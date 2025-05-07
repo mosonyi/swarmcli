@@ -158,7 +158,15 @@ func layout(g *gocui.Gui) error {
 	v.FgColor = gocui.ColorCyan
 	v.Clear()
 
-	switch state.Mode {
+	renderModeView(g, state.Mode, v)
+
+	g.SetCurrentView("main")
+
+	return nil
+}
+
+func renderModeView(g *gocui.Gui, mode string, v *gocui.View) {
+	switch mode {
 	case ModeNodes:
 		nodes, _ := docker.ListSwarmNodes()
 		for _, n := range nodes {
@@ -175,10 +183,6 @@ func layout(g *gocui.Gui) error {
 			fmt.Fprintln(v, stack)
 		}
 	}
-
-	g.SetCurrentView("main")
-
-	return nil
 }
 
 func inspectSelected(g *gocui.Gui, _ *gocui.View) error {
