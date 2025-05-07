@@ -12,28 +12,38 @@ import (
 	"github.com/jroimartin/gocui"
 )
 
-var nodes []docker.SwarmNode
-var serviceInput string
-var mode string = "nodes"
-var previousMode string = "nodes"
-var tailingLogs bool
-var paused bool
-var version = "dev"
-var cpuUsage = "0%"
-var memUsage = "0%"
-var containerCount = "0"
-var serviceCount = "0"
+const (
+	ModeNodes    = "nodes"
+	ModeServices = "services"
+	ModeStacks   = "stacks"
+	Version      = "dev"
+)
+
+type State struct {
+	Mode           string
+	Nodes          []docker.SwarmNode
+	CPUUsage       string
+	MemUsage       string
+	ContainerCount string
+	ServiceCount   string
+	TailingLogs    bool
+	Paused         bool
+	InInspectMode  bool
+	ViewStack      []string
+}
+
 var globalGui *gocui.Gui
-var inInspectMode bool = false
-var viewStack []string
+var state State
 
 func main() {
 	go startUsageUpdater()
+	state.Mode = ModeNodes
 
 	var err error
-	nodes, err = docker.ListSwarmNodes()
+	state.Nodes, err = docker.ListSwarmNodes()
 	if err != nil {
-		nodes = []docker.SwarmNode{}
+		log.Println("Error fetching swarm nodes:", err)
+		state.Nodes = []docker.SwarmNode{}
 	}
 
 	g, err := gocui.NewGui(gocui.OutputNormal)
@@ -55,10 +65,10 @@ func main() {
 
 func startUsageUpdater() {
 	for {
-		cpuUsage = docker.GetSwarmCPUUsage()
-		memUsage = docker.GetSwarmMemUsage()
-		containerCount = docker.GetContainerCount()
-		serviceCount = docker.GetServiceCount()
+		state.CPUUsage = docker.GetSwarmCPUUsage()
+		state.MemUsage = docker.GetSwarmMemUsage()
+		state.ContainerCount = docker.GetContainerCount()
+		state.ServiceCount = docker.GetServiceCount()
 
 		if globalGui != nil {
 			globalGui.Update(func(g *gocui.Gui) error {
@@ -72,10 +82,10 @@ func startUsageUpdater() {
 						hostname, _ := os.Hostname()
 						dockerVer := docker.GetDockerVersion()
 						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "Context:", hostname)
-						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "Version:", version)
+						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "Version:", Version)
 						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "Docker version:", dockerVer)
-						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "RAM:", memUsage)
-						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "CPU:", cpuUsage)
+						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "RAM:", state.MemUsage)
+						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "CPU:", state.CPUUsage)
 					}
 				}
 				return nil
@@ -98,20 +108,17 @@ func layout(g *gocui.Gui) error {
 
 		v.Frame = false
 		v.Clear()
-		if inInspectMode {
-			fmt.Fprintf(v, "\033[46m\033[30m <%s> \033[0m \033[43m\033[30m<inspect>\033[0m\n", mode)
+		if state.InInspectMode {
+			fmt.Fprintf(v, "\033[46m\033[30m <%s> \033[0m \033[43m\033[30m<inspect>\033[0m\n", state.Mode)
 
 		} else {
-			fmt.Fprintf(v, "\033[43m\033[30m <%s> \033[0m\n", mode)
+			fmt.Fprintf(v, "\033[43m\033[30m <%s> \033[0m\n", state.Mode)
 			g.Update(func(*gocui.Gui) error { return nil })
 
 		}
 	}
 
-	if inInspectMode {
-		return nil
-	}
-	if inInspectMode {
+	if state.InInspectMode {
 		return nil
 	}
 
@@ -140,7 +147,7 @@ func layout(g *gocui.Gui) error {
 	if v, err := g.SetView("main", 0, mainTop, maxX-1, mainBottom); err != nil && err != gocui.ErrUnknownView {
 		return err
 	} else if err == nil {
-		v.Title = strings.Title(mode)
+		v.Title = strings.Title(state.Mode)
 		v.Highlight = true
 		v.SelFgColor = gocui.ColorBlack
 		v.SelBgColor = gocui.ColorCyan
@@ -148,18 +155,18 @@ func layout(g *gocui.Gui) error {
 		v.FgColor = gocui.ColorCyan
 		v.Clear()
 
-		switch mode {
-		case "nodes":
+		switch state.Mode {
+		case ModeNodes:
 			nodes, _ := docker.ListSwarmNodes()
 			for _, n := range nodes {
 				fmt.Fprintln(v, n)
 			}
-		case "services":
+		case ModeServices:
 			services, _ := docker.ListSwarmServices()
 			for _, service := range services {
 				fmt.Fprintln(v, service)
 			}
-		case "stacks":
+		case ModeStacks:
 			stacks, _ := docker.ListStacks()
 			for _, stack := range stacks {
 				fmt.Fprintln(v, stack)
@@ -173,7 +180,7 @@ func layout(g *gocui.Gui) error {
 }
 
 func inspectSelected(g *gocui.Gui, _ *gocui.View) error {
-	viewStack = append(viewStack, mode)
+	state.ViewStack = append(state.ViewStack, state.Mode)
 	v, err := g.View("main")
 	if err != nil {
 		return err
@@ -186,12 +193,12 @@ func inspectSelected(g *gocui.Gui, _ *gocui.View) error {
 	item := strings.Fields(line)[0]
 
 	var cmd *exec.Cmd
-	switch mode {
-	case "nodes":
+	switch state.Mode {
+	case ModeNodes:
 		cmd = exec.Command("docker", "node", "inspect", item)
-	case "services":
+	case ModeServices:
 		cmd = exec.Command("docker", "service", "inspect", item)
-	case "stacks":
+	case ModeStacks:
 		cmd = exec.Command("docker", "stack", "services", item)
 	default:
 		return nil
@@ -203,7 +210,7 @@ func inspectSelected(g *gocui.Gui, _ *gocui.View) error {
 	}
 
 	v.Clear()
-	inInspectMode = true
+	state.InInspectMode = true
 	g.SetCurrentView("main")
 	v.Title = "Inspect (press ESC to go back)"
 	v.Highlight = false
@@ -239,10 +246,10 @@ func showInspectOutput(g *gocui.Gui, output string) error {
 }
 
 func goBack(g *gocui.Gui, v *gocui.View) error {
-	inInspectMode = false
-	if len(viewStack) > 0 {
-		mode = viewStack[len(viewStack)-1]
-		viewStack = viewStack[:len(viewStack)-1]
+	state.InInspectMode = false
+	if len(state.ViewStack) > 0 {
+		state.Mode = state.ViewStack[len(state.ViewStack)-1]
+		state.ViewStack = state.ViewStack[:len(state.ViewStack)-1]
 	}
 	if v, err := g.View("main"); err == nil {
 		v.Highlight = true
@@ -282,7 +289,7 @@ func executeCommand(g *gocui.Gui, v *gocui.View) error {
 	g.DeleteView("cmdinput")
 	g.SetCurrentView("main")
 	if cmd == "services" || cmd == "nodes" || cmd == "stacks" {
-		mode = cmd
+		state.Mode = cmd
 	}
 	return layout(g)
 }
@@ -319,7 +326,7 @@ func keybindings(g *gocui.Gui) error {
 
 func cursorDown(g *gocui.Gui, v *gocui.View) error {
 
-	if inInspectMode {
+	if state.InInspectMode {
 		ox, oy := v.Origin()
 		v.SetOrigin(ox, oy+1)
 		g.Update(func(*gocui.Gui) error { return nil })
@@ -332,7 +339,7 @@ func cursorDown(g *gocui.Gui, v *gocui.View) error {
 
 func cursorUp(g *gocui.Gui, v *gocui.View) error {
 
-	if inInspectMode {
+	if state.InInspectMode {
 		ox, oy := v.Origin()
 		if oy > 0 {
 			v.SetOrigin(ox, oy-1)
