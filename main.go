@@ -27,7 +27,7 @@ const (
 	ColorDefault = "\033[39m"
 )
 
-type State struct {
+type AppState struct {
 	Mode           string
 	Nodes          []docker.SwarmNode
 	CPUUsage       string
@@ -40,7 +40,14 @@ type State struct {
 	ViewStack      []string
 }
 
-var state State
+func (a *AppState) UpdateUsage() {
+	a.CPUUsage = docker.GetSwarmCPUUsage()
+	a.MemUsage = docker.GetSwarmMemUsage()
+	a.ContainerCount = docker.GetContainerCount()
+	a.ServiceCount = docker.GetServiceCount()
+}
+
+var state AppState
 
 func main() {
 	g, err := gocui.NewGui(gocui.OutputNormal)
@@ -69,32 +76,28 @@ func main() {
 
 func updateUsage(gui *gocui.Gui) {
 	for {
-		state.CPUUsage = docker.GetSwarmCPUUsage()
-		state.MemUsage = docker.GetSwarmMemUsage()
-		state.ContainerCount = docker.GetContainerCount()
-		state.ServiceCount = docker.GetServiceCount()
+		state.UpdateUsage()
 
-		if gui != nil {
-			gui.Update(func(g *gocui.Gui) error {
-				if g.CurrentView() != nil && g.CurrentView().Name() != "inspect" {
-					if v, err := g.View("context"); err == nil {
-						v.Clear()
-						g.SetViewOnTop("footer")
-						v.BgColor = gocui.ColorDefault
-						v.FgColor = gocui.ColorWhite
+		gui.Update(func(g *gocui.Gui) error {
+			if g.CurrentView() != nil && g.CurrentView().Name() != "inspect" {
+				if v, err := g.View("context"); err == nil {
+					v.Clear()
+					g.SetViewOnTop("footer")
+					v.BgColor = gocui.ColorDefault
+					v.FgColor = gocui.ColorWhite
 
-						hostname, _ := os.Hostname()
-						dockerVer := docker.GetDockerVersion()
-						fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "Context:", ColorWhite, hostname)
-						fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "Version:", ColorWhite, Version)
-						fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "Docker version:", ColorWhite, dockerVer)
-						fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "RAM:", ColorWhite, state.MemUsage)
-						fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "CPU:", ColorWhite, state.CPUUsage)
-					}
+					hostname, _ := os.Hostname()
+					dockerVer := docker.GetDockerVersion()
+					fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "Context:", ColorWhite, hostname)
+					fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "Version:", ColorWhite, Version)
+					fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "Docker version:", ColorWhite, dockerVer)
+					fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "RAM:", ColorWhite, state.MemUsage)
+					fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "CPU:", ColorWhite, state.CPUUsage)
 				}
-				return nil
-			})
-		}
+			}
+			return nil
+		})
+
 		time.Sleep(5 * time.Second)
 	}
 }
