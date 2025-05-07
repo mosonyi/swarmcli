@@ -43,7 +43,7 @@ func main() {
 	defer g.Close()
 	g.SetManagerFunc(layout)
 
-	go startUsageUpdater(g)
+	go updateUsage(g)
 	state.Mode = ModeNodes
 
 	state.Nodes, err = docker.ListSwarmNodes()
@@ -60,7 +60,7 @@ func main() {
 	}
 }
 
-func startUsageUpdater(gui *gocui.Gui) {
+func updateUsage(gui *gocui.Gui) {
 	for {
 		state.CPUUsage = docker.GetSwarmCPUUsage()
 		state.MemUsage = docker.GetSwarmMemUsage()
@@ -254,7 +254,7 @@ func goBack(g *gocui.Gui, v *gocui.View) error {
 	return layout(g)
 }
 
-func activateCommandInput(g *gocui.Gui, v *gocui.View) error {
+func showCommandInput(g *gocui.Gui, v *gocui.View) error {
 	maxX, _ := g.Size()
 	if iv, err := g.SetView("cmdinput", 0, 8, maxX-1, 9); err != nil && err != gocui.ErrUnknownView {
 		iv.Frame = true
@@ -269,7 +269,7 @@ func activateCommandInput(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func cancelCommandInput(g *gocui.Gui, v *gocui.View) error {
+func hideCommandInput(g *gocui.Gui, v *gocui.View) error {
 	g.DeleteView("cmdinput")
 	layout(g) // restore main view size
 	g.SetCurrentView("main")
@@ -309,9 +309,9 @@ func keybindings(g *gocui.Gui) error {
 	g.SetKeybinding("main", 'b', gocui.ModNone, goBack)
 	g.SetKeybinding("main", 'i', gocui.ModNone, inspectSelected)
 	g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit)
-	g.SetKeybinding("main", ':', gocui.ModNone, activateCommandInput)
+	g.SetKeybinding("main", ':', gocui.ModNone, showCommandInput)
 	g.SetKeybinding("cmdinput", gocui.KeyEnter, gocui.ModNone, executeCommand)
-	g.SetKeybinding("cmdinput", gocui.KeyEsc, gocui.ModNone, cancelCommandInput)
+	g.SetKeybinding("cmdinput", gocui.KeyEsc, gocui.ModNone, hideCommandInput)
 	g.SetKeybinding("cmdinput", gocui.KeyTab, gocui.ModNone, autocompleteCommand)
 	g.SetKeybinding("main", 'q', gocui.ModNone, quit)
 	g.SetKeybinding("main", gocui.KeyArrowDown, gocui.ModNone, cursorDown)
