@@ -12,7 +12,7 @@ import (
 	"github.com/jroimartin/gocui"
 )
 
-var nodes []string
+var nodes []utils.SwarmNode
 var serviceInput string
 var mode string = "nodes"
 var previousMode string = "nodes"
@@ -33,7 +33,7 @@ func main() {
 	var err error
 	nodes, err = utils.ListSwarmNodes()
 	if err != nil {
-		nodes = []string{}
+		nodes = []utils.SwarmNode{}
 	}
 
 	g, err := gocui.NewGui(gocui.OutputNormal)

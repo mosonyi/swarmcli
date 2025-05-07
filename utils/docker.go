@@ -12,12 +12,35 @@ func RunDockerCmd(name string, arg ...string) ([]byte, error) {
 	return exec.Command("docker", args...).Output()
 }
 
-func ListSwarmNodes() ([]string, error) {
+type SwarmNode struct {
+	ID            string
+	Hostname      string
+	Status        string
+	Availability  string
+	ManagerStatus string
+}
+
+func ListSwarmNodes() ([]SwarmNode, error) {
 	out, err := RunDockerCmd("node", "ls", "--format", "{{.ID}}\t{{.Hostname}}\t{{.Status}}\t{{.Availability}}\t{{.ManagerStatus}}")
 	if err != nil {
 		return nil, err
 	}
-	return strings.Split(strings.TrimSpace(string(out)), "\n"), nil
+
+	var nodes []SwarmNode
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	for _, line := range lines {
+		parts := strings.Split(line, "\t")
+		if len(parts) >= 5 {
+			nodes = append(nodes, SwarmNode{
+				ID:            parts[0],
+				Hostname:      parts[1],
+				Status:        parts[2],
+				Availability:  parts[3],
+				ManagerStatus: parts[4],
+			})
+		}
+	}
+	return nodes, nil
 }
 
 func GetSwarmCPUUsage() string {
