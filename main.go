@@ -32,28 +32,24 @@ type State struct {
 	ViewStack      []string
 }
 
-var globalGui *gocui.Gui
 var state State
 
 func main() {
-	go startUsageUpdater()
-	state.Mode = ModeNodes
-
-	var err error
-	state.Nodes, err = docker.ListSwarmNodes()
-	if err != nil {
-		log.Println("Error fetching swarm nodes:", err)
-		state.Nodes = []docker.SwarmNode{}
-	}
-
 	g, err := gocui.NewGui(gocui.OutputNormal)
 	if err != nil {
 		log.Panicln(err)
 	}
 	defer g.Close()
-
-	globalGui = g
 	g.SetManagerFunc(layout)
+
+	go startUsageUpdater(g)
+	state.Mode = ModeNodes
+
+	state.Nodes, err = docker.ListSwarmNodes()
+	if err != nil {
+		log.Println("Error fetching swarm nodes:", err)
+		state.Nodes = []docker.SwarmNode{}
+	}
 
 	if err := keybindings(g); err != nil {
 		log.Panicln(err)
@@ -63,15 +59,15 @@ func main() {
 	}
 }
 
-func startUsageUpdater() {
+func startUsageUpdater(gui *gocui.Gui) {
 	for {
 		state.CPUUsage = docker.GetSwarmCPUUsage()
 		state.MemUsage = docker.GetSwarmMemUsage()
 		state.ContainerCount = docker.GetContainerCount()
 		state.ServiceCount = docker.GetServiceCount()
 
-		if globalGui != nil {
-			globalGui.Update(func(g *gocui.Gui) error {
+		if gui != nil {
+			gui.Update(func(g *gocui.Gui) error {
 				if g.CurrentView() != nil && g.CurrentView().Name() != "inspect" {
 					if v, err := g.View("context"); err == nil {
 						v.Clear()
