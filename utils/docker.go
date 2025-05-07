@@ -47,10 +47,7 @@ func GetContainerCount() string {
 		return "0"
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) == 1 && lines[0] == "" {
-		return "0"
-	}
-	return strconv.Itoa(len(lines))
+	return strconv.Itoa(countNonEmptyLines(lines))
 }
 
 func GetServiceCount() string {
@@ -59,10 +56,7 @@ func GetServiceCount() string {
 		return "0"
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) == 1 && lines[0] == "" {
-		return "0"
-	}
-	return strconv.Itoa(len(lines))
+	return strconv.Itoa(countNonEmptyLines(lines))
 }
 
 func GetDockerVersion() string {
@@ -82,4 +76,14 @@ func parseAndSumPercentLines(lines []string) float64 {
 		}
 	}
 	return total
+}
+
+func countNonEmptyLines(lines []string) int {
+	count := 0
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			count++
+		}
+	}
+	return count
 }
