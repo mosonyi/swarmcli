@@ -20,6 +20,13 @@ const (
 	Version      = "dev"
 )
 
+const (
+	ColorYellow  = "\033[33m"
+	ColorWhite   = "\033[37m"
+	ColorCyan    = "\033[36m"
+	ColorDefault = "\033[39m"
+)
+
 type State struct {
 	Mode           string
 	Nodes          []docker.SwarmNode
@@ -78,11 +85,11 @@ func updateUsage(gui *gocui.Gui) {
 
 						hostname, _ := os.Hostname()
 						dockerVer := docker.GetDockerVersion()
-						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "Context:", hostname)
-						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "Version:", Version)
-						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "Docker version:", dockerVer)
-						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "RAM:", state.MemUsage)
-						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "CPU:", state.CPUUsage)
+						fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "Context:", ColorWhite, hostname)
+						fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "Version:", ColorWhite, Version)
+						fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "Docker version:", ColorWhite, dockerVer)
+						fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "RAM:", ColorWhite, state.MemUsage)
+						fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "CPU:", ColorWhite, state.CPUUsage)
 					}
 				}
 				return nil
