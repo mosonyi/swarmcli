@@ -26,6 +26,12 @@ type SwarmService struct {
 	Replicas string
 }
 
+type DockerStack struct {
+	Name         string
+	Services     string
+	Orchestrator string
+}
+
 func ListSwarmNodes() ([]SwarmNode, error) {
 	out, err := RunDockerCmd("node", "ls", "--format", "{{.ID}}\t{{.Hostname}}\t{{.Status}}\t{{.Availability}}\t{{.ManagerStatus}}")
 	if err != nil {
@@ -70,6 +76,29 @@ func ListSwarmServices() ([]SwarmService, error) {
 	}
 
 	return services, nil
+}
+
+func ListStacks() ([]DockerStack, error) {
+	out, err := RunDockerCmd("stack", "ls", "--format", "{{.Name}}\t{{.Services}}\t{{.Orchestrator}}")
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	var stacks []DockerStack
+
+	for _, line := range lines {
+		parts := strings.Split(line, "\t")
+		if len(parts) >= 3 {
+			stacks = append(stacks, DockerStack{
+				Name:         parts[0],
+				Services:     parts[1],
+				Orchestrator: parts[2],
+			})
+		}
+	}
+
+	return stacks, nil
 }
 
 func GetSwarmCPUUsage() string {

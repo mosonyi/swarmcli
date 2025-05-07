@@ -160,10 +160,9 @@ func layout(g *gocui.Gui) error {
 				fmt.Fprintln(v, service)
 			}
 		case "stacks":
-			cmd := exec.Command("docker", "stack", "ls", "--format", "{{.Name}}	{{.Services}}	{{.Orchestrator}}")
-			out, _ := cmd.Output()
-			for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-				fmt.Fprintln(v, line)
+			stacks, _ := utils.ListStacks()
+			for _, stack := range stacks {
+				fmt.Fprintln(v, stack)
 			}
 		}
 	}
