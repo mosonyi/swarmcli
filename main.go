@@ -6,13 +6,13 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"swarmcli/utils"
+	"swarmcli/docker"
 	"time"
 
 	"github.com/jroimartin/gocui"
 )
 
-var nodes []utils.SwarmNode
+var nodes []docker.SwarmNode
 var serviceInput string
 var mode string = "nodes"
 var previousMode string = "nodes"
@@ -31,9 +31,9 @@ func main() {
 	go startUsageUpdater()
 
 	var err error
-	nodes, err = utils.ListSwarmNodes()
+	nodes, err = docker.ListSwarmNodes()
 	if err != nil {
-		nodes = []utils.SwarmNode{}
+		nodes = []docker.SwarmNode{}
 	}
 
 	g, err := gocui.NewGui(gocui.OutputNormal)
@@ -55,10 +55,10 @@ func main() {
 
 func startUsageUpdater() {
 	for {
-		cpuUsage = utils.GetSwarmCPUUsage()
-		memUsage = utils.GetSwarmMemUsage()
-		containerCount = utils.GetContainerCount()
-		serviceCount = utils.GetServiceCount()
+		cpuUsage = docker.GetSwarmCPUUsage()
+		memUsage = docker.GetSwarmMemUsage()
+		containerCount = docker.GetContainerCount()
+		serviceCount = docker.GetServiceCount()
 
 		if globalGui != nil {
 			globalGui.Update(func(g *gocui.Gui) error {
@@ -70,7 +70,7 @@ func startUsageUpdater() {
 						v.FgColor = gocui.ColorWhite
 
 						hostname, _ := os.Hostname()
-						dockerVer := utils.GetDockerVersion()
+						dockerVer := docker.GetDockerVersion()
 						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "Context:", hostname)
 						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "Version:", version)
 						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "Docker version:", dockerVer)
@@ -150,17 +150,17 @@ func layout(g *gocui.Gui) error {
 
 		switch mode {
 		case "nodes":
-			nodes, _ := utils.ListSwarmNodes()
+			nodes, _ := docker.ListSwarmNodes()
 			for _, n := range nodes {
 				fmt.Fprintln(v, n)
 			}
 		case "services":
-			services, _ := utils.ListSwarmServices()
+			services, _ := docker.ListSwarmServices()
 			for _, service := range services {
 				fmt.Fprintln(v, service)
 			}
 		case "stacks":
-			stacks, _ := utils.ListStacks()
+			stacks, _ := docker.ListStacks()
 			for _, stack := range stacks {
 				fmt.Fprintln(v, stack)
 			}
