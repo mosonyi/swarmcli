@@ -20,6 +20,12 @@ type SwarmNode struct {
 	ManagerStatus string
 }
 
+type SwarmService struct {
+	Name     string
+	Mode     string
+	Replicas string
+}
+
 func ListSwarmNodes() ([]SwarmNode, error) {
 	out, err := RunDockerCmd("node", "ls", "--format", "{{.ID}}\t{{.Hostname}}\t{{.Status}}\t{{.Availability}}\t{{.ManagerStatus}}")
 	if err != nil {
@@ -41,6 +47,29 @@ func ListSwarmNodes() ([]SwarmNode, error) {
 		}
 	}
 	return nodes, nil
+}
+
+func ListSwarmServices() ([]SwarmService, error) {
+	out, err := RunDockerCmd("service", "ls", "--format", "{{.Name}}\t{{.Mode}}\t{{.Replicas}}")
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	var services []SwarmService
+
+	for _, line := range lines {
+		parts := strings.Split(line, "\t")
+		if len(parts) >= 3 {
+			services = append(services, SwarmService{
+				Name:     parts[0],
+				Mode:     parts[1],
+				Replicas: parts[2],
+			})
+		}
+	}
+
+	return services, nil
 }
 
 func GetSwarmCPUUsage() string {
