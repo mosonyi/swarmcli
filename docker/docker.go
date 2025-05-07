@@ -20,16 +20,31 @@ type SwarmNode struct {
 	ManagerStatus string
 }
 
+// Remove the braces when printing as this is what we need.
+// It might make sense to just use a special method instead
+// naively overwriting the fmt.
+func (s SwarmNode) String() string {
+	return strings.Join(StructFieldsAsStringArray(s), " ")
+}
+
 type SwarmService struct {
 	Name     string
 	Mode     string
 	Replicas string
 }
 
+func (s SwarmService) String() string {
+	return strings.Join(StructFieldsAsStringArray(s), " ")
+}
+
 type DockerStack struct {
 	Name         string
 	Services     string
 	Orchestrator string
+}
+
+func (s DockerStack) String() string {
+	return strings.Join(StructFieldsAsStringArray(s), " ")
 }
 
 func ListSwarmNodes() ([]SwarmNode, error) {
@@ -146,25 +161,4 @@ func GetDockerVersion() string {
 		return "unknown"
 	}
 	return strings.TrimSpace(string(out))
-}
-
-func parseAndSumPercentLines(lines []string) float64 {
-	var total float64
-	for _, line := range lines {
-		val := strings.TrimSuffix(strings.TrimSpace(line), "%")
-		if f, err := strconv.ParseFloat(val, 64); err == nil {
-			total += f
-		}
-	}
-	return total
-}
-
-func countNonEmptyLines(lines []string) int {
-	count := 0
-	for _, line := range lines {
-		if strings.TrimSpace(line) != "" {
-			count++
-		}
-	}
-	return count
 }
