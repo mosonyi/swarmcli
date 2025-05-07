@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"swarmcli/utils"
 	"time"
 
 	"github.com/jroimartin/gocui"
@@ -30,7 +31,7 @@ func main() {
 	go startUsageUpdater()
 
 	var err error
-	nodes, err = listSwarmNodes()
+	nodes, err = utils.ListSwarmNodes()
 	if err != nil {
 		nodes = []string{}
 	}
@@ -54,10 +55,10 @@ func main() {
 
 func startUsageUpdater() {
 	for {
-		cpuUsage = getSwarmCPUUsage()
-		memUsage = getSwarmMemUsage()
-		containerCount = getContainerCount()
-		serviceCount = getServiceCount()
+		cpuUsage = utils.GetSwarmCPUUsage()
+		memUsage = utils.GetSwarmMemUsage()
+		containerCount = utils.GetContainerCount()
+		serviceCount = utils.GetServiceCount()
 
 		if globalGui != nil {
 			globalGui.Update(func(g *gocui.Gui) error {
@@ -69,7 +70,7 @@ func startUsageUpdater() {
 						v.FgColor = gocui.ColorWhite
 
 						hostname, _ := os.Hostname()
-						dockerVer := getDockerVersion()
+						dockerVer := utils.GetDockerVersion()
 						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "Context:", hostname)
 						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "Version:", version)
 						fmt.Fprintf(v, "\033[33m%-16s\033[37m%s\n", "Docker version:", dockerVer)
@@ -82,60 +83,6 @@ func startUsageUpdater() {
 		}
 		time.Sleep(5 * time.Second)
 	}
-}
-
-func listSwarmNodes() ([]string, error) {
-	cmd := exec.Command("docker", "node", "ls", "--format", "{{.ID}}\t{{.Hostname}}\t{{.Status}}\t{{.Availability}}\t{{.ManagerStatus}}")
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-	return strings.Split(strings.TrimSpace(string(out)), "\n"), nil
-}
-
-func getSwarmCPUUsage() string {
-	cmd := exec.Command("sh", "-c", `docker stats --no-stream --format '{{.CPUPerc}}' | awk -F '%' '{sum += $1} END {printf "%.1f%%", sum}'`)
-	out, err := cmd.Output()
-	if err != nil {
-		return "0%"
-	}
-	return strings.TrimSpace(string(out))
-}
-
-func getSwarmMemUsage() string {
-	cmd := exec.Command("sh", "-c", `docker stats --no-stream --format '{{.MemPerc}}' | awk -F '%' '{sum += $1} END {printf "%.1f%%", sum}'`)
-	out, err := cmd.Output()
-	if err != nil {
-		return "0%"
-	}
-	return strings.TrimSpace(string(out))
-}
-
-func getContainerCount() string {
-	cmd := exec.Command("sh", "-c", "docker ps -q | wc -l")
-	out, err := cmd.Output()
-	if err != nil {
-		return "0"
-	}
-	return strings.TrimSpace(string(out))
-}
-
-func getServiceCount() string {
-	cmd := exec.Command("sh", "-c", "docker service ls -q | wc -l")
-	out, err := cmd.Output()
-	if err != nil {
-		return "0"
-	}
-	return strings.TrimSpace(string(out))
-}
-
-func getDockerVersion() string {
-	cmd := exec.Command("docker", "version", "--format", "{{.Server.Version}}")
-	out, err := cmd.Output()
-	if err != nil {
-		return "unknown"
-	}
-	return strings.TrimSpace(string(out))
 }
 
 func layout(g *gocui.Gui) error {
@@ -203,7 +150,7 @@ func layout(g *gocui.Gui) error {
 
 		switch mode {
 		case "nodes":
-			nodes, _ := listSwarmNodes()
+			nodes, _ := utils.ListSwarmNodes()
 			for _, n := range nodes {
 				fmt.Fprintln(v, n)
 			}
@@ -325,7 +272,7 @@ func activateCommandInput(g *gocui.Gui, v *gocui.View) error {
 func cancelCommandInput(g *gocui.Gui, v *gocui.View) error {
 	g.DeleteView("cmdinput")
 	layout(g) // restore main view size
-        g.SetCurrentView("main")	
+	g.SetCurrentView("main")
 	return nil
 }
 
@@ -405,4 +352,3 @@ func cursorUp(g *gocui.Gui, v *gocui.View) error {
 func quit(g *gocui.Gui, v *gocui.View) error {
 	return gocui.ErrQuit
 }
-
