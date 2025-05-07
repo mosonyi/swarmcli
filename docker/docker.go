@@ -37,13 +37,13 @@ func (s SwarmService) String() string {
 	return strings.Join(StructFieldsAsStringArray(s), " ")
 }
 
-type DockerStack struct {
+type Stack struct {
 	Name         string
 	Services     string
 	Orchestrator string
 }
 
-func (s DockerStack) String() string {
+func (s Stack) String() string {
 	return strings.Join(StructFieldsAsStringArray(s), " ")
 }
 
@@ -93,19 +93,19 @@ func ListSwarmServices() ([]SwarmService, error) {
 	return services, nil
 }
 
-func ListStacks() ([]DockerStack, error) {
+func ListStacks() ([]Stack, error) {
 	out, err := RunDockerCmd("stack", "ls", "--format", "{{.Name}}\t{{.Services}}\t{{.Orchestrator}}")
 	if err != nil {
 		return nil, err
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	var stacks []DockerStack
+	var stacks []Stack
 
 	for _, line := range lines {
 		parts := strings.Split(line, "\t")
 		if len(parts) >= 3 {
-			stacks = append(stacks, DockerStack{
+			stacks = append(stacks, Stack{
 				Name:         parts[0],
 				Services:     parts[1],
 				Orchestrator: parts[2],
