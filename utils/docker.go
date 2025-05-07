@@ -1,13 +1,19 @@
 package utils
 
 import (
+	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
+func RunDockerCmd(name string, arg ...string) ([]byte, error) {
+	args := append([]string{name}, arg...)
+	return exec.Command("docker", args...).Output()
+}
+
 func ListSwarmNodes() ([]string, error) {
-	cmd := exec.Command("docker", "node", "ls", "--format", "{{.ID}}\t{{.Hostname}}\t{{.Status}}\t{{.Availability}}\t{{.ManagerStatus}}")
-	out, err := cmd.Output()
+	out, err := RunDockerCmd("node", "ls", "--format", "{{.ID}}\t{{.Hostname}}\t{{.Status}}\t{{.Availability}}\t{{.ManagerStatus}}")
 	if err != nil {
 		return nil, err
 	}
@@ -15,44 +21,70 @@ func ListSwarmNodes() ([]string, error) {
 }
 
 func GetSwarmCPUUsage() string {
-	cmd := exec.Command("sh", "-c", `docker stats --no-stream --format '{{.CPUPerc}}' | awk -F '%' '{sum += $1} END {printf "%.1f%%", sum}'`)
-	out, err := cmd.Output()
+	out, err := RunDockerCmd("stats", "--no-stream", "--format", "{{.CPUPerc}}")
 	if err != nil {
 		return "0%"
 	}
-	return strings.TrimSpace(string(out))
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	var total float64
+	for _, line := range lines {
+		// Trim % sign and parse
+		value := strings.TrimSuffix(line, "%")
+		f, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err == nil {
+			total += f
+		}
+	}
+
+	return fmt.Sprintf("%.1f%%", total)
 }
 
 func GetSwarmMemUsage() string {
-	cmd := exec.Command("sh", "-c", `docker stats --no-stream --format '{{.MemPerc}}' | awk -F '%' '{sum += $1} END {printf "%.1f%%", sum}'`)
-	out, err := cmd.Output()
+	out, err := RunDockerCmd("stats", "--no-stream", "--format", "{{.MemPerc}}")
 	if err != nil {
 		return "0%"
 	}
-	return strings.TrimSpace(string(out))
+
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	var total float64
+	for _, line := range lines {
+		// Remove trailing '%' and whitespace
+		value := strings.TrimSuffix(line, "%")
+		f, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err == nil {
+			total += f
+		}
+	}
+
+	return fmt.Sprintf("%.1f%%", total)
 }
 
 func GetContainerCount() string {
-	cmd := exec.Command("sh", "-c", "docker ps -q | wc -l")
-	out, err := cmd.Output()
+	out, err := RunDockerCmd("ps", "-q")
 	if err != nil {
 		return "0"
 	}
-	return strings.TrimSpace(string(out))
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) == 1 && lines[0] == "" {
+		return "0"
+	}
+	return strconv.Itoa(len(lines))
 }
 
 func GetServiceCount() string {
-	cmd := exec.Command("sh", "-c", "docker service ls -q | wc -l")
-	out, err := cmd.Output()
+	out, err := RunDockerCmd("service", "ls", "-q")
 	if err != nil {
 		return "0"
 	}
-	return strings.TrimSpace(string(out))
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) == 1 && lines[0] == "" {
+		return "0"
+	}
+	return strconv.Itoa(len(lines))
 }
 
 func GetDockerVersion() string {
-	cmd := exec.Command("docker", "version", "--format", "{{.Server.Version}}")
-	out, err := cmd.Output()
+	out, err := RunDockerCmd("version", "--format", "{{.Server.Version}}")
 	if err != nil {
 		return "unknown"
 	}
