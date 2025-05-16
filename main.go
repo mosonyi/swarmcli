@@ -338,6 +338,7 @@ func keybindings(g *gocui.Gui) error {
 	g.SetKeybinding("main", gocui.KeyEsc, gocui.ModNone, goBack)
 	g.SetKeybinding("main", 'b', gocui.ModNone, goBack)
 	g.SetKeybinding("main", 'i', gocui.ModNone, inspectSelected)
+	g.SetKeybinding("main", 's', gocui.ModNone, showNodeStacks)
 	g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit)
 	g.SetKeybinding("main", ':', gocui.ModNone, showCommandInput)
 	g.SetKeybinding("cmdinput", gocui.KeyEnter, gocui.ModNone, executeCommand)
@@ -390,4 +391,65 @@ func setView(g *gocui.Gui, name string, x0, y0, x1, y1 int, frame bool) (*gocui.
 
 func quit(g *gocui.Gui, v *gocui.View) error {
 	return gocui.ErrQuit
+}
+
+func showNodeStacks(g *gocui.Gui, v *gocui.View) error {
+	if state.Mode != ModeNodes {
+		return nil
+	}
+	_, cy := v.Cursor()
+	line, err := v.Line(cy)
+	if err != nil || line == "" {
+		return nil
+	}
+	nodeID := strings.Fields(line)[0]
+
+	// List services running on the node
+	cmd := exec.Command("docker", "node", "ps", "--filter", "desired-state=running", "--format", "{{.Name}}", nodeID)
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to get running services: %v", err)
+	}
+	services := strings.Split(strings.TrimSpace(string(out)), "\n")
+
+	// Map service names to stacks (format: stack_service)
+	stacks := make(map[string]struct{})
+	for _, svc := range services {
+		parts := strings.SplitN(svc, "_", 2)
+		if len(parts) == 2 {
+			stacks[parts[0]] = struct{}{}
+		}
+	}
+
+	// Show stacks in a new view
+	maxX, maxY := g.Size()
+	stackView, err := g.SetView("stacklist", maxX/4, maxY/4, maxX*3/4, maxY*3/4)
+	if err != nil && err != gocui.ErrUnknownView {
+		return err
+	}
+	stackView.Clear()
+	stackView.Title = "Stacks on Node (ESC to close)"
+	stackView.Highlight = true
+	stackView.SelFgColor = gocui.ColorBlack
+	stackView.SelBgColor = gocui.ColorCyan
+	stackView.Editable = false
+
+	for stack := range stacks {
+		fmt.Fprintln(stackView, stack)
+	}
+	g.SetCurrentView("stacklist")
+	state.InInspectMode = true
+
+	// Add navigation and close keybindings for the stack view
+	g.SetKeybinding("stacklist", gocui.KeyArrowDown, gocui.ModNone, cursorDown)
+	g.SetKeybinding("stacklist", gocui.KeyArrowUp, gocui.ModNone, cursorUp)
+	g.SetKeybinding("stacklist", gocui.KeyEsc, gocui.ModNone, closeStackList)
+	return nil
+}
+
+func closeStackList(g *gocui.Gui, v *gocui.View) error {
+	g.DeleteView("stacklist")
+	state.InInspectMode = false
+	g.SetCurrentView("main")
+	return nil
 }
