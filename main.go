@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
@@ -69,6 +70,10 @@ type model struct {
 	memUsage       string
 	containerCount int
 	serviceCount   int
+
+	// Search inside inspect view
+	inspectSearchMode bool   // Are we in search mode inside inspect view?
+	inspectSearchTerm string // The search term to highlight
 }
 
 // initialModel creates default model
@@ -173,6 +178,20 @@ func inspectItem(mode mode, line string) tea.Cmd {
 	}
 }
 
+func highlightMatches(text, searchTerm string) string {
+	if searchTerm == "" {
+		return text
+	}
+	re, err := regexp.Compile("(?i)" + regexp.QuoteMeta(searchTerm)) // case-insensitive
+	if err != nil {
+		return text // fail silently
+	}
+	highlighted := re.ReplaceAllStringFunc(text, func(match string) string {
+		return lipgloss.NewStyle().Background(lipgloss.Color("238")).Foreground(lipgloss.Color("229")).Render(match)
+	})
+	return highlighted
+}
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
@@ -232,8 +251,39 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		} else if m.inspecting {
+			if m.inspectSearchMode {
+				// Search input mode inside inspect view
+				switch msg.Type {
+				case tea.KeyEnter:
+					m.inspectSearchMode = false
+					// Update highlighted content
+					m.inspectViewport.SetContent(highlightMatches(m.inspectText, m.inspectSearchTerm))
+					m.inspectViewport.GotoTop()
+					return m, nil
+				case tea.KeyEsc:
+					m.inspectSearchMode = false
+					m.inspectSearchTerm = ""
+					m.inspectViewport.SetContent(m.inspectText) // reset content
+					return m, nil
+				case tea.KeyBackspace:
+					if len(m.inspectSearchTerm) > 0 {
+						m.inspectSearchTerm = m.inspectSearchTerm[:len(m.inspectSearchTerm)-1]
+					}
+					return m, nil
+				default:
+					// Append character to search term (handle printable characters)
+					if len(msg.String()) == 1 && msg.String()[0] >= 32 {
+						m.inspectSearchTerm += msg.String()
+					}
+					return m, nil
+				}
+			}
 			// Scroll inside inspect viewport
 			switch msg.String() {
+			case "/":
+				m.inspectSearchMode = true
+				m.inspectSearchTerm = ""
+				return m, nil
 			case "j", "down":
 				m.inspectViewport.LineDown(1)
 			case "k", "up":
@@ -283,7 +333,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 			}
-
 		}
 
 	case tickMsg:
@@ -327,8 +376,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	if m.inspecting {
+		header := fmt.Sprintf("Inspecting (%s)", m.mode)
+		if m.inspectSearchMode {
+			header += fmt.Sprintf(" - Search: %s", m.inspectSearchTerm)
+		}
 		return borderStyle.Render(
-			fmt.Sprintf("Inspecting (%s)\n\n%s\n\n[press q or esc to go back]", m.mode, m.inspectViewport.View()),
+			fmt.Sprintf("%s\n\n%s\n\n[press q or esc to go back, / to search]", header, m.inspectViewport.View()),
 		)
 	}
 
