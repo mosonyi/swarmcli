@@ -54,6 +54,22 @@ func (m model) updateViewports(msg tea.Msg) (model, tea.Cmd) {
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Global escape / quit handler
+	if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc || msg.String() == "esc" {
+		switch {
+		case m.inspecting:
+			m.inspecting = false
+			m.inspectText = ""
+			return m, nil
+		case m.view == "nodeStacks":
+			m.view = "main"
+			m.nodeStackOutput = ""
+			return m, nil
+		default:
+			return m, tea.Quit
+		}
+	}
+
 	if m.commandMode {
 		return m.handleCommandKey(msg)
 	} else if m.inspecting {
