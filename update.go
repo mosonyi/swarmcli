@@ -21,8 +21,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.inspectText = string(msg)
 		m.inspectViewport.SetContent(m.inspectText)
 		m.inspectViewport.GotoTop()
-	case nodeStackMsg:
-		m.nodeStackOutput = string(msg)
+	case nodeStacksMsg:
+		m.view = "nodeStacks"
+		m.nodeStackOutput = msg.output
+		m.nodeStacks = msg.stacks
+		m.stackCursor = 0
+	case stackLogMsg:
+		m.stackLogs = string(msg)
 	case statusMsg:
 		m.host = msg.host
 		m.version = msg.version
@@ -175,13 +180,23 @@ func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case "j", "down":
-		if m.cursor < len(m.items)-1 {
+		if m.view == "nodeStacks" && m.stackCursor < len(m.nodeStacks)-1 {
+			m.stackCursor++
+		} else if m.cursor < len(m.items)-1 {
 			m.cursor++
 		}
 
 	case "k", "up":
-		if m.cursor > 0 {
+		if m.view == "nodeStacks" && m.stackCursor > 0 {
+			m.stackCursor--
+		} else if m.cursor > 0 {
 			m.cursor--
+		}
+
+	case "enter":
+		if m.view == "nodeStacks" && m.stackCursor < len(m.nodeStacks) {
+			stackName := m.nodeStacks[m.stackCursor]
+			return m, inspectStackLogs(stackName)
 		}
 
 	case "i":
@@ -189,6 +204,12 @@ func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			cmd := inspectItem(m.mode, m.items[m.cursor])
 			m.inspectViewport.SetContent("")
 			return m, cmd
+		}
+
+	case "esc":
+		if m.view == "nodeStacks" {
+			m.view = ""
+			m.stackLogs = ""
 		}
 
 	case ":":

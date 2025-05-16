@@ -19,7 +19,10 @@ const (
 type tickMsg time.Time
 type loadedMsg []string
 type inspectMsg string
-type nodeStackMsg string
+type nodeStacksMsg struct {
+	output string
+	stacks []string
+}
 
 // new status message to update system usage info
 type statusMsg struct {

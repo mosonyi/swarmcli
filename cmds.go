@@ -5,6 +5,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"swarmcli/docker"
 	"time"
@@ -82,11 +83,13 @@ func inspectItem(mode mode, line string) tea.Cmd {
 
 func loadNodeStacks(nodeID string) tea.Cmd {
 	return func() tea.Msg {
-		// Step 1: Get task names on node
 		cmd := exec.Command("docker", "node", "ps", nodeID, "--format", "{{.Name}}")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return nodeStackMsg(fmt.Sprintf("Error getting node tasks: %v\n%s", err, out))
+			return nodeStacksMsg{
+				output: fmt.Sprintf("Error getting node tasks: %v\n%s", err, out),
+				stacks: nil,
+			}
 		}
 
 		taskNames := strings.Fields(string(out))
@@ -98,10 +101,8 @@ func loadNodeStacks(nodeID string) tea.Cmd {
 			}
 		}
 
-		stacks := make(map[string]struct{})
-
+		stackSet := make(map[string]struct{})
 		for serviceName := range serviceNamesSet {
-			// Get service ID for the service name
 			cmdServiceID := exec.Command("docker", "service", "ls", "--filter", "name="+serviceName, "--format", "{{.ID}}")
 			idOut, err := cmdServiceID.CombinedOutput()
 			if err != nil || len(idOut) == 0 {
@@ -109,7 +110,6 @@ func loadNodeStacks(nodeID string) tea.Cmd {
 			}
 			serviceID := strings.TrimSpace(string(idOut))
 
-			// Inspect service for stack label
 			cmdInspect := exec.Command("docker", "service", "inspect", serviceID, "--format", "{{ index .Spec.Labels \"com.docker.stack.namespace\" }}")
 			stackNameBytes, err := cmdInspect.CombinedOutput()
 			if err != nil {
@@ -117,20 +117,50 @@ func loadNodeStacks(nodeID string) tea.Cmd {
 			}
 			stackName := strings.TrimSpace(string(stackNameBytes))
 			if stackName != "" {
-				stacks[stackName] = struct{}{}
+				stackSet[stackName] = struct{}{}
 			}
 		}
 
-		if len(stacks) == 0 {
-			return nodeStackMsg("No stacks found on this node.")
+		var stacks []string
+		for stack := range stackSet {
+			stacks = append(stacks, stack)
 		}
 
+		sort.Strings(stacks)
 		var sb strings.Builder
 		sb.WriteString("Stacks running on node " + nodeID + ":\n")
-		for stack := range stacks {
-			sb.WriteString("- " + stack + "\n")
+		for _, s := range stacks {
+			sb.WriteString("- " + s + "\n")
 		}
 
-		return nodeStackMsg(sb.String())
+		return nodeStacksMsg{output: sb.String(), stacks: stacks}
+	}
+}
+
+type stackLogMsg string
+
+func inspectStackLogs(stack string) tea.Cmd {
+	return func() tea.Msg {
+		cmd := exec.Command("docker", "service", "ls", "--filter", "label=com.docker.stack.namespace="+stack, "--format", "{{.Name}}")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return stackLogMsg(fmt.Sprintf("Error listing services: %v\n%s", err, out))
+		}
+
+		serviceNames := strings.Fields(string(out))
+		var logs strings.Builder
+
+		for _, svc := range serviceNames {
+			logs.WriteString("Logs for service: " + svc + "\n")
+			logCmd := exec.Command("docker", "service", "logs", "--raw", "--no-task-ids", "--tail", "20", svc)
+			logOut, err := logCmd.CombinedOutput()
+			if err != nil {
+				logs.WriteString("Error fetching logs: " + err.Error() + "\n")
+				continue
+			}
+			logs.WriteString(string(logOut) + "\n\n")
+		}
+
+		return stackLogMsg(logs.String())
 	}
 }

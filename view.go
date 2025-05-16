@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/charmbracelet/lipgloss"
+	"strings"
 )
 
 func (m model) View() string {
@@ -17,9 +18,20 @@ func (m model) View() string {
 	}
 
 	if m.view == "nodeStacks" {
-		return borderStyle.Render(
-			fmt.Sprintf("Stacks on node: %s\n\n%s\n\n[press q or esc to go back]", m.selectedNodeID, m.nodeStackOutput),
-		)
+		if m.stackLogs != "" {
+			return m.stackLogs + "\n\n[press q or esc to go back]"
+		}
+		var b strings.Builder
+		b.WriteString("Stacks on node:\n\n")
+		for i, stack := range m.nodeStacks {
+			cursor := "  "
+			if i == m.stackCursor {
+				cursor = "➜ "
+			}
+			b.WriteString(fmt.Sprintf("%s%s\n", cursor, stack))
+		}
+		b.WriteString("\n[press enter to inspect logs, q/esc to go back]")
+		return b.String()
 	}
 
 	status := statusStyle.Render(fmt.Sprintf(

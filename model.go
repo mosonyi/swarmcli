@@ -19,7 +19,6 @@ type model struct {
 	commandMode     bool
 	commandInput    string
 	selectedNodeID  string
-	nodeStackOutput string
 
 	// status overview fields
 	host           string
@@ -28,6 +27,12 @@ type model struct {
 	memUsage       string
 	containerCount int
 	serviceCount   int
+
+	// node stacks
+	nodeStackOutput string
+	nodeStacks      []string
+	stackCursor     int
+	stackLogs       string // content of inspected stack logs
 
 	// Search inside inspect view
 	inspectSearchMode bool   // Are we in search mode inside inspect view?
