@@ -23,11 +23,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.inspectViewport.GotoTop()
 	case nodeStacksMsg:
 		m.view = "nodeStacks"
-		m.nodeStackOutput = msg.output
 		m.nodeStacks = msg.stacks
+		m.nodeStackLines = strings.Split(msg.output, "\n")
 		m.stackCursor = 0
-	case stackLogMsg:
-		m.stackLogs = string(msg)
+	case logMsg:
+		m.viewingLogs = true
+		m.stackLogsText = string(msg)
+		m.logsViewport.SetContent(m.stackLogsText)
+		m.logsViewport.GotoTop()
 	case statusMsg:
 		m.host = msg.host
 		m.version = msg.version
@@ -54,10 +57,11 @@ func (m model) handleResize(msg tea.WindowSizeMsg) model {
 }
 
 func (m model) updateViewports(msg tea.Msg) (model, tea.Cmd) {
-	var cmd1, cmd2 tea.Cmd
+	var cmd1, cmd2, cmd3 tea.Cmd
 	m.viewport, cmd1 = m.viewport.Update(msg)
 	m.inspectViewport, cmd2 = m.inspectViewport.Update(msg)
-	return m, tea.Batch(cmd1, cmd2)
+	m.logsViewport, cmd3 = m.logsViewport.Update(msg)
+	return m, tea.Batch(cmd1, cmd2, cmd3)
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -68,9 +72,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.inspecting = false
 			m.inspectText = ""
 			return m, nil
+		case m.viewingLogs: // 🛠️ Fix: Add this
+			m.viewingLogs = false
+			m.stackLogsText = ""
+			return m, nil
 		case m.view == "nodeStacks":
 			m.view = "main"
-			m.nodeStackOutput = ""
 			return m, nil
 		default:
 			return m, tea.Quit
@@ -81,6 +88,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleCommandKey(msg)
 	} else if m.inspecting {
 		return m.handleInspectKey(msg)
+	} else if m.viewingLogs {
+		return m.handleLogKey(msg)
 	} else {
 		return m.handleMainKey(msg)
 	}
@@ -194,9 +203,11 @@ func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "enter":
-		if m.view == "nodeStacks" && m.stackCursor < len(m.nodeStacks) {
-			stackName := m.nodeStacks[m.stackCursor]
-			return m, inspectStackLogs(stackName)
+		if m.view == "nodeStacks" && m.stackCursor < len(m.nodeStackLines) {
+			serviceID := extractServiceID(m.nodeStackLines[m.stackCursor])
+			m.viewingLogs = true
+			m.logsViewport.SetContent("")
+			return m, loadServiceLogs(serviceID)
 		}
 
 	case "i":
@@ -204,12 +215,6 @@ func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			cmd := inspectItem(m.mode, m.items[m.cursor])
 			m.inspectViewport.SetContent("")
 			return m, cmd
-		}
-
-	case "esc":
-		if m.view == "nodeStacks" {
-			m.view = ""
-			m.stackLogs = ""
 		}
 
 	case ":":
@@ -236,4 +241,57 @@ func (m model) handleSelectNode() (tea.Model, tea.Cmd) {
 	m.selectedNodeID = nodeID
 	m.view = "nodeStacks"
 	return m, loadNodeStacks(nodeID)
+}
+
+func (m model) handleLogsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEnter:
+		m.stackLogsSearchMode = false
+		m.logsViewport.SetContent(highlightMatches(m.stackLogsText, m.stackLogsSearchTerm))
+		m.logsViewport.GotoTop()
+	case tea.KeyEsc:
+		m.stackLogsSearchMode = false
+		m.stackLogsSearchTerm = ""
+		m.logsViewport.SetContent(m.stackLogsText)
+	case tea.KeyBackspace:
+		if len(m.stackLogsSearchTerm) > 0 {
+			m.stackLogsSearchTerm = m.stackLogsSearchTerm[:len(m.stackLogsSearchTerm)-1]
+		}
+	default:
+		if len(msg.String()) == 1 && msg.String()[0] >= 32 {
+			m.stackLogsSearchTerm += msg.String()
+		}
+	}
+	return m, nil
+}
+
+func (m model) handleLogsScrollKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "/":
+		m.stackLogsSearchMode = true
+		m.stackLogsSearchTerm = ""
+	case "j", "down":
+		m.logsViewport.LineDown(1)
+	case "k", "up":
+		m.logsViewport.LineUp(1)
+	case "pgdown":
+		m.logsViewport.ScrollDown(m.logsViewport.Height)
+	case "pgup":
+		m.logsViewport.ScrollUp(m.logsViewport.Height)
+	case "g":
+		m.logsViewport.GotoTop()
+	case "G":
+		m.logsViewport.GotoBottom()
+	case "q":
+		m.viewingLogs = false
+		m.stackLogsText = ""
+	}
+	return m, nil
+}
+
+func (m model) handleLogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.stackLogsSearchMode {
+		return m.handleLogsKey(msg)
+	}
+	return m.handleLogsScrollKey(msg)
 }

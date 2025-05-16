@@ -17,10 +17,21 @@ func (m model) View() string {
 		)
 	}
 
-	if m.view == "nodeStacks" {
-		if m.stackLogs != "" {
-			return m.stackLogs + "\n\n[press q or esc to go back]"
+	if m.viewingLogs {
+		header := fmt.Sprintf("Logs (%s)", m.mode)
+		if m.stackLogsSearchMode {
+			header += fmt.Sprintf(" - Search: %s", m.stackLogsSearchTerm)
 		}
+		return borderStyle.Render(
+			fmt.Sprintf("%s\n\n%s\n\n[press q or esc to go back, / to search]", header, m.logsViewport.View()),
+		)
+	}
+	//
+	//if m.viewingLogs {
+	//	return frame("Logs", m.logsViewport.View(), m.logsViewport.Width)
+	//}
+
+	if m.view == "nodeStacks" {
 		var b strings.Builder
 		b.WriteString("Stacks on node:\n\n")
 		for i, stack := range m.nodeStacks {

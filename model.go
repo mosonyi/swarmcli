@@ -29,10 +29,15 @@ type model struct {
 	serviceCount   int
 
 	// node stacks
-	nodeStackOutput string
-	nodeStacks      []string
-	stackCursor     int
-	stackLogs       string // content of inspected stack logs
+	nodeStacks  []string
+	stackCursor int
+
+	logsViewport        viewport.Model
+	viewingLogs         bool
+	stackLogsText       string
+	stackLogsSearchTerm string
+	stackLogsSearchMode bool
+	nodeStackLines      []string
 
 	// Search inside inspect view
 	inspectSearchMode bool   // Are we in search mode inside inspect view?
