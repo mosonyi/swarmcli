@@ -313,14 +313,21 @@ func isValidCommand(cmd string) bool {
 	return ok
 }
 
+// Provides basic auto-completion for commands.
+//
+// Stores the current match to prevent needles frame rewrites.
 func autocompleteCommand(g *gocui.Gui, v *gocui.View) error {
 	input := strings.TrimSpace(v.Buffer())
+	var match string
 	for c := range Commands {
 		if strings.HasPrefix(c, input) {
-			v.Clear()
-			fmt.Fprint(v, c)
+			match = c
 			break
 		}
+	}
+	if match != "" {
+		v.Clear()
+		fmt.Fprint(v, match)
 	}
 	return nil
 }
