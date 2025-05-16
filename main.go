@@ -10,6 +10,7 @@ import (
 	"swarmcli/docker"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type mode string
@@ -21,6 +22,33 @@ const (
 	version           = "dev"
 )
 
+// Styles with lipgloss
+
+var (
+	borderStyle = lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color("#874BFD")).
+			Padding(0, 1)
+
+	statusStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#00FF00")).
+			Padding(0, 1).
+			Width(50)
+
+	listStyle = lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color("#FFD700")).
+			Margin(1, 0).
+			Padding(1)
+
+	helpStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#888888")).
+			Italic(true).
+			Margin(1, 0)
+)
+
+// Model holds app state
 type model struct {
 	mode            mode
 	view            string // "main" or "nodeStacks"
@@ -249,42 +277,46 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // ------- View
 
-const (
-	ColorYellow = "\033[33m"
-	ColorWhite  = "\033[37m"
-	ColorReset  = "\033[0m"
-)
-
 func (m model) View() string {
 	if m.inspecting {
-		return fmt.Sprintf("Inspecting (%s)\n\n%s\n[press q or esc to go back]", m.mode, m.inspectText)
+		return borderStyle.Render(
+			fmt.Sprintf("Inspecting (%s)\n\n%s\n\n[press q or esc to go back]", m.mode, m.inspectText),
+		)
 	}
 
 	if m.view == "nodeStacks" {
-		return fmt.Sprintf(
-			"Stacks on node: %s\n\n%s\n\n[press q or esc to go back]",
-			m.selectedNodeID, m.nodeStackOutput)
+		return borderStyle.Render(
+			fmt.Sprintf("Stacks on node: %s\n\n%s\n\n[press q or esc to go back]", m.selectedNodeID, m.nodeStackOutput),
+		)
 	}
 
-	s := fmt.Sprintf(
-		"%sCPU: %-10s  MEM: %-10s  Containers: %-4d  Services: %-4d%s\n\n",
-		ColorYellow, m.cpuUsage, m.memUsage, m.containerCount, m.serviceCount, ColorReset,
-	)
+	status := statusStyle.Render(fmt.Sprintf(
+		"CPU: %s\nMEM: %s\nContainers: %d\nServices: %d",
+		m.cpuUsage, m.memUsage, m.containerCount, m.serviceCount,
+	))
 
-	s += fmt.Sprintf("Mode: %s (press : to switch)\n\n", m.mode)
+	// Build main list with cursor highlight
+	var listBuilder strings.Builder
 	for i, item := range m.items {
 		cursor := "  "
 		if i == m.cursor {
 			cursor = "→ "
 		}
-		s += fmt.Sprintf("%s%s\n", cursor, item)
+		listBuilder.WriteString(cursor + item + "\n")
 	}
-	if m.commandMode {
-		s += fmt.Sprintf("\n: %s", m.commandInput)
-	} else {
-		s += "\n[i: inspect, s: see stacks q: quit, j/k: move]"
-	}
-	return s
+
+	mainList := listStyle.Render(listBuilder.String())
+
+	helpText := helpStyle.Render("[i: inspect, s: see stacks, q: quit, j/k: move, : switch mode]")
+
+	// Layout: status on top-left, list below
+	// We can stack vertically for simplicity
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		status,
+		mainList,
+		helpText,
+	)
 }
 
 // ------- Node stacks view
