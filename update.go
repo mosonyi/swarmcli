@@ -8,7 +8,7 @@ import (
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.handleResize(msg)
+		m = m.handleResize(msg)
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	case tickMsg:
