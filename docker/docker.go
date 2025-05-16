@@ -3,7 +3,6 @@ package docker
 import (
 	"fmt"
 	"os/exec"
-	"strconv"
 	"strings"
 )
 
@@ -137,22 +136,22 @@ func GetSwarmMemUsage() string {
 	return fmt.Sprintf("%.1f%%", total)
 }
 
-func GetContainerCount() string {
+func GetContainerCount() int {
 	out, err := RunDockerCmd("ps", "-q")
 	if err != nil {
-		return "0"
+		return 0
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	return strconv.Itoa(countNonEmptyLines(lines))
+	return countNonEmptyLines(lines)
 }
 
-func GetServiceCount() string {
+func GetServiceCount() int {
 	out, err := RunDockerCmd("service", "ls", "-q")
 	if err != nil {
-		return "0"
+		return 0
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	return strconv.Itoa(countNonEmptyLines(lines))
+	return countNonEmptyLines(lines)
 }
 
 func GetDockerVersion() string {

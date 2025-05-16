@@ -32,8 +32,15 @@ type model struct {
 	commandInput    string
 	selectedNodeID  string
 	nodeStackOutput string
+
+	// status overview fields
+	cpuUsage       string
+	memUsage       string
+	containerCount int
+	serviceCount   int
 }
 
+// initialModel creates default model
 func initialModel() model {
 	return model{mode: modeNodes}
 }
@@ -43,11 +50,20 @@ func initialModel() model {
 type tickMsg time.Time
 type loadedMsg []string
 type inspectMsg string
+type nodeStackMsg string
+
+// new status message to update system usage info
+type statusMsg struct {
+	cpu        string
+	mem        string
+	containers int
+	services   int
+}
 
 // ------- Update
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(tick(), loadData(m.mode))
+	return tea.Batch(tick(), loadData(m.mode), loadStatus())
 }
 
 func tick() tea.Cmd {
@@ -77,6 +93,23 @@ func loadData(m mode) tea.Cmd {
 			}
 		}
 		return loadedMsg(list)
+	}
+}
+
+func loadStatus() tea.Cmd {
+	return func() tea.Msg {
+		// Use your docker package functions here
+		cpu := docker.GetSwarmCPUUsage()
+		mem := docker.GetSwarmMemUsage()
+		containers := docker.GetContainerCount()
+		services := docker.GetServiceCount()
+
+		return statusMsg{
+			cpu:        cpu,
+			mem:        mem,
+			containers: containers,
+			services:   services,
+		}
 	}
 }
 
@@ -185,7 +218,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tickMsg:
-		return m, loadData(m.mode)
+		// Refresh both data and status every 5s
+		return m, tea.Batch(loadData(m.mode), loadStatus())
 
 	case loadedMsg:
 		m.items = msg
@@ -201,12 +235,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.nodeStackOutput = string(msg)
 		return m, nil
 
+	case statusMsg:
+		m.cpuUsage = msg.cpu
+		m.memUsage = msg.mem
+		m.containerCount = msg.containers
+		m.serviceCount = msg.services
+		return m, nil
+
 	}
 
 	return m, nil
 }
 
 // ------- View
+
+const (
+	ColorYellow = "\033[33m"
+	ColorWhite  = "\033[37m"
+	ColorReset  = "\033[0m"
+)
 
 func (m model) View() string {
 	if m.inspecting {
@@ -219,7 +266,12 @@ func (m model) View() string {
 			m.selectedNodeID, m.nodeStackOutput)
 	}
 
-	s := fmt.Sprintf("Mode: %s (press : to switch)\n\n", m.mode)
+	s := fmt.Sprintf(
+		"%sCPU: %-10s  MEM: %-10s  Containers: %-4d  Services: %-4d%s\n\n",
+		ColorYellow, m.cpuUsage, m.memUsage, m.containerCount, m.serviceCount, ColorReset,
+	)
+
+	s += fmt.Sprintf("Mode: %s (press : to switch)\n\n", m.mode)
 	for i, item := range m.items {
 		cursor := "  "
 		if i == m.cursor {
@@ -235,7 +287,7 @@ func (m model) View() string {
 	return s
 }
 
-type nodeStackMsg string
+// ------- Node stacks view
 
 func loadNodeStacks(nodeID string) tea.Cmd {
 	return func() tea.Msg {
