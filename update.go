@@ -24,6 +24,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case nodeStackMsg:
 		m.nodeStackOutput = string(msg)
 	case statusMsg:
+		m.host = msg.host
+		m.version = msg.version
 		m.cpuUsage = msg.cpu
 		m.memUsage = msg.mem
 		m.containerCount = msg.containers

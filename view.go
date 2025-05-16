@@ -23,8 +23,8 @@ func (m model) View() string {
 	}
 
 	status := statusStyle.Render(fmt.Sprintf(
-		"CPU: %s\nMEM: %s\nContainers: %d\nServices: %d",
-		m.cpuUsage, m.memUsage, m.containerCount, m.serviceCount,
+		"Host: %s\nVersion: %s\nCPU: %s\nMEM: %s\nContainers: %d\nServices: %d",
+		m.host, m.version, m.cpuUsage, m.memUsage, m.containerCount, m.serviceCount,
 	))
 
 	helpText := helpStyle.Render("[i: inspect, s: see stacks, q: quit, j/k: move cursor, : switch mode]")

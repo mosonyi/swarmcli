@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
+	"os"
 	"os/exec"
 	"strings"
 	"swarmcli/docker"
@@ -47,7 +48,10 @@ func loadStatus() tea.Cmd {
 		containers := docker.GetContainerCount()
 		services := docker.GetServiceCount()
 
+		host, _ := os.Hostname()
 		return statusMsg{
+			host:       host,
+			version:    version,
 			cpu:        cpu,
 			mem:        mem,
 			containers: containers,

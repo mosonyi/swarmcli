@@ -25,6 +25,8 @@ type nodeStackMsg string
 
 // new status message to update system usage info
 type statusMsg struct {
+	host       string
+	version    string
 	cpu        string
 	mem        string
 	containers int

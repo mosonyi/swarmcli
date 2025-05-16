@@ -22,6 +22,8 @@ type model struct {
 	nodeStackOutput string
 
 	// status overview fields
+	host           string
+	version        string
 	cpuUsage       string
 	memUsage       string
 	containerCount int
