@@ -1,9 +1,7 @@
 package main
 
 import (
-	"fmt"
 	"log"
-	"os/exec"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -31,19 +29,6 @@ type statusMsg struct {
 	mem        string
 	containers int
 	services   int
-}
-
-// ------- Node stacks view
-
-func loadNodeStacks(nodeID string) tea.Cmd {
-	return func() tea.Msg {
-		cmd := exec.Command("docker", "ps", "--filter", fmt.Sprintf("node=%s", nodeID), "--format", "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Labels}}")
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return nodeStackMsg(fmt.Sprintf("Error: %v\n%s", err, out))
-		}
-		return nodeStackMsg(string(out))
-	}
 }
 
 func (m model) Init() tea.Cmd {

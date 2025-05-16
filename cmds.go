@@ -79,3 +79,58 @@ func inspectItem(mode mode, line string) tea.Cmd {
 		return inspectMsg(string(out))
 	}
 }
+
+func loadNodeStacks(nodeID string) tea.Cmd {
+	return func() tea.Msg {
+		// Step 1: Get task names on node
+		cmd := exec.Command("docker", "node", "ps", nodeID, "--format", "{{.Name}}")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return nodeStackMsg(fmt.Sprintf("Error getting node tasks: %v\n%s", err, out))
+		}
+
+		taskNames := strings.Fields(string(out))
+		serviceNamesSet := make(map[string]struct{})
+		for _, taskName := range taskNames {
+			parts := strings.Split(taskName, ".")
+			if len(parts) > 0 {
+				serviceNamesSet[parts[0]] = struct{}{}
+			}
+		}
+
+		stacks := make(map[string]struct{})
+
+		for serviceName := range serviceNamesSet {
+			// Get service ID for the service name
+			cmdServiceID := exec.Command("docker", "service", "ls", "--filter", "name="+serviceName, "--format", "{{.ID}}")
+			idOut, err := cmdServiceID.CombinedOutput()
+			if err != nil || len(idOut) == 0 {
+				continue
+			}
+			serviceID := strings.TrimSpace(string(idOut))
+
+			// Inspect service for stack label
+			cmdInspect := exec.Command("docker", "service", "inspect", serviceID, "--format", "{{ index .Spec.Labels \"com.docker.stack.namespace\" }}")
+			stackNameBytes, err := cmdInspect.CombinedOutput()
+			if err != nil {
+				continue
+			}
+			stackName := strings.TrimSpace(string(stackNameBytes))
+			if stackName != "" {
+				stacks[stackName] = struct{}{}
+			}
+		}
+
+		if len(stacks) == 0 {
+			return nodeStackMsg("No stacks found on this node.")
+		}
+
+		var sb strings.Builder
+		sb.WriteString("Stacks running on node " + nodeID + ":\n")
+		for stack := range stacks {
+			sb.WriteString("- " + stack + "\n")
+		}
+
+		return nodeStackMsg(sb.String())
+	}
+}
