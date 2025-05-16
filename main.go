@@ -20,7 +20,11 @@ const (
 	Version      = "dev"
 )
 
-var Commands = []string{"nodes", "services", "stacks"}
+var Commands = map[string]struct{}{
+	"nodes":    {},
+	"services": {},
+	"stacks":   {},
+}
 
 const (
 	ColorYellow  = "\033[33m"
@@ -297,7 +301,6 @@ func executeCommand(g *gocui.Gui, v *gocui.View) error {
 	layout(g) // restore main view size
 	v.Rewind()
 	cmd := strings.TrimSpace(v.Buffer())
-	g.DeleteView("cmdinput")
 	g.SetCurrentView("main")
 	if isValidCommand(cmd) {
 		state.Mode = cmd
@@ -306,17 +309,13 @@ func executeCommand(g *gocui.Gui, v *gocui.View) error {
 }
 
 func isValidCommand(cmd string) bool {
-	for _, c := range Commands {
-		if c == cmd {
-			return true
-		}
-	}
-	return false
+	_, ok := Commands[cmd]
+	return ok
 }
 
 func autocompleteCommand(g *gocui.Gui, v *gocui.View) error {
 	input := strings.TrimSpace(v.Buffer())
-	for _, c := range Commands {
+	for c := range Commands {
 		if strings.HasPrefix(c, input) {
 			v.Clear()
 			fmt.Fprint(v, c)
