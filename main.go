@@ -22,13 +22,16 @@ const (
 )
 
 type model struct {
-	mode         mode
-	items        []string
-	cursor       int
-	inspecting   bool
-	inspectText  string
-	commandMode  bool
-	commandInput string
+	mode            mode
+	view            string // "main" or "nodeStacks"
+	items           []string
+	cursor          int
+	inspecting      bool
+	inspectText     string
+	commandMode     bool
+	commandInput    string
+	selectedNodeID  string
+	nodeStackOutput string
 }
 
 func initialModel() model {
@@ -101,14 +104,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.KeyMsg:
-		if m.inspecting {
-			switch msg.String() {
-			case "esc", "q":
+		switch msg.String() {
+		case "esc", "q":
+			switch {
+			case m.inspecting:
 				m.inspecting = false
 				m.inspectText = ""
-				return m, nil
+			case m.view == "nodeStacks":
+				m.view = "main"
+				m.nodeStackOutput = ""
+			default:
+				return m, tea.Quit
 			}
-		} else if m.commandMode {
+			return m, nil
+		}
+		if m.commandMode {
 			switch msg.Type {
 			case tea.KeyEnter:
 				cmd := strings.TrimSpace(m.commandInput)
@@ -159,7 +169,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case ":":
 				m.commandMode = true
+			case "s":
+				if m.mode == modeNodes && m.cursor < len(m.items) {
+					fields := strings.Fields(m.items[m.cursor])
+					if len(fields) > 0 {
+						nodeID := fields[0]
+						m.selectedNodeID = nodeID
+						m.view = "nodeStacks"
+						return m, loadNodeStacks(nodeID)
+					}
+				}
+
 			}
+
 		}
 
 	case tickMsg:
@@ -174,6 +196,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.inspecting = true
 		m.inspectText = string(msg)
 		return m, nil
+
+	case nodeStackMsg:
+		m.nodeStackOutput = string(msg)
+		return m, nil
+
 	}
 
 	return m, nil
@@ -184,6 +211,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	if m.inspecting {
 		return fmt.Sprintf("Inspecting (%s)\n\n%s\n[press q or esc to go back]", m.mode, m.inspectText)
+	}
+
+	if m.view == "nodeStacks" {
+		return fmt.Sprintf(
+			"Stacks on node: %s\n\n%s\n\n[press q or esc to go back]",
+			m.selectedNodeID, m.nodeStackOutput)
 	}
 
 	s := fmt.Sprintf("Mode: %s (press : to switch)\n\n", m.mode)
@@ -197,9 +230,22 @@ func (m model) View() string {
 	if m.commandMode {
 		s += fmt.Sprintf("\n: %s", m.commandInput)
 	} else {
-		s += "\n[i: inspect, q: quit, j/k: move]"
+		s += "\n[i: inspect, s: see stacks q: quit, j/k: move]"
 	}
 	return s
+}
+
+type nodeStackMsg string
+
+func loadNodeStacks(nodeID string) tea.Cmd {
+	return func() tea.Msg {
+		cmd := exec.Command("docker", "ps", "--filter", fmt.Sprintf("node=%s", nodeID), "--format", "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Labels}}")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return nodeStackMsg(fmt.Sprintf("Error: %v\n%s", err, out))
+		}
+		return nodeStackMsg(string(out))
+	}
 }
 
 // ------- Main
