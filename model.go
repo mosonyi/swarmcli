@@ -1,6 +1,10 @@
 package main
 
-import "github.com/charmbracelet/bubbles/viewport"
+import (
+	"github.com/charmbracelet/bubbles/viewport"
+)
+
+type mode string
 
 // Model holds app state
 type model struct {

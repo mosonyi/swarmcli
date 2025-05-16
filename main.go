@@ -9,8 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-type mode string
-
 const (
 	modeNodes    mode = "nodes"
 	modeServices mode = "services"
@@ -33,12 +31,6 @@ type statusMsg struct {
 	services   int
 }
 
-// ------- Update
-
-func (m model) Init() tea.Cmd {
-	return tea.Batch(tick(), loadData(m.mode), loadStatus())
-}
-
 // ------- Node stacks view
 
 func loadNodeStacks(nodeID string) tea.Cmd {
@@ -52,7 +44,9 @@ func loadNodeStacks(nodeID string) tea.Cmd {
 	}
 }
 
-// ------- Main
+func (m model) Init() tea.Cmd {
+	return tea.Batch(tick(), loadData(m.mode), loadStatus())
+}
 
 func main() {
 	p := tea.NewProgram(initialModel())
