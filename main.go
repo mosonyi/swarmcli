@@ -1,455 +1,213 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
-	"swarmcli/docker"
 	"time"
 
-	"github.com/jroimartin/gocui"
+	"swarmcli/docker"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
+
+type mode string
 
 const (
-	ModeNodes    = "nodes"
-	ModeServices = "services"
-	ModeStacks   = "stacks"
-	Version      = "dev"
+	modeNodes    mode = "nodes"
+	modeServices mode = "services"
+	modeStacks   mode = "stacks"
+	version           = "dev"
 )
 
-var Commands = map[string]struct{}{
-	"nodes":    {},
-	"services": {},
-	"stacks":   {},
+type model struct {
+	mode         mode
+	items        []string
+	cursor       int
+	inspecting   bool
+	inspectText  string
+	commandMode  bool
+	commandInput string
 }
 
-const (
-	ColorYellow  = "\033[33m"
-	ColorWhite   = "\033[37m"
-	ColorCyan    = "\033[36m"
-	ColorDefault = "\033[39m"
-)
-
-type AppState struct {
-	Mode           string
-	Nodes          []docker.SwarmNode
-	CPUUsage       string
-	MemUsage       string
-	ContainerCount string
-	ServiceCount   string
-	TailingLogs    bool
-	Paused         bool
-	InInspectMode  bool
-	ViewStack      []string
+func initialModel() model {
+	return model{mode: modeNodes}
 }
 
-func (a *AppState) UpdateUsage() {
-	a.CPUUsage = docker.GetSwarmCPUUsage()
-	a.MemUsage = docker.GetSwarmMemUsage()
-	a.ContainerCount = docker.GetContainerCount()
-	a.ServiceCount = docker.GetServiceCount()
+// ------- Messages
+
+type tickMsg time.Time
+type loadedMsg []string
+type inspectMsg string
+
+// ------- Update
+
+func (m model) Init() tea.Cmd {
+	return tea.Batch(tick(), loadData(m.mode))
 }
 
-var state AppState
+func tick() tea.Cmd {
+	return tea.Tick(time.Second*5, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
+
+func loadData(m mode) tea.Cmd {
+	return func() tea.Msg {
+		var list []string
+		switch m {
+		case modeNodes:
+			nodes, _ := docker.ListSwarmNodes()
+			for _, n := range nodes {
+				list = append(list, fmt.Sprint(n))
+			}
+		case modeServices:
+			services, _ := docker.ListSwarmServices()
+			for _, s := range services {
+				list = append(list, fmt.Sprint(s))
+			}
+		case modeStacks:
+			stacks, _ := docker.ListStacks()
+			for _, s := range stacks {
+				list = append(list, fmt.Sprint(s))
+			}
+		}
+		return loadedMsg(list)
+	}
+}
+
+func inspectItem(mode mode, line string) tea.Cmd {
+	return func() tea.Msg {
+		item := strings.Fields(line)[0]
+		var out []byte
+		var err error
+		switch mode {
+		case modeNodes:
+			out, err = exec.Command("docker", "node", "inspect", item).CombinedOutput()
+		case modeServices:
+			out, err = exec.Command("docker", "service", "inspect", item).CombinedOutput()
+		case modeStacks:
+			out, err = exec.Command("docker", "stack", "services", item).CombinedOutput()
+		}
+		if err != nil {
+			return inspectMsg(fmt.Sprintf("Error: %v\n%s", err, out))
+		}
+		return inspectMsg(string(out))
+	}
+}
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+
+	case tea.KeyMsg:
+		if m.inspecting {
+			switch msg.String() {
+			case "esc", "q":
+				m.inspecting = false
+				m.inspectText = ""
+				return m, nil
+			}
+		} else if m.commandMode {
+			switch msg.Type {
+			case tea.KeyEnter:
+				cmd := strings.TrimSpace(m.commandInput)
+				m.commandMode = false
+				m.commandInput = ""
+				switch cmd {
+				case "nodes":
+					m.mode = modeNodes
+					m.cursor = 0
+					return m, loadData(modeNodes)
+				case "services":
+					m.mode = modeServices
+					m.cursor = 0
+					return m, loadData(modeServices)
+				case "stacks":
+					m.mode = modeStacks
+					m.cursor = 0
+					return m, loadData(modeStacks)
+				}
+			case tea.KeyEsc:
+				m.commandMode = false
+				m.commandInput = ""
+				return m, nil
+			case tea.KeyBackspace:
+				if len(m.commandInput) > 0 {
+					m.commandInput = m.commandInput[:len(m.commandInput)-1]
+				}
+				return m, nil
+			default:
+				m.commandInput += msg.String()
+				return m, nil
+			}
+		} else {
+			switch msg.String() {
+			case "q":
+				return m, tea.Quit
+			case "j", "down":
+				if m.cursor < len(m.items)-1 {
+					m.cursor++
+				}
+			case "k", "up":
+				if m.cursor > 0 {
+					m.cursor--
+				}
+			case "i":
+				if m.cursor < len(m.items) {
+					return m, inspectItem(m.mode, m.items[m.cursor])
+				}
+			case ":":
+				m.commandMode = true
+			}
+		}
+
+	case tickMsg:
+		return m, loadData(m.mode)
+
+	case loadedMsg:
+		m.items = msg
+		m.cursor = 0
+		return m, nil
+
+	case inspectMsg:
+		m.inspecting = true
+		m.inspectText = string(msg)
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// ------- View
+
+func (m model) View() string {
+	if m.inspecting {
+		return fmt.Sprintf("Inspecting (%s)\n\n%s\n[press q or esc to go back]", m.mode, m.inspectText)
+	}
+
+	s := fmt.Sprintf("Mode: %s (press : to switch)\n\n", m.mode)
+	for i, item := range m.items {
+		cursor := "  "
+		if i == m.cursor {
+			cursor = "→ "
+		}
+		s += fmt.Sprintf("%s%s\n", cursor, item)
+	}
+	if m.commandMode {
+		s += fmt.Sprintf("\n: %s", m.commandInput)
+	} else {
+		s += "\n[i: inspect, q: quit, j/k: move]"
+	}
+	return s
+}
+
+// ------- Main
 
 func main() {
-	g, err := gocui.NewGui(gocui.OutputNormal)
-	if err != nil {
-		log.Panicln(err)
+	p := tea.NewProgram(initialModel())
+	if err := p.Start(); err != nil {
+		fmt.Println("Error running program:", err)
+		os.Exit(1)
 	}
-	defer g.Close()
-	g.SetManagerFunc(layout)
-
-	go updateUsage(g)
-	state.Mode = ModeNodes
-
-	state.Nodes, err = docker.ListSwarmNodes()
-	if err != nil {
-		log.Println("Error fetching swarm nodes:", err)
-		state.Nodes = []docker.SwarmNode{}
-	}
-
-	if err := keybindings(g); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
-		log.Panicln(err)
-	}
-}
-
-func updateUsage(gui *gocui.Gui) {
-	for {
-		state.UpdateUsage()
-
-		gui.Update(func(g *gocui.Gui) error {
-			if g.CurrentView() != nil && g.CurrentView().Name() != "inspect" {
-				if v, err := g.View("context"); err == nil {
-					v.Clear()
-					g.SetViewOnTop("footer")
-					v.BgColor = gocui.ColorDefault
-					v.FgColor = gocui.ColorWhite
-
-					hostname, _ := os.Hostname()
-					dockerVer := docker.GetDockerVersion()
-					fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "Context:", ColorWhite, hostname)
-					fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "Version:", ColorWhite, Version)
-					fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "Docker version:", ColorWhite, dockerVer)
-					fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "RAM:", ColorWhite, state.MemUsage)
-					fmt.Fprintf(v, "%s%-16s%s%s\n", ColorYellow, "CPU:", ColorWhite, state.CPUUsage)
-				}
-			}
-			return nil
-		})
-
-		time.Sleep(5 * time.Second)
-	}
-}
-
-func layout(g *gocui.Gui) error {
-	maxX, maxY := g.Size()
-
-	// Always draw footer, even during inspect
-	//log.Println("Rendering footer...")
-	v, err := setView(g, "footer", 0, maxY-3, maxX-1, maxY-1, false)
-	if err != nil {
-		return err
-	}
-	//v.Title = "FOOTER"
-	//v.Frame = true
-	v.Clear()
-
-	if state.InInspectMode {
-		fmt.Fprintf(v, "\033[46m\033[30m <%s> \033[0m \033[43m\033[30m<inspect>\033[0m\n", state.Mode)
-
-	} else {
-		fmt.Fprintf(v, "\033[43m\033[30m <%s> \033[0m\n", state.Mode)
-		g.Update(func(*gocui.Gui) error { return nil })
-
-	}
-
-	if state.InInspectMode {
-		return nil
-	}
-
-	v, err = setView(g, "context", 0, 0, maxX-1, 7, false)
-	if err != nil {
-		return err
-	}
-	v.BgColor = gocui.ColorDefault
-	v.FgColor = gocui.ColorWhite
-
-	v, err = setView(g, "cmdbar", 0, 6, maxX-1, 8, false)
-	if err != nil {
-		return err
-	}
-	v.BgColor = gocui.ColorDefault
-	v.FgColor = gocui.ColorYellow
-	//fmt.Fprint(v, ": (nodes, services, stacks)")
-
-	mainTop := 9
-	mainBottom := maxY - 4
-	if _, err := g.View("cmdinput"); err == nil {
-		mainTop = 10 // shift down if command input is active
-	}
-
-	v, err = setView(g, "main", 0, mainTop, maxX-1, mainBottom, true)
-	if err != nil {
-		return err
-	}
-	v.Title = strings.Title(state.Mode)
-	v.Highlight = true
-	v.SelFgColor = gocui.ColorBlack
-	v.SelBgColor = gocui.ColorCyan
-	v.BgColor = gocui.ColorDefault
-	v.FgColor = gocui.ColorCyan
-	v.Clear()
-
-	renderModeView(g, state.Mode, v)
-
-	g.SetCurrentView("main")
-
-	return nil
-}
-
-func renderModeView(g *gocui.Gui, mode string, v *gocui.View) {
-	switch mode {
-	case ModeNodes:
-		nodes, _ := docker.ListSwarmNodes()
-		for _, n := range nodes {
-			fmt.Fprintln(v, n)
-		}
-	case ModeServices:
-		services, _ := docker.ListSwarmServices()
-		for _, service := range services {
-			fmt.Fprintln(v, service)
-		}
-	case ModeStacks:
-		stacks, _ := docker.ListStacks()
-		for _, stack := range stacks {
-			fmt.Fprintln(v, stack)
-		}
-	}
-}
-
-func inspectSelected(g *gocui.Gui, _ *gocui.View) error {
-	state.ViewStack = append(state.ViewStack, state.Mode)
-	v, err := g.View("main")
-	if err != nil {
-		return err
-	}
-	_, cy := v.Cursor()
-	line, err := v.Line(cy)
-	if err != nil || line == "" {
-		return nil
-	}
-	item := strings.Fields(line)[0]
-
-	var cmd *exec.Cmd
-	switch state.Mode {
-	case ModeNodes:
-		cmd = exec.Command("docker", "node", "inspect", item)
-	case ModeServices:
-		cmd = exec.Command("docker", "service", "inspect", item)
-	case ModeStacks:
-		cmd = exec.Command("docker", "stack", "services", item)
-	default:
-		return nil
-	}
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("inspect error: %v %s", err, out)
-	}
-
-	v.Clear()
-	state.InInspectMode = true
-	g.SetCurrentView("main")
-	v.Title = "Inspect (press ESC to go back)"
-	v.Highlight = false
-	v.SelBgColor = gocui.ColorDefault
-	v.SelFgColor = gocui.ColorDefault
-	v.SetCursor(0, 0)
-	v.SetOrigin(0, 0)
-	fmt.Fprint(v, string(out))
-	v.SetCursor(0, 0)
-	v.SetOrigin(0, 0)
-	g.Update(func(*gocui.Gui) error { return nil })
-	return nil
-}
-
-func showInspectOutput(g *gocui.Gui, output string) error {
-	maxX, maxY := g.Size()
-	if v, err := g.SetView("inspect", 5, 4, maxX-5, maxY-2); err != nil && err != gocui.ErrUnknownView {
-		return err
-	} else {
-		v.Title = "Inspect"
-		v.Wrap = true
-		v.Autoscroll = false
-		v.Editable = false
-		v.Clear()
-		v.Highlight = true
-		v.Editable = false
-		fmt.Fprint(v, output)
-		g.SetCurrentView("inspect")
-		v.SetCursor(0, 0)
-		v.SetOrigin(0, 0)
-	}
-	return nil
-}
-
-func goBack(g *gocui.Gui, v *gocui.View) error {
-	state.InInspectMode = false
-	if len(state.ViewStack) > 0 {
-		state.Mode = state.ViewStack[len(state.ViewStack)-1]
-		state.ViewStack = state.ViewStack[:len(state.ViewStack)-1]
-	}
-	if v, err := g.View("main"); err == nil {
-		v.Highlight = true
-		v.SetCursor(0, 0)
-		v.SetOrigin(0, 0)
-	}
-	return layout(g)
-}
-
-func showCommandInput(g *gocui.Gui, v *gocui.View) error {
-	maxX, _ := g.Size()
-	if iv, err := g.SetView("cmdinput", 0, 8, maxX-1, 9); err != nil && err != gocui.ErrUnknownView {
-		iv.Frame = true
-		iv.Title = "Command"
-		iv.FgColor = gocui.ColorCyan
-		iv.Editable = true
-		iv.Editor = gocui.DefaultEditor
-		fmt.Fprint(iv, "> ")
-		g.SetCurrentView("cmdinput")
-		return nil
-	}
-	return nil
-}
-
-func hideCommandInput(g *gocui.Gui, v *gocui.View) error {
-	g.DeleteView("cmdinput")
-	layout(g) // restore main view size
-	g.SetCurrentView("main")
-	return nil
-}
-
-func executeCommand(g *gocui.Gui, v *gocui.View) error {
-	g.DeleteView("cmdinput")
-	layout(g) // restore main view size
-	v.Rewind()
-	cmd := strings.TrimSpace(v.Buffer())
-	g.SetCurrentView("main")
-	if isValidCommand(cmd) {
-		state.Mode = cmd
-	}
-	return layout(g)
-}
-
-func isValidCommand(cmd string) bool {
-	_, ok := Commands[cmd]
-	return ok
-}
-
-// Provides basic auto-completion for commands.
-//
-// Stores the current match to prevent needles frame rewrites.
-func autocompleteCommand(g *gocui.Gui, v *gocui.View) error {
-	input := strings.TrimSpace(v.Buffer())
-	var match string
-	for c := range Commands {
-		if strings.HasPrefix(c, input) {
-			match = c
-			break
-		}
-	}
-	if match != "" {
-		v.Clear()
-		fmt.Fprint(v, match)
-	}
-	return nil
-}
-
-func keybindings(g *gocui.Gui) error {
-	g.SetKeybinding("main", gocui.KeyArrowDown, gocui.ModNone, cursorDown)
-	g.SetKeybinding("main", gocui.KeyArrowUp, gocui.ModNone, cursorUp)
-	g.SetKeybinding("main", gocui.KeyEsc, gocui.ModNone, goBack)
-	g.SetKeybinding("main", 'b', gocui.ModNone, goBack)
-	g.SetKeybinding("main", 'i', gocui.ModNone, inspectSelected)
-	g.SetKeybinding("main", 's', gocui.ModNone, showNodeStacks)
-	g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit)
-	g.SetKeybinding("main", ':', gocui.ModNone, showCommandInput)
-	g.SetKeybinding("cmdinput", gocui.KeyEnter, gocui.ModNone, executeCommand)
-	g.SetKeybinding("cmdinput", gocui.KeyEsc, gocui.ModNone, hideCommandInput)
-	g.SetKeybinding("cmdinput", gocui.KeyTab, gocui.ModNone, autocompleteCommand)
-	g.SetKeybinding("main", 'q', gocui.ModNone, quit)
-	g.SetKeybinding("main", gocui.KeyArrowDown, gocui.ModNone, cursorDown)
-	g.SetKeybinding("main", gocui.KeyArrowUp, gocui.ModNone, cursorUp)
-	return nil
-}
-
-func cursorDown(g *gocui.Gui, v *gocui.View) error {
-
-	if state.InInspectMode {
-		ox, oy := v.Origin()
-		v.SetOrigin(ox, oy+1)
-		g.Update(func(*gocui.Gui) error { return nil })
-	} else {
-		_, y := v.Cursor()
-		v.SetCursor(0, y+1)
-	}
-	return nil
-}
-
-func cursorUp(g *gocui.Gui, v *gocui.View) error {
-
-	if state.InInspectMode {
-		ox, oy := v.Origin()
-		if oy > 0 {
-			v.SetOrigin(ox, oy-1)
-			g.Update(func(*gocui.Gui) error { return nil })
-		}
-	} else {
-		_, y := v.Cursor()
-		if y > 0 {
-			v.SetCursor(0, y-1)
-		}
-	}
-	return nil
-}
-
-func setView(g *gocui.Gui, name string, x0, y0, x1, y1 int, frame bool) (*gocui.View, error) {
-	v, err := g.SetView(name, x0, y0, x1, y1)
-	if err != nil && !errors.Is(err, gocui.ErrUnknownView) {
-		return nil, err
-	}
-	v.Frame = frame
-	return v, nil
-}
-
-func quit(g *gocui.Gui, v *gocui.View) error {
-	return gocui.ErrQuit
-}
-
-func showNodeStacks(g *gocui.Gui, v *gocui.View) error {
-	if state.Mode != ModeNodes {
-		return nil
-	}
-	_, cy := v.Cursor()
-	line, err := v.Line(cy)
-	if err != nil || line == "" {
-		return nil
-	}
-	nodeID := strings.Fields(line)[0]
-
-	// List services running on the node
-	cmd := exec.Command("docker", "node", "ps", "--filter", "desired-state=running", "--format", "{{.Name}}", nodeID)
-	out, err := cmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to get running services: %v", err)
-	}
-	services := strings.Split(strings.TrimSpace(string(out)), "\n")
-
-	// Map service names to stacks (format: stack_service)
-	stacks := make(map[string]struct{})
-	for _, svc := range services {
-		parts := strings.SplitN(svc, "_", 2)
-		if len(parts) == 2 {
-			stacks[parts[0]] = struct{}{}
-		}
-	}
-
-	// Show stacks in a new view
-	maxX, maxY := g.Size()
-	stackView, err := g.SetView("stacklist", maxX/4, maxY/4, maxX*3/4, maxY*3/4)
-	if err != nil && err != gocui.ErrUnknownView {
-		return err
-	}
-	stackView.Clear()
-	stackView.Title = "Stacks on Node (ESC to close)"
-	stackView.Highlight = true
-	stackView.SelFgColor = gocui.ColorBlack
-	stackView.SelBgColor = gocui.ColorCyan
-	stackView.Editable = false
-
-	for stack := range stacks {
-		fmt.Fprintln(stackView, stack)
-	}
-	g.SetCurrentView("stacklist")
-	state.InInspectMode = true
-
-	// Add navigation and close keybindings for the stack view
-	g.SetKeybinding("stacklist", gocui.KeyArrowDown, gocui.ModNone, cursorDown)
-	g.SetKeybinding("stacklist", gocui.KeyArrowUp, gocui.ModNone, cursorUp)
-	g.SetKeybinding("stacklist", gocui.KeyEsc, gocui.ModNone, closeStackList)
-	return nil
-}
-
-func closeStackList(g *gocui.Gui, v *gocui.View) error {
-	g.DeleteView("stacklist")
-	state.InInspectMode = false
-	g.SetCurrentView("main")
-	return nil
 }
