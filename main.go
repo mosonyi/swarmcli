@@ -9,6 +9,7 @@ import (
 
 	"swarmcli/docker"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -54,6 +55,8 @@ type model struct {
 	view            string // "main" or "nodeStacks"
 	items           []string
 	cursor          int
+	viewport        viewport.Model
+	inspectViewport viewport.Model
 	inspecting      bool
 	inspectText     string
 	commandMode     bool
@@ -70,7 +73,16 @@ type model struct {
 
 // initialModel creates default model
 func initialModel() model {
-	return model{mode: modeNodes}
+	vp := viewport.New(80, 20)
+	vp.YPosition = 5
+
+	inspectVp := viewport.New(80, 20) // initial size, will update on WindowSizeMsg
+
+	return model{
+		mode:            modeNodes,
+		viewport:        vp,
+		inspectViewport: inspectVp,
+	}
 }
 
 // ------- Messages
@@ -164,6 +176,13 @@ func inspectItem(mode mode, line string) tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
+	case tea.WindowSizeMsg:
+		m.viewport.Width = msg.Width - 4
+		m.viewport.Height = msg.Height - 10
+
+		m.inspectViewport.Width = msg.Width - 4
+		m.inspectViewport.Height = msg.Height - 10
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "esc", "q":
@@ -212,6 +231,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.commandInput += msg.String()
 				return m, nil
 			}
+		} else if m.inspecting {
+			// Scroll inside inspect viewport
+			switch msg.String() {
+			case "j", "down":
+				m.inspectViewport.LineDown(1)
+			case "k", "up":
+				m.inspectViewport.LineUp(1)
+			case "pgdown":
+				m.inspectViewport.ScrollDown(m.inspectViewport.Height)
+			case "pgup":
+				m.inspectViewport.ScrollUp(m.inspectViewport.Height)
+			case "g":
+				m.inspectViewport.GotoTop()
+			case "G":
+				m.inspectViewport.GotoBottom()
+			case "q", "esc":
+				m.inspecting = false
+				m.inspectText = ""
+			}
 		} else {
 			switch msg.String() {
 			case "q":
@@ -226,7 +264,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case "i":
 				if m.cursor < len(m.items) {
-					return m, inspectItem(m.mode, m.items[m.cursor])
+					cmd := inspectItem(m.mode, m.items[m.cursor])
+					// We clear viewport content here, will fill on inspectMsg
+					m.inspectViewport.SetContent("")
+					return m, cmd
 				}
 			case ":":
 				m.commandMode = true
@@ -257,6 +298,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case inspectMsg:
 		m.inspecting = true
 		m.inspectText = string(msg)
+		m.inspectViewport.SetContent(m.inspectText)
+		m.inspectViewport.GotoTop()
 		return m, nil
 
 	case nodeStackMsg:
@@ -272,7 +315,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	}
 
-	return m, nil
+	// Update viewport and inspectViewport independently
+	var cmd1, cmd2 tea.Cmd
+	m.viewport, cmd1 = m.viewport.Update(msg)
+	m.inspectViewport, cmd2 = m.inspectViewport.Update(msg)
+
+	return m, tea.Batch(cmd1, cmd2)
 }
 
 // ------- View
@@ -280,7 +328,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	if m.inspecting {
 		return borderStyle.Render(
-			fmt.Sprintf("Inspecting (%s)\n\n%s\n\n[press q or esc to go back]", m.mode, m.inspectText),
+			fmt.Sprintf("Inspecting (%s)\n\n%s\n\n[press q or esc to go back]", m.mode, m.inspectViewport.View()),
 		)
 	}
 
@@ -295,26 +343,22 @@ func (m model) View() string {
 		m.cpuUsage, m.memUsage, m.containerCount, m.serviceCount,
 	))
 
-	// Build main list with cursor highlight
-	var listBuilder strings.Builder
+	helpText := helpStyle.Render("[i: inspect, s: see stacks, q: quit, j/k: move cursor, : switch mode]")
+
+	// Show the main list with cursor highlighted, no viewport scroll for this version
+	s := fmt.Sprintf("Mode: %s\n\n", m.mode)
 	for i, item := range m.items {
 		cursor := "  "
 		if i == m.cursor {
 			cursor = "→ "
 		}
-		listBuilder.WriteString(cursor + item + "\n")
+		s += fmt.Sprintf("%s%s\n", cursor, item)
 	}
 
-	mainList := listStyle.Render(listBuilder.String())
-
-	helpText := helpStyle.Render("[i: inspect, s: see stacks, q: quit, j/k: move, : switch mode]")
-
-	// Layout: status on top-left, list below
-	// We can stack vertically for simplicity
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		status,
-		mainList,
+		borderStyle.Render(s),
 		helpText,
 	)
 }
