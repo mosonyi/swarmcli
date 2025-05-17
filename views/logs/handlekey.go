@@ -22,6 +22,8 @@ func HandleKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.mode = "normal"
 			m.searchMatches = utils.FindAllMatches(m.viewport.View(), m.searchTerm)
 			m.searchIndex = 0
+			highlighted := utils.HighlightMatches(m.logLines, m.searchTerm)
+			m.viewport.SetContent(highlighted)
 			m.scrollToMatch()
 		}
 		return m, nil

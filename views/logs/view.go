@@ -18,7 +18,7 @@ func (m Model) View() string {
 
 	content := m.viewport.View()
 	if len(m.searchMatches) > 0 {
-		content = utils.HighlightMatches(content, m.searchTerm, m.searchMatches)
+		content = utils.HighlightMatches(content, m.searchTerm)
 	}
 	m.viewport.SetContent(content)
 

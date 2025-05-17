@@ -2,6 +2,7 @@ package utils
 
 import (
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"strings"
 )
 
@@ -21,23 +22,30 @@ import (
 
 var highlightStyle = lipgloss.NewStyle().Background(lipgloss.Color("205")).Foreground(lipgloss.Color("0"))
 
-func HighlightMatches(text, term string, matches []int) string {
-	if term == "" || len(matches) == 0 {
+func HighlightMatches(text, term string) string {
+	matches := FindAllMatches(text, term)
+	if len(matches) == 0 {
 		return text
 	}
 
-	var b strings.Builder
-	last := 0
-	for _, idx := range matches {
-		if idx < last || idx >= len(text) {
-			continue
+	var highlighted strings.Builder
+	cursor := 0
+	style := termenv.String().Foreground(termenv.ANSIBrightYellow).Background(termenv.ANSIBlue)
+
+	for _, match := range matches {
+		start := match
+		end := match + len(term)
+		if start > cursor {
+			highlighted.WriteString(text[cursor:start])
 		}
-		b.WriteString(text[last:idx])
-		b.WriteString(highlightStyle.Render(text[idx : idx+len(term)]))
-		last = idx + len(term)
+		highlighted.WriteString(style.Styled(text[start:end]))
+		cursor = end
 	}
-	b.WriteString(text[last:])
-	return b.String()
+	if cursor < len(text) {
+		highlighted.WriteString(text[cursor:])
+	}
+
+	return highlighted.String()
 }
 
 func FindAllMatches(text, term string) []int {

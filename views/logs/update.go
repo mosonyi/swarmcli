@@ -39,7 +39,7 @@ func (m *Model) scrollToMatch() {
 		return
 	}
 	matchPos := m.searchMatches[m.searchIndex]
-	lines := strings.Split(m.viewport.View()[:matchPos], "\n")
+	lines := strings.Split(m.logLines[:matchPos], "\n")
 	offset := len(lines) - m.viewport.Height/2
 	if offset < 0 {
 		offset = 0
