@@ -53,6 +53,9 @@ func (m model) handleResize(msg tea.WindowSizeMsg) model {
 	m.inspectViewport.Width = usableWidth
 	m.inspectViewport.Height = usableHeight
 
+	m.logsViewport.Width = usableWidth
+	m.logsViewport.Height = usableHeight
+
 	return m
 }
 
