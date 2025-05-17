@@ -30,15 +30,10 @@ type model struct {
 	serviceCount   int
 
 	// node stacks
-	nodeStacks  []string
-	stackCursor int
-
-	logsViewport        viewport.Model
-	stackLogsText       string
-	stackLogsSearchTerm string
-	stackLogsSearchMode bool
-	nodeStackLines      []string
-	nodeServices        []string
+	nodeStacks     []string
+	stackCursor    int
+	nodeStackLines []string
+	nodeServices   []string
 
 	logs logs.Model
 

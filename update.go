@@ -61,11 +61,10 @@ func (m model) handleResize(msg tea.WindowSizeMsg) model {
 }
 
 func (m model) updateViewports(msg tea.Msg) (model, tea.Cmd) {
-	var cmd1, cmd2, cmd3 tea.Cmd
+	var cmd1, cmd2 tea.Cmd
 	m.viewport, cmd1 = m.viewport.Update(msg)
 	m.inspectViewport, cmd2 = m.inspectViewport.Update(msg)
-	m.logsViewport, cmd3 = m.logsViewport.Update(msg)
-	return m, tea.Batch(cmd1, cmd2, cmd3)
+	return m, tea.Batch(cmd1, cmd2)
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -251,55 +250,4 @@ func (m model) handleSelectNode() (tea.Model, tea.Cmd) {
 	m.selectedNodeID = nodeID
 	m.view = "nodeStacks"
 	return m, loadNodeStacks(nodeID)
-}
-
-func (m model) handleLogsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
-		m.stackLogsSearchMode = false
-		m.logsViewport.SetContent(highlightMatches(m.stackLogsText, m.stackLogsSearchTerm))
-		m.logsViewport.GotoTop()
-	case tea.KeyEsc:
-		m.stackLogsSearchMode = false
-		m.stackLogsSearchTerm = ""
-		m.logsViewport.SetContent(m.stackLogsText)
-	case tea.KeyBackspace:
-		if len(m.stackLogsSearchTerm) > 0 {
-			m.stackLogsSearchTerm = m.stackLogsSearchTerm[:len(m.stackLogsSearchTerm)-1]
-		}
-	default:
-		if len(msg.String()) == 1 && msg.String()[0] >= 32 {
-			m.stackLogsSearchTerm += msg.String()
-		}
-	}
-	return m, nil
-}
-
-func (m model) handleLogsScrollKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "/":
-		m.stackLogsSearchMode = true
-		m.stackLogsSearchTerm = ""
-	case "j", "down":
-		m.logsViewport.LineDown(1)
-	case "k", "up":
-		m.logsViewport.LineUp(1)
-	case "pgdown":
-		m.logsViewport.ScrollDown(m.logsViewport.Height)
-	case "pgup":
-		m.logsViewport.ScrollUp(m.logsViewport.Height)
-	case "g":
-		m.logsViewport.GotoTop()
-	case "G":
-		m.logsViewport.GotoBottom()
-	case "q":
-	}
-	return m, nil
-}
-
-func (m model) handleLogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.stackLogsSearchMode {
-		return m.handleLogsKey(msg)
-	}
-	return m.handleLogsScrollKey(msg)
 }
