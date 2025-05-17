@@ -3,6 +3,7 @@ package main
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	"strings"
+	inspectview "swarmcli/views/inspect"
 	"swarmcli/views/logs"
 )
 
@@ -17,11 +18,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loadedMsg:
 		m.items = msg
 		m.cursor = 0
-	case inspectMsg:
-		m.inspecting = true
-		m.inspectText = string(msg)
-		m.inspectViewport.SetContent(m.inspectText)
-		m.inspectViewport.GotoTop()
+	case inspectview.Msg:
+		m.view = inspectview.ViewName
+		var cmd tea.Cmd
+		m.inspect, cmd = m.inspect.Update(msg)
+		return m, cmd
 	case nodeStacksMsg:
 		m.view = "nodeStacks"
 		m.nodeStacks = msg.stacks
@@ -52,10 +53,8 @@ func (m model) handleResize(msg tea.WindowSizeMsg) model {
 	m.viewport.Width = usableWidth
 	m.viewport.Height = usableHeight
 
-	m.inspectViewport.Width = usableWidth
-	m.inspectViewport.Height = usableHeight
-
 	m.logs = m.logs.SetSize(usableWidth, usableHeight)
+	m.inspect = m.inspect.SetSize(usableWidth, usableHeight)
 
 	return m
 }
@@ -63,7 +62,6 @@ func (m model) handleResize(msg tea.WindowSizeMsg) model {
 func (m model) updateViewports(msg tea.Msg) (model, tea.Cmd) {
 	var cmd1, cmd2 tea.Cmd
 	m.viewport, cmd1 = m.viewport.Update(msg)
-	m.inspectViewport, cmd2 = m.inspectViewport.Update(msg)
 	return m, tea.Batch(cmd1, cmd2)
 }
 
@@ -71,10 +69,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Global escape / quit handler
 	if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc || msg.String() == "esc" {
 		switch {
-		case m.inspecting:
-			m.inspecting = false
-			m.inspectText = ""
-			return m, nil
+		case m.view == inspectview.ViewName:
+			m.view = "main"
+			var cmd tea.Cmd
+			m.inspect, cmd = m.inspect.Update(msg)
+			return m, cmd
 		case m.view == "nodeStacks":
 			m.view = "main"
 			return m, nil
@@ -90,10 +89,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	if m.commandMode {
 		return m.handleCommandKey(msg)
-	} else if m.inspecting {
-		return m.handleInspectKey(msg)
 	} else {
 		switch m.view {
+		case inspectview.ViewName:
+			var cmd tea.Cmd
+			m.inspect, cmd = m.inspect.Update(msg)
+			return m, cmd
 		case logs.ViewName:
 			var cmd tea.Cmd
 			m.logs, cmd = m.logs.Update(msg)
@@ -139,61 +140,6 @@ func (m model) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) handleInspectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case m.inspectSearchMode:
-		return m.handleInspectSearchKey(msg)
-	default:
-		return m.handleInspectScrollKey(msg)
-	}
-}
-
-func (m model) handleInspectSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
-		m.inspectSearchMode = false
-		m.inspectViewport.SetContent(highlightMatches(m.inspectText, m.inspectSearchTerm))
-		m.inspectViewport.GotoTop()
-	case tea.KeyEsc:
-		m.inspectSearchMode = false
-		m.inspectSearchTerm = ""
-		m.inspectViewport.SetContent(m.inspectText)
-	case tea.KeyBackspace:
-		if len(m.inspectSearchTerm) > 0 {
-			m.inspectSearchTerm = m.inspectSearchTerm[:len(m.inspectSearchTerm)-1]
-		}
-	default:
-		if len(msg.String()) == 1 && msg.String()[0] >= 32 {
-			m.inspectSearchTerm += msg.String()
-		}
-	}
-	return m, nil
-}
-
-func (m model) handleInspectScrollKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "/":
-		m.inspectSearchMode = true
-		m.inspectSearchTerm = ""
-	case "j", "down":
-		m.inspectViewport.ScrollDown(1)
-	case "k", "up":
-		m.inspectViewport.ScrollUp(1)
-	case "pgdown":
-		m.inspectViewport.ScrollDown(m.inspectViewport.Height)
-	case "pgup":
-		m.inspectViewport.ScrollUp(m.inspectViewport.Height)
-	case "g":
-		m.inspectViewport.GotoTop()
-	case "G":
-		m.inspectViewport.GotoBottom()
-	case "q", "esc":
-		m.inspecting = false
-		m.inspectText = ""
-	}
-	return m, nil
-}
-
 func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q":
@@ -222,7 +168,7 @@ func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "i":
 		if m.cursor < len(m.items) {
 			cmd := inspectItem(m.mode, m.items[m.cursor])
-			m.inspectViewport.SetContent("")
+			m.inspect.SetContent("")
 			return m, cmd
 		}
 

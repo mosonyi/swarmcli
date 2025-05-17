@@ -5,18 +5,20 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"strings"
 	"swarmcli/styles"
+	inspectview "swarmcli/views/inspect"
 	"swarmcli/views/logs"
 )
 
 func (m model) View() string {
-	if m.inspecting {
-		header := fmt.Sprintf("Inspecting (%s)", m.mode)
-		if m.inspectSearchMode {
-			header += fmt.Sprintf(" - Search: %s", m.inspectSearchTerm)
-		}
-		return styles.BorderStyle.Render(
-			fmt.Sprintf("%s\n\n%s\n\n[press q or esc to go back, / to search]", header, m.inspectViewport.View()),
-		)
+	if m.view == inspectview.ViewName {
+		return m.inspect.View()
+		//header := fmt.Sprintf("Inspecting (%s)", m.mode)
+		//if m.inspectSearchMode {
+		//	header += fmt.Sprintf(" - Search: %s", m.inspectSearchTerm)
+		//}
+		//return styles.BorderStyle.Render(
+		//	fmt.Sprintf("%s\n\n%s\n\n[press q or esc to go back, / to search]", header, m.inspectViewport.View()),
+		//)
 	}
 
 	if m.view == logs.ViewName {
