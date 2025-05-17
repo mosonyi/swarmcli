@@ -29,7 +29,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.nodeStackLines = strings.Split(msg.output, "\n")
 		m.stackCursor = 0
 	case logs.Msg:
-		m.view = "logs"
+		m.view = logs.ViewName
 		var cmd tea.Cmd
 		m.logs, cmd = m.logs.Update(msg)
 		return m, cmd
@@ -78,7 +78,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case m.view == "nodeStacks":
 			m.view = "main"
 			return m, nil
-		case m.view == "logs":
+		case m.view == logs.ViewName:
 			m.view = "nodeStacks"
 			var cmd tea.Cmd
 			m.logs, cmd = m.logs.Update(msg)
@@ -94,7 +94,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleInspectKey(msg)
 	} else {
 		switch m.view {
-		case "logs":
+		case logs.ViewName:
 			var cmd tea.Cmd
 			m.logs, cmd = m.logs.Update(msg)
 			return m, cmd

@@ -5,6 +5,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"strings"
 	"swarmcli/styles"
+	"swarmcli/views/logs"
 )
 
 func (m model) View() string {
@@ -18,7 +19,7 @@ func (m model) View() string {
 		)
 	}
 
-	if m.view == "logs" {
+	if m.view == logs.ViewName {
 		return m.logs.View()
 	}
 
