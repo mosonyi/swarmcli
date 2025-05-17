@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/charmbracelet/lipgloss"
 	"strings"
+	"swarmcli/styles"
 )
 
 func (m model) View() string {
@@ -12,7 +13,7 @@ func (m model) View() string {
 		if m.inspectSearchMode {
 			header += fmt.Sprintf(" - Search: %s", m.inspectSearchTerm)
 		}
-		return borderStyle.Render(
+		return styles.BorderStyle.Render(
 			fmt.Sprintf("%s\n\n%s\n\n[press q or esc to go back, / to search]", header, m.inspectViewport.View()),
 		)
 	}
@@ -20,20 +21,6 @@ func (m model) View() string {
 	if m.view == "logs" {
 		return m.logs.View()
 	}
-
-	//if m.viewingLogs {
-	//	header := fmt.Sprintf("Logs (%s)", m.mode)
-	//	if m.stackLogsSearchMode {
-	//		header += fmt.Sprintf(" - Search: %s", m.stackLogsSearchTerm)
-	//	}
-	//	return borderStyle.Render(
-	//		fmt.Sprintf("%s\n\n%s\n\n[press q or esc to go back, / to search]", header, m.logsViewport.View()),
-	//	)
-	//}
-
-	//if m.viewingLogs {
-	//	return frame("Logs", m.logsViewport.View(), m.logsViewport.Width)
-	//}
 
 	if m.view == "nodeStacks" {
 		var b strings.Builder
@@ -49,12 +36,12 @@ func (m model) View() string {
 		return b.String()
 	}
 
-	status := statusStyle.Render(fmt.Sprintf(
+	status := styles.StatusStyle.Render(fmt.Sprintf(
 		"Host: %s\nVersion: %s\nCPU: %s\nMEM: %s\nContainers: %d\nServices: %d",
 		m.host, m.version, m.cpuUsage, m.memUsage, m.containerCount, m.serviceCount,
 	))
 
-	helpText := helpStyle.Render("[i: inspect, s: see stacks, q: quit, j/k: move cursor, : switch mode]")
+	helpText := styles.HelpStyle.Render("[i: inspect, s: see stacks, q: quit, j/k: move cursor, : switch mode]")
 
 	// Show the main list with cursor highlighted, no viewport scroll for this version
 	s := fmt.Sprintf("Mode: %s\n\n", m.mode)
@@ -69,7 +56,7 @@ func (m model) View() string {
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		status,
-		borderStyle.Render(s),
+		styles.BorderStyle.Render(s),
 		helpText,
 	)
 }

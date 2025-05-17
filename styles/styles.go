@@ -1,4 +1,4 @@
-package main
+package styles
 
 import (
 	"fmt"
@@ -7,30 +7,30 @@ import (
 )
 
 var (
-	borderStyle = lipgloss.NewStyle().
+	BorderStyle = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).
 			BorderForeground(lipgloss.Color("#874BFD")).
 			Padding(0, 1)
 
-	statusStyle = lipgloss.NewStyle().
+	StatusStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#00FF00")).
 			Padding(0, 1).
 			Width(50)
 
-	listStyle = lipgloss.NewStyle().
+	ListStyle = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).
 			BorderForeground(lipgloss.Color("#FFD700")).
 			Margin(1, 0).
 			Padding(1)
 
-	helpStyle = lipgloss.NewStyle().
+	HelpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#888888")).
 			Italic(true).
 			Margin(1, 0)
 )
 
-func frame(title, content string, width int) string {
+func Frame(title, content string, width int) string {
 	const (
 		horizontal  = "─"
 		vertical    = "│"

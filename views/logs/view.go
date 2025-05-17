@@ -1,10 +1,19 @@
 package logs
 
-import "swarmcli/utils"
+import (
+	"fmt"
+	"swarmcli/styles"
+	"swarmcli/utils"
+)
 
 func (m Model) View() string {
 	if !m.Visible {
 		return ""
+	}
+
+	header := fmt.Sprintf("Inspecting (%s)", m.mode)
+	if m.mode == "search" {
+		header += fmt.Sprintf(" - Search: %s", m.searchTerm)
 	}
 
 	content := m.viewport.View()
@@ -13,10 +22,7 @@ func (m Model) View() string {
 	}
 	m.viewport.SetContent(content)
 
-	footer := ""
-	if m.mode == "search" {
-		footer = "/" + m.searchTerm
-	}
-
-	return m.viewport.View() + "\n" + footer
+	return styles.BorderStyle.Render(
+		fmt.Sprintf("%s\n\n%s\n\n[press q or esc to go back, / to search]", header, m.viewport.View()),
+	)
 }
