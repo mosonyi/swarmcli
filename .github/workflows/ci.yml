@@ -38,4 +38,4 @@ jobs:
       run: golangci-lint run ./...
 
     - name: Build CLI
-      run: go build -v -o swarmcli main.go
+      run: go build -v -o swarmcli .
