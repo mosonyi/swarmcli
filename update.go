@@ -176,9 +176,9 @@ func (m model) handleInspectScrollKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.inspectSearchMode = true
 		m.inspectSearchTerm = ""
 	case "j", "down":
-		m.inspectViewport.LineDown(1)
+		m.inspectViewport.ScrollDown(1)
 	case "k", "up":
-		m.inspectViewport.LineUp(1)
+		m.inspectViewport.ScrollUp(1)
 	case "pgdown":
 		m.inspectViewport.ScrollDown(m.inspectViewport.Height)
 	case "pgup":

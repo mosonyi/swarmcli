@@ -2,6 +2,9 @@
 
 Simple CLI for managing Docker Swarm clusters similar to k9s.
 
+![CI](https://github.com/mosonyi/swarmcli/actions/workflows/ci.yml/badge.svg)
+
+
 ## Structure
 
 ```

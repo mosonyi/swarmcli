@@ -19,7 +19,6 @@ const (
 type tickMsg time.Time
 type loadedMsg []string
 type inspectMsg string
-type logMsg string
 type nodeStacksMsg struct {
 	output   string
 	stacks   []string
