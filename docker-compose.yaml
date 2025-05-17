@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  swarmcli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /app
+    tty: true         # Allows interactive terminal
+    stdin_open: true  # Keeps STDIN open
+    command: bash     # Start with a shell by default

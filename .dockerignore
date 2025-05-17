@@ -1,0 +1,5 @@
+# Don't include these in the build context
+.git
+vendor
+bin
+*.log
