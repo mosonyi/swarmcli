@@ -141,14 +141,3 @@ func loadNodeStacks(nodeID string) tea.Cmd {
 		return nodeStacksMsg{output: sb.String(), stacks: stacks, services: services}
 	}
 }
-
-func loadServiceLogs(serviceID string) tea.Cmd {
-	return func() tea.Msg {
-		cmd := exec.Command("docker", "service", "logs", "--no-trunc", serviceID)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return logMsg(fmt.Sprintf("Error: %v\n%s", err, out))
-		}
-		return logMsg(out)
-	}
-}

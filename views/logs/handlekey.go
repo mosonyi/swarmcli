@@ -43,11 +43,11 @@ func HandleKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 
 	case "up":
-		m.viewport.LineUp(1)
+		m.viewport.ScrollUp(1)
 		return m, nil
 
 	case "down":
-		m.viewport.LineDown(1)
+		m.viewport.ScrollDown(1)
 		return m, nil
 
 	case "pgup":

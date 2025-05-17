@@ -1,26 +1,9 @@
 package utils
 
 import (
-	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 	"strings"
 )
-
-//func HighlightMatches(text, searchTerm string) string {
-//	if searchTerm == "" {
-//		return text
-//	}
-//	re, err := regexp.Compile("(?i)" + regexp.QuoteMeta(searchTerm)) // case-insensitive
-//	if err != nil {
-//		return text // fail silently
-//	}
-//	highlighted := re.ReplaceAllStringFunc(text, func(match string) string {
-//		return lipgloss.NewStyle().Background(lipgloss.Color("238")).Foreground(lipgloss.Color("229")).Render(match)
-//	})
-//	return highlighted
-//}
-
-var highlightStyle = lipgloss.NewStyle().Background(lipgloss.Color("205")).Foreground(lipgloss.Color("0"))
 
 func HighlightMatches(text, term string) string {
 	matches := FindAllMatches(text, term)
