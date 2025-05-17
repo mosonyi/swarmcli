@@ -31,7 +31,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewingLogs = true
 		m.stackLogsText = string(msg)
 		m.logsViewport.SetContent(m.stackLogsText)
-		m.logsViewport.GotoTop()
+		m.logsViewport.GotoBottom()
 	case statusMsg:
 		m.host = msg.host
 		m.version = msg.version
