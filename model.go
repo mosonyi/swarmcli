@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/charmbracelet/bubbles/viewport"
+	"swarmcli/views/logs"
 )
 
 type mode string
@@ -33,12 +34,13 @@ type model struct {
 	stackCursor int
 
 	logsViewport        viewport.Model
-	viewingLogs         bool
 	stackLogsText       string
 	stackLogsSearchTerm string
 	stackLogsSearchMode bool
 	nodeStackLines      []string
 	nodeServices        []string
+
+	logs logs.Model
 
 	// Search inside inspect view
 	inspectSearchMode bool   // Are we in search mode inside inspect view?
@@ -56,5 +58,6 @@ func initialModel() model {
 		mode:            modeNodes,
 		viewport:        vp,
 		inspectViewport: inspectVp,
+		logs:            logs.New(80, 20),
 	}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	"strings"
+	"swarmcli/views/logs"
 )
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -27,11 +28,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.nodeServices = msg.services
 		m.nodeStackLines = strings.Split(msg.output, "\n")
 		m.stackCursor = 0
-	case logMsg:
-		m.viewingLogs = true
-		m.stackLogsText = string(msg)
-		m.logsViewport.SetContent(m.stackLogsText)
-		m.logsViewport.GotoBottom()
+	case logs.Msg:
+		m.view = "logs"
+		var cmd tea.Cmd
+		m.logs, cmd = m.logs.Update(msg)
+		return m, cmd
 	case statusMsg:
 		m.host = msg.host
 		m.version = msg.version
@@ -54,8 +55,7 @@ func (m model) handleResize(msg tea.WindowSizeMsg) model {
 	m.inspectViewport.Width = usableWidth
 	m.inspectViewport.Height = usableHeight
 
-	m.logsViewport.Width = usableWidth
-	m.logsViewport.Height = usableHeight
+	m.logs = m.logs.SetSize(usableWidth, usableHeight)
 
 	return m
 }
@@ -76,13 +76,14 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.inspecting = false
 			m.inspectText = ""
 			return m, nil
-		case m.viewingLogs: // 🛠️ Fix: Add this
-			m.viewingLogs = false
-			m.stackLogsText = ""
-			return m, nil
 		case m.view == "nodeStacks":
 			m.view = "main"
 			return m, nil
+		case m.view == "logs":
+			m.view = "nodeStacks"
+			var cmd tea.Cmd
+			m.logs, cmd = m.logs.Update(msg)
+			return m, cmd
 		default:
 			return m, tea.Quit
 		}
@@ -92,10 +93,17 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleCommandKey(msg)
 	} else if m.inspecting {
 		return m.handleInspectKey(msg)
-	} else if m.viewingLogs {
-		return m.handleLogKey(msg)
 	} else {
-		return m.handleMainKey(msg)
+		switch m.view {
+		case "logs":
+			var cmd tea.Cmd
+			m.logs, cmd = m.logs.Update(msg)
+			return m, cmd
+		case "nodeStacks", "main":
+			return m.handleMainKey(msg)
+		default:
+			return m.handleMainKey(msg)
+		}
 	}
 }
 
@@ -209,9 +217,7 @@ func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		if m.view == "nodeStacks" && m.stackCursor < len(m.nodeStackLines) {
 			serviceID := m.nodeServices[m.stackCursor]
-			m.viewingLogs = true
-			m.logsViewport.SetContent("")
-			return m, loadServiceLogs(serviceID)
+			return m, logs.Load(serviceID)
 		}
 
 	case "i":
@@ -287,8 +293,6 @@ func (m model) handleLogsScrollKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "G":
 		m.logsViewport.GotoBottom()
 	case "q":
-		m.viewingLogs = false
-		m.stackLogsText = ""
 	}
 	return m, nil
 }
