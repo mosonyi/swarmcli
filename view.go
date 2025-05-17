@@ -26,7 +26,7 @@ func (m model) View() string {
 			fmt.Sprintf("%s\n\n%s\n\n[press q or esc to go back, / to search]", header, m.logsViewport.View()),
 		)
 	}
-	//
+
 	//if m.viewingLogs {
 	//	return frame("Logs", m.logsViewport.View(), m.logsViewport.Width)
 	//}

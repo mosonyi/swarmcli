@@ -126,6 +126,11 @@ func loadNodeStacks(nodeID string) tea.Cmd {
 			stacks = append(stacks, stack)
 		}
 
+		var services []string
+		for service := range serviceNamesSet {
+			services = append(services, service)
+		}
+
 		sort.Strings(stacks)
 		var sb strings.Builder
 		sb.WriteString("Stacks running on node " + nodeID + ":\n")
@@ -133,35 +138,7 @@ func loadNodeStacks(nodeID string) tea.Cmd {
 			sb.WriteString("- " + s + "\n")
 		}
 
-		return nodeStacksMsg{output: sb.String(), stacks: stacks}
-	}
-}
-
-type stackLogMsg string
-
-func inspectStackLogs(stack string) tea.Cmd {
-	return func() tea.Msg {
-		cmd := exec.Command("docker", "service", "ls", "--filter", "label=com.docker.stack.namespace="+stack, "--format", "{{.Name}}")
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return stackLogMsg(fmt.Sprintf("Error listing services: %v\n%s", err, out))
-		}
-
-		serviceNames := strings.Fields(string(out))
-		var logs strings.Builder
-
-		for _, svc := range serviceNames {
-			logs.WriteString("Logs for service: " + svc + "\n")
-			logCmd := exec.Command("docker", "service", "logs", "--raw", "--no-task-ids", "--tail", "20", svc)
-			logOut, err := logCmd.CombinedOutput()
-			if err != nil {
-				logs.WriteString("Error fetching logs: " + err.Error() + "\n")
-				continue
-			}
-			logs.WriteString(string(logOut) + "\n\n")
-		}
-
-		return stackLogMsg(logs.String())
+		return nodeStacksMsg{output: sb.String(), stacks: stacks, services: services}
 	}
 }
 

@@ -38,6 +38,7 @@ type model struct {
 	stackLogsSearchTerm string
 	stackLogsSearchMode bool
 	nodeStackLines      []string
+	nodeServices        []string
 
 	// Search inside inspect view
 	inspectSearchMode bool   // Are we in search mode inside inspect view?

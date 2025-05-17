@@ -24,6 +24,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case nodeStacksMsg:
 		m.view = "nodeStacks"
 		m.nodeStacks = msg.stacks
+		m.nodeServices = msg.services
 		m.nodeStackLines = strings.Split(msg.output, "\n")
 		m.stackCursor = 0
 	case logMsg:
@@ -207,7 +208,7 @@ func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "enter":
 		if m.view == "nodeStacks" && m.stackCursor < len(m.nodeStackLines) {
-			serviceID := extractServiceID(m.nodeStackLines[m.stackCursor])
+			serviceID := m.nodeServices[m.stackCursor]
 			m.viewingLogs = true
 			m.logsViewport.SetContent("")
 			return m, loadServiceLogs(serviceID)

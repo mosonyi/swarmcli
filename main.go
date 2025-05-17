@@ -21,8 +21,9 @@ type loadedMsg []string
 type inspectMsg string
 type logMsg string
 type nodeStacksMsg struct {
-	output string
-	stacks []string
+	output   string
+	stacks   []string
+	services []string
 }
 
 // new status message to update system usage info
