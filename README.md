@@ -18,3 +18,21 @@ Simple CLI for managing Docker Swarm clusters similar to k9s.
 ├── utils.go // Utility functions
 ├── view.go // Draws the UI
 ```
+
+## Using Docker container to build and run locally
+
+```
+docker build -t swarmcli-dev .
+docker run --rm -it -v "$PWD":/app -v /var/run/docker.sock:/var/run/docker.sock  -w /app swarmcli-dev
+```
+
+or with docker compose:
+
+```
+docker compose run --build --rm swarmcli
+```
+
+Then run:
+```
+go run .
+```
