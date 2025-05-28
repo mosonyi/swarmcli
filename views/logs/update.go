@@ -3,18 +3,26 @@ package logs
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	"strings"
+	"swarmcli/utils"
 )
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case Msg:
-		m.logLines = string(msg)
-		m.viewport.SetContent(m.logLines)
+		if m.ready {
+			m.SetContent(string(msg))
+		}
 		m.Visible = true
+		return m, nil
 
 	case tea.WindowSizeMsg:
 		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height - 2
+		m.viewport.Height = msg.Height
+		if !m.ready {
+			m.ready = true
+			m.viewport.SetContent(m.logLines) // Now set the content safely
+		}
+
 		return m, nil
 
 	case tea.KeyMsg:
@@ -27,6 +35,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m *Model) SetContent(content string) {
+	m.logLines = content
+	if len(m.searchMatches) > 0 && m.searchTerm != "" {
+		content = utils.HighlightMatches(content, m.searchTerm)
+	}
+
+	if !m.ready {
+		return
+	}
+	m.viewport.GotoTop()           // reset scroll position
+	m.viewport.SetContent(content) // now set new content
+	m.viewport.YOffset = 0
+
 	m.viewport.SetContent(content)
 	m.searchMatches = nil
 	m.searchTerm = ""

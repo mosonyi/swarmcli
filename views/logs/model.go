@@ -16,6 +16,7 @@ type Model struct {
 	searchMatches []int  // indexes of match positions
 	mode          string // "normal", "search"
 	logLines      string
+	ready         bool
 }
 
 // Create a new instance
@@ -25,6 +26,7 @@ func New(width, height int) Model {
 	return Model{
 		viewport: vp,
 		Visible:  false,
+		mode:     "normal",
 	}
 }
 
@@ -41,10 +43,4 @@ func Load(serviceID string) tea.Cmd {
 		}
 		return Msg(out)
 	}
-}
-
-func (m Model) SetSize(width, height int) Model {
-	m.viewport.Width = width
-	m.viewport.Height = height - 4 // adjust for borders or header
-	return m
 }
