@@ -13,21 +13,17 @@ type Model struct {
 	searchMatches []int  // indexes of match positions
 	mode          string // "normal", "search"
 	inspectLines  string
+	ready         bool
 }
 
 func New(width, height int) Model {
 	vp := viewport.New(width, height)
 	return Model{
 		viewport: vp,
+		mode:     "normal",
 	}
 }
 
 func (m Model) Init() tea.Cmd {
 	return nil
-}
-
-func (m Model) SetSize(width, height int) Model {
-	m.viewport.Width = width
-	m.viewport.Height = height - 4 // adjust for borders or header
-	return m
 }

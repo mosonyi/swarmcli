@@ -8,9 +8,13 @@ import (
 )
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m = m.handleResize(msg)
+		var wndCmds []tea.Cmd
+		m, wndCmds = m.handleResize(msg)
+		cmds = append(cmds, wndCmds...)
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	case tickMsg:
@@ -41,28 +45,50 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.memUsage = msg.mem
 		m.containerCount = msg.containers
 		m.serviceCount = msg.services
+	default:
+		var cmd tea.Cmd
+		m.logs, cmd = m.logs.Update(msg)
+		cmds = append(cmds, cmd)
+
+		m.inspect, cmd = m.inspect.Update(msg)
+		cmds = append(cmds, cmd)
 	}
 
-	return m.updateViewports(msg)
+	var cmd tea.Cmd
+	m, cmd = m.updateViewports(msg)
+	cmds = append(cmds, cmd)
+	return m, tea.Batch(cmds...)
 }
 
-func (m model) handleResize(msg tea.WindowSizeMsg) model {
+func (m model) handleResize(msg tea.WindowSizeMsg) (model, []tea.Cmd) {
+	var cmd tea.Cmd
+	var cmds []tea.Cmd
+
 	usableWidth := msg.Width - 4
 	usableHeight := msg.Height - 10
 
 	m.viewport.Width = usableWidth
 	m.viewport.Height = usableHeight
 
-	m.logs = m.logs.SetSize(usableWidth, usableHeight)
-	m.inspect = m.inspect.SetSize(usableWidth, usableHeight)
+	// Create adjusted WindowSizeMsg
+	adjustedMsg := tea.WindowSizeMsg{
+		Width:  usableWidth,
+		Height: usableHeight,
+	}
 
-	return m
+	m.inspect, cmd = m.inspect.Update(adjustedMsg)
+	cmds = append(cmds, cmd)
+
+	m.logs, cmd = m.logs.Update(adjustedMsg)
+	cmds = append(cmds, cmd)
+
+	return m, cmds
 }
 
 func (m model) updateViewports(msg tea.Msg) (model, tea.Cmd) {
-	var cmd1, cmd2 tea.Cmd
+	var cmd1 tea.Cmd
 	m.viewport, cmd1 = m.viewport.Update(msg)
-	return m, tea.Batch(cmd1, cmd2)
+	return m, cmd1
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
