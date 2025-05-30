@@ -5,6 +5,7 @@ import (
 	"strings"
 	inspectview "swarmcli/views/inspect"
 	"swarmcli/views/logs"
+	"swarmcli/views/stacks"
 )
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -27,12 +28,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.inspect, cmd = m.inspect.Update(msg)
 		return m, cmd
-	case nodeStacksMsg:
-		m.view = "nodeStacks"
-		m.nodeStacks = msg.stacks
-		m.nodeServices = msg.services
-		m.nodeStackLines = strings.Split(msg.output, "\n")
-		m.stackCursor = 0
+	case stacks.Msg:
+		m.view = stacks.ViewName
+		var cmd tea.Cmd
+		m.stacks, cmd = m.stacks.Update(msg)
 	case logs.Msg:
 		m.view = logs.ViewName
 		var cmd tea.Cmd

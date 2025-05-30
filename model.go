@@ -27,12 +27,6 @@ type model struct {
 	containerCount int
 	serviceCount   int
 
-	// node stacks
-	nodeStacks     []string
-	stackCursor    int
-	nodeStackLines []string
-	nodeServices   []string
-
 	logs logs.Model
 
 	inspect inspectview.Model
