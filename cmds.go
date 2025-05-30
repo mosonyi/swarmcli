@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"swarmcli/docker"
+	inspectview "swarmcli/views/inspect"
 	"time"
 )
 
@@ -75,9 +76,9 @@ func inspectItem(mode mode, line string) tea.Cmd {
 			out, err = exec.Command("docker", "stack", "services", item).CombinedOutput()
 		}
 		if err != nil {
-			return inspectMsg(fmt.Sprintf("Error: %v\n%s", err, out))
+			return inspectview.Msg(fmt.Sprintf("Error: %v\n%s", err, out))
 		}
-		return inspectMsg(string(out))
+		return inspectview.Msg(out)
 	}
 }
 

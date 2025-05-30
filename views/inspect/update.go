@@ -1,4 +1,4 @@
-package logs
+package inspectview
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
@@ -7,6 +7,7 @@ import (
 )
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+
 	switch msg := msg.(type) {
 	case Msg:
 		if m.ready {
@@ -20,9 +21,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.viewport.Height = msg.Height
 		if !m.ready {
 			m.ready = true
-			m.viewport.SetContent(m.logLines) // Now set the content safely
+			m.viewport.SetContent(m.inspectLines) // Now set the content safely
 		}
-
 		return m, nil
 
 	case tea.KeyMsg:
@@ -35,7 +35,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m *Model) SetContent(content string) {
-	m.logLines = content
+	m.inspectLines = content
 	if len(m.searchMatches) > 0 && m.searchTerm != "" {
 		content = utils.HighlightMatches(content, m.searchTerm)
 	}
@@ -47,7 +47,6 @@ func (m *Model) SetContent(content string) {
 	m.viewport.SetContent(content) // now set new content
 	m.viewport.YOffset = 0
 
-	m.viewport.SetContent(content)
 	m.searchMatches = nil
 	m.searchTerm = ""
 	m.searchIndex = 0
@@ -59,7 +58,7 @@ func (m *Model) scrollToMatch() {
 		return
 	}
 	matchPos := m.searchMatches[m.searchIndex]
-	lines := strings.Split(m.logLines[:matchPos], "\n")
+	lines := strings.Split(m.inspectLines[:matchPos], "\n")
 	offset := len(lines) - m.viewport.Height/2
 	if offset < 0 {
 		offset = 0
