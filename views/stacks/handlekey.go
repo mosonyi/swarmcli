@@ -16,10 +16,12 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "j", "down":
 		if m.stackCursor < len(m.nodeStacks)-1 {
 			m.stackCursor++
+			m.viewport.SetContent(m.buildContent())
 		}
 	case "k", "up":
 		if m.stackCursor > 0 {
 			m.stackCursor--
+			m.viewport.SetContent(m.buildContent())
 		}
 	case "pgup":
 		m.viewport.ScrollUp(m.viewport.Height)
