@@ -48,7 +48,6 @@ func (m *Model) SetContent(msg Msg) {
 
 func (m *Model) buildContent() string {
 	var b strings.Builder
-	b.WriteString("Stacks on node:\n\n")
 	for i, stack := range m.nodeStacks {
 		cursor := "  "
 		if i == m.stackCursor {
@@ -56,6 +55,5 @@ func (m *Model) buildContent() string {
 		}
 		b.WriteString(fmt.Sprintf("%s%s\n", cursor, stack))
 	}
-	b.WriteString("\n[press enter to inspect logs, q/esc to go back]")
 	return b.String()
 }

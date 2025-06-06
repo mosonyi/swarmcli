@@ -52,6 +52,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.inspect, cmd = m.inspect.Update(msg)
 		cmds = append(cmds, cmd)
+
+		m.stacks, cmd = m.stacks.Update(msg)
+		cmds = append(cmds, cmd)
 	}
 
 	var cmd tea.Cmd
@@ -80,6 +83,9 @@ func (m model) handleResize(msg tea.WindowSizeMsg) (model, []tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	m.logs, cmd = m.logs.Update(adjustedMsg)
+	cmds = append(cmds, cmd)
+
+	m.stacks, cmd = m.stacks.Update(adjustedMsg)
 	cmds = append(cmds, cmd)
 
 	return m, cmds
