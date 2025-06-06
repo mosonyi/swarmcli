@@ -1,4 +1,4 @@
-package stacks
+package stacksview
 
 import (
 	"fmt"
@@ -10,18 +10,7 @@ func (m Model) View() string {
 		return ""
 	}
 
-	return m.viewport.View()
-}
-
-func (m Model) View() string {
-	if !m.Visible {
-		return ""
-	}
-
-	header := fmt.Sprintf("Inspecting (%s)", m.mode)
-	if m.mode == "search" {
-		header += fmt.Sprintf(" - Search: %s", m.searchTerm)
-	}
+	header := fmt.Sprintf("Stacks on Node")
 
 	return styles.BorderStyle.Render(
 		fmt.Sprintf("%s\n\n%s\n\n[press q or esc to go back, / to search]", header, m.viewport.View()),

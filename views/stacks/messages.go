@@ -1,7 +1,7 @@
-package stacks
+package stacksview
 
 type Msg struct {
-	output   string
-	stacks   []string
-	services []string
+	Output   string
+	Stacks   []string
+	Services []string
 }

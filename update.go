@@ -28,10 +28,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.inspect, cmd = m.inspect.Update(msg)
 		return m, cmd
-	case stacks.Msg:
-		m.view = stacks.ViewName
+	case stacksview.Msg:
+		m.view = stacksview.ViewName
 		var cmd tea.Cmd
 		m.stacks, cmd = m.stacks.Update(msg)
+		return m, cmd
 	case logs.Msg:
 		m.view = logs.ViewName
 		var cmd tea.Cmd
@@ -99,9 +100,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			var cmd tea.Cmd
 			m.inspect, cmd = m.inspect.Update(msg)
 			return m, cmd
-		case m.view == "nodeStacks":
+		case m.view == stacksview.ViewName:
 			m.view = "main"
-			return m, nil
+			var cmd tea.Cmd
+			m.stacks, cmd = m.stacks.Update(msg)
+			return m, cmd
 		case m.view == logs.ViewName:
 			m.view = "nodeStacks"
 			var cmd tea.Cmd
@@ -124,7 +127,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			var cmd tea.Cmd
 			m.logs, cmd = m.logs.Update(msg)
 			return m, cmd
-		case "nodeStacks", "main":
+		case stacksview.ViewName:
+			var cmd tea.Cmd
+			m.stacks, cmd = m.stacks.Update(msg)
+			return m, cmd
+		case "main":
 			return m.handleMainKey(msg)
 		default:
 			return m.handleMainKey(msg)
@@ -171,23 +178,13 @@ func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case "j", "down":
-		if m.view == "nodeStacks" && m.stackCursor < len(m.nodeStacks)-1 {
-			m.stackCursor++
-		} else if m.cursor < len(m.items)-1 {
+		if m.cursor < len(m.items)-1 {
 			m.cursor++
 		}
 
 	case "k", "up":
-		if m.view == "nodeStacks" && m.stackCursor > 0 {
-			m.stackCursor--
-		} else if m.cursor > 0 {
+		if m.cursor > 0 {
 			m.cursor--
-		}
-
-	case "enter":
-		if m.view == "nodeStacks" && m.stackCursor < len(m.nodeStackLines) {
-			serviceID := m.nodeServices[m.stackCursor]
-			return m, logs.Load(serviceID)
 		}
 
 	case "i":

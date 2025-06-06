@@ -1,10 +1,9 @@
-package stacks
+package stacksview
 
 import (
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
 	"strings"
-	"swarmcli/utils"
 )
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
@@ -21,7 +20,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.viewport.Height = msg.Height
 		if !m.ready {
 			m.ready = true
-			m.viewport.SetContent(m.logLines) // Now set the content safely
+			m.viewport.SetContent(m.buildContent()) // Now set the content safely
 		}
 
 		return m, nil
@@ -36,9 +35,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m *Model) SetContent(msg Msg) {
-	m.nodeStacks = msg.stacks
-	m.nodeServices = msg.services
-	m.nodeStackLines = strings.Split(msg.output, "\n")
+	m.nodeStacks = msg.Stacks
+	m.nodeServices = msg.Services
+	m.nodeStackLines = strings.Split(msg.Output, "\n")
 	m.stackCursor = 0
 
 	if !m.ready {

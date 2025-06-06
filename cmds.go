@@ -9,6 +9,7 @@ import (
 	"strings"
 	"swarmcli/docker"
 	inspectview "swarmcli/views/inspect"
+	"swarmcli/views/stacks"
 	"time"
 )
 
@@ -87,9 +88,9 @@ func loadNodeStacks(nodeID string) tea.Cmd {
 		cmd := exec.Command("docker", "node", "ps", nodeID, "--format", "{{.Name}}")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return nodeStacksMsg{
-				output: fmt.Sprintf("Error getting node tasks: %v\n%s", err, out),
-				stacks: nil,
+			return stacksview.Msg{
+				Output: fmt.Sprintf("Error getting node tasks: %v\n%s", err, out),
+				Stacks: nil,
 			}
 		}
 
@@ -139,6 +140,6 @@ func loadNodeStacks(nodeID string) tea.Cmd {
 			sb.WriteString("- " + s + "\n")
 		}
 
-		return nodeStacksMsg{output: sb.String(), stacks: stacks, services: services}
+		return stacksview.Msg{Output: sb.String(), Stacks: stacks, Services: services}
 	}
 }

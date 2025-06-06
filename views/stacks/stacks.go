@@ -1,3 +1,3 @@
-package stacks
+package stacksview
 
 const ViewName = "stacks"
