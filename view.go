@@ -19,7 +19,7 @@ func (m model) View() string {
 	}
 
 	if m.view == stacksview.ViewName {
-		return m.logs.View()
+		return m.stacks.View()
 	}
 
 	status := styles.StatusStyle.Render(fmt.Sprintf(
