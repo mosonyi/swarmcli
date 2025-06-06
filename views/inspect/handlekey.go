@@ -1,4 +1,4 @@
-package logs
+package inspectview
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
@@ -24,7 +24,7 @@ func handleSearchModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.mode = "normal"
 		m.searchMatches = utils.FindAllMatches(m.viewport.View(), m.searchTerm)
 		m.searchIndex = 0
-		highlighted := utils.HighlightMatches(m.logLines, m.searchTerm)
+		highlighted := utils.HighlightMatches(m.inspectLines, m.searchTerm)
 		m.viewport.SetContent(highlighted)
 		m.scrollToMatch()
 	case tea.KeyEsc:
@@ -41,7 +41,7 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.mode = "search"
 		m.searchTerm = ""
 		// Restore unhighlighted content
-		m.viewport.SetContent(m.logLines)
+		m.viewport.SetContent(m.inspectLines)
 		m.searchMatches = nil
 		m.searchIndex = 0
 	case "n":
