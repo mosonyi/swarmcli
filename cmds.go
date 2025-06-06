@@ -134,12 +134,7 @@ func loadNodeStacks(nodeID string) tea.Cmd {
 		}
 
 		sort.Strings(stacks)
-		var sb strings.Builder
-		sb.WriteString("Stacks running on node " + nodeID + ":\n")
-		for _, s := range stacks {
-			sb.WriteString("- " + s + "\n")
-		}
 
-		return stacksview.Msg{Output: sb.String(), Stacks: stacks, Services: services}
+		return stacksview.Msg{Stacks: stacks, Services: services}
 	}
 }

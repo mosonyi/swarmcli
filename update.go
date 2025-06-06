@@ -222,6 +222,5 @@ func (m model) handleSelectNode() (tea.Model, tea.Cmd) {
 
 	nodeID := fields[0]
 	m.selectedNodeID = nodeID
-	m.view = "nodeStacks"
 	return m, loadNodeStacks(nodeID)
 }
