@@ -2,6 +2,7 @@ package stacksview
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"swarmcli/views/logs"
 )
 
 func HandleKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -27,6 +28,11 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.viewport.ScrollUp(m.viewport.Height)
 	case "pgdown":
 		m.viewport.ScrollDown(m.viewport.Height)
+	case "enter":
+		if m.stackCursor < len(m.nodeStackLines) {
+			serviceID := m.nodeServices[m.stackCursor]
+			return m, logs.Load(serviceID)
+		}
 	}
 	return m, nil
 }
