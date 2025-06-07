@@ -51,7 +51,7 @@ func (m *Model) buildContent() string {
 		if i == m.stackCursor {
 			cursor = "➜ "
 		}
-		b.WriteString(fmt.Sprintf("%s%s\n", cursor, stack.StackName))
+		b.WriteString(fmt.Sprintf("%s%s / %s\n", cursor, stack.StackName, stack.ServiceName))
 	}
 	return b.String()
 }

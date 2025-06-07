@@ -55,8 +55,8 @@ func LoadNodeStacks(nodeID string) tea.Cmd {
 			}
 		}
 
+		stackSet := make(map[string]struct{}) // <-- define stackSet here
 		var stackServices []StackService
-		stackSet := make(map[string]struct{})
 		for serviceName := range serviceNamesSet {
 			cmdServiceID := exec.Command("docker", "service", "ls", "--filter", "name="+serviceName, "--format", "{{.ID}}")
 			idOut, err := cmdServiceID.CombinedOutput()
@@ -72,15 +72,17 @@ func LoadNodeStacks(nodeID string) tea.Cmd {
 			}
 			stackName := strings.TrimSpace(string(stackNameBytes))
 			if stackName != "" {
-				stackSet[stackName] = struct{}{}
-				stackServices = append(stackServices, StackService{
-					StackName:   stackName,
-					ServiceName: serviceName,
-				})
+				key := stackName + "|" + serviceName
+				if _, exists := stackSet[key]; !exists {
+					stackSet[key] = struct{}{}
+					stackServices = append(stackServices, StackService{
+						StackName:   stackName,
+						ServiceName: serviceName,
+					})
+				}
 			}
 		}
 
-		// Sort stackServices by StackName for consistent display
 		sort.Slice(stackServices, func(i, j int) bool {
 			return stackServices[i].StackName < stackServices[j].StackName
 		})
