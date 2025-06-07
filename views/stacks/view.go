@@ -10,7 +10,7 @@ func (m Model) View() string {
 		return ""
 	}
 
-	header := fmt.Sprintf("Stacks on Node")
+	header := fmt.Sprintf("Stacks on Node: %s", m.nodeId)
 
 	return styles.BorderStyle.Render(
 		fmt.Sprintf("%s\n\n%s\n\n[Press enter to see logs. Press q or esc to go back]", header, m.viewport.View()),

@@ -6,8 +6,10 @@ import (
 )
 
 type Model struct {
-	viewport      viewport.Model
-	Visible       bool
+	viewport viewport.Model
+	Visible  bool
+
+	nodeId        string
 	stackCursor   int
 	stackServices []StackService
 	ready         bool
@@ -35,6 +37,6 @@ func (m Model) Init() tea.Cmd {
 func LoadNodeStacks(nodeID string) tea.Cmd {
 	return func() tea.Msg {
 		services := loadNodeStacks(nodeID)
-		return Msg{Services: services}
+		return Msg{NodeId: nodeID, Services: services}
 	}
 }

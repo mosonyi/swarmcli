@@ -33,6 +33,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m *Model) SetContent(msg Msg) {
+	m.nodeId = msg.NodeId
 	m.stackServices = msg.Services
 	m.stackCursor = 0
 
