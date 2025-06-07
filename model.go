@@ -4,6 +4,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	inspectview "swarmcli/views/inspect"
 	"swarmcli/views/logs"
+	"swarmcli/views/stacks"
 )
 
 type mode string
@@ -27,14 +28,8 @@ type model struct {
 	containerCount int
 	serviceCount   int
 
-	// node stacks
-	nodeStacks     []string
-	stackCursor    int
-	nodeStackLines []string
-	nodeServices   []string
-
-	logs logs.Model
-
+	stacks  stacksview.Model
+	logs    logs.Model
 	inspect inspectview.Model
 }
 

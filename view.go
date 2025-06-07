@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 	"github.com/charmbracelet/lipgloss"
-	"strings"
 	"swarmcli/styles"
 	inspectview "swarmcli/views/inspect"
 	"swarmcli/views/logs"
+	stacksview "swarmcli/views/stacks"
 )
 
 func (m model) View() string {
@@ -18,18 +18,8 @@ func (m model) View() string {
 		return m.logs.View()
 	}
 
-	if m.view == "nodeStacks" {
-		var b strings.Builder
-		b.WriteString("Stacks on node:\n\n")
-		for i, stack := range m.nodeStacks {
-			cursor := "  "
-			if i == m.stackCursor {
-				cursor = "➜ "
-			}
-			b.WriteString(fmt.Sprintf("%s%s\n", cursor, stack))
-		}
-		b.WriteString("\n[press enter to inspect logs, q/esc to go back]")
-		return b.String()
+	if m.view == stacksview.ViewName {
+		return m.stacks.View()
 	}
 
 	status := styles.StatusStyle.Render(fmt.Sprintf(
