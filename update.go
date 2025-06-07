@@ -112,7 +112,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.stacks, cmd = m.stacks.Update(msg)
 			return m, cmd
 		case m.view == logs.ViewName:
-			m.view = "nodeStacks"
+			m.view = stacksview.ViewName
 			var cmd tea.Cmd
 			m.logs, cmd = m.logs.Update(msg)
 			return m, cmd
