@@ -46,12 +46,25 @@ func (m *Model) SetContent(msg Msg) {
 
 func (m *Model) buildContent() string {
 	var b strings.Builder
-	for i, stack := range m.stackServices {
+	visible := m.visibleStackServices()
+	start := m.stackCursor - m.stackCursor%m.viewport.Height
+	for i, stack := range visible {
 		cursor := "  "
-		if i == m.stackCursor {
+		if start+i == m.stackCursor {
 			cursor = "➜ "
 		}
 		b.WriteString(fmt.Sprintf("%s%s / %s\n", cursor, stack.StackName, stack.ServiceName))
 	}
 	return b.String()
+}
+func (m *Model) visibleStackServices() []StackService {
+	if m.viewport.Height <= 0 || len(m.stackServices) == 0 {
+		return nil
+	}
+	start := m.stackCursor - m.stackCursor%m.viewport.Height
+	end := start + m.viewport.Height
+	if end > len(m.stackServices) {
+		end = len(m.stackServices)
+	}
+	return m.stackServices[start:end]
 }
