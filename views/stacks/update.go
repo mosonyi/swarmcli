@@ -35,7 +35,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 func (m *Model) SetContent(msg Msg) {
 	m.nodeStacks = msg.Stacks
 	m.nodeServices = msg.Services
-	m.nodeStackLines = strings.Split(msg.Output, "\n")
 	m.stackCursor = 0
 
 	if !m.ready {
