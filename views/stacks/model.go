@@ -38,68 +38,34 @@ func (m Model) Init() tea.Cmd {
 
 func LoadNodeStacks(nodeID string) tea.Cmd {
 	return func() tea.Msg {
-		// Get all task names for the node
-		out, err := exec.Command("docker", "node", "ps", nodeID, "--format", "{{.Name}}").CombinedOutput()
+		taskNames, err := getNodeTaskNames(nodeID)
 		if err != nil {
-			return Msg{Error: fmt.Sprintf("Error getting node tasks: %v\n%s", err, out)}
+			return Msg{Error: err.Error()}
 		}
 
-		// Extract unique service names
-		serviceNames := make(map[string]struct{})
-		for _, name := range strings.Fields(string(out)) {
-			if parts := strings.SplitN(name, ".", 2); len(parts) > 0 {
-				serviceNames[parts[0]] = struct{}{}
-			}
-		}
-
-		// Map service name to ID
-		servicesOut, err := exec.Command("docker", "service", "ls", "--format", "{{.ID}} {{.Name}}").CombinedOutput()
-		if err != nil {
-			return Msg{Error: fmt.Sprintf("Error getting services: %v\n%s", err, servicesOut)}
-		}
-		nameToID := make(map[string]string)
-		for _, line := range strings.Split(strings.TrimSpace(string(servicesOut)), "\n") {
-			parts := strings.Fields(line)
-			if len(parts) == 2 {
-				nameToID[parts[1]] = parts[0]
-			}
-		}
-
-		// Collect relevant service IDs
-		var ids []string
-		for name := range serviceNames {
-			if id, ok := nameToID[name]; ok {
-				ids = append(ids, id)
-			}
-		}
-		if len(ids) == 0 {
+		serviceNames := extractServiceNames(taskNames)
+		if len(serviceNames) == 0 {
 			return Msg{Services: nil}
 		}
 
-		// Inspect relevant services for stack labels
-		args := append([]string{"service", "inspect"}, ids...)
-		args = append(args, "--format", "{{.ID}} {{ index .Spec.Labels \"com.docker.stack.namespace\" }} {{.Spec.Name}}")
-		inspectOut, err := exec.Command("docker", args...).CombinedOutput()
+		nameToID, err := getServiceNameToIDMap()
 		if err != nil {
-			return Msg{Error: fmt.Sprintf("Error inspecting services: %v\n%s", err, inspectOut)}
+			return Msg{Error: err.Error()}
 		}
 
-		// Build stack-service pairs
-		unique := make(map[string]struct{})
-		var stackServices []StackService
-		for _, line := range strings.Split(strings.TrimSpace(string(inspectOut)), "\n") {
-			parts := strings.Fields(line)
-			if len(parts) < 3 {
-				continue
+		var serviceIDs []string
+		for name := range serviceNames {
+			if id, ok := nameToID[name]; ok {
+				serviceIDs = append(serviceIDs, id)
 			}
-			key := parts[1] + "|" + parts[2]
-			if _, exists := unique[key]; !exists && parts[1] != "" && parts[2] != "" {
-				unique[key] = struct{}{}
-				stackServices = append(stackServices, StackService{
-					StackName:   parts[1],
-					ServiceName: parts[2],
-				})
-			}
+		}
+		if len(serviceIDs) == 0 {
+			return Msg{Services: nil}
+		}
+
+		stackServices, err := inspectStackServices(serviceIDs)
+		if err != nil {
+			return Msg{Error: err.Error()}
 		}
 
 		sort.Slice(stackServices, func(i, j int) bool {
@@ -108,4 +74,63 @@ func LoadNodeStacks(nodeID string) tea.Cmd {
 
 		return Msg{Services: stackServices}
 	}
+}
+
+func getNodeTaskNames(nodeID string) ([]string, error) {
+	out, err := exec.Command("docker", "node", "ps", nodeID, "--format", "{{.Name}}").CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("Error getting node tasks: %v\n%s", err, out)
+	}
+	return strings.Fields(string(out)), nil
+}
+
+func extractServiceNames(taskNames []string) map[string]struct{} {
+	serviceNames := make(map[string]struct{})
+	for _, name := range taskNames {
+		if parts := strings.SplitN(name, ".", 2); len(parts) > 0 {
+			serviceNames[parts[0]] = struct{}{}
+		}
+	}
+	return serviceNames
+}
+
+func getServiceNameToIDMap() (map[string]string, error) {
+	out, err := exec.Command("docker", "service", "ls", "--format", "{{.ID}} {{.Name}}").CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("Error getting services: %v\n%s", err, out)
+	}
+	nameToID := make(map[string]string)
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		parts := strings.Fields(line)
+		if len(parts) == 2 {
+			nameToID[parts[1]] = parts[0]
+		}
+	}
+	return nameToID, nil
+}
+
+func inspectStackServices(serviceIDs []string) ([]StackService, error) {
+	args := append([]string{"service", "inspect"}, serviceIDs...)
+	args = append(args, "--format", "{{.ID}} {{ index .Spec.Labels \"com.docker.stack.namespace\" }} {{.Spec.Name}}")
+	out, err := exec.Command("docker", args...).CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("Error inspecting services: %v\n%s", err, out)
+	}
+	unique := make(map[string]struct{})
+	var stackServices []StackService
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		parts := strings.Fields(line)
+		if len(parts) < 3 {
+			continue
+		}
+		key := parts[1] + "|" + parts[2]
+		if _, exists := unique[key]; !exists && parts[1] != "" && parts[2] != "" {
+			unique[key] = struct{}{}
+			stackServices = append(stackServices, StackService{
+				StackName:   parts[1],
+				ServiceName: parts[2],
+			})
+		}
+	}
+	return stackServices, nil
 }
