@@ -10,12 +10,16 @@ import (
 )
 
 type Model struct {
-	viewport     viewport.Model
-	Visible      bool
-	nodeStacks   []string
-	stackCursor  int
-	nodeServices []string
-	ready        bool
+	viewport      viewport.Model
+	Visible       bool
+	stackCursor   int
+	stackServices []StackService
+	ready         bool
+}
+
+type StackService struct {
+	StackName   string
+	ServiceName string
 }
 
 // Create a new instance
@@ -38,8 +42,7 @@ func LoadNodeStacks(nodeID string) tea.Cmd {
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return Msg{
-				Error:  fmt.Sprintf("Error getting node tasks: %v\n%s", err, out),
-				Stacks: nil,
+				Error: fmt.Sprintf("Error getting node tasks: %v\n%s", err, out),
 			}
 		}
 
@@ -52,6 +55,7 @@ func LoadNodeStacks(nodeID string) tea.Cmd {
 			}
 		}
 
+		var stackServices []StackService
 		stackSet := make(map[string]struct{})
 		for serviceName := range serviceNamesSet {
 			cmdServiceID := exec.Command("docker", "service", "ls", "--filter", "name="+serviceName, "--format", "{{.ID}}")
@@ -69,21 +73,18 @@ func LoadNodeStacks(nodeID string) tea.Cmd {
 			stackName := strings.TrimSpace(string(stackNameBytes))
 			if stackName != "" {
 				stackSet[stackName] = struct{}{}
+				stackServices = append(stackServices, StackService{
+					StackName:   stackName,
+					ServiceName: serviceName,
+				})
 			}
 		}
 
-		var stacks []string
-		for stack := range stackSet {
-			stacks = append(stacks, stack)
-		}
+		// Sort stackServices by StackName for consistent display
+		sort.Slice(stackServices, func(i, j int) bool {
+			return stackServices[i].StackName < stackServices[j].StackName
+		})
 
-		var services []string
-		for service := range serviceNamesSet {
-			services = append(services, service)
-		}
-
-		sort.Strings(stacks)
-
-		return Msg{Stacks: stacks, Services: services}
+		return Msg{Services: stackServices}
 	}
 }

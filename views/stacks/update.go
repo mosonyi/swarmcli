@@ -33,8 +33,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m *Model) SetContent(msg Msg) {
-	m.nodeStacks = msg.Stacks
-	m.nodeServices = msg.Services
+	m.stackServices = msg.Services
 	m.stackCursor = 0
 
 	if !m.ready {
@@ -47,12 +46,12 @@ func (m *Model) SetContent(msg Msg) {
 
 func (m *Model) buildContent() string {
 	var b strings.Builder
-	for i, stack := range m.nodeStacks {
+	for i, stack := range m.stackServices {
 		cursor := "  "
 		if i == m.stackCursor {
 			cursor = "➜ "
 		}
-		b.WriteString(fmt.Sprintf("%s%s\n", cursor, stack))
+		b.WriteString(fmt.Sprintf("%s%s\n", cursor, stack.StackName))
 	}
 	return b.String()
 }

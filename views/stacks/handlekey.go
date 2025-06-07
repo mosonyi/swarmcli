@@ -15,7 +15,7 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "q", "esc":
 		m.Visible = false
 	case "j", "down":
-		if m.stackCursor < len(m.nodeStacks)-1 {
+		if m.stackCursor < len(m.stackServices)-1 {
 			m.stackCursor++
 			m.viewport.SetContent(m.buildContent())
 		}
@@ -29,9 +29,9 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "pgdown":
 		m.viewport.ScrollDown(m.viewport.Height)
 	case "enter":
-		if m.stackCursor < len(m.nodeStacks) {
-			serviceID := m.nodeServices[m.stackCursor]
-			return m, logs.Load(serviceID)
+		if m.stackCursor < len(m.stackServices) {
+			serviceID := m.stackServices[m.stackCursor]
+			return m, logs.Load(serviceID.ServiceName)
 		}
 	}
 	return m, nil
