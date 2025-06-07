@@ -29,7 +29,7 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "pgdown":
 		m.viewport.ScrollDown(m.viewport.Height)
 	case "enter":
-		if m.stackCursor < len(m.nodeStackLines) {
+		if m.stackCursor < len(m.nodeStacks) {
 			serviceID := m.nodeServices[m.stackCursor]
 			return m, logs.Load(serviceID)
 		}
