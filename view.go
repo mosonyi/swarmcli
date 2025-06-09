@@ -22,6 +22,7 @@ func (m model) View() string {
 		return m.stacks.View()
 	}
 
+	// Todo: Extract this into a separate view
 	status := styles.StatusStyle.Render(fmt.Sprintf(
 		"Host: %s\nVersion: %s\nCPU: %s\nMEM: %s\nContainers: %d\nServices: %d",
 		m.host, m.version, m.cpuUsage, m.memUsage, m.containerCount, m.serviceCount,
@@ -32,7 +33,7 @@ func (m model) View() string {
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		status,
-		styles.BorderStyle.Render(m.nodesV.View()),
+		m.nodesV.View(),
 		helpText,
 	)
 }

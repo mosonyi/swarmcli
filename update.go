@@ -85,6 +85,11 @@ func (m model) handleResize(msg tea.WindowSizeMsg) (model, []tea.Cmd) {
 		Height: usableHeight,
 	}
 
+	nodeViewMsg := tea.WindowSizeMsg{
+		Width:  usableWidth,
+		Height: usableHeight / 2,
+	}
+
 	m.inspect, cmd = m.inspect.Update(adjustedMsg)
 	cmds = append(cmds, cmd)
 
@@ -94,7 +99,7 @@ func (m model) handleResize(msg tea.WindowSizeMsg) (model, []tea.Cmd) {
 	m.stacks, cmd = m.stacks.Update(adjustedMsg)
 	cmds = append(cmds, cmd)
 
-	m.nodesV, cmd = m.nodesV.Update(adjustedMsg)
+	m.nodesV, cmd = m.nodesV.Update(nodeViewMsg)
 	cmds = append(cmds, cmd)
 
 	return m, cmds
