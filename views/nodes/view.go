@@ -13,6 +13,6 @@ func (m Model) View() string {
 	header := "Nodes"
 
 	return styles.BorderStyle.Render(
-		fmt.Sprintf("%s\n\n%s\n\n[Press enter to see logs. Press q or esc to go back]", header, m.viewport.View()),
+		fmt.Sprintf("%s\n\n%s", header, m.viewport.View()),
 	)
 }

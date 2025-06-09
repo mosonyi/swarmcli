@@ -20,7 +20,7 @@ type model struct {
 	//commandInput string
 
 	systemInfo systeminfoview.Model
-	nodesV     nodesview.Model
+	nodes      nodesview.Model
 	stacks     stacksview.Model
 	logs       logs.Model
 	inspect    inspectview.Model
@@ -37,6 +37,6 @@ func initialModel() model {
 		systemInfo: systeminfoview.New(version),
 		logs:       logs.New(80, 20),
 		inspect:    inspectview.New(80, 20),
-		nodesV:     nodesview.New(80, 20),
+		nodes:      nodesview.New(80, 20),
 	}
 }
