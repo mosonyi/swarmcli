@@ -5,6 +5,7 @@ import (
 	"strings"
 	inspectview "swarmcli/views/inspect"
 	"swarmcli/views/logs"
+	nodesview "swarmcli/views/nodes"
 	"swarmcli/views/stacks"
 )
 
@@ -19,10 +20,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	case tickMsg:
-		return m, tea.Batch(loadData(m.mode), loadStatus())
-	case loadedMsg:
-		m.items = msg
-		m.cursor = 0
+		return m, tea.Batch(nodesview.LoadNodes(), loadStatus())
+	case nodesview.Msg:
+		m.view = nodesview.ViewName
+		var cmd tea.Cmd
+		m.nodesV, cmd = m.nodesV.Update(msg)
+		return m, cmd
 	case inspectview.Msg:
 		m.view = inspectview.ViewName
 		var cmd tea.Cmd
@@ -55,6 +58,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.stacks, cmd = m.stacks.Update(msg)
 		cmds = append(cmds, cmd)
+
+		m.nodesV, cmd = m.nodesV.Update(msg)
+		cmds = append(cmds, cmd)
 	}
 
 	var cmd tea.Cmd
@@ -86,6 +92,9 @@ func (m model) handleResize(msg tea.WindowSizeMsg) (model, []tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	m.stacks, cmd = m.stacks.Update(adjustedMsg)
+	cmds = append(cmds, cmd)
+
+	m.nodesV, cmd = m.nodesV.Update(adjustedMsg)
 	cmds = append(cmds, cmd)
 
 	return m, cmds
@@ -121,62 +130,61 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if m.commandMode {
-		return m.handleCommandKey(msg)
-	} else {
-		switch m.view {
-		case inspectview.ViewName:
-			var cmd tea.Cmd
-			m.inspect, cmd = m.inspect.Update(msg)
-			return m, cmd
-		case logs.ViewName:
-			var cmd tea.Cmd
-			m.logs, cmd = m.logs.Update(msg)
-			return m, cmd
-		case stacksview.ViewName:
-			var cmd tea.Cmd
-			m.stacks, cmd = m.stacks.Update(msg)
-			return m, cmd
-		case "main":
-			return m.handleMainKey(msg)
-		default:
-			return m.handleMainKey(msg)
-		}
+	//if m.commandMode {
+	//	//return m.handleCommandKey(msg)
+	//} else {
+	switch m.view {
+	case inspectview.ViewName:
+		var cmd tea.Cmd
+		m.inspect, cmd = m.inspect.Update(msg)
+		return m, cmd
+	case logs.ViewName:
+		var cmd tea.Cmd
+		m.logs, cmd = m.logs.Update(msg)
+		return m, cmd
+	case stacksview.ViewName:
+		var cmd tea.Cmd
+		m.stacks, cmd = m.stacks.Update(msg)
+		return m, cmd
+	case "main":
+		return m.handleMainKey(msg)
+	default:
+		return m.handleMainKey(msg)
 	}
 }
 
-func (m model) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
-		cmd := strings.TrimSpace(m.commandInput)
-		m.commandMode = false
-		m.commandInput = ""
-		switch cmd {
-		case "nodes":
-			m.mode = modeNodes
-			m.cursor = 0
-			return m, loadData(modeNodes)
-		case "services":
-			m.mode = modeServices
-			m.cursor = 0
-			return m, loadData(modeServices)
-		case "stacks":
-			m.mode = modeStacks
-			m.cursor = 0
-			return m, loadData(modeStacks)
-		}
-	case tea.KeyEsc:
-		m.commandMode = false
-		m.commandInput = ""
-	case tea.KeyBackspace:
-		if len(m.commandInput) > 0 {
-			m.commandInput = m.commandInput[:len(m.commandInput)-1]
-		}
-	default:
-		m.commandInput += msg.String()
-	}
-	return m, nil
-}
+//func (m model) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+//	switch msg.Type {
+//	case tea.KeyEnter:
+//		cmd := strings.TrimSpace(m.commandInput)
+//		m.commandMode = false
+//		m.commandInput = ""
+//		switch cmd {
+//		case "nodes":
+//			m.mode = modeNodes
+//			m.cursor = 0
+//			return m, loadData(modeNodes)
+//		case "services":
+//			m.mode = modeServices
+//			m.cursor = 0
+//			return m, loadData(modeServices)
+//		case "stacks":
+//			m.mode = modeStacks
+//			m.cursor = 0
+//			return m, loadData(modeStacks)
+//		}
+//	case tea.KeyEsc:
+//		m.commandMode = false
+//		m.commandInput = ""
+//	case tea.KeyBackspace:
+//		if len(m.commandInput) > 0 {
+//			m.commandInput = m.commandInput[:len(m.commandInput)-1]
+//		}
+//	default:
+//		m.commandInput += msg.String()
+//	}
+//	return m, nil
+//}
 
 func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
@@ -184,7 +192,7 @@ func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case "j", "down":
-		if m.cursor < len(m.items)-1 {
+		if m.cursor < len(m.nodes)-1 {
 			m.cursor++
 		}
 
@@ -194,14 +202,14 @@ func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "i":
-		if m.cursor < len(m.items) {
-			cmd := inspectItem(m.mode, m.items[m.cursor])
+		if m.cursor < len(m.nodes) {
+			cmd := inspectItem(m.mode, m.nodes[m.cursor])
 			m.inspect.SetContent("")
 			return m, cmd
 		}
 
-	case ":":
-		m.commandMode = true
+	//case ":":
+	//	m.commandMode = true
 
 	case "s":
 		return m.handleSelectNode()
@@ -211,16 +219,15 @@ func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleSelectNode() (tea.Model, tea.Cmd) {
-	if m.mode != modeNodes || m.cursor >= len(m.items) {
+	if m.mode != modeNodes || m.cursor >= len(m.nodes) {
 		return m, nil
 	}
 
-	fields := strings.Fields(m.items[m.cursor])
+	fields := strings.Fields(m.nodes[m.cursor])
 	if len(fields) == 0 {
 		return m, nil
 	}
 
 	nodeID := fields[0]
-	m.selectedNodeID = nodeID
 	return m, stacksview.LoadNodeStacks(nodeID)
 }

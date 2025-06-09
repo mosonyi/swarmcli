@@ -29,20 +29,10 @@ func (m model) View() string {
 
 	helpText := styles.HelpStyle.Render("[i: inspect, s: see stacks, q: quit, j/k: move cursor, : switch mode]")
 
-	// Show the main list with cursor highlighted, no viewport scroll for this version
-	s := fmt.Sprintf("Mode: %s\n\n", m.mode)
-	for i, item := range m.items {
-		cursor := "  "
-		if i == m.cursor {
-			cursor = "→ "
-		}
-		s += fmt.Sprintf("%s%s\n", cursor, item)
-	}
-
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		status,
-		styles.BorderStyle.Render(s),
+		styles.BorderStyle.Render(m.nodesV.View()),
 		helpText,
 	)
 }
