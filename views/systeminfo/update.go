@@ -17,9 +17,15 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m *Model) buildContent() string {
+	return content(
+		m.host, m.version, m.cpuUsage, m.memUsage, m.containerCount, m.serviceCount,
+	)
+}
+
+func content(host, version, cpu, mem string, containers, services int) string {
 	return fmt.Sprintf(
 		"Host: %s\nVersion: %s\nCPU: %s\nMEM: %s\nContainers: %d\nServices: %d",
-		m.host, m.version, m.cpuUsage, m.memUsage, m.containerCount, m.serviceCount,
+		host, version, cpu, mem, containers, services,
 	)
 }
 
