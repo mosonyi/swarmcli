@@ -26,7 +26,7 @@ func (m model) View() string {
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		m.systemInfo.View(),
-		m.nodesV.View(),
+		m.nodes.View(),
 		helpText,
 	)
 }

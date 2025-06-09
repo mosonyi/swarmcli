@@ -25,7 +25,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// No need to set the view here, it is only a sub-view on main
 		//m.view = nodesview.ViewName
 		var cmd tea.Cmd
-		m.nodesV, cmd = m.nodesV.Update(msg)
+		m.nodes, cmd = m.nodes.Update(msg)
 		return m, cmd
 	case inspectview.Msg:
 		m.view = inspectview.ViewName
@@ -57,7 +57,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.stacks, cmd = m.stacks.Update(msg)
 		cmds = append(cmds, cmd)
 
-		m.nodesV, cmd = m.nodesV.Update(msg)
+		m.nodes, cmd = m.nodes.Update(msg)
 		cmds = append(cmds, cmd)
 	}
 
@@ -97,7 +97,7 @@ func (m model) handleResize(msg tea.WindowSizeMsg) (model, []tea.Cmd) {
 	m.stacks, cmd = m.stacks.Update(adjustedMsg)
 	cmds = append(cmds, cmd)
 
-	m.nodesV, cmd = m.nodesV.Update(nodeViewMsg)
+	m.nodes, cmd = m.nodes.Update(nodeViewMsg)
 	cmds = append(cmds, cmd)
 
 	return m, cmds
@@ -197,7 +197,7 @@ func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	//	m.commandMode = true
 	default:
 		var cmd tea.Cmd
-		m.nodesV, cmd = m.nodesV.Update(msg)
+		m.nodes, cmd = m.nodes.Update(msg)
 		return m, cmd
 	}
 }
