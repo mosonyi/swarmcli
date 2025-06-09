@@ -3,34 +3,23 @@ package main
 import (
 	"log"
 	nodesview "swarmcli/views/nodes"
+	systeminfoview "swarmcli/views/systeminfo"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 const (
-	modeNodes    mode = "nodes"
-	modeServices mode = "services"
-	modeStacks   mode = "stacks"
-	version           = "dev"
+	modeNodes mode   = "nodes"
+	version   string = "dev"
 )
 
 // ------- Messages
 
 type tickMsg time.Time
 
-// new status message to update system usage info
-type statusMsg struct {
-	host       string
-	version    string
-	cpu        string
-	mem        string
-	containers int
-	services   int
-}
-
 func (m model) Init() tea.Cmd {
-	return tea.Batch(tick(), nodesview.LoadNodes(), loadStatus())
+	return tea.Batch(tick(), nodesview.LoadNodes(), systeminfoview.LoadStatus())
 }
 
 func main() {

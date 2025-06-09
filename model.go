@@ -6,6 +6,7 @@ import (
 	"swarmcli/views/logs"
 	nodesview "swarmcli/views/nodes"
 	"swarmcli/views/stacks"
+	systeminfoview "swarmcli/views/systeminfo"
 )
 
 type mode string
@@ -18,18 +19,11 @@ type model struct {
 	//commandMode  bool
 	//commandInput string
 
-	// status overview fields
-	host           string
-	version        string
-	cpuUsage       string
-	memUsage       string
-	containerCount int
-	serviceCount   int
-
-	nodesV  nodesview.Model
-	stacks  stacksview.Model
-	logs    logs.Model
-	inspect inspectview.Model
+	systemInfo systeminfoview.Model
+	nodesV     nodesview.Model
+	stacks     stacksview.Model
+	logs       logs.Model
+	inspect    inspectview.Model
 }
 
 // initialModel creates default model
@@ -38,10 +32,11 @@ func initialModel() model {
 	vp.YPosition = 5
 
 	return model{
-		mode:     modeNodes,
-		viewport: vp,
-		logs:     logs.New(80, 20),
-		inspect:  inspectview.New(80, 20),
-		nodesV:   nodesview.New(80, 20),
+		mode:       modeNodes,
+		viewport:   vp,
+		systemInfo: systeminfoview.New(version),
+		logs:       logs.New(80, 20),
+		inspect:    inspectview.New(80, 20),
+		nodesV:     nodesview.New(80, 20),
 	}
 }
