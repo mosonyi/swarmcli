@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/charmbracelet/lipgloss"
 	"swarmcli/styles"
 	inspectview "swarmcli/views/inspect"
@@ -22,17 +21,11 @@ func (m model) View() string {
 		return m.stacks.View()
 	}
 
-	// Todo: Extract this into a separate view
-	status := styles.StatusStyle.Render(fmt.Sprintf(
-		"Host: %s\nVersion: %s\nCPU: %s\nMEM: %s\nContainers: %d\nServices: %d",
-		m.host, m.version, m.cpuUsage, m.memUsage, m.containerCount, m.serviceCount,
-	))
-
 	helpText := styles.HelpStyle.Render("[i: inspect, s: see stacks, q: quit, j/k: move cursor, : switch mode]")
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		status,
+		m.systemInfo.View(),
 		m.nodesV.View(),
 		helpText,
 	)

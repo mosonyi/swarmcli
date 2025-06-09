@@ -6,6 +6,7 @@ import (
 	"swarmcli/views/logs"
 	nodesview "swarmcli/views/nodes"
 	"swarmcli/views/stacks"
+	systeminfoview "swarmcli/views/systeminfo"
 )
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -19,7 +20,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	case tickMsg:
-		return m, tea.Batch(nodesview.LoadNodes(), loadStatus())
+		return m, tea.Batch(nodesview.LoadNodes(), systeminfoview.LoadStatus())
 	case nodesview.Msg:
 		// No need to set the view here, it is only a sub-view on main
 		//m.view = nodesview.ViewName
@@ -41,13 +42,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.logs, cmd = m.logs.Update(msg)
 		return m, cmd
-	case statusMsg:
-		m.host = msg.host
-		m.version = msg.version
-		m.cpuUsage = msg.cpu
-		m.memUsage = msg.mem
-		m.containerCount = msg.containers
-		m.serviceCount = msg.services
+	case systeminfoview.Msg:
+		var cmd tea.Cmd
+		m.systemInfo, cmd = m.systemInfo.Update(msg)
+		return m, cmd
 	default:
 		var cmd tea.Cmd
 		m.logs, cmd = m.logs.Update(msg)
