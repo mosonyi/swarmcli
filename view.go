@@ -22,6 +22,7 @@ func (m model) View() string {
 		return m.stacks.View()
 	}
 
+	// Todo: Extract this into a separate view
 	status := styles.StatusStyle.Render(fmt.Sprintf(
 		"Host: %s\nVersion: %s\nCPU: %s\nMEM: %s\nContainers: %d\nServices: %d",
 		m.host, m.version, m.cpuUsage, m.memUsage, m.containerCount, m.serviceCount,
@@ -29,20 +30,10 @@ func (m model) View() string {
 
 	helpText := styles.HelpStyle.Render("[i: inspect, s: see stacks, q: quit, j/k: move cursor, : switch mode]")
 
-	// Show the main list with cursor highlighted, no viewport scroll for this version
-	s := fmt.Sprintf("Mode: %s\n\n", m.mode)
-	for i, item := range m.items {
-		cursor := "  "
-		if i == m.cursor {
-			cursor = "→ "
-		}
-		s += fmt.Sprintf("%s%s\n", cursor, item)
-	}
-
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		status,
-		styles.BorderStyle.Render(s),
+		m.nodesV.View(),
 		helpText,
 	)
 }
