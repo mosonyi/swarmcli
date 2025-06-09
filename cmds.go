@@ -1,13 +1,9 @@
 package main
 
 import (
-	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
 	"os"
-	"os/exec"
-	"strings"
 	"swarmcli/docker"
-	inspectview "swarmcli/views/inspect"
 	"time"
 )
 
@@ -34,25 +30,5 @@ func loadStatus() tea.Cmd {
 			containers: containers,
 			services:   services,
 		}
-	}
-}
-
-func inspectItem(mode mode, line string) tea.Cmd {
-	return func() tea.Msg {
-		item := strings.Fields(line)[0]
-		var out []byte
-		var err error
-		switch mode {
-		case modeNodes:
-			out, err = exec.Command("docker", "node", "inspect", item).CombinedOutput()
-		case modeServices:
-			out, err = exec.Command("docker", "service", "inspect", item).CombinedOutput()
-		case modeStacks:
-			out, err = exec.Command("docker", "stack", "services", item).CombinedOutput()
-		}
-		if err != nil {
-			return inspectview.Msg(fmt.Sprintf("Error: %v\n%s", err, out))
-		}
-		return inspectview.Msg(out)
 	}
 }

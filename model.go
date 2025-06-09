@@ -12,13 +12,11 @@ type mode string
 
 // Model holds app state
 type model struct {
-	mode         mode
-	view         string // "main" or "nodeStacks"
-	nodes        []string
-	cursor       int
-	viewport     viewport.Model
-	commandMode  bool
-	commandInput string
+	mode     mode
+	view     string // "main" or "nodeStacks"
+	viewport viewport.Model
+	//commandMode  bool
+	//commandInput string
 
 	// status overview fields
 	host           string
@@ -44,5 +42,6 @@ func initialModel() model {
 		viewport: vp,
 		logs:     logs.New(80, 20),
 		inspect:  inspectview.New(80, 20),
+		nodesV:   nodesview.New(80, 20),
 	}
 }

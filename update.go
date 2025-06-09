@@ -2,7 +2,6 @@ package main
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"strings"
 	inspectview "swarmcli/views/inspect"
 	"swarmcli/views/logs"
 	nodesview "swarmcli/views/nodes"
@@ -22,7 +21,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		return m, tea.Batch(nodesview.LoadNodes(), loadStatus())
 	case nodesview.Msg:
-		m.view = nodesview.ViewName
+		// No need to set the view here, it is only a sub-view on main
+		//m.view = nodesview.ViewName
 		var cmd tea.Cmd
 		m.nodesV, cmd = m.nodesV.Update(msg)
 		return m, cmd
@@ -195,44 +195,11 @@ func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q":
 		return m, tea.Quit
-
-	case "j", "down":
-		if m.cursor < len(m.nodes)-1 {
-			m.cursor++
-		}
-
-	case "k", "up":
-		if m.cursor > 0 {
-			m.cursor--
-		}
-
-	case "i":
-		if m.cursor < len(m.nodes) {
-			cmd := inspectItem(m.mode, m.nodes[m.cursor])
-			m.inspect.SetContent("")
-			return m, cmd
-		}
-
 	//case ":":
 	//	m.commandMode = true
-
-	case "s":
-		return m.handleSelectNode()
-
+	default:
+		var cmd tea.Cmd
+		m.nodesV, cmd = m.nodesV.Update(msg)
+		return m, cmd
 	}
-	return m, nil
-}
-
-func (m model) handleSelectNode() (tea.Model, tea.Cmd) {
-	if m.mode != modeNodes || m.cursor >= len(m.nodes) {
-		return m, nil
-	}
-
-	fields := strings.Fields(m.nodes[m.cursor])
-	if len(fields) == 0 {
-		return m, nil
-	}
-
-	nodeID := fields[0]
-	return m, stacksview.LoadNodeStacks(nodeID)
 }
