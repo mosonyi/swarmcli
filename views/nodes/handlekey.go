@@ -7,11 +7,10 @@ import (
 )
 
 func HandleKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
-	// Maybe add search mode handling in the future
-	return handleNormalModeKey(m, msg)
+	return handleModeKey(m, msg)
 }
 
-func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+func handleModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "q":
 		return m, tea.Quit
@@ -32,17 +31,14 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, cmd
 		}
 
-	//case ":":
-	//	m.commandMode = true
-
 	case "s":
-		return m.handleSelectNode()
+		return m.selectNode()
 
 	}
 	return m, nil
 }
 
-func (m Model) handleSelectNode() (Model, tea.Cmd) {
+func (m Model) selectNode() (Model, tea.Cmd) {
 	fields := strings.Fields(m.nodes[m.cursor])
 	if len(fields) == 0 {
 		return m, nil
