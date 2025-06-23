@@ -2,10 +2,7 @@ package main
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	inspectview "swarmcli/views/inspect"
-	"swarmcli/views/logs"
 	nodesview "swarmcli/views/nodes"
-	"swarmcli/views/stacks"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
 )
@@ -76,55 +73,23 @@ func (m model) updateViewports(msg tea.Msg) (model, tea.Cmd) {
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Global escape / quit handler
 	if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc || msg.String() == "q" {
-		switch {
-		case m.view == inspectview.ViewName:
-			m.view = "main"
-			var cmd tea.Cmd
-			m.currentView, cmd = m.currentView.Update(msg)
-			return m, cmd
-		case m.view == stacksview.ViewName:
-			m.view = "main"
-			var cmd tea.Cmd
-			m.currentView, cmd = m.currentView.Update(msg)
-			return m, cmd
-		case m.view == logsview.ViewName:
-			m.view = stacksview.ViewName
-			var cmd tea.Cmd
-			m.currentView, cmd = m.currentView.Update(msg)
-			return m, cmd
-		default:
-			return m, tea.Quit
-		}
-	}
-
-	//if m.commandMode {
-	//	//return m.handleCommandKey(msg)
-	//} else {
-	switch m.view {
-	case inspectview.ViewName:
 		var cmd tea.Cmd
-		m.currentView, cmd = m.currentView.Update(msg)
-		return m, cmd
-	case logsview.ViewName:
-		var cmd tea.Cmd
-		m.currentView, cmd = m.currentView.Update(msg)
-		return m, cmd
-	case stacksview.ViewName:
-		var cmd tea.Cmd
-		m.currentView, cmd = m.currentView.Update(msg)
-		return m, cmd
-	//case ":":
-	//	m.commandMode = true
-	case "main":
-		var cmd tea.Cmd
-		m.currentView, cmd = m.currentView.Update(msg)
-		return m, cmd
-
-	default:
-		var cmd tea.Cmd
-		m.currentView, cmd = m.currentView.Update(msg)
+		m, cmd = m.goBack()
 		return m, cmd
 	}
+
+	var cmd tea.Cmd
+	m.currentView, cmd = m.currentView.Update(msg)
+	return m, cmd
+}
+
+func (m model) goBack() (model, tea.Cmd) {
+	if len(m.viewStack) == 0 {
+		return m, tea.Quit
+	}
+	m.currentView = m.viewStack[len(m.viewStack)-1]
+	m.viewStack = m.viewStack[:len(m.viewStack)-1]
+	return m, nil
 }
 
 //func (m model) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
