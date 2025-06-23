@@ -10,7 +10,7 @@ func (m Model) View() string {
 		return ""
 	}
 
-	header := fmt.Sprintf("Inspecting (%s)", m.mode)
+	header := fmt.Sprintf("Inspecting Logs (%s)", m.mode)
 	if m.mode == "search" {
 		header += fmt.Sprintf(" - Search: %s", m.searchTerm)
 	}

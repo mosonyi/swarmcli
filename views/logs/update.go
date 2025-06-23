@@ -35,9 +35,6 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 
 func (m *Model) SetContent(content string) {
 	m.logLines = content
-	if len(m.searchMatches) > 0 && m.searchTerm != "" {
-		content = utils.HighlightMatches(content, m.searchTerm)
-	}
 
 	m.searchMatches = nil
 	m.searchTerm = ""
@@ -47,9 +44,24 @@ func (m *Model) SetContent(content string) {
 	if !m.ready {
 		return
 	}
-	m.viewport.GotoTop()           // reset scroll position
-	m.viewport.SetContent(content) // now set new content
+	m.viewport.GotoTop()                    // reset scroll position
+	m.viewport.SetContent(m.buildContent()) // now set new content
 	m.viewport.YOffset = 0
+}
+
+func (m *Model) highlightContent() {
+	if m.searchTerm != "" {
+		m.searchMatches = utils.FindAllMatches(m.viewport.View(), m.searchTerm)
+	}
+	m.viewport.SetContent(m.buildContent())
+}
+
+func (m *Model) buildContent() string {
+	if len(m.searchMatches) > 0 && m.searchTerm != "" {
+		return utils.HighlightMatches(m.logLines, m.searchTerm)
+	} else {
+		return m.logLines
+	}
 }
 
 func (m *Model) scrollToMatch() {

@@ -50,10 +50,10 @@ func (m *Model) SetContent(content string) {
 }
 
 func (m *Model) highlightContent() {
-	m.searchMatches = utils.FindAllMatches(m.viewport.View(), m.searchTerm)
-	m.searchIndex = 0
-	highlighted := utils.HighlightMatches(m.inspectLines, m.searchTerm)
-	m.viewport.SetContent(highlighted)
+	if m.searchTerm != "" {
+		m.searchMatches = utils.FindAllMatches(m.viewport.View(), m.searchTerm)
+	}
+	m.viewport.SetContent(m.buildContent())
 }
 
 func (m *Model) buildContent() string {

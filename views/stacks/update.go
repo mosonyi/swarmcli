@@ -59,6 +59,7 @@ func (m *Model) buildContent() string {
 	}
 	return b.String()
 }
+
 func (m *Model) visibleStackServices() []StackService {
 	if m.viewport.Height <= 0 || len(m.stackServices) == 0 {
 		return nil

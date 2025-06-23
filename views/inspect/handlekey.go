@@ -19,8 +19,8 @@ func handleSearchModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyBackspace:
 		if len(m.searchTerm) > 0 {
 			m.searchTerm = m.searchTerm[:len(m.searchTerm)-1]
+			m.highlightContent()
 		}
-		m.highlightContent()
 	case tea.KeyEnter:
 		m.mode = "normal"
 		m.highlightContent()
