@@ -8,39 +8,44 @@ import (
 )
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-
 	switch msg := msg.(type) {
 	case view.NavigateToMsg:
 		return m.switchToView(msg.ViewName, msg.Payload)
+
 	case tea.WindowSizeMsg:
-		var wndCmds []tea.Cmd
-		m, wndCmds = m.handleResize(msg)
-		cmds = append(cmds, wndCmds...)
+		return m.updateForResize(msg)
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
+
 	case tickMsg:
-		return m, tea.Batch(nodesview.LoadNodes(), systeminfoview.LoadStatus())
+		return m, tea.Batch(
+			nodesview.LoadNodes(),
+			systeminfoview.LoadStatus(),
+		)
+
 	case systeminfoview.Msg:
 		var cmd tea.Cmd
 		m.systemInfo, cmd = m.systemInfo.Update(msg)
 		return m, cmd
-	default:
-		var cmd tea.Cmd
-		m.currentView, cmd = m.currentView.Update(msg)
-		cmds = append(cmds, cmd)
-	}
 
-	var cmd tea.Cmd
-	m, cmd = m.updateViewports(msg)
-	cmds = append(cmds, cmd)
-	return m, tea.Batch(cmds...)
+	default:
+		return m.delegateToCurrentView(msg)
+	}
 }
 
-func (m model) handleResize(msg tea.WindowSizeMsg) (model, []tea.Cmd) {
+func (m model) delegateToCurrentView(msg tea.Msg) (model, tea.Cmd) {
 	var cmd tea.Cmd
-	var cmds []tea.Cmd
+	m.currentView, cmd = m.currentView.Update(msg)
 
+	var vpCmd tea.Cmd
+	m, vpCmd = m.updateViewports(msg)
+
+	return m, tea.Batch(cmd, vpCmd)
+}
+
+func (m model) updateForResize(msg tea.WindowSizeMsg) (model, tea.Cmd) {
+	var cmd tea.Cmd
 	usableWidth := msg.Width - 4
 	usableHeight := msg.Height - 10
 
@@ -48,9 +53,7 @@ func (m model) handleResize(msg tea.WindowSizeMsg) (model, []tea.Cmd) {
 	m.viewport.Height = usableHeight
 
 	m.currentView, cmd = handleViewResize(m.currentView, usableWidth, usableHeight)
-	cmds = append(cmds, cmd)
-
-	return m, cmds
+	return m, cmd
 }
 
 func handleViewResize(view view.View, width, height int) (view.View, tea.Cmd) {
