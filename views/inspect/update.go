@@ -51,7 +51,7 @@ func (m *Model) SetContent(content string) {
 
 func (m *Model) highlightContent() {
 	if m.searchTerm != "" {
-		m.searchMatches = utils.FindAllMatches(m.viewport.View(), m.searchTerm)
+		m.searchMatches = utils.FindAllMatches(m.inspectLines, m.searchTerm)
 	}
 	m.viewport.SetContent(m.buildContent())
 }
