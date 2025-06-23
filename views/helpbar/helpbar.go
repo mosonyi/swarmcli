@@ -2,6 +2,7 @@ package helpbar
 
 import (
 	"github.com/charmbracelet/lipgloss"
+	"strings"
 	"swarmcli/styles"
 )
 
@@ -36,18 +37,34 @@ func (m Model) SetWidth(width int) Model {
 func (m Model) View(systemInfo string) string {
 	allHelp := append(m.globalHelp, m.viewHelp...)
 
-	// Render help columns
 	const colWidth = 18
-	var cols []string
-	for _, key := range allHelp {
-		cols = append(cols, lipgloss.NewStyle().
-			Width(colWidth).
-			PaddingRight(1).
-			Render(styles.HelpStyle.Render("["+key+"]")))
-	}
-	help := lipgloss.JoinHorizontal(lipgloss.Top, cols...)
+	const numCols = 3
 
-	// Layout: system info left, help right
+	// Break help items into column-first layout
+	numRows := (len(allHelp) + numCols - 1) / numCols
+	columns := make([][]string, numCols)
+
+	for i, item := range allHelp {
+		col := i / numRows
+		columns[col] = append(columns[col], item)
+	}
+
+	// Render each column
+	var renderedCols []string
+	for _, col := range columns {
+		var colLines []string
+		for _, key := range col {
+			colLines = append(colLines, styles.HelpStyle.Render("["+key+"]"))
+		}
+		renderedCols = append(renderedCols,
+			lipgloss.NewStyle().
+				Width(colWidth).
+				Render(strings.Join(colLines, "\n")))
+	}
+
+	helpBlock := lipgloss.JoinHorizontal(lipgloss.Top, renderedCols...)
+
+	// Align to right of systemInfo
 	infoWidth := lipgloss.Width(systemInfo)
 	helpWidth := m.width - infoWidth
 	if helpWidth < 0 {
@@ -56,8 +73,8 @@ func (m Model) View(systemInfo string) string {
 
 	helpAligned := lipgloss.NewStyle().
 		Width(helpWidth).
-		Align(lipgloss.Right).
-		Render(help)
+		Align(lipgloss.Left).
+		Render(helpBlock)
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, systemInfo, helpAligned)
 }
