@@ -20,7 +20,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		m.viewport.Height = msg.Height
 		if !m.ready {
 			m.ready = true
-			m.viewport.SetContent(m.inspectLines)
+			m.viewport.SetContent(m.buildContent())
 		}
 		return m, nil
 
