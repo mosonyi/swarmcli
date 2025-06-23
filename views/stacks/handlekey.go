@@ -2,7 +2,8 @@ package stacksview
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"swarmcli/views/logs"
+	logsview "swarmcli/views/logs"
+	"swarmcli/views/view"
 )
 
 func HandleKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -31,7 +32,12 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "enter":
 		if m.stackCursor < len(m.stackServices) {
 			serviceID := m.stackServices[m.stackCursor]
-			return m, logs.Load(serviceID.ServiceName)
+			return m, func() tea.Msg {
+				return view.NavigateToMsg{
+					ViewName: logsview.ViewName,
+					Payload:  serviceID.ServiceName,
+				}
+			}
 		}
 	}
 	return m, nil

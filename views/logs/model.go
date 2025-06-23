@@ -1,4 +1,4 @@
-package logs
+package logsview
 
 import (
 	"fmt"
@@ -32,6 +32,10 @@ func New(width, height int) Model {
 
 func (m Model) Init() tea.Cmd {
 	return nil
+}
+
+func (m Model) Name() string {
+	return ViewName
 }
 
 // Log loading command

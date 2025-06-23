@@ -1,3 +1,3 @@
-package logs
+package logsview
 
 const ViewName = "logs"

@@ -4,9 +4,10 @@ import (
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
 	"strings"
+	"swarmcli/views/view"
 )
 
-func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	switch msg := msg.(type) {
 	case Msg:
 		m.SetContent(msg)
@@ -58,6 +59,7 @@ func (m *Model) buildContent() string {
 	}
 	return b.String()
 }
+
 func (m *Model) visibleStackServices() []StackService {
 	if m.viewport.Height <= 0 || len(m.stackServices) == 0 {
 		return nil

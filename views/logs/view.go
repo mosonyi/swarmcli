@@ -1,4 +1,4 @@
-package logs
+package logsview
 
 import (
 	"fmt"
@@ -10,12 +10,12 @@ func (m Model) View() string {
 		return ""
 	}
 
-	header := fmt.Sprintf("Inspecting (%s)", m.mode)
+	header := fmt.Sprintf("Inspecting Logs (%s)", m.mode)
 	if m.mode == "search" {
 		header += fmt.Sprintf(" - Search: %s", m.searchTerm)
 	}
 
 	return styles.BorderStyle.Render(
-		fmt.Sprintf("%s\n\n%s\n\n[press q or esc to go back, / to search]", header, m.viewport.View()),
+		fmt.Sprintf("%s\n\n%s[press q or esc to go back, / to search]", header, m.viewport.View()),
 	)
 }
