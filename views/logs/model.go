@@ -38,6 +38,21 @@ func (m Model) Name() string {
 	return ViewName
 }
 
+func (m Model) ShortHelpItems() []string {
+	if m.mode == "search" {
+		return []string{
+			"enter: confirm",
+			"esc: cancel",
+			"n/N: next/prev",
+		}
+	}
+	return []string{
+		"/: search",
+		"n/N: next/prev",
+		"q: close",
+	}
+}
+
 // Log loading command
 func Load(serviceID string) tea.Cmd {
 	return func() tea.Msg {

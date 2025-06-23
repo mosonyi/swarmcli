@@ -7,4 +7,5 @@ type View interface {
 	View() string
 	Init() tea.Cmd
 	Name() string
+	ShortHelpItems() []string
 }

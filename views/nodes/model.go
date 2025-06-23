@@ -40,6 +40,16 @@ func (m Model) Name() string {
 	return ViewName
 }
 
+func (m Model) ShortHelpItems() []string {
+	return []string{
+		"s: select",
+		"i: inspect",
+		"k/up: scr up",
+		"j/down: scr down",
+		"q: close",
+	}
+}
+
 func LoadNodes() tea.Cmd {
 	return func() tea.Msg {
 		var list []string

@@ -38,6 +38,17 @@ func (m Model) Name() string {
 	return ViewName
 }
 
+func (m Model) ShortHelpItems() []string {
+	return []string{
+		"enter: view logs",
+		"k/up: scr up",
+		"j/down: scr down",
+		"pgup: page up",
+		"pgdown: page down",
+		"q: close",
+	}
+}
+
 func LoadNodeStacks(nodeID string) tea.Cmd {
 	return func() tea.Msg {
 		services := loadNodeStacks(nodeID)
