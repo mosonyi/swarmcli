@@ -6,10 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"swarmcli/styles"
-	inspectview "swarmcli/views/inspect"
-	"swarmcli/views/logs"
 	nodesview "swarmcli/views/nodes"
-	stacksview "swarmcli/views/stacks"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
 	"swarmcli/views/viewstack"
@@ -26,10 +23,6 @@ type model struct {
 	//commandInput string
 
 	systemInfo systeminfoview.Model
-	nodes      nodesview.Model
-	stacks     stacksview.Model
-	logs       logsview.Model
-	inspect    inspectview.Model
 
 	currentView view.View
 	viewStack   viewstack.Stack
