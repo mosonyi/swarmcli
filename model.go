@@ -48,28 +48,34 @@ func initialModel() model {
 }
 
 func (m model) switchToView(name string, data any) (model, tea.Cmd) {
+	var newView view.View
+	var loadCmd tea.Cmd
+
 	switch name {
 	case logsview.ViewName:
 		serviceID := data.(string)
-		logsView := logsview.New(80, 20)
-		m.viewStack = append(m.viewStack, m.currentView)
-		m.currentView = logsView
-		return m, logsview.Load(serviceID)
+		newView = logsview.New(m.viewport.Width, m.viewport.Height)
+		loadCmd = logsview.Load(serviceID)
 
 	case stacksview.ViewName:
 		nodeID := data.(string)
-		stacksView := stacksview.New(80, 20)
-		m.viewStack = append(m.viewStack, m.currentView)
-		m.currentView = stacksView
-		return m, stacksview.LoadNodeStacks(nodeID)
+		newView = stacksview.New(m.viewport.Width, m.viewport.Height)
+		loadCmd = stacksview.LoadNodeStacks(nodeID)
 
 	case inspectview.ViewName:
 		nodeViewLine := data.(string)
-		stacksView := inspectview.New(80, 20)
-		m.viewStack = append(m.viewStack, m.currentView)
-		m.currentView = stacksView
-		return m, inspectview.LoadInspectItem(nodeViewLine)
+		newView = inspectview.New(m.viewport.Width, m.viewport.Height)
+		loadCmd = inspectview.LoadInspectItem(nodeViewLine)
+	default:
+		return m, nil
 	}
 
-	return m, nil
+	// Push old view to stack
+	m.viewStack = append(m.viewStack, m.currentView)
+	m.view = name
+
+	newView, resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height)
+	m.currentView = newView
+
+	return m, tea.Batch(resizeCmd, loadCmd)
 }

@@ -50,25 +50,21 @@ func (m model) handleResize(msg tea.WindowSizeMsg) (model, []tea.Cmd) {
 	m.viewport.Width = usableWidth
 	m.viewport.Height = usableHeight
 
-	// Create adjusted WindowSizeMsg
-	var adjustedMsg tea.WindowSizeMsg
-
-	if m.currentView.Name() == nodesview.ViewName {
-		adjustedMsg = tea.WindowSizeMsg{
-			Width:  usableWidth,
-			Height: usableHeight / 2,
-		}
-	} else {
-		adjustedMsg = tea.WindowSizeMsg{
-			Width:  usableWidth,
-			Height: usableHeight,
-		}
-	}
-
-	m.currentView, cmd = m.currentView.Update(adjustedMsg)
+	m.currentView, cmd = handleViewResize(m.currentView, usableWidth, usableHeight)
 	cmds = append(cmds, cmd)
 
 	return m, cmds
+}
+
+func handleViewResize(view view.View, width, height int) (view.View, tea.Cmd) {
+	var adjustedMsg = tea.WindowSizeMsg{
+		Width:  width,
+		Height: height - systeminfoview.Height,
+	}
+
+	var cmd tea.Cmd
+	view, cmd = view.Update(adjustedMsg)
+	return view, cmd
 }
 
 func (m model) updateViewports(msg tea.Msg) (model, tea.Cmd) {
