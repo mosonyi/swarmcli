@@ -12,6 +12,7 @@ import (
 	stacksview "swarmcli/views/stacks"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
+	"swarmcli/views/viewstack"
 )
 
 type mode string
@@ -31,8 +32,7 @@ type model struct {
 	inspect    inspectview.Model
 
 	currentView view.View
-	views       map[string]view.View
-	viewStack   []view.View
+	viewStack   viewstack.Stack
 }
 
 // initialModel creates default model
@@ -46,7 +46,7 @@ func initialModel() model {
 		mode:        modeNodes,
 		viewport:    vp,
 		currentView: nodes,
-		viewStack:   []view.View{},
+		viewStack:   viewstack.Stack{},
 	}
 }
 
@@ -59,7 +59,7 @@ func (m model) switchToView(name string, data any) (model, tea.Cmd) {
 	newView, loadCmd := factory(m.viewport.Width, m.viewport.Height, data)
 	newView, resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height)
 
-	m.viewStack = append(m.viewStack, m.currentView)
+	m.viewStack.Push(m.currentView)
 	m.currentView = newView
 	m.view = name
 
@@ -68,7 +68,7 @@ func (m model) switchToView(name string, data any) (model, tea.Cmd) {
 
 func (m model) renderStackBar() string {
 	// Combine stack and current view
-	stack := append(m.viewStack, m.currentView)
+	stack := append(m.viewStack.Views(), m.currentView)
 
 	var parts []string
 	for i, view := range stack {

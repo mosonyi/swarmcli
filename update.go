@@ -84,11 +84,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) goBack() (model, tea.Cmd) {
-	if len(m.viewStack) == 0 {
+	if m.viewStack.Len() == 0 {
 		return m, tea.Quit
 	}
-	m.currentView = m.viewStack[len(m.viewStack)-1]
-	m.viewStack = m.viewStack[:len(m.viewStack)-1]
+	m.currentView = m.viewStack.Pop()
 	return m, nil
 }
 
