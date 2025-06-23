@@ -1,17 +1,16 @@
-package logs
+package logsview
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	"strings"
 	"swarmcli/utils"
+	"swarmcli/views/view"
 )
 
-func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	switch msg := msg.(type) {
 	case Msg:
-		if m.ready {
-			m.SetContent(string(msg))
-		}
+		m.SetContent(string(msg))
 		m.Visible = true
 		return m, nil
 

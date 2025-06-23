@@ -36,6 +36,10 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
+func (m Model) Name() string {
+	return ViewName
+}
+
 func LoadNodes() tea.Cmd {
 	return func() tea.Msg {
 		var list []string

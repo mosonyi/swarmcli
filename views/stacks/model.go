@@ -34,6 +34,10 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
+func (m Model) Name() string {
+	return ViewName
+}
+
 func LoadNodeStacks(nodeID string) tea.Cmd {
 	return func() tea.Msg {
 		services := loadNodeStacks(nodeID)

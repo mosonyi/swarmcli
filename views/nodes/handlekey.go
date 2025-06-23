@@ -3,7 +3,9 @@ package nodesview
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	"strings"
+	inspectview "swarmcli/views/inspect"
 	stacksview "swarmcli/views/stacks"
+	"swarmcli/views/view"
 )
 
 func HandleKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -27,8 +29,12 @@ func handleModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	case "i":
 		if m.cursor < len(m.nodes) {
-			cmd := inspectItem(m.nodes[m.cursor])
-			return m, cmd
+			return m, func() tea.Msg {
+				return view.NavigateToMsg{
+					ViewName: inspectview.ViewName,
+					Payload:  m.nodes[m.cursor],
+				}
+			}
 		}
 
 	case "s":
@@ -45,5 +51,10 @@ func (m Model) selectNode() (Model, tea.Cmd) {
 	}
 
 	nodeID := fields[0]
-	return m, stacksview.LoadNodeStacks(nodeID)
+	return m, func() tea.Msg {
+		return view.NavigateToMsg{
+			ViewName: stacksview.ViewName,
+			Payload:  nodeID,
+		}
+	}
 }

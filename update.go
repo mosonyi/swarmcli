@@ -7,12 +7,15 @@ import (
 	nodesview "swarmcli/views/nodes"
 	"swarmcli/views/stacks"
 	systeminfoview "swarmcli/views/systeminfo"
+	"swarmcli/views/view"
 )
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
+	case view.NavigateToMsg:
+		return m.switchToView(msg.ViewName, msg.Payload)
 	case tea.WindowSizeMsg:
 		var wndCmds []tea.Cmd
 		m, wndCmds = m.handleResize(msg)
@@ -21,43 +24,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 	case tickMsg:
 		return m, tea.Batch(nodesview.LoadNodes(), systeminfoview.LoadStatus())
-	case nodesview.Msg:
-		// No need to set the view here, it is only a sub-view on main
-		//m.view = nodesview.ViewName
-		var cmd tea.Cmd
-		m.nodes, cmd = m.nodes.Update(msg)
-		return m, cmd
-	case inspectview.Msg:
-		m.view = inspectview.ViewName
-		var cmd tea.Cmd
-		m.inspect, cmd = m.inspect.Update(msg)
-		return m, cmd
-	case stacksview.Msg:
-		m.view = stacksview.ViewName
-		var cmd tea.Cmd
-		m.stacks, cmd = m.stacks.Update(msg)
-		return m, cmd
-	case logs.Msg:
-		m.view = logs.ViewName
-		var cmd tea.Cmd
-		m.logs, cmd = m.logs.Update(msg)
-		return m, cmd
 	case systeminfoview.Msg:
 		var cmd tea.Cmd
 		m.systemInfo, cmd = m.systemInfo.Update(msg)
 		return m, cmd
 	default:
 		var cmd tea.Cmd
-		m.logs, cmd = m.logs.Update(msg)
-		cmds = append(cmds, cmd)
-
-		m.inspect, cmd = m.inspect.Update(msg)
-		cmds = append(cmds, cmd)
-
-		m.stacks, cmd = m.stacks.Update(msg)
-		cmds = append(cmds, cmd)
-
-		m.nodes, cmd = m.nodes.Update(msg)
+		m.currentView, cmd = m.currentView.Update(msg)
 		cmds = append(cmds, cmd)
 	}
 
@@ -78,26 +51,21 @@ func (m model) handleResize(msg tea.WindowSizeMsg) (model, []tea.Cmd) {
 	m.viewport.Height = usableHeight
 
 	// Create adjusted WindowSizeMsg
-	adjustedMsg := tea.WindowSizeMsg{
-		Width:  usableWidth,
-		Height: usableHeight,
+	var adjustedMsg tea.WindowSizeMsg
+
+	if m.currentView.Name() == nodesview.ViewName {
+		adjustedMsg = tea.WindowSizeMsg{
+			Width:  usableWidth,
+			Height: usableHeight / 2,
+		}
+	} else {
+		adjustedMsg = tea.WindowSizeMsg{
+			Width:  usableWidth,
+			Height: usableHeight,
+		}
 	}
 
-	nodeViewMsg := tea.WindowSizeMsg{
-		Width:  usableWidth,
-		Height: usableHeight / 2,
-	}
-
-	m.inspect, cmd = m.inspect.Update(adjustedMsg)
-	cmds = append(cmds, cmd)
-
-	m.logs, cmd = m.logs.Update(adjustedMsg)
-	cmds = append(cmds, cmd)
-
-	m.stacks, cmd = m.stacks.Update(adjustedMsg)
-	cmds = append(cmds, cmd)
-
-	m.nodes, cmd = m.nodes.Update(nodeViewMsg)
+	m.currentView, cmd = m.currentView.Update(adjustedMsg)
 	cmds = append(cmds, cmd)
 
 	return m, cmds
@@ -111,22 +79,22 @@ func (m model) updateViewports(msg tea.Msg) (model, tea.Cmd) {
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Global escape / quit handler
-	if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc || msg.String() == "esc" {
+	if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc || msg.String() == "q" {
 		switch {
 		case m.view == inspectview.ViewName:
 			m.view = "main"
 			var cmd tea.Cmd
-			m.inspect, cmd = m.inspect.Update(msg)
+			m.currentView, cmd = m.currentView.Update(msg)
 			return m, cmd
 		case m.view == stacksview.ViewName:
 			m.view = "main"
 			var cmd tea.Cmd
-			m.stacks, cmd = m.stacks.Update(msg)
+			m.currentView, cmd = m.currentView.Update(msg)
 			return m, cmd
-		case m.view == logs.ViewName:
+		case m.view == logsview.ViewName:
 			m.view = stacksview.ViewName
 			var cmd tea.Cmd
-			m.logs, cmd = m.logs.Update(msg)
+			m.currentView, cmd = m.currentView.Update(msg)
 			return m, cmd
 		default:
 			return m, tea.Quit
@@ -139,20 +107,27 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.view {
 	case inspectview.ViewName:
 		var cmd tea.Cmd
-		m.inspect, cmd = m.inspect.Update(msg)
+		m.currentView, cmd = m.currentView.Update(msg)
 		return m, cmd
-	case logs.ViewName:
+	case logsview.ViewName:
 		var cmd tea.Cmd
-		m.logs, cmd = m.logs.Update(msg)
+		m.currentView, cmd = m.currentView.Update(msg)
 		return m, cmd
 	case stacksview.ViewName:
 		var cmd tea.Cmd
-		m.stacks, cmd = m.stacks.Update(msg)
+		m.currentView, cmd = m.currentView.Update(msg)
 		return m, cmd
+	//case ":":
+	//	m.commandMode = true
 	case "main":
-		return m.handleMainKey(msg)
+		var cmd tea.Cmd
+		m.currentView, cmd = m.currentView.Update(msg)
+		return m, cmd
+
 	default:
-		return m.handleMainKey(msg)
+		var cmd tea.Cmd
+		m.currentView, cmd = m.currentView.Update(msg)
+		return m, cmd
 	}
 }
 
@@ -188,16 +163,3 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 //	}
 //	return m, nil
 //}
-
-func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "q":
-		return m, tea.Quit
-	//case ":":
-	//	m.commandMode = true
-	default:
-		var cmd tea.Cmd
-		m.nodes, cmd = m.nodes.Update(msg)
-		return m, cmd
-	}
-}

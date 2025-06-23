@@ -1,4 +1,4 @@
-package logs
+package logsview
 
 import (
 	tea "github.com/charmbracelet/bubbletea"

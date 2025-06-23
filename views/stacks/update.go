@@ -4,9 +4,10 @@ import (
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
 	"strings"
+	"swarmcli/views/view"
 )
 
-func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	switch msg := msg.(type) {
 	case Msg:
 		m.SetContent(msg)
