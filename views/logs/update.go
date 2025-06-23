@@ -39,18 +39,17 @@ func (m *Model) SetContent(content string) {
 		content = utils.HighlightMatches(content, m.searchTerm)
 	}
 
+	m.searchMatches = nil
+	m.searchTerm = ""
+	m.searchIndex = 0
+	m.mode = "normal"
+
 	if !m.ready {
 		return
 	}
 	m.viewport.GotoTop()           // reset scroll position
 	m.viewport.SetContent(content) // now set new content
 	m.viewport.YOffset = 0
-
-	m.viewport.SetContent(content)
-	m.searchMatches = nil
-	m.searchTerm = ""
-	m.searchIndex = 0
-	m.mode = "normal"
 }
 
 func (m *Model) scrollToMatch() {

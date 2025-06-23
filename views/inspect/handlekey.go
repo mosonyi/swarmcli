@@ -2,7 +2,6 @@ package inspectview
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"swarmcli/utils"
 )
 
 func HandleKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -16,16 +15,16 @@ func handleSearchModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyRunes:
 		m.searchTerm += msg.String()
+		m.highlightContent()
 	case tea.KeyBackspace:
 		if len(m.searchTerm) > 0 {
 			m.searchTerm = m.searchTerm[:len(m.searchTerm)-1]
 		}
+		m.highlightContent()
 	case tea.KeyEnter:
 		m.mode = "normal"
-		m.searchMatches = utils.FindAllMatches(m.viewport.View(), m.searchTerm)
+		m.highlightContent()
 		m.searchIndex = 0
-		highlighted := utils.HighlightMatches(m.inspectLines, m.searchTerm)
-		m.viewport.SetContent(highlighted)
 		m.scrollToMatch()
 	case tea.KeyEsc:
 		m.mode = "normal"
