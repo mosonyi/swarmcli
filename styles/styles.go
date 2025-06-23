@@ -74,3 +74,12 @@ func Frame(title, content string, width int) string {
 
 	return top + body.String() + bottom
 }
+
+var Rainbow = []lipgloss.Style{
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87")), // pink
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#FFAF00")), // orange
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFF00")), // yellow
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF87")), // green
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#5FD7FF")), // cyan
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#AF87FF")), // purple
+}

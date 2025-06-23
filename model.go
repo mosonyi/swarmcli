@@ -1,8 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"swarmcli/styles"
 	inspectview "swarmcli/views/inspect"
 	"swarmcli/views/logs"
 	nodesview "swarmcli/views/nodes"
@@ -43,7 +46,7 @@ func initialModel() model {
 		mode:        modeNodes,
 		viewport:    vp,
 		currentView: nodes,
-		viewStack:   []view.View{&nodes},
+		viewStack:   []view.View{},
 	}
 }
 
@@ -78,4 +81,22 @@ func (m model) switchToView(name string, data any) (model, tea.Cmd) {
 	m.currentView = newView
 
 	return m, tea.Batch(resizeCmd, loadCmd)
+}
+
+func (m model) renderStackBar() string {
+	// Combine stack and current view
+	stack := append(m.viewStack, m.currentView)
+
+	var parts []string
+	for i, view := range stack {
+		if i > 0 {
+			parts = append(parts, lipgloss.NewStyle().Faint(true).Render(" → "))
+
+		}
+		style := styles.Rainbow[i%len(styles.Rainbow)]
+		label := view.Name()
+		parts = append(parts, style.Render(fmt.Sprintf(" %s ", label)))
+	}
+
+	return lipgloss.JoinHorizontal(lipgloss.Left, parts...)
 }
