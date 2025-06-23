@@ -51,34 +51,17 @@ func initialModel() model {
 }
 
 func (m model) switchToView(name string, data any) (model, tea.Cmd) {
-	var newView view.View
-	var loadCmd tea.Cmd
-
-	switch name {
-	case logsview.ViewName:
-		serviceID := data.(string)
-		newView = logsview.New(m.viewport.Width, m.viewport.Height)
-		loadCmd = logsview.Load(serviceID)
-
-	case stacksview.ViewName:
-		nodeID := data.(string)
-		newView = stacksview.New(m.viewport.Width, m.viewport.Height)
-		loadCmd = stacksview.LoadNodeStacks(nodeID)
-
-	case inspectview.ViewName:
-		nodeViewLine := data.(string)
-		newView = inspectview.New(m.viewport.Width, m.viewport.Height)
-		loadCmd = inspectview.LoadInspectItem(nodeViewLine)
-	default:
+	factory, ok := viewRegistry[name]
+	if !ok {
 		return m, nil
 	}
 
-	// Push old view to stack
-	m.viewStack = append(m.viewStack, m.currentView)
-	m.view = name
-
+	newView, loadCmd := factory(m.viewport.Width, m.viewport.Height, data)
 	newView, resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height)
+
+	m.viewStack = append(m.viewStack, m.currentView)
 	m.currentView = newView
+	m.view = name
 
 	return m, tea.Batch(resizeCmd, loadCmd)
 }
