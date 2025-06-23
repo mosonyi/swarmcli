@@ -18,9 +18,10 @@ type mode string
 
 // Model holds app state
 type model struct {
-	mode     mode
-	view     string // "main" or "nodeStacks"
-	viewport viewport.Model
+	mode        mode
+	view        string // "main" or "nodeStacks"
+	viewport    viewport.Model
+	initialized bool
 	//commandMode  bool
 	//commandInput string
 
@@ -40,13 +41,10 @@ func initialModel() model {
 	vp := viewport.New(80, 20)
 	vp.YPosition = 5
 
-	nodes := nodesview.New(80, 20)
-
 	return model{
-		mode:        modeNodes,
-		viewport:    vp,
-		currentView: nodes,
-		viewStack:   []view.View{},
+		mode:      modeNodes,
+		viewport:  vp,
+		viewStack: []view.View{},
 	}
 }
 

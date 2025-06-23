@@ -14,6 +14,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case view.NavigateToMsg:
 		return m.switchToView(msg.ViewName, msg.Payload)
 	case tea.WindowSizeMsg:
+		if !m.initialized {
+			m.initialized = true
+			nodes := nodesview.New(msg.Width-4, msg.Height-10-systeminfoview.Height)
+			m.currentView = nodes
+		}
+
 		var wndCmds []tea.Cmd
 		m, wndCmds = m.handleResize(msg)
 		cmds = append(cmds, wndCmds...)
