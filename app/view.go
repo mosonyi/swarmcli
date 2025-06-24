@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"github.com/charmbracelet/lipgloss"
@@ -6,7 +6,7 @@ import (
 	systeminfoview "swarmcli/views/systeminfo"
 )
 
-func (m model) View() string {
+func (m Model) View() string {
 	systemInfo := m.systemInfo.View()
 
 	help := helpbar.New(m.viewport.Width, systeminfoview.Height).

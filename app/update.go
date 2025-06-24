@@ -1,13 +1,12 @@
-package main
+package app
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	nodesview "swarmcli/views/nodes"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
 )
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case view.NavigateToMsg:
 		return m.switchToView(msg.ViewName, msg.Payload)
@@ -19,10 +18,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case tickMsg:
-		return m, tea.Batch(
-			nodesview.LoadNodes(),
-			systeminfoview.LoadStatus(),
-		)
+		return m.handleTick(msg)
 
 	case systeminfoview.Msg:
 		var cmd tea.Cmd
@@ -34,7 +30,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m model) delegateToCurrentView(msg tea.Msg) (model, tea.Cmd) {
+func (m Model) delegateToCurrentView(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.currentView, cmd = m.currentView.Update(msg)
 
@@ -44,7 +40,7 @@ func (m model) delegateToCurrentView(msg tea.Msg) (model, tea.Cmd) {
 	return m, tea.Batch(cmd, vpCmd)
 }
 
-func (m model) updateForResize(msg tea.WindowSizeMsg) (model, tea.Cmd) {
+func (m Model) updateForResize(msg tea.WindowSizeMsg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	usableWidth := msg.Width - 4
 	usableHeight := msg.Height - 10
@@ -67,13 +63,13 @@ func handleViewResize(view view.View, width, height int) (view.View, tea.Cmd) {
 	return view, cmd
 }
 
-func (m model) updateViewports(msg tea.Msg) (model, tea.Cmd) {
+func (m Model) updateViewports(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd1 tea.Cmd
 	m.viewport, cmd1 = m.viewport.Update(msg)
 	return m, cmd1
 }
 
-func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Global escape / quit handler
 	if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc || msg.String() == "q" {
 		var cmd tea.Cmd
@@ -86,7 +82,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m model) goBack() (model, tea.Cmd) {
+func (m Model) goBack() (Model, tea.Cmd) {
 	if m.viewStack.Len() == 0 {
 		return m, tea.Quit
 	}
@@ -94,7 +90,7 @@ func (m model) goBack() (model, tea.Cmd) {
 	return m, nil
 }
 
-//func (m model) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+//func (m Model) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 //	switch msg.Type {
 //	case tea.KeyEnter:
 //		cmd := strings.TrimSpace(m.commandInput)

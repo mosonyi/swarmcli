@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"fmt"
@@ -15,7 +15,7 @@ import (
 type mode string
 
 // Model holds app state
-type model struct {
+type Model struct {
 	mode     mode
 	view     string // "main" or "nodeStacks"
 	viewport viewport.Model
@@ -29,13 +29,13 @@ type model struct {
 }
 
 // initialModel creates default model
-func initialModel() model {
+func InitialModel() Model {
 	vp := viewport.New(80, 20)
 	vp.YPosition = 5
 
 	nodes := nodesview.New(80, 20)
 
-	return model{
+	return Model{
 		mode:        modeNodes,
 		viewport:    vp,
 		currentView: nodes,
@@ -44,7 +44,13 @@ func initialModel() model {
 	}
 }
 
-func (m model) switchToView(name string, data any) (model, tea.Cmd) {
+// Init  will be automatically called by Bubble Tea if the model implements the Model interface
+// and is passed into the tea.NewProgram function.
+func (m Model) Init() tea.Cmd {
+	return tea.Batch(tick(), nodesview.LoadNodes(), systeminfoview.LoadStatus())
+}
+
+func (m Model) switchToView(name string, data any) (Model, tea.Cmd) {
 	factory, ok := viewRegistry[name]
 	if !ok {
 		return m, nil
@@ -60,7 +66,7 @@ func (m model) switchToView(name string, data any) (model, tea.Cmd) {
 	return m, tea.Batch(resizeCmd, loadCmd)
 }
 
-func (m model) renderStackBar() string {
+func (m Model) renderStackBar() string {
 	// Combine stack and current view
 	stack := append(m.viewStack.Views(), m.currentView)
 
