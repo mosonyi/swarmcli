@@ -3,5 +3,5 @@ package helpbar
 import "github.com/charmbracelet/lipgloss"
 
 var Style = lipgloss.NewStyle().
-	Padding(0, 1).
+	Padding(0, 0).
 	Faint(true)
