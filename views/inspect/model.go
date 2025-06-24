@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"os/exec"
 	"strings"
+	"swarmcli/views/helpbar"
 )
 
 type Model struct {
@@ -33,6 +34,21 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) Name() string {
 	return ViewName
+}
+
+func (m Model) ShortHelpItems() []helpbar.HelpEntry {
+	if m.mode == "search" {
+		return []helpbar.HelpEntry{
+			{Key: "enter", Desc: "confirm"},
+			{Key: "esc", Desc: "cancel"},
+			{Key: "n/N", Desc: "next/prev"},
+		}
+	}
+	return []helpbar.HelpEntry{
+		{Key: "/", Desc: "search"},
+		{Key: "n/N", Desc: "next/prev"},
+		{Key: "q", Desc: "close"},
+	}
 }
 
 func LoadInspectItem(line string) tea.Cmd {

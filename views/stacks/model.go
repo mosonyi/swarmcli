@@ -3,6 +3,7 @@ package stacksview
 import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"swarmcli/views/helpbar"
 )
 
 type Model struct {
@@ -36,6 +37,17 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) Name() string {
 	return ViewName
+}
+
+func (m Model) ShortHelpItems() []helpbar.HelpEntry {
+	return []helpbar.HelpEntry{
+		{Key: "enter", Desc: "view logs"},
+		{Key: "k/up", Desc: "scr up"},
+		{Key: "j/down", Desc: "scr down"},
+		{Key: "pgup", Desc: "page up"},
+		{Key: "pgdown", Desc: "page down"},
+		{Key: "q", Desc: "close"},
+	}
 }
 
 func LoadNodeStacks(nodeID string) tea.Cmd {

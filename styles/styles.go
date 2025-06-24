@@ -13,10 +13,8 @@ var (
 			Padding(0, 1)
 
 	StatusStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#00FF00")).
 			Padding(0, 1).
-			Width(50)
+			Width(30)
 
 	ListStyle = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).

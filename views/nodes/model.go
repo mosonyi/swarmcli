@@ -5,6 +5,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"swarmcli/docker"
+	"swarmcli/views/helpbar"
 )
 
 type Model struct {
@@ -38,6 +39,16 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) Name() string {
 	return ViewName
+}
+
+func (m Model) ShortHelpItems() []helpbar.HelpEntry {
+	return []helpbar.HelpEntry{
+		{Key: "s", Desc: "select"},
+		{Key: "i", Desc: "inspect"},
+		{Key: "k/up", Desc: "scr up"},
+		{Key: "j/down", Desc: "scr down"},
+		{Key: "q", Desc: "close"},
+	}
 }
 
 func LoadNodes() tea.Cmd {

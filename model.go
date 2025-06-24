@@ -39,6 +39,7 @@ func initialModel() model {
 		mode:        modeNodes,
 		viewport:    vp,
 		currentView: nodes,
+		systemInfo:  systeminfoview.New(version),
 		viewStack:   viewstack.Stack{},
 	}
 }
