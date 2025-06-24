@@ -3,6 +3,7 @@ package stacksview
 import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"swarmcli/views/helpbar"
 )
 
 type Model struct {
@@ -38,14 +39,14 @@ func (m Model) Name() string {
 	return ViewName
 }
 
-func (m Model) ShortHelpItems() []string {
-	return []string{
-		"enter: view logs",
-		"k/up: scr up",
-		"j/down: scr down",
-		"pgup: page up",
-		"pgdown: page down",
-		"q: close",
+func (m Model) ShortHelpItems() []helpbar.HelpEntry {
+	return []helpbar.HelpEntry{
+		{"enter", "view logs"},
+		{"k/up", "scr up"},
+		{"j/down", "scr down"},
+		{"pgup", "page up"},
+		{"pgdown", "page down"},
+		{"q", "close"},
 	}
 }
 

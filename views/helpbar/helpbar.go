@@ -6,35 +6,47 @@ import (
 	"swarmcli/styles"
 )
 
+type HelpEntry struct {
+	Key  string
+	Desc string
+}
+
 type Model struct {
-	globalHelp  []string
-	viewHelp    []string
+	globalHelp  []HelpEntry
+	viewHelp    []HelpEntry
 	width       int
+	height      int
 	minColWidth int
 }
 
-const defaultMinColWidth = 18
+const defaultMinColWidth = 20
 
-func New(width int) Model {
+func New(width, height int) Model {
 	return Model{
-		globalHelp:  []string{"q: quit", "?: help"},
+		globalHelp:  []HelpEntry{{Key: "q", Desc: "quit"}, {Key: "?", Desc: "help"}},
 		width:       width,
-		minColWidth: defaultMinColWidth, // Minimum width for each help column
+		height:      height,
+		minColWidth: defaultMinColWidth,
 	}
 }
 
-func (m Model) WithGlobalHelp(keys []string) Model {
-	m.globalHelp = keys
+func (m Model) WithGlobalHelp(entries []HelpEntry) Model {
+	m.globalHelp = entries
 	return m
 }
 
-func (m Model) WithViewHelp(keys []string) Model {
-	m.viewHelp = keys
+func (m Model) WithViewHelp(entries []HelpEntry) Model {
+	m.viewHelp = entries
 	return m
 }
 
 func (m Model) SetWidth(width int) Model {
 	m.width = width
+	return m
+}
+
+func (m Model) SetHeight(height int) Model {
+	m.height = height
 	return m
 }
 
@@ -44,85 +56,69 @@ func (m Model) SetMinColWidth(width int) Model {
 }
 
 func (m Model) View(systemInfo string) string {
-	// Return systemInfo alone if no help
-	if len(m.globalHelp) == 0 && len(m.viewHelp) == 0 {
+	allHelp := append(m.globalHelp, m.viewHelp...)
+	if len(allHelp) == 0 {
 		return systemInfo
 	}
 
-	itemStyle := styles.HelpStyle.Padding(0).Margin(0)
+	itemStyle := styles.HelpStyle.Copy().Padding(0).Margin(0)
 
-	// Calculate available width after systemInfo
 	infoWidth := lipgloss.Width(systemInfo)
 	availableWidth := m.width - infoWidth
-	if availableWidth < 10 {
-		return systemInfo // no room to display help
+	if availableWidth < m.minColWidth {
+		// Not enough space to render help, just return systemInfo
+		return systemInfo
 	}
 
-	// Min col width and number of columns
-	minColWidth := m.minColWidth
-	maxCols := availableWidth / minColWidth
+	// Calculate max columns we can fit horizontally
+	maxCols := availableWidth / m.minColWidth
 	if maxCols < 1 {
 		maxCols = 1
 	}
-
-	// Reserve first column for globalHelp
-	// Remaining columns for viewHelp
-	viewHelpCount := len(m.viewHelp)
-	numViewCols := maxCols - 1
-	if numViewCols < 1 {
-		// no room for viewHelp columns, just show globalHelp
-		numViewCols = 0
+	if maxCols > len(allHelp) {
+		maxCols = len(allHelp)
 	}
 
-	// Determine rows for viewHelp columns
-	viewRows := 0
-	if numViewCols > 0 {
-		viewRows = (viewHelpCount + numViewCols - 1) / numViewCols
+	// Calculate rows needed (max rows is limited by height)
+	maxRows := m.height
+	if maxRows < 1 {
+		maxRows = 1
 	}
 
-	// Build columns slice: first column = globalHelp
-	columns := make([][]string, maxCols)
-	columns[0] = m.globalHelp
-
-	// Distribute viewHelp into columns 1..N, column-first top-down
-	for i, item := range m.viewHelp {
-		col := 1 + (i / viewRows)
-		row := i % viewRows
-
-		// Ensure enough rows in column
-		for len(columns[col]) <= row {
-			columns[col] = append(columns[col], "")
-		}
-		columns[col][row] = item
+	// Use min of rows needed and maxRows
+	requiredRows := (len(allHelp) + maxCols - 1) / maxCols
+	numRows := requiredRows
+	if numRows > maxRows {
+		numRows = maxRows
 	}
 
-	// Render columns with fixed width
+	// Prepare columns filled top-to-bottom first
+	columns := make([][]HelpEntry, maxCols)
+
+	for i, entry := range allHelp {
+		col := i / numRows // Fill columns top to bottom
+		columns[col] = append(columns[col], entry)
+	}
+
+	// Render columns
 	var renderedCols []string
 	for _, col := range columns {
 		var lines []string
-		for _, key := range col {
-			if key == "" {
-				lines = append(lines, "") // empty line for alignment
-			} else {
-				lines = append(lines, itemStyle.Render("["+key+"]"))
-			}
+		for _, entry := range col {
+			line := itemStyle.Render(entry.Key) + "    " + entry.Desc
+			lines = append(lines, line)
 		}
 		colBlock := lipgloss.NewStyle().
-			Width(minColWidth).
-			Padding(0).
-			Margin(0).
+			Width(m.minColWidth).
 			Render(strings.Join(lines, "\n"))
 		renderedCols = append(renderedCols, colBlock)
 	}
 
 	helpBlock := lipgloss.JoinHorizontal(lipgloss.Top, renderedCols...)
 
-	// Right-align help block next to systemInfo
 	helpAligned := lipgloss.NewStyle().
 		Width(availableWidth).
 		Align(lipgloss.Left).
-		Padding(0).
-		Margin(0).
 		Render(helpBlock)
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, systemInfo, helpAligned)
