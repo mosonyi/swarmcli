@@ -12,12 +12,8 @@ import (
 	"swarmcli/views/viewstack"
 )
 
-type mode string
-
 // Model holds app state
 type Model struct {
-	mode     mode
-	view     string // "main" or "nodeStacks"
 	viewport viewport.Model
 	//commandMode  bool
 	//commandInput string
@@ -36,7 +32,6 @@ func InitialModel() Model {
 	nodes := nodesview.New(80, 20)
 
 	return Model{
-		mode:        modeNodes,
 		viewport:    vp,
 		currentView: nodes,
 		systemInfo:  systeminfoview.New(version),
@@ -61,7 +56,6 @@ func (m Model) switchToView(name string, data any) (Model, tea.Cmd) {
 
 	m.viewStack.Push(m.currentView)
 	m.currentView = newView
-	m.view = name
 
 	return m, tea.Batch(resizeCmd, loadCmd)
 }
