@@ -42,15 +42,15 @@ func (m Model) Name() string {
 func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 	if m.mode == "search" {
 		return []helpbar.HelpEntry{
-			{"enter", "confirm"},
-			{"esc", "cancel"},
-			{"n/N", "next/prev"},
+			{Key: "enter", Desc: "confirm"},
+			{Key: "esc", Desc: "cancel"},
+			{Key: "n/N", Desc: "next/prev"},
 		}
 	}
 	return []helpbar.HelpEntry{
-		{"/", "search"},
-		{"n/N", "next/prev"},
-		{"q", "close"},
+		{Key: "/", Desc: "search"},
+		{Key: "n/N", Desc: "next/prev"},
+		{Key: "q", Desc: "close"},
 	}
 }
 

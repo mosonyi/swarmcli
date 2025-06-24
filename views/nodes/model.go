@@ -43,11 +43,11 @@ func (m Model) Name() string {
 
 func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
-		{"s", "select"},
-		{"i", "inspect"},
-		{"k/up", "scr up"},
-		{"j/down", "scr down"},
-		{"q", "close"},
+		{Key: "s", Desc: "select"},
+		{Key: "i", Desc: "inspect"},
+		{Key: "k/up", Desc: "scr up"},
+		{Key: "j/down", Desc: "scr down"},
+		{Key: "q", Desc: "close"},
 	}
 }
 
