@@ -7,8 +7,6 @@ import (
 )
 
 func (m model) View() string {
-	//helpText := styles.HelpStyle.Render("[i: inspect, s: see stacks, q: quit, j/k: move cursor, : switch mode]")
-
 	systemInfo := m.systemInfo.View()
 
 	help := helpbar.New(m.viewport.Width, systeminfoview.Height).
