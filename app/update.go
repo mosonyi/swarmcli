@@ -37,16 +37,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateForResize(msg)
 
 	case tea.KeyMsg:
-		// If command input is visible, all keys go there first
+		if msg.String() == ":" {
+			if !m.commandInput.Visible() {
+				cmd := m.commandInput.Show()
+				return m, cmd
+			}
+			// If already visible, consume it and do nothing
+			return m, nil
+		}
+
+		// If command input is visible, forward all keys to it exclusively
 		if m.commandInput.Visible() {
 			var cmd tea.Cmd
 			m.commandInput, cmd = m.commandInput.Update(msg)
-			return m, cmd
-		}
-
-		// Press ':' to open command bar
-		if msg.String() == ":" {
-			cmd := m.commandInput.Show()
 			return m, cmd
 		}
 

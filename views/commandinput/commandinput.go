@@ -21,7 +21,6 @@ func New() Model {
 	ti.Placeholder = "Enter command..."
 	ti.Prompt = ": "
 	ti.CharLimit = 256
-	ti.Focus()
 
 	return Model{
 		input:   ti,
