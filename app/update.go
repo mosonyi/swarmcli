@@ -10,16 +10,10 @@ import (
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	newCmdInput, cmd := m.commandInput.Update(msg)
-	m.commandInput = newCmdInput
-	cmds := []tea.Cmd{cmd}
-
 	switch msg := msg.(type) {
 	case commandinput.SubmitMsg:
-		return m.executeCommand(string(msg))
-	}
+		return m.executeCommand(msg.Command)
 
-	switch msg := msg.(type) {
 	case view.NavigateToMsg:
 		return m.switchToView(msg.ViewName, msg.Payload)
 
@@ -30,10 +24,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == ":" && !m.commandInput.Visible() {
 			cmd := m.commandInput.Show()
 			return m, cmd
-		}
-
-		if m.commandInput.Visible() {
-			return m, tea.Batch(cmds...)
 		}
 
 		return m.handleKey(msg)
@@ -55,10 +45,13 @@ func (m Model) delegateToCurrentView(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.currentView, cmd = m.currentView.Update(msg)
 
+	var inputCmd tea.Cmd
+	m.commandInput, inputCmd = m.commandInput.Update(msg)
+
 	var vpCmd tea.Cmd
 	m, vpCmd = m.updateViewports(msg)
 
-	return m, tea.Batch(cmd, vpCmd)
+	return m, tea.Batch(cmd, inputCmd, vpCmd)
 }
 
 func (m Model) updateForResize(msg tea.WindowSizeMsg) (Model, tea.Cmd) {
