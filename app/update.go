@@ -37,7 +37,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateForResize(msg)
 
 	case tea.KeyMsg:
-		if msg.String() == ":" && !m.commandInput.Visible() {
+		// If command input is visible, all keys go there first
+		if m.commandInput.Visible() {
+			var cmd tea.Cmd
+			m.commandInput, cmd = m.commandInput.Update(msg)
+			return m, cmd
+		}
+
+		// Press ':' to open command bar
+		if msg.String() == ":" {
 			cmd := m.commandInput.Show()
 			return m, cmd
 		}
@@ -61,13 +69,10 @@ func (m Model) delegateToCurrentView(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.currentView, cmd = m.currentView.Update(msg)
 
-	var inputCmd tea.Cmd
-	m.commandInput, inputCmd = m.commandInput.Update(msg)
-
 	var vpCmd tea.Cmd
 	m, vpCmd = m.updateViewports(msg)
 
-	return m, tea.Batch(cmd, inputCmd, vpCmd)
+	return m, tea.Batch(cmd, vpCmd)
 }
 
 func (m Model) updateForResize(msg tea.WindowSizeMsg) (Model, tea.Cmd) {
