@@ -1,12 +1,24 @@
 package app
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	"strings"
+	"swarmcli/views/commandinput"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	newCmdInput, cmd := m.commandInput.Update(msg)
+	m.commandInput = newCmdInput
+	cmds := []tea.Cmd{cmd}
+
+	switch msg := msg.(type) {
+	case commandinput.SubmitMsg:
+		return m.executeCommand(string(msg))
+	}
+
 	switch msg := msg.(type) {
 	case view.NavigateToMsg:
 		return m.switchToView(msg.ViewName, msg.Payload)
@@ -15,6 +27,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateForResize(msg)
 
 	case tea.KeyMsg:
+		if msg.String() == ":" && !m.commandInput.Visible() {
+			cmd := m.commandInput.Show()
+			return m, cmd
+		}
+
+		if m.commandInput.Visible() {
+			return m, tea.Batch(cmds...)
+		}
+
 		return m.handleKey(msg)
 
 	case tickMsg:
@@ -90,35 +111,21 @@ func (m Model) goBack() (Model, tea.Cmd) {
 	return m, nil
 }
 
-//func (m Model) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-//	switch msg.Type {
-//	case tea.KeyEnter:
-//		cmd := strings.TrimSpace(m.commandInput)
-//		m.commandMode = false
-//		m.commandInput = ""
-//		switch cmd {
-//		case "nodes":
-//			m.mode = modeNodes
-//			m.cursor = 0
-//			return m, loadData(modeNodes)
-//		case "services":
-//			m.mode = modeServices
-//			m.cursor = 0
-//			return m, loadData(modeServices)
-//		case "stacks":
-//			m.mode = modeStacks
-//			m.cursor = 0
-//			return m, loadData(modeStacks)
-//		}
-//	case tea.KeyEsc:
-//		m.commandMode = false
-//		m.commandInput = ""
-//	case tea.KeyBackspace:
-//		if len(m.commandInput) > 0 {
-//			m.commandInput = m.commandInput[:len(m.commandInput)-1]
-//		}
-//	default:
-//		m.commandInput += msg.String()
-//	}
-//	return m, nil
-//}
+// 🟢 Add this function to dispatch commands (simplified for now)
+func (m Model) executeCommand(line string) (tea.Model, tea.Cmd) {
+	fields := strings.Fields(line)
+	if len(fields) == 0 {
+		return m, nil
+	}
+
+	switch {
+	case len(fields) >= 3 && fields[0] == "docker" && fields[1] == "stack" && fields[2] == "ls":
+		return m.switchToView("stacks", nil)
+
+	case len(fields) >= 3 && fields[0] == "docker" && fields[1] == "service" && fields[2] == "ls":
+		return m.switchToView("services", nil)
+
+	default:
+		return m, tea.Printf("Unknown command: %s", line)
+	}
+}

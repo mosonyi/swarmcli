@@ -2,26 +2,28 @@ package app
 
 import (
 	"fmt"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"swarmcli/styles"
+	"swarmcli/views/commandinput"
 	nodesview "swarmcli/views/nodes"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
 	"swarmcli/views/viewstack"
+
+	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // Model holds app state
 type Model struct {
 	viewport viewport.Model
-	//commandMode  bool
-	//commandInput string
 
 	systemInfo systeminfoview.Model
 
 	currentView view.View
 	viewStack   viewstack.Stack
+
+	commandInput commandinput.Model
 }
 
 // initialModel creates default model
@@ -32,10 +34,11 @@ func InitialModel() Model {
 	nodes := nodesview.New(80, 20)
 
 	return Model{
-		viewport:    vp,
-		currentView: nodes,
-		systemInfo:  systeminfoview.New(version),
-		viewStack:   viewstack.Stack{},
+		viewport:     vp,
+		currentView:  nodes,
+		systemInfo:   systeminfoview.New(version),
+		viewStack:    viewstack.Stack{},
+		commandInput: commandinput.New(),
 	}
 }
 
