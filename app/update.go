@@ -2,6 +2,7 @@ package app
 
 import (
 	"strings"
+	"swarmcli/commands"
 	"swarmcli/views/commandinput"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
@@ -12,6 +13,21 @@ import (
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case commandinput.SubmitMsg:
+		cmdLine := strings.TrimSpace(msg.Command)
+		parts := strings.Fields(cmdLine)
+		if len(parts) == 0 {
+			return m, nil
+		}
+
+		cmdName := strings.Join(parts[:min(2, len(parts))], " ") // support multi-word like "stack ls"
+		args := parts[min(2, len(parts)):]
+		if cmd, ok := commands.Get(cmdName); ok {
+			ctx := commands.Context{App: &m}
+			return m, cmd.Execute(ctx, args)
+		}
+
+		// Unknown command: show error overlay
+		//m.commandInput.ShowError("unknown command: " + cmdLine)
 		return m.executeCommand(msg.Command)
 
 	case view.NavigateToMsg:

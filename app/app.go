@@ -6,6 +6,8 @@ import (
 	logsview "swarmcli/views/logs"
 	stacksview "swarmcli/views/stacks"
 	"swarmcli/views/view"
+
+	_ "swarmcli/commands"
 )
 
 const (

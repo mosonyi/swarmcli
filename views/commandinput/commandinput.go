@@ -1,6 +1,9 @@
 package commandinput
 
 import (
+	"strings"
+	"swarmcli/commands"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -107,4 +110,14 @@ func (m Model) View() string {
 		Padding(0, 1)
 
 	return style.Render(m.input.View())
+}
+
+func (m *Model) Suggestions(prefix string) []string {
+	var results []string
+	for _, cmd := range commands.List() {
+		if strings.HasPrefix(cmd.Name(), prefix) {
+			results = append(results, cmd.Name())
+		}
+	}
+	return results
 }
