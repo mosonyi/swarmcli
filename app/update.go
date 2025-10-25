@@ -27,7 +27,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Unknown command: show error overlay
-		//m.commandInput.ShowError("unknown command: " + cmdLine)
+		m.commandInput.ShowError("unknown command: " + cmdLine)
 		return m.executeCommand(msg.Command)
 
 	case view.NavigateToMsg:

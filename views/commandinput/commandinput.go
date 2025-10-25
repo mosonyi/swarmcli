@@ -1,33 +1,27 @@
 package commandinput
 
 import (
-	"strings"
-	"swarmcli/commands"
-
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 type Model struct {
-	input   textinput.Model
-	visible bool
-	history []string
-	histPos int
+	input    textinput.Model
+	visible  bool
+	history  []string
+	histPos  int
+	errorMsg string
 }
 
-type (
-	ShowMsg   struct{}
-	HideMsg   struct{}
-	SubmitMsg struct{ Command string }
-)
+type SubmitMsg struct{ Command string }
 
 func New() Model {
 	ti := textinput.New()
 	ti.Placeholder = "Enter command..."
 	ti.Prompt = ": "
-	ti.Focus()
 	ti.CharLimit = 256
+	ti.Focus()
 
 	return Model{
 		input:   ti,
@@ -35,23 +29,30 @@ func New() Model {
 	}
 }
 
-func (m Model) Init() tea.Cmd {
-	return nil
-}
-
-func (m Model) Visible() bool {
-	return m.visible
-}
+func (m Model) Visible() bool { return m.visible }
 
 func (m *Model) Show() tea.Cmd {
 	m.visible = true
 	m.input.Focus()
+	m.errorMsg = ""
 	return nil
 }
 
 func (m *Model) Hide() tea.Cmd {
 	m.visible = false
 	m.input.Blur()
+	m.input.SetValue("")
+	m.errorMsg = ""
+	return nil
+}
+
+// ShowError sets an error message on the command input. It returns nil (no cmd),
+// but keeping the signature tee-friendly allows you to return a cmd later if desired.
+func (m *Model) ShowError(msg string) tea.Cmd {
+	m.errorMsg = msg
+	// ensure the input is visible so user sees the error
+	m.visible = true
+	// do not focus/clear input so user can edit immediately
 	return nil
 }
 
@@ -70,11 +71,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.histPos = len(m.history)
 			m.input.SetValue("")
 			m.visible = false
+			m.errorMsg = ""
 			return m, func() tea.Msg { return SubmitMsg{Command: val} }
 
 		case "esc":
 			m.visible = false
 			m.input.SetValue("")
+			m.errorMsg = ""
 			return m, nil
 
 		case "up":
@@ -91,6 +94,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			} else {
 				m.histPos = len(m.history)
 				m.input.SetValue("")
+			}
+		default:
+			// Clear error as soon as the user starts typing so they can correct.
+			if m.errorMsg != "" && (msg.Type == tea.KeyRunes || msg.Type == tea.KeyBackspace) {
+				m.errorMsg = ""
 			}
 		}
 	}
@@ -109,15 +117,16 @@ func (m Model) View() string {
 		Foreground(lipgloss.Color("#00d7ff")).
 		Padding(0, 1)
 
-	return style.Render(m.input.View())
-}
+	out := style.Render(m.input.View())
 
-func (m *Model) Suggestions(prefix string) []string {
-	var results []string
-	for _, cmd := range commands.List() {
-		if strings.HasPrefix(cmd.Name(), prefix) {
-			results = append(results, cmd.Name())
-		}
+	if m.errorMsg != "" {
+		errStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#ff5f87")).
+			Bold(true).
+			MarginTop(0).
+			Padding(0, 1)
+		out = out + "\n" + errStyle.Render(m.errorMsg)
 	}
-	return results
+
+	return out
 }
