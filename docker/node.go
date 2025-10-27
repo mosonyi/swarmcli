@@ -1,8 +1,6 @@
 package docker
 
 import (
-	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -81,71 +79,4 @@ func inspectStackServices(serviceIDs []string) ([]StackService, error) {
 		}
 	}
 	return stackServices, nil
-}
-
-// ---------- Stack Queries ----------
-
-func GetNodeStacks(nodeID string) []StackService {
-	taskNames, err := GetNodeTaskNames(nodeID)
-	if err != nil {
-		return []StackService{}
-	}
-
-	serviceNames := extractServiceNames(taskNames)
-	if len(serviceNames) == 0 {
-		return []StackService{}
-	}
-
-	nameToID, err := GetServiceNameToIDMap()
-	if err != nil {
-		return []StackService{}
-	}
-
-	var serviceIDs []string
-	for name := range serviceNames {
-		if id, ok := nameToID[name]; ok {
-			serviceIDs = append(serviceIDs, id)
-		}
-	}
-
-	stackServices, err := inspectStackServices(serviceIDs)
-	if err != nil {
-		return []StackService{}
-	}
-
-	sort.Slice(stackServices, func(i, j int) bool {
-		return stackServices[i].StackName < stackServices[j].StackName
-	})
-
-	return stackServices
-}
-
-func GetAllStacks() []StackService {
-	nodeIDs, err := GetNodeIDs()
-	if err != nil {
-		fmt.Println(err)
-		return []StackService{}
-	}
-
-	allStacks := make(map[string]StackService)
-	for _, nodeID := range nodeIDs {
-		for _, s := range GetNodeStacks(nodeID) {
-			key := s.StackName + "|" + s.ServiceName
-			allStacks[key] = s
-		}
-	}
-
-	uniqueStacks := make([]StackService, 0, len(allStacks))
-	for _, s := range allStacks {
-		uniqueStacks = append(uniqueStacks, s)
-	}
-
-	sort.Slice(uniqueStacks, func(i, j int) bool {
-		if uniqueStacks[i].StackName == uniqueStacks[j].StackName {
-			return uniqueStacks[i].ServiceName < uniqueStacks[j].ServiceName
-		}
-		return uniqueStacks[i].StackName < uniqueStacks[j].StackName
-	})
-
-	return uniqueStacks
 }
