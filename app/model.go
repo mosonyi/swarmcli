@@ -85,9 +85,3 @@ func cmdBar() commandinput.Model {
 	cmdBar := commandinput.New()
 	return cmdBar
 }
-
-func (m *Model) NavigateTo(name string, payload any) tea.Cmd {
-	newModel, cmd := m.switchToView(name, payload)
-	m = &newModel
-	return cmd
-}

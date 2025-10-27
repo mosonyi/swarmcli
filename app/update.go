@@ -121,22 +121,3 @@ func (m Model) goBack() (Model, tea.Cmd) {
 	m.currentView = m.viewStack.Pop()
 	return m, nil
 }
-
-// 🟢 Add this function to dispatch commands (simplified for now)
-func (m Model) executeCommand(line string) (tea.Model, tea.Cmd) {
-	fields := strings.Fields(line)
-	if len(fields) == 0 {
-		return m, nil
-	}
-
-	switch {
-	case len(fields) >= 3 && fields[0] == "docker" && fields[1] == "stack" && fields[2] == "ls":
-		return m.switchToView("stacks", nil)
-
-	case len(fields) >= 3 && fields[0] == "docker" && fields[1] == "service" && fields[2] == "ls":
-		return m.switchToView("services", nil)
-
-	default:
-		return m, tea.Printf("Unknown command: %s", line)
-	}
-}

@@ -19,7 +19,7 @@ func (m Model) View() string {
 	suggestionStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#808080"))
 
-	selectedStyle := suggestionStyle.Copy().
+	selectedStyle := suggestionStyle.
 		Foreground(lipgloss.Color("#00d7ff")).
 		Bold(true)
 
