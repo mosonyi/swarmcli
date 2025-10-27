@@ -1,4 +1,18 @@
 package commandinput
 
-// SubmitMsg is emitted when the user presses Enter in command mode.
-type SubmitMsg struct{ Command string }
+import tea "github.com/charmbracelet/bubbletea"
+
+type (
+	// SubmitMsg is emitted when the user presses Enter in command mode.
+	SubmitMsg struct {
+		Command string
+		Args    []string
+	}
+
+	// Command defines metadata for a recognized command.
+	Command struct {
+		Name        string
+		Description string
+		Handler     func(args []string) tea.Msg // executed when valid
+	}
+)

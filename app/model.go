@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"swarmcli/commands"
 	"swarmcli/styles"
 	"swarmcli/views/commandinput"
 	nodesview "swarmcli/views/nodes"
@@ -38,7 +39,7 @@ func InitialModel() Model {
 		currentView:  nodes,
 		systemInfo:   systeminfoview.New(version),
 		viewStack:    viewstack.Stack{},
-		commandInput: commandinput.New(),
+		commandInput: cmdBar(),
 	}
 }
 
@@ -79,4 +80,11 @@ func (m Model) renderStackBar() string {
 	}
 
 	return lipgloss.JoinHorizontal(lipgloss.Left, parts...)
+}
+
+func cmdBar() commandinput.Model {
+	cmdBar := commandinput.New(":")
+	cmdBar.Register(commands.DockerStackLsCommand{})
+
+	return cmdBar
 }

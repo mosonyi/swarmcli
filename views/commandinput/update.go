@@ -1,8 +1,11 @@
 package commandinput
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	"strings"
 
-// Update handles key events and manages input/history state.
+	tea "github.com/charmbracelet/bubbletea"
+)
+
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !m.visible {
 		return m, nil
@@ -12,49 +15,61 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-
+		switch key := msg.String(); key {
 		case "enter":
-			val := m.input.Value()
-			if val == "" {
+			raw := strings.TrimSpace(m.input.Value())
+			if raw == "" {
 				return m, nil
 			}
-			m.history = append(m.history, val)
+
+			m.history = append(m.history, raw)
 			m.histPos = len(m.history)
+
+			// Parse the command
+			parts := strings.Fields(raw)
+			name := strings.TrimPrefix(parts[0], m.cmdPrefix)
+			args := parts[1:]
+
+			c, ok := m.commands[name]
+			if !ok {
+				m.errorMsg = "Unknown command: " + name
+				return m, nil
+			}
+
 			m.input.Reset()
-			m.errorMsg = ""
 			m.visible = false
-			return m, func() tea.Msg { return SubmitMsg{Command: val} }
+			m.errorMsg = ""
+
+			if c.Handler != nil {
+				return m, func() tea.Msg { return c.Handler(args) }
+			}
+
+			return m, func() tea.Msg { return SubmitMsg{Command: name, Args: args} }
 
 		case "esc":
 			m.Hide()
 			return m, nil
 
 		case "up":
-			if len(m.history) == 0 {
-				break
-			}
-			if m.histPos > 0 {
+			if len(m.history) > 0 && m.histPos > 0 {
 				m.histPos--
+				m.input.SetValue(m.history[m.histPos])
+				m.input.CursorEnd()
 			}
-			m.input.SetValue(m.history[m.histPos])
-			m.input.CursorEnd()
+			return m, nil
 
 		case "down":
-			if len(m.history) == 0 {
-				break
-			}
 			if m.histPos < len(m.history)-1 {
 				m.histPos++
 				m.input.SetValue(m.history[m.histPos])
+				m.input.CursorEnd()
 			} else {
 				m.histPos = len(m.history)
 				m.input.Reset()
 			}
-			m.input.CursorEnd()
+			return m, nil
 
 		default:
-			// Clear error when user edits
 			if m.errorMsg != "" && (msg.Type == tea.KeyRunes || msg.Type == tea.KeyBackspace) {
 				m.errorMsg = ""
 			}
