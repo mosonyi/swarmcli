@@ -14,21 +14,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case commandinput.SubmitMsg:
 		cmdLine := strings.TrimSpace(msg.Command)
+		if cmdLine == "" {
+			return m, nil
+		}
+
 		parts := strings.Fields(cmdLine)
 		if len(parts) == 0 {
 			return m, nil
 		}
 
-		cmdName := strings.Join(parts[:min(2, len(parts))], " ") // support multi-word like "stack ls"
-		args := parts[min(2, len(parts)):]
-		if cmd, ok := commands.Get(cmdName); ok {
-			ctx := commands.Context{App: &m}
-			return m, cmd.Execute(ctx, args)
+		// join up to first 3 parts for multi-word names
+		for i := min(3, len(parts)); i > 0; i-- {
+			name := strings.Join(parts[:i], " ")
+			args := parts[i:]
+			if cmd, ok := commands.Get(name); ok {
+				ctx := commands.Context{App: &m}
+				return m, cmd.Execute(ctx, args)
+			}
 		}
 
-		// Unknown command: show error overlay
 		m.commandInput.ShowError("unknown command: " + cmdLine)
-		return m.executeCommand(msg.Command)
+		return m, nil
 
 	case view.NavigateToMsg:
 		return m.switchToView(msg.ViewName, msg.Payload)

@@ -1,25 +1,14 @@
 package commands
 
-import (
-	"swarmcli/views/view"
+import tea "github.com/charmbracelet/bubbletea"
+import "swarmcli/views/view"
 
-	tea "github.com/charmbracelet/bubbletea"
-)
+type DockerStackLs struct{}
 
-type DockerStackLsCommand struct{}
+func (DockerStackLs) Name() string        { return "docker stack ls" }
+func (DockerStackLs) Description() string { return "List all Docker stacks" }
 
-func (DockerStackLsCommand) Name() string        { return "stack ls" }
-func (DockerStackLsCommand) Description() string { return "List all stacks on all nodes" }
-
-func (DockerStackLsCommand) Execute(ctx Context, args []string) tea.Cmd {
-	return func() tea.Msg {
-		return view.NavigateToMsg{
-			ViewName: "stacks",
-			Payload:  nil,
-		}
-	}
-}
-
-func init() {
-	Register(DockerStackLsCommand{})
+func (DockerStackLs) Execute(ctx Context, args []string) tea.Cmd {
+	app := ctx.App.(view.Navigator)
+	return app.NavigateTo("stacks", nil)
 }

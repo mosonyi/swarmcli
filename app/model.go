@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"swarmcli/commands"
 	"swarmcli/styles"
 	"swarmcli/views/commandinput"
 	nodesview "swarmcli/views/nodes"
@@ -84,7 +83,11 @@ func (m Model) renderStackBar() string {
 
 func cmdBar() commandinput.Model {
 	cmdBar := commandinput.New(":")
-	cmdBar.Register(commands.DockerStackLsCommand{})
-
 	return cmdBar
+}
+
+func (m *Model) NavigateTo(name string, payload any) tea.Cmd {
+	newModel, cmd := m.switchToView(name, payload)
+	m = &newModel
+	return cmd
 }
