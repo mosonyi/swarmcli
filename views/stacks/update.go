@@ -3,7 +3,6 @@ package stacksview
 import (
 	"fmt"
 	"strings"
-	"swarmcli/docker"
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -54,28 +53,28 @@ func (m *Model) SetContent(msg Msg) {
 
 func (m *Model) buildContent() string {
 	var b strings.Builder
-	visible := m.visibleStackServices()
-	start := m.stackCursor - m.stackCursor%m.viewport.Height
-
-	for i, stack := range visible {
+	for i, stack := range m.stackServices {
 		cursor := "  "
-		if start+i == m.stackCursor {
+		if i == m.stackCursor {
 			cursor = "➜ "
 		}
-		// Include node ID on the left
 		b.WriteString(fmt.Sprintf("%s%-12s %s / %s\n", cursor, stack.NodeID, stack.StackName, stack.ServiceName))
 	}
+
+	m.ensureCursorVisible()
 	return b.String()
 }
 
-func (m *Model) visibleStackServices() []docker.StackService {
-	if m.viewport.Height <= 0 || len(m.stackServices) == 0 {
-		return nil
+// ensureCursorVisible keeps the cursor in view
+func (m *Model) ensureCursorVisible() {
+	h := m.viewport.Height
+	if h < 1 {
+		h = 1
 	}
-	start := m.stackCursor - m.stackCursor%m.viewport.Height
-	end := start + m.viewport.Height
-	if end > len(m.stackServices) {
-		end = len(m.stackServices)
+
+	if m.stackCursor < m.viewport.YOffset {
+		m.viewport.YOffset = m.stackCursor
+	} else if m.stackCursor >= m.viewport.YOffset+h {
+		m.viewport.YOffset = m.stackCursor - h + 1
 	}
-	return m.stackServices[start:end]
 }
