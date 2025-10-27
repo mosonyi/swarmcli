@@ -3,25 +3,32 @@ package helpview
 import (
 	"fmt"
 	"strings"
-	"swarmcli/commands"
 	"swarmcli/views/helpbar"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 type Model struct {
-	Visible bool
-	content string
+	Visible  bool
+	content  string
+	commands []CommandInfo
 }
 
-func New(width, height int) Model {
+type CommandInfo struct {
+	Name        string
+	Description string
+}
+
+func New(width, height int, cmds []CommandInfo) Model {
 	var b strings.Builder
-	for _, cmd := range commands.All() {
-		b.WriteString(fmt.Sprintf("  %-20s %s\n", cmd.Name(), cmd.Description()))
+	for _, c := range cmds {
+		fmt.Fprintf(&b, ":%-15s %s\n", c.Name, c.Description)
 	}
+
 	return Model{
-		Visible: true,
-		content: b.String(),
+		Visible:  true,
+		content:  b.String(),
+		commands: cmds,
 	}
 }
 

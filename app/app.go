@@ -28,7 +28,8 @@ func Init() {
 	commands.Init()
 
 	registerView(helpview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
-		return helpview.New(w, h), nil
+		cmds, _ := payload.([]helpview.CommandInfo)
+		return helpview.New(w, h, cmds), nil
 	})
 	registerView(logsview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		return logsview.New(w, h), logsview.Load(payload.(string))
