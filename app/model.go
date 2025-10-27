@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"swarmcli/styles"
 	"swarmcli/views/commandinput"
-	nodesview "swarmcli/views/nodes"
+	stacksview "swarmcli/views/stacks"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
 	"swarmcli/views/viewstack"
@@ -31,11 +31,11 @@ func InitialModel() Model {
 	vp := viewport.New(80, 20)
 	vp.YPosition = 5
 
-	nodes := nodesview.New(80, 20)
+	stacks := stacksview.New(80, 20)
 
 	return Model{
 		viewport:     vp,
-		currentView:  nodes,
+		currentView:  stacks,
 		systemInfo:   systeminfoview.New(version),
 		viewStack:    viewstack.Stack{},
 		commandInput: cmdBar(),
@@ -45,7 +45,8 @@ func InitialModel() Model {
 // Init  will be automatically called by Bubble Tea if the model implements the Model interface
 // and is passed into the tea.NewProgram function.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tick(), nodesview.LoadNodes(), systeminfoview.LoadStatus())
+	// "" loads all stacks on all nodes
+	return tea.Batch(tick(), stacksview.LoadStacks(""), systeminfoview.LoadStatus())
 }
 
 func (m Model) switchToView(name string, data any) (Model, tea.Cmd) {
