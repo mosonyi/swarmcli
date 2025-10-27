@@ -1,0 +1,38 @@
+{
+  "name": "Swarm Agent Dev",
+  "dockerFile": "Dockerfile",
+  "context": "..",
+  "runArgs": [
+    "--group-add=1001",
+    "--volume=/var/run/docker.sock:/var/run/docker.sock"
+  ],
+  "mounts": [
+    "type=bind,source=/mnt/wslg/runtime-dir/wayland-0,target=/tmp/vscode-wayland",
+    "type=bind,source=./shared/.docker,target=/home/vscode/.docker"
+  ],
+  "remoteEnv": {
+    "DISPLAY": "",
+    "WAYLAND_DISPLAY": "",
+    "XDG_RUNTIME_DIR": "/tmp"
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "go.toolsManagement.autoUpdate": true,
+        "go.useLanguageServer": true,
+        "go.lintOnSave": "package",
+        "go.vetOnSave": "package"
+      },
+      "extensions": [
+        "golang.Go"
+      ]
+    }
+  },
+  "containerEnv": {
+    "GOPATH": "${containerWorkspaceFolder}/.go",
+    "GOMODCACHE": "${containerWorkspaceFolder}/.go/pkg/mod",
+    "GOCACHE": "${containerWorkspaceFolder}/.cache/go-build"
+  },
+  "postCreateCommand": "go mod tidy",
+  "remoteUser": "vscode"
+}
