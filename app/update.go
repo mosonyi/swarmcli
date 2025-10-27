@@ -3,6 +3,7 @@ package app
 import (
 	"strings"
 	"swarmcli/commands"
+	"swarmcli/commands/api"
 	"swarmcli/views/commandinput"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
@@ -20,7 +21,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		ctx := commands.Context{App: &m}
+		ctx := api.Context{App: &m}
 		return m, cmd.Execute(ctx, nil)
 
 	case view.NavigateToMsg:

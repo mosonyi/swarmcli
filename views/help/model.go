@@ -14,7 +14,7 @@ type Model struct {
 	height   int
 }
 
-func New(width, height int, _ any) (view.View, tea.Cmd) {
+func New(width, height int) (view.View, tea.Cmd) {
 	m := Model{
 		width:  width,
 		height: height,

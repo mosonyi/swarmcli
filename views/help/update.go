@@ -16,7 +16,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 }
 
 func (m Model) buildContent() string {
-	cmds := commands.List()
+	cmds := commands.All()
 	var sb strings.Builder
 
 	header := lipgloss.NewStyle().
