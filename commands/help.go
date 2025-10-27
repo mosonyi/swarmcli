@@ -1,8 +1,8 @@
 package commands
 
 import (
-	"fmt"
-	"strings"
+	helpview "swarmcli/views/help"
+	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -13,14 +13,10 @@ func (HelpCommand) Name() string        { return "help" }
 func (HelpCommand) Description() string { return "Show all available commands" }
 
 func (HelpCommand) Execute(ctx Context, args []string) tea.Cmd {
-	cmds := List() // ✅ call directly (no prefix needed)
-
-	var b strings.Builder
-	fmt.Fprintf(&b, "\nAvailable commands:\n\n")
-	for _, c := range cmds {
-		fmt.Fprintf(&b, "  %-20s %s\n", c.Name(), c.Description())
+	return func() tea.Msg {
+		return view.NavigateToMsg{
+			ViewName: helpview.ViewName,
+			Payload:  nil,
+		}
 	}
-	fmt.Fprintf(&b, "\n")
-
-	return tea.Printf(b.String())
 }
