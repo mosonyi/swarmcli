@@ -10,6 +10,7 @@ import (
 func Init() {
 	registry.Register(command.Help{})
 	registry.Register(docker.DockerStackLs{})
+	registry.Register(docker.DockerNodeLs{})
 }
 
 // Public passthroughs so app code can just use `commands.Get()` or `commands.All()`
