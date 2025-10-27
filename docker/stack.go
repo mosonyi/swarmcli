@@ -3,6 +3,7 @@ package docker
 import (
 	"fmt"
 	"sort"
+	"sync"
 )
 
 // StackService represents a single service inside a stack on a node.
@@ -11,6 +12,11 @@ type StackService struct {
 	StackName   string
 	ServiceName string
 }
+
+var (
+	nodeNameCache     map[string]string
+	nodeNameCacheOnce sync.Once
+)
 
 // GetStacks returns stacks across all nodes if nodeID is empty,
 // or stacks only for the given node.
@@ -55,13 +61,13 @@ func getAllStacks() []StackService {
 		return nil
 	}
 
-	idToName, _ := GetNodeIDToHostnameMap()
+	initHostnameCache()
 
 	allStacks := make(map[string]StackService)
 	for _, nodeID := range nodeIDs {
 		nodeStacks := getNodeStacks(nodeID)
 		for _, s := range nodeStacks {
-			if hostname, ok := idToName[s.NodeID]; ok {
+			if hostname, ok := nodeNameCache[s.NodeID]; ok {
 				s.NodeID = hostname
 			}
 			key := fmt.Sprintf("%s|%s|%s", s.StackName, s.ServiceName, s.NodeID)
@@ -101,15 +107,26 @@ func resolveServiceIDs(taskNames []string) ([]string, error) {
 	return serviceIDs, nil
 }
 
-// resolveHostname translates a node ID to its hostname (if available).
+// resolveHostname translates a node ID to its hostname (cached).
 func resolveHostname(nodeID string) string {
-	idToName, err := GetNodeIDToHostnameMap()
-	if err == nil {
-		if name, ok := idToName[nodeID]; ok && name != "" {
-			return name
-		}
+	initHostnameCache()
+
+	if name, ok := nodeNameCache[nodeID]; ok && name != "" {
+		return name
 	}
 	return nodeID
+}
+
+// initHostnameCache loads the node ID → hostname map once per runtime.
+func initHostnameCache() {
+	nodeNameCacheOnce.Do(func() {
+		idToName, err := GetNodeIDToHostnameMap()
+		if err != nil {
+			nodeNameCache = make(map[string]string)
+			return
+		}
+		nodeNameCache = idToName
+	})
 }
 
 // sortStackServices sorts by StackName → NodeID → ServiceName.
