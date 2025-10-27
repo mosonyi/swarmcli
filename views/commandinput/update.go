@@ -2,6 +2,7 @@ package commandinput
 
 import (
 	"strings"
+	"swarmcli/commands"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -15,6 +16,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		switch msg.Type {
+		case tea.KeyTab:
+			prefix := strings.TrimSpace(m.input.Value())
+			suggestions := commands.Suggestions(prefix)
+			if len(suggestions) == 1 {
+				m.input.SetValue(suggestions[0] + " ")
+			} else if len(suggestions) > 1 {
+				// Optional: show popup or print in status line
+				return m, tea.Printf("Suggestions: %v", suggestions)
+			}
+		}
+
 		switch key := msg.String(); key {
 		case "enter":
 			raw := strings.TrimSpace(m.input.Value())

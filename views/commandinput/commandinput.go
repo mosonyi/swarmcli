@@ -1,9 +1,6 @@
 package commandinput
 
 import (
-	"strings"
-	"swarmcli/commands"
-
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -62,15 +59,4 @@ func (m *Model) ShowError(msg string) tea.Cmd {
 	m.visible = true
 	m.input.Focus()
 	return nil
-}
-
-func (m *Model) Suggestions(prefix string) []string {
-	cmds := commands.List()
-	var matches []string
-	for _, c := range cmds {
-		if strings.HasPrefix(c.Name(), prefix) {
-			matches = append(matches, c.Name())
-		}
-	}
-	return matches
 }

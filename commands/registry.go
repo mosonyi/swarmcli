@@ -1,27 +1,34 @@
 package commands
 
-type Registry struct {
-	cmds map[string]Command
-}
+import "strings"
 
-var globalRegistry = &Registry{cmds: make(map[string]Command)}
+var registry = map[string]Command{}
 
-// Register adds a command to the global registry
 func Register(cmd Command) {
-	globalRegistry.cmds[cmd.Name()] = cmd
+	registry[cmd.Name()] = cmd
 }
 
-// Get looks up a command by name
 func Get(name string) (Command, bool) {
-	cmd, ok := globalRegistry.cmds[name]
+	name = strings.TrimSpace(strings.TrimPrefix(name, ":"))
+	cmd, ok := registry[name]
 	return cmd, ok
 }
 
-// List returns all registered commands (useful for autocomplete/help)
 func List() []Command {
-	cmds := make([]Command, 0, len(globalRegistry.cmds))
-	for _, c := range globalRegistry.cmds {
+	cmds := make([]Command, 0, len(registry))
+	for _, c := range registry {
 		cmds = append(cmds, c)
 	}
 	return cmds
+}
+
+func Suggestions(prefix string) []string {
+	prefix = strings.TrimSpace(strings.TrimPrefix(prefix, ":"))
+	suggestions := []string{}
+	for name := range registry {
+		if strings.HasPrefix(name, prefix) {
+			suggestions = append(suggestions, name)
+		}
+	}
+	return suggestions
 }
