@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -12,6 +13,23 @@ func GetNodeIDs() ([]string, error) {
 		return nil, err
 	}
 	return strings.Fields(strings.Join(lines, " ")), nil
+}
+
+func GetNodeIDToHostnameMap() (map[string]string, error) {
+	out, err := RunDockerSingle("node", "ls", "--format", "{{.ID}} {{.Hostname}}")
+	if err != nil {
+		return nil, fmt.Errorf("Error getting node hostnames: %v", err)
+	}
+
+	idToName := make(map[string]string)
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	for _, line := range lines {
+		parts := strings.Fields(line)
+		if len(parts) == 2 {
+			idToName[parts[0]] = parts[1]
+		}
+	}
+	return idToName, nil
 }
 
 func GetNodeTaskNames(nodeID string) ([]string, error) {

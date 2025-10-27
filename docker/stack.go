@@ -21,17 +21,17 @@ func GetStacks(nodeID string) []StackService {
 func GetNodeStacks(nodeID string) []StackService {
 	taskNames, err := GetNodeTaskNames(nodeID)
 	if err != nil {
-		return nil
+		return []StackService{}
 	}
 
 	serviceNames := extractServiceNames(taskNames)
 	if len(serviceNames) == 0 {
-		return nil
+		return []StackService{}
 	}
 
 	nameToID, err := GetServiceNameToIDMap()
 	if err != nil {
-		return nil
+		return []StackService{}
 	}
 
 	var serviceIDs []string
@@ -41,20 +41,32 @@ func GetNodeStacks(nodeID string) []StackService {
 		}
 	}
 	if len(serviceIDs) == 0 {
-		return nil
+		return []StackService{}
 	}
 
 	stackServices, err := inspectStackServices(serviceIDs)
 	if err != nil {
-		return nil
+		return []StackService{}
 	}
 
-	// 🟢 Fix: attach nodeID to each StackService
+	// Translate node ID -> hostname
+	idToName, _ := GetNodeIDToHostnameMap() // ignore map error; hostname is optional
+	nodeName := nodeID
+	if hn, ok := idToName[nodeID]; ok && hn != "" {
+		nodeName = hn
+	}
+
 	for i := range stackServices {
-		stackServices[i].NodeID = nodeID
+		stackServices[i].NodeID = nodeName
 	}
 
 	sort.Slice(stackServices, func(i, j int) bool {
+		if stackServices[i].StackName == stackServices[j].StackName {
+			if stackServices[i].ServiceName == stackServices[j].ServiceName {
+				return stackServices[i].NodeID < stackServices[j].NodeID
+			}
+			return stackServices[i].ServiceName < stackServices[j].ServiceName
+		}
 		return stackServices[i].StackName < stackServices[j].StackName
 	})
 
@@ -65,25 +77,34 @@ func GetAllStacks() []StackService {
 	nodeIDs, err := GetNodeIDs()
 	if err != nil {
 		fmt.Println(err)
-		return []StackService{}
+		return nil
 	}
+
+	idToName, _ := GetNodeIDToHostnameMap() // 🟢 ignore error if minor
 
 	allStacks := make(map[string]StackService)
 	for _, nodeID := range nodeIDs {
-		for _, s := range GetNodeStacks(nodeID) {
-			key := s.StackName + "|" + s.ServiceName
+		nodeStacks := GetNodeStacks(nodeID)
+		for _, s := range nodeStacks {
+			if hostname, ok := idToName[s.NodeID]; ok {
+				s.NodeID = hostname // 🟢 replace ID with hostname
+			}
+			key := s.StackName + "|" + s.ServiceName + "|" + s.NodeID
 			allStacks[key] = s
 		}
 	}
 
-	uniqueStacks := make([]StackService, 0, len(allStacks))
+	var uniqueStacks []StackService
 	for _, s := range allStacks {
 		uniqueStacks = append(uniqueStacks, s)
 	}
 
 	sort.Slice(uniqueStacks, func(i, j int) bool {
 		if uniqueStacks[i].StackName == uniqueStacks[j].StackName {
-			return uniqueStacks[i].ServiceName < uniqueStacks[j].ServiceName
+			if uniqueStacks[i].NodeID == uniqueStacks[j].NodeID {
+				return uniqueStacks[i].ServiceName < uniqueStacks[j].ServiceName
+			}
+			return uniqueStacks[i].NodeID < uniqueStacks[j].NodeID
 		}
 		return uniqueStacks[i].StackName < uniqueStacks[j].StackName
 	})
