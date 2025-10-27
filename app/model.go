@@ -82,7 +82,7 @@ func (m Model) renderStackBar() string {
 }
 
 func cmdBar() commandinput.Model {
-	cmdBar := commandinput.New(":")
+	cmdBar := commandinput.New()
 	return cmdBar
 }
 

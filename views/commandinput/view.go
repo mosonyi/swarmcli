@@ -1,9 +1,13 @@
 package commandinput
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 func (m Model) View() string {
-	if !m.visible {
+	if !m.active {
 		return ""
 	}
 
@@ -12,15 +16,25 @@ func (m Model) View() string {
 		Foreground(lipgloss.Color("#00d7ff")).
 		Padding(0, 1)
 
-	view := inputStyle.Render(m.input.View())
+	suggestionStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#808080"))
 
-	if m.errorMsg != "" {
-		errorStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#ff5f87")).
-			Bold(true).
-			Padding(0, 1)
-		view += "\n" + errorStyle.Render(m.errorMsg)
+	selectedStyle := suggestionStyle.Copy().
+		Foreground(lipgloss.Color("#00d7ff")).
+		Bold(true)
+
+	var suggestionLines []string
+	for i, s := range m.suggestions {
+		if i == m.selected {
+			suggestionLines = append(suggestionLines, selectedStyle.Render("> "+s))
+		} else {
+			suggestionLines = append(suggestionLines, suggestionStyle.Render("  "+s))
+		}
 	}
 
-	return view
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		inputStyle.Render(m.input.View()),
+		strings.Join(suggestionLines, "\n"),
+	)
 }

@@ -1,62 +1,55 @@
 package commandinput
 
 import (
+	"strings"
+	"swarmcli/commands"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Model represents the command input bar (like in k9s).
 type Model struct {
-	input     textinput.Model
-	visible   bool
-	history   []string
-	histPos   int
-	errorMsg  string
-	commands  map[string]Command
-	cmdPrefix string // usually ":" for Vim-style
+	input       textinput.Model
+	active      bool
+	suggestions []string
+	selected    int
+	errorMsg    string
 }
 
-// New creates a new command input model with a given prefix (e.g. ":").
-func New(prefix string) Model {
+func New() Model {
 	ti := textinput.New()
-	ti.Prompt = prefix + " "
+	ti.Placeholder = ""
+	ti.Prompt = ": "
 	ti.CharLimit = 256
-	ti.Focus()
-
-	return Model{
-		input:     ti,
-		history:   make([]string, 0),
-		commands:  make(map[string]Command),
-		cmdPrefix: prefix,
-	}
+	return Model{input: ti}
 }
-
-// Register adds a new command definition.
-func (m *Model) Register(cmd Command) {
-	m.commands[cmd.Name] = cmd
-}
-
-// Visible reports whether the input bar is shown.
-func (m Model) Visible() bool { return m.visible }
 
 func (m *Model) Show() tea.Cmd {
-	m.visible = true
-	m.errorMsg = ""
+	m.active = true
 	m.input.Focus()
+	m.refreshSuggestions()
 	return textinput.Blink
 }
 
 func (m *Model) Hide() tea.Cmd {
-	m.visible = false
-	m.errorMsg = ""
+	m.active = false
 	m.input.Blur()
 	m.input.Reset()
+	m.suggestions = nil
+	m.selected = 0
 	return nil
 }
 
 func (m *Model) ShowError(msg string) tea.Cmd {
 	m.errorMsg = msg
-	m.visible = true
 	m.input.Focus()
 	return nil
 }
+
+func (m *Model) refreshSuggestions() {
+	prefix := strings.TrimSpace(m.input.Value())
+	m.suggestions = commands.Suggest(prefix)
+	m.selected = 0
+}
+
+func (m Model) Visible() bool { return m.active }

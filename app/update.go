@@ -13,28 +13,15 @@ import (
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case commandinput.SubmitMsg:
-		cmdLine := strings.TrimSpace(msg.Command)
-		if cmdLine == "" {
+		cmdName := strings.TrimSpace(msg.Command)
+		cmd, ok := commands.Get(cmdName)
+		if !ok {
+			m.commandInput.ShowError("Unknown command: " + cmdName)
 			return m, nil
 		}
 
-		parts := strings.Fields(cmdLine)
-		if len(parts) == 0 {
-			return m, nil
-		}
-
-		// join up to first 3 parts for multi-word names
-		for i := min(3, len(parts)); i > 0; i-- {
-			name := strings.Join(parts[:i], " ")
-			args := parts[i:]
-			if cmd, ok := commands.Get(name); ok {
-				ctx := commands.Context{App: &m}
-				return m, cmd.Execute(ctx, args)
-			}
-		}
-
-		m.commandInput.ShowError("unknown command: " + cmdLine)
-		return m, nil
+		ctx := commands.Context{App: &m}
+		return m, cmd.Execute(ctx, nil)
 
 	case view.NavigateToMsg:
 		return m.switchToView(msg.ViewName, msg.Payload)

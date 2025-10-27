@@ -1,19 +1,23 @@
 package commands
 
-import "strings"
+import (
+	"strings"
+)
 
-var registry = map[string]Command{}
+var registry = make(map[string]Command)
 
+// Register a command globally, usually called from init()
 func Register(cmd Command) {
 	registry[cmd.Name()] = cmd
 }
 
+// Get returns a command by exact name
 func Get(name string) (Command, bool) {
-	name = strings.TrimSpace(strings.TrimPrefix(name, ":"))
-	cmd, ok := registry[name]
-	return cmd, ok
+	c, ok := registry[name]
+	return c, ok
 }
 
+// List returns all registered commands
 func List() []Command {
 	cmds := make([]Command, 0, len(registry))
 	for _, c := range registry {
@@ -22,13 +26,13 @@ func List() []Command {
 	return cmds
 }
 
-func Suggestions(prefix string) []string {
-	prefix = strings.TrimSpace(strings.TrimPrefix(prefix, ":"))
-	suggestions := []string{}
+// Suggest returns all command names that start with a given prefix
+func Suggest(prefix string) []string {
+	var out []string
 	for name := range registry {
-		if strings.HasPrefix(name, prefix) {
-			suggestions = append(suggestions, name)
+		if prefix == "" || strings.HasPrefix(name, prefix) {
+			out = append(out, name)
 		}
 	}
-	return suggestions
+	return out
 }
