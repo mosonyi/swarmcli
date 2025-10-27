@@ -2,9 +2,11 @@ package stacksview
 
 import (
 	"fmt"
-	tea "github.com/charmbracelet/bubbletea"
 	"strings"
+	"swarmcli/docker"
 	"swarmcli/views/view"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
@@ -60,7 +62,7 @@ func (m *Model) buildContent() string {
 	return b.String()
 }
 
-func (m *Model) visibleStackServices() []StackService {
+func (m *Model) visibleStackServices() []docker.StackService {
 	if m.viewport.Height <= 0 || len(m.stackServices) == 0 {
 		return nil
 	}

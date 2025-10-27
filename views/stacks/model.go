@@ -3,6 +3,7 @@ package stacksview
 import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"swarmcli/docker"
 	"swarmcli/views/helpbar"
 )
 
@@ -12,13 +13,8 @@ type Model struct {
 
 	nodeId        string
 	stackCursor   int
-	stackServices []StackService
+	stackServices []docker.StackService
 	ready         bool
-}
-
-type StackService struct {
-	StackName   string
-	ServiceName string
 }
 
 // Create a new instance
@@ -52,7 +48,7 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 
 func LoadNodeStacks(nodeID string) tea.Cmd {
 	return func() tea.Msg {
-		services := loadNodeStacks(nodeID)
+		services := docker.GetNodeStacks(nodeID)
 		return Msg{NodeId: nodeID, Services: services}
 	}
 }

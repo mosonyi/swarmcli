@@ -1,4 +1,4 @@
-package stacksview
+package docker
 
 import (
 	"fmt"
@@ -7,7 +7,20 @@ import (
 	"strings"
 )
 
-func getNodeTaskNames(nodeID string) ([]string, error) {
+type StackService struct {
+	StackName   string
+	ServiceName string
+}
+
+func GetNodeIDs() ([]string, error) {
+	out, err := exec.Command("docker", "node", "ls", "--format", "{{.ID}}").CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("Error getting nodes: %v\n%s", err, out)
+	}
+	return strings.Fields(string(out)), nil
+}
+
+func GetNodeTaskNames(nodeID string) ([]string, error) {
 	out, err := exec.Command("docker", "node", "ps", nodeID, "--format", "{{.Name}}").CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("Error getting node tasks: %v\n%s", err, out)
@@ -25,7 +38,7 @@ func extractServiceNames(taskNames []string) map[string]struct{} {
 	return serviceNames
 }
 
-func getServiceNameToIDMap() (map[string]string, error) {
+func GetServiceNameToIDMap() (map[string]string, error) {
 	out, err := exec.Command("docker", "service", "ls", "--format", "{{.ID}} {{.Name}}").CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("Error getting services: %v\n%s", err, out)
@@ -66,8 +79,8 @@ func inspectStackServices(serviceIDs []string) ([]StackService, error) {
 	return stackServices, nil
 }
 
-func loadNodeStacks(nodeID string) []StackService {
-	taskNames, err := getNodeTaskNames(nodeID)
+func GetNodeStacks(nodeID string) []StackService {
+	taskNames, err := GetNodeTaskNames(nodeID)
 	if err != nil {
 		return nil
 	}
@@ -77,7 +90,7 @@ func loadNodeStacks(nodeID string) []StackService {
 		return nil
 	}
 
-	nameToID, err := getServiceNameToIDMap()
+	nameToID, err := GetServiceNameToIDMap()
 	if err != nil {
 		return nil
 	}
@@ -102,4 +115,35 @@ func loadNodeStacks(nodeID string) []StackService {
 	})
 
 	return stackServices
+}
+
+func GetAllStacks() []StackService {
+	nodeIDs, err := GetNodeIDs()
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+
+	allStacks := make(map[string]StackService)
+	for _, nodeID := range nodeIDs {
+		nodeStacks := GetNodeStacks(nodeID)
+		for _, s := range nodeStacks {
+			key := s.StackName + "|" + s.ServiceName
+			allStacks[key] = s
+		}
+	}
+
+	var uniqueStacks []StackService
+	for _, s := range allStacks {
+		uniqueStacks = append(uniqueStacks, s)
+	}
+
+	sort.Slice(uniqueStacks, func(i, j int) bool {
+		if uniqueStacks[i].StackName == uniqueStacks[j].StackName {
+			return uniqueStacks[i].ServiceName < uniqueStacks[j].ServiceName
+		}
+		return uniqueStacks[i].StackName < uniqueStacks[j].StackName
+	})
+
+	return uniqueStacks
 }
