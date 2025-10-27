@@ -5,109 +5,124 @@ import (
 	"sort"
 )
 
+// StackService represents a single service inside a stack on a node.
 type StackService struct {
 	NodeID      string
 	StackName   string
 	ServiceName string
 }
 
+// GetStacks returns stacks across all nodes if nodeID is empty,
+// or stacks only for the given node.
 func GetStacks(nodeID string) []StackService {
 	if nodeID == "" {
-		return GetAllStacks()
+		return getAllStacks()
 	}
-	return GetNodeStacks(nodeID)
+	return getNodeStacks(nodeID)
 }
 
-func GetNodeStacks(nodeID string) []StackService {
+// getNodeStacks retrieves stack services for a specific node.
+func getNodeStacks(nodeID string) []StackService {
 	taskNames, err := GetNodeTaskNames(nodeID)
 	if err != nil {
-		return []StackService{}
+		return nil
 	}
 
+	serviceIDs, err := resolveServiceIDs(taskNames)
+	if err != nil || len(serviceIDs) == 0 {
+		return nil
+	}
+
+	stackServices, err := inspectStackServices(serviceIDs)
+	if err != nil {
+		return nil
+	}
+
+	nodeName := resolveHostname(nodeID)
+	for i := range stackServices {
+		stackServices[i].NodeID = nodeName
+	}
+
+	sortStackServices(stackServices)
+	return stackServices
+}
+
+// getAllStacks retrieves all stacks across all nodes.
+func getAllStacks() []StackService {
+	nodeIDs, err := GetNodeIDs()
+	if err != nil {
+		fmt.Println("error getting nodes:", err)
+		return nil
+	}
+
+	idToName, _ := GetNodeIDToHostnameMap()
+
+	allStacks := make(map[string]StackService)
+	for _, nodeID := range nodeIDs {
+		nodeStacks := getNodeStacks(nodeID)
+		for _, s := range nodeStacks {
+			if hostname, ok := idToName[s.NodeID]; ok {
+				s.NodeID = hostname
+			}
+			key := fmt.Sprintf("%s|%s|%s", s.StackName, s.ServiceName, s.NodeID)
+			allStacks[key] = s
+		}
+	}
+
+	uniqueStacks := make([]StackService, 0, len(allStacks))
+	for _, s := range allStacks {
+		uniqueStacks = append(uniqueStacks, s)
+	}
+
+	sortStackServices(uniqueStacks)
+	return uniqueStacks
+}
+
+// --- helpers ---
+
+// resolveServiceIDs converts task names into Docker service IDs.
+func resolveServiceIDs(taskNames []string) ([]string, error) {
 	serviceNames := extractServiceNames(taskNames)
 	if len(serviceNames) == 0 {
-		return []StackService{}
+		return nil, nil
 	}
 
 	nameToID, err := GetServiceNameToIDMap()
 	if err != nil {
-		return []StackService{}
+		return nil, err
 	}
 
-	var serviceIDs []string
+	serviceIDs := make([]string, 0, len(serviceNames))
 	for name := range serviceNames {
 		if id, ok := nameToID[name]; ok {
 			serviceIDs = append(serviceIDs, id)
 		}
 	}
-	if len(serviceIDs) == 0 {
-		return []StackService{}
-	}
-
-	stackServices, err := inspectStackServices(serviceIDs)
-	if err != nil {
-		return []StackService{}
-	}
-
-	// Translate node ID -> hostname
-	idToName, _ := GetNodeIDToHostnameMap() // ignore map error; hostname is optional
-	nodeName := nodeID
-	if hn, ok := idToName[nodeID]; ok && hn != "" {
-		nodeName = hn
-	}
-
-	for i := range stackServices {
-		stackServices[i].NodeID = nodeName
-	}
-
-	sort.Slice(stackServices, func(i, j int) bool {
-		if stackServices[i].StackName == stackServices[j].StackName {
-			if stackServices[i].ServiceName == stackServices[j].ServiceName {
-				return stackServices[i].NodeID < stackServices[j].NodeID
-			}
-			return stackServices[i].ServiceName < stackServices[j].ServiceName
-		}
-		return stackServices[i].StackName < stackServices[j].StackName
-	})
-
-	return stackServices
+	return serviceIDs, nil
 }
 
-func GetAllStacks() []StackService {
-	nodeIDs, err := GetNodeIDs()
-	if err != nil {
-		fmt.Println(err)
-		return nil
-	}
-
-	idToName, _ := GetNodeIDToHostnameMap() // 🟢 ignore error if minor
-
-	allStacks := make(map[string]StackService)
-	for _, nodeID := range nodeIDs {
-		nodeStacks := GetNodeStacks(nodeID)
-		for _, s := range nodeStacks {
-			if hostname, ok := idToName[s.NodeID]; ok {
-				s.NodeID = hostname // 🟢 replace ID with hostname
-			}
-			key := s.StackName + "|" + s.ServiceName + "|" + s.NodeID
-			allStacks[key] = s
+// resolveHostname translates a node ID to its hostname (if available).
+func resolveHostname(nodeID string) string {
+	idToName, err := GetNodeIDToHostnameMap()
+	if err == nil {
+		if name, ok := idToName[nodeID]; ok && name != "" {
+			return name
 		}
 	}
+	return nodeID
+}
 
-	var uniqueStacks []StackService
-	for _, s := range allStacks {
-		uniqueStacks = append(uniqueStacks, s)
-	}
-
-	sort.Slice(uniqueStacks, func(i, j int) bool {
-		if uniqueStacks[i].StackName == uniqueStacks[j].StackName {
-			if uniqueStacks[i].NodeID == uniqueStacks[j].NodeID {
-				return uniqueStacks[i].ServiceName < uniqueStacks[j].ServiceName
-			}
-			return uniqueStacks[i].NodeID < uniqueStacks[j].NodeID
+// sortStackServices sorts by StackName → NodeID → ServiceName.
+func sortStackServices(stacks []StackService) {
+	sort.Slice(stacks, func(i, j int) bool {
+		a, b := stacks[i], stacks[j]
+		switch {
+		case a.StackName != b.StackName:
+			return a.StackName < b.StackName
+		case a.NodeID != b.NodeID:
+			return a.NodeID < b.NodeID
+		default:
+			return a.ServiceName < b.ServiceName
 		}
-		return uniqueStacks[i].StackName < uniqueStacks[j].StackName
 	})
-
-	return uniqueStacks
 }
