@@ -5,6 +5,7 @@ import (
 	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"
 	logsview "swarmcli/views/logs"
+	nodesview "swarmcli/views/nodes"
 	stacksview "swarmcli/views/stacks"
 	"swarmcli/views/view"
 
@@ -36,6 +37,9 @@ func Init() {
 	})
 	registerView(inspectview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		return inspectview.New(w, h), inspectview.LoadInspectItem(payload.(string))
+	})
+	registerView(nodesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
+		return nodesview.New(w, h), nodesview.LoadNodes()
 	})
 	registerView(stacksview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		var nodeID string
