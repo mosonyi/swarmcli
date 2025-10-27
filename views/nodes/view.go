@@ -5,6 +5,7 @@ import (
 	"swarmcli/styles"
 )
 
+// View renders the nodes view.
 func (m Model) View() string {
 	if !m.Visible {
 		return ""
@@ -12,7 +13,11 @@ func (m Model) View() string {
 
 	header := "Nodes"
 
-	return styles.BorderStyle.Render(
-		fmt.Sprintf("%s\n\n%s", header, m.viewport.View()),
+	content := fmt.Sprintf(
+		"%s\n\n%s",
+		header,
+		m.viewport.View(),
 	)
+
+	return styles.BorderStyle.Render(content)
 }

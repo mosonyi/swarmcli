@@ -1,31 +1,40 @@
 package nodesview
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
 	"strings"
 	inspectview "swarmcli/views/inspect"
 	stacksview "swarmcli/views/stacks"
 	"swarmcli/views/view"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func HandleKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
-	return handleModeKey(m, msg)
+	return handleNormalModeKey(m, msg)
 }
 
-func handleModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "q":
-		return m, tea.Quit
+		m.Visible = false
 
 	case "j", "down":
 		if m.cursor < len(m.nodes)-1 {
 			m.cursor++
+			m.viewport.SetContent(m.buildContent())
 		}
 
 	case "k", "up":
 		if m.cursor > 0 {
 			m.cursor--
+			m.viewport.SetContent(m.buildContent())
 		}
+
+	case "pgup":
+		m.viewport.ScrollUp(m.viewport.Height)
+
+	case "pgdown":
+		m.viewport.ScrollDown(m.viewport.Height)
 
 	case "i":
 		if m.cursor < len(m.nodes) {
@@ -39,8 +48,8 @@ func handleModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	case "s":
 		return m.selectNode()
-
 	}
+
 	return m, nil
 }
 

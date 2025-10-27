@@ -18,9 +18,8 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		m.viewport.Height = msg.Height
 		if !m.ready {
 			m.ready = true
-			m.viewport.SetContent(m.buildContent()) // Now set the content safely
+			m.viewport.SetContent(m.buildContent())
 		}
-
 		return m, nil
 
 	case tea.KeyMsg:
@@ -39,8 +38,9 @@ func (m *Model) SetContent(msg Msg) {
 	if !m.ready {
 		return
 	}
+
 	m.viewport.GotoTop()
-	m.viewport.SetContent(m.buildContent()) // now set new content
+	m.viewport.SetContent(m.buildContent())
 	m.viewport.YOffset = 0
 }
 
@@ -53,5 +53,24 @@ func (m *Model) buildContent() string {
 		}
 		s += fmt.Sprintf("%s%s\n", cursor, item)
 	}
+
+	m.ensureCursorVisible()
 	return s
+}
+
+// ensureCursorVisible keeps the cursor within the visible viewport
+func (m *Model) ensureCursorVisible() {
+	// Prevent negative height
+	h := m.viewport.Height
+	if h < 1 {
+		h = 1
+	}
+
+	// If cursor is above the viewport, scroll up
+	if m.cursor < m.viewport.YOffset {
+		m.viewport.YOffset = m.cursor
+	} else if m.cursor >= m.viewport.YOffset+h {
+		// If cursor is below viewport, scroll down
+		m.viewport.YOffset = m.cursor - h + 1
+	}
 }
