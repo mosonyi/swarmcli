@@ -1,9 +1,11 @@
 package stacksview
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	"swarmcli/docker"
 	logsview "swarmcli/views/logs"
 	"swarmcli/views/view"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func HandleKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -13,6 +15,10 @@ func HandleKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 
 func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
+	case "r":
+		// Refresh hostname cache and reload data
+		docker.RefreshNodeCache()
+		return m, LoadStacks(m.nodeId)
 	case "q", "esc":
 		m.Visible = false
 	case "j", "down":

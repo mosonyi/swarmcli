@@ -16,6 +16,7 @@ type StackService struct {
 var (
 	nodeNameCache     map[string]string
 	nodeNameCacheOnce sync.Once
+	nodeCacheMu       sync.RWMutex
 )
 
 // GetStacks returns stacks across all nodes if nodeID is empty,
@@ -67,7 +68,7 @@ func getAllStacks() []StackService {
 	for _, nodeID := range nodeIDs {
 		nodeStacks := getNodeStacks(nodeID)
 		for _, s := range nodeStacks {
-			if hostname, ok := nodeNameCache[s.NodeID]; ok {
+			if hostname := resolveHostname(s.NodeID); hostname != "" {
 				s.NodeID = hostname
 			}
 			key := fmt.Sprintf("%s|%s|%s", s.StackName, s.ServiceName, s.NodeID)
@@ -86,7 +87,6 @@ func getAllStacks() []StackService {
 
 // --- helpers ---
 
-// resolveServiceIDs converts task names into Docker service IDs.
 func resolveServiceIDs(taskNames []string) ([]string, error) {
 	serviceNames := extractServiceNames(taskNames)
 	if len(serviceNames) == 0 {
@@ -107,10 +107,11 @@ func resolveServiceIDs(taskNames []string) ([]string, error) {
 	return serviceIDs, nil
 }
 
-// resolveHostname translates a node ID to its hostname (cached).
+// resolveHostname translates a node ID to its hostname using a cached map.
 func resolveHostname(nodeID string) string {
 	initHostnameCache()
-
+	nodeCacheMu.RLock()
+	defer nodeCacheMu.RUnlock()
 	if name, ok := nodeNameCache[nodeID]; ok && name != "" {
 		return name
 	}
@@ -120,16 +121,28 @@ func resolveHostname(nodeID string) string {
 // initHostnameCache loads the node ID → hostname map once per runtime.
 func initHostnameCache() {
 	nodeNameCacheOnce.Do(func() {
-		idToName, err := GetNodeIDToHostnameMap()
-		if err != nil {
-			nodeNameCache = make(map[string]string)
-			return
-		}
-		nodeNameCache = idToName
+		refreshNodeCacheInternal()
 	})
 }
 
-// sortStackServices sorts by StackName → NodeID → ServiceName.
+// RefreshNodeCache forcibly refreshes the node hostname cache.
+// This can be triggered when nodes change (join/leave/rename).
+func RefreshNodeCache() error {
+	nodeCacheMu.Lock()
+	defer nodeCacheMu.Unlock()
+	return refreshNodeCacheInternal()
+}
+
+func refreshNodeCacheInternal() error {
+	idToName, err := GetNodeIDToHostnameMap()
+	if err != nil {
+		nodeNameCache = make(map[string]string)
+		return err
+	}
+	nodeNameCache = idToName
+	return nil
+}
+
 func sortStackServices(stacks []StackService) {
 	sort.Slice(stacks, func(i, j int) bool {
 		a, b := stacks[i], stacks[j]
