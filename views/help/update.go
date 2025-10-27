@@ -10,9 +10,7 @@ import (
 )
 
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
-	var cmd tea.Cmd
-	m.viewport, cmd = m.viewport.Update(msg)
-	return m, cmd
+	return m, nil
 }
 
 func (m Model) buildContent() string {

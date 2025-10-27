@@ -1,22 +1,28 @@
 package helpview
 
 import (
+	"fmt"
+	"swarmcli/styles"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
 func (m Model) View() string {
-	title := lipgloss.NewStyle().
+	if !m.Visible {
+		return ""
+	}
+
+	header := lipgloss.NewStyle().
 		Bold(true).
-		Background(lipgloss.Color("57")).
-		Foreground(lipgloss.Color("230")).
-		Padding(0, 1).
-		Render(" HELP — press q to return ")
+		Foreground(lipgloss.Color("#00d7ff")).
+		Render("Available Commands")
 
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		title,
-		m.viewport.View(),
+	body := m.content
+	footer := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#808080")).
+		Render("[press q or esc to go back]")
+
+	return styles.BorderStyle.Render(
+		fmt.Sprintf("%s\n\n%s\n\n%s", header, body, footer),
 	)
-
-	return content
 }

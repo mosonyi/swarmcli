@@ -1,26 +1,28 @@
 package helpview
 
 import (
+	"fmt"
+	"strings"
+	"swarmcli/commands"
 	"swarmcli/views/helpbar"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 type Model struct {
-	viewport viewport.Model
-	width    int
-	height   int
+	Visible bool
+	content string
 }
 
 func New(width, height int) Model {
-	m := Model{
-		width:  width,
-		height: height,
+	var b strings.Builder
+	for _, cmd := range commands.All() {
+		b.WriteString(fmt.Sprintf("  %-20s %s\n", cmd.Name(), cmd.Description()))
 	}
-	m.viewport = viewport.New(width, height)
-	m.viewport.SetContent(m.buildContent())
-	return m
+	return Model{
+		Visible: true,
+		content: b.String(),
+	}
 }
 
 func (m Model) Init() tea.Cmd { return nil }
@@ -34,5 +36,3 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "q", Desc: "close"},
 	}
 }
-
-func Load() tea.Cmd { return nil }
