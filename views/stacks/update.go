@@ -2,9 +2,11 @@ package stacksview
 
 import (
 	"fmt"
-	tea "github.com/charmbracelet/bubbletea"
 	"strings"
+	"swarmcli/docker"
 	"swarmcli/views/view"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
@@ -14,14 +16,18 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		m.Visible = true
 		return m, nil
 
+	case RefreshErrorMsg:
+		m.Visible = true
+		m.viewport.SetContent(fmt.Sprintf("Error refreshing stacks: %v", msg.Err))
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height
 		if !m.ready {
 			m.ready = true
-			m.viewport.SetContent(m.buildContent()) // Now set the content safely
+			m.viewport.SetContent(m.buildContent())
 		}
-
 		return m, nil
 
 	case tea.KeyMsg:
@@ -42,7 +48,7 @@ func (m *Model) SetContent(msg Msg) {
 		return
 	}
 	m.viewport.GotoTop()
-	m.viewport.SetContent(m.buildContent()) // now set new content
+	m.viewport.SetContent(m.buildContent())
 	m.viewport.YOffset = 0
 }
 
@@ -50,17 +56,19 @@ func (m *Model) buildContent() string {
 	var b strings.Builder
 	visible := m.visibleStackServices()
 	start := m.stackCursor - m.stackCursor%m.viewport.Height
+
 	for i, stack := range visible {
 		cursor := "  "
 		if start+i == m.stackCursor {
 			cursor = "➜ "
 		}
-		b.WriteString(fmt.Sprintf("%s%s / %s\n", cursor, stack.StackName, stack.ServiceName))
+		// Include node ID on the left
+		b.WriteString(fmt.Sprintf("%s%-12s %s / %s\n", cursor, stack.NodeID, stack.StackName, stack.ServiceName))
 	}
 	return b.String()
 }
 
-func (m *Model) visibleStackServices() []StackService {
+func (m *Model) visibleStackServices() []docker.StackService {
 	if m.viewport.Height <= 0 || len(m.stackServices) == 0 {
 		return nil
 	}

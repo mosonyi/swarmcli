@@ -38,6 +38,10 @@ func Init() {
 		return inspectview.New(w, h), inspectview.LoadInspectItem(payload.(string))
 	})
 	registerView(stacksview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
-		return stacksview.New(w, h), stacksview.LoadNodeStacks(payload.(string))
+		var nodeID string
+		if payload != nil {
+			nodeID, _ = payload.(string)
+		}
+		return stacksview.New(w, h), stacksview.LoadStacks(nodeID)
 	})
 }
