@@ -16,9 +16,7 @@ func HandleKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "r":
-		// Refresh hostname cache and reload data
-		docker.RefreshNodeCache()
-		return m, LoadStacks(m.nodeId)
+		return m, refreshStacksCmd(m.nodeId)
 	case "q", "esc":
 		m.Visible = false
 	case "j", "down":
@@ -47,4 +45,20 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func refreshStacksCmd(nodeID string) tea.Cmd {
+	return func() tea.Msg {
+		// Refresh hostname cache first
+		if err := docker.RefreshHostnameCache(); err != nil {
+			return RefreshErrorMsg{Err: err}
+		}
+
+		// Fetch stacks for node or all nodes
+		stacks := docker.GetStacks(nodeID)
+		return Msg{
+			NodeId:   nodeID,
+			Services: stacks,
+		}
+	}
 }

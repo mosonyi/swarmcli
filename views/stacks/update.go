@@ -16,6 +16,11 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		m.Visible = true
 		return m, nil
 
+	case RefreshErrorMsg:
+		m.Visible = true
+		m.viewport.SetContent(fmt.Sprintf("Error refreshing stacks: %v", msg.Err))
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height

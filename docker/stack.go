@@ -3,33 +3,26 @@ package docker
 import (
 	"fmt"
 	"sort"
-	"sync"
 )
 
 // StackService represents a single service inside a stack on a node.
 type StackService struct {
-	NodeID      string
-	StackName   string
-	ServiceName string
+	NodeID      string // node hostname or ID
+	StackName   string // stack namespace
+	ServiceName string // service name
 }
-
-var (
-	nodeNameCache     map[string]string
-	nodeNameCacheOnce sync.Once
-	nodeCacheMu       sync.RWMutex
-)
 
 // GetStacks returns stacks across all nodes if nodeID is empty,
 // or stacks only for the given node.
 func GetStacks(nodeID string) []StackService {
 	if nodeID == "" {
-		return getAllStacks()
+		return getStacksAllNodes()
 	}
-	return getNodeStacks(nodeID)
+	return getStacksForNode(nodeID)
 }
 
-// getNodeStacks retrieves stack services for a specific node.
-func getNodeStacks(nodeID string) []StackService {
+// getStacksForNode retrieves stack services for a specific node.
+func getStacksForNode(nodeID string) []StackService {
 	taskNames, err := GetNodeTaskNames(nodeID)
 	if err != nil {
 		return nil
@@ -54,39 +47,36 @@ func getNodeStacks(nodeID string) []StackService {
 	return stackServices
 }
 
-// getAllStacks retrieves all stacks across all nodes.
-func getAllStacks() []StackService {
+// getStacksAllNodes retrieves all stacks across all nodes.
+func getStacksAllNodes() []StackService {
 	nodeIDs, err := GetNodeIDs()
 	if err != nil {
-		fmt.Println("error getting nodes:", err)
 		return nil
 	}
 
-	initHostnameCache()
+	seen := make(map[string]struct{})
+	var all []StackService
 
-	allStacks := make(map[string]StackService)
 	for _, nodeID := range nodeIDs {
-		nodeStacks := getNodeStacks(nodeID)
-		for _, s := range nodeStacks {
-			if hostname := resolveHostname(s.NodeID); hostname != "" {
-				s.NodeID = hostname
-			}
+		for _, s := range getStacksForNode(nodeID) {
+			s.NodeID = resolveHostname(s.NodeID)
+
 			key := fmt.Sprintf("%s|%s|%s", s.StackName, s.ServiceName, s.NodeID)
-			allStacks[key] = s
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			all = append(all, s)
 		}
 	}
 
-	uniqueStacks := make([]StackService, 0, len(allStacks))
-	for _, s := range allStacks {
-		uniqueStacks = append(uniqueStacks, s)
-	}
-
-	sortStackServices(uniqueStacks)
-	return uniqueStacks
+	sortStackServices(all)
+	return all
 }
 
 // --- helpers ---
 
+// resolveServiceIDs maps task names → service IDs.
 func resolveServiceIDs(taskNames []string) ([]string, error) {
 	serviceNames := extractServiceNames(taskNames)
 	if len(serviceNames) == 0 {
@@ -107,52 +97,16 @@ func resolveServiceIDs(taskNames []string) ([]string, error) {
 	return serviceIDs, nil
 }
 
-// resolveHostname translates a node ID to its hostname using a cached map.
-func resolveHostname(nodeID string) string {
-	initHostnameCache()
-	nodeCacheMu.RLock()
-	defer nodeCacheMu.RUnlock()
-	if name, ok := nodeNameCache[nodeID]; ok && name != "" {
-		return name
-	}
-	return nodeID
-}
-
-// initHostnameCache loads the node ID → hostname map once per runtime.
-func initHostnameCache() {
-	nodeNameCacheOnce.Do(func() {
-		refreshNodeCacheInternal()
-	})
-}
-
-// RefreshNodeCache forcibly refreshes the node hostname cache.
-// This can be triggered when nodes change (join/leave/rename).
-func RefreshNodeCache() error {
-	nodeCacheMu.Lock()
-	defer nodeCacheMu.Unlock()
-	return refreshNodeCacheInternal()
-}
-
-func refreshNodeCacheInternal() error {
-	idToName, err := GetNodeIDToHostnameMap()
-	if err != nil {
-		nodeNameCache = make(map[string]string)
-		return err
-	}
-	nodeNameCache = idToName
-	return nil
-}
-
+// sortStackServices sorts stack services by stack, then node, then service name.
 func sortStackServices(stacks []StackService) {
 	sort.Slice(stacks, func(i, j int) bool {
 		a, b := stacks[i], stacks[j]
-		switch {
-		case a.StackName != b.StackName:
+		if a.StackName != b.StackName {
 			return a.StackName < b.StackName
-		case a.NodeID != b.NodeID:
-			return a.NodeID < b.NodeID
-		default:
-			return a.ServiceName < b.ServiceName
 		}
+		if a.NodeID != b.NodeID {
+			return a.NodeID < b.NodeID
+		}
+		return a.ServiceName < b.ServiceName
 	})
 }

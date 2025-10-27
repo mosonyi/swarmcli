@@ -7,3 +7,7 @@ type Msg struct {
 	Services []docker.StackService
 	Error    string
 }
+
+type RefreshErrorMsg struct {
+	Err error
+}

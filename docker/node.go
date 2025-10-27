@@ -15,7 +15,7 @@ func GetNodeIDs() ([]string, error) {
 	return strings.Fields(strings.Join(lines, " ")), nil
 }
 
-func GetNodeIDToHostnameMap() (map[string]string, error) {
+func GetNodeIDToHostnameMapFromDocker() (map[string]string, error) {
 	out, err := RunDockerSingle("node", "ls", "--format", "{{.ID}} {{.Hostname}}")
 	if err != nil {
 		return nil, fmt.Errorf("Error getting node hostnames: %v", err)
