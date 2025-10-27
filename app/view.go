@@ -1,9 +1,10 @@
 package app
 
 import (
-	"github.com/charmbracelet/lipgloss"
 	"swarmcli/views/helpbar"
 	systeminfoview "swarmcli/views/systeminfo"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (m Model) View() string {
@@ -13,6 +14,16 @@ func (m Model) View() string {
 		WithGlobalHelp([]helpbar.HelpEntry{{Key: "q", Desc: "quit"}, {Key: "?", Desc: "help"}}).
 		WithViewHelp(m.currentView.ShortHelpItems()).
 		View(systemInfo)
+
+	if m.commandInput.Visible() {
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			help,
+			m.commandInput.View(),
+			m.currentView.View(),
+			m.renderStackBar(),
+		)
+	}
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,

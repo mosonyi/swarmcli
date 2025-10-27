@@ -1,13 +1,29 @@
 package app
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	"strings"
+	"swarmcli/commands"
+	"swarmcli/commands/api"
+	"swarmcli/views/commandinput"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case commandinput.SubmitMsg:
+		cmdName := strings.TrimSpace(msg.Command)
+		cmd, ok := commands.Get(cmdName)
+		if !ok {
+			m.commandInput.ShowError("Unknown command: " + cmdName)
+			return m, nil
+		}
+
+		ctx := api.Context{App: &m}
+		return m, cmd.Execute(ctx, nil)
+
 	case view.NavigateToMsg:
 		return m.switchToView(msg.ViewName, msg.Payload)
 
@@ -15,6 +31,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateForResize(msg)
 
 	case tea.KeyMsg:
+		if msg.String() == ":" {
+			if !m.commandInput.Visible() {
+				cmd := m.commandInput.Show()
+				return m, cmd
+			}
+			// If already visible, consume it and do nothing
+			return m, nil
+		}
+
+		// If command input is visible, forward all keys to it exclusively
+		if m.commandInput.Visible() {
+			var cmd tea.Cmd
+			m.commandInput, cmd = m.commandInput.Update(msg)
+			return m, cmd
+		}
+
 		return m.handleKey(msg)
 
 	case tickMsg:
@@ -89,36 +121,3 @@ func (m Model) goBack() (Model, tea.Cmd) {
 	m.currentView = m.viewStack.Pop()
 	return m, nil
 }
-
-//func (m Model) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-//	switch msg.Type {
-//	case tea.KeyEnter:
-//		cmd := strings.TrimSpace(m.commandInput)
-//		m.commandMode = false
-//		m.commandInput = ""
-//		switch cmd {
-//		case "nodes":
-//			m.mode = modeNodes
-//			m.cursor = 0
-//			return m, loadData(modeNodes)
-//		case "services":
-//			m.mode = modeServices
-//			m.cursor = 0
-//			return m, loadData(modeServices)
-//		case "stacks":
-//			m.mode = modeStacks
-//			m.cursor = 0
-//			return m, loadData(modeStacks)
-//		}
-//	case tea.KeyEsc:
-//		m.commandMode = false
-//		m.commandInput = ""
-//	case tea.KeyBackspace:
-//		if len(m.commandInput) > 0 {
-//			m.commandInput = m.commandInput[:len(m.commandInput)-1]
-//		}
-//	default:
-//		m.commandInput += msg.String()
-//	}
-//	return m, nil
-//}
