@@ -1,8 +1,8 @@
 package command
 
 import (
-	"swarmcli/commands"
 	"swarmcli/commands/api"
+	"swarmcli/commands/internal/registry"
 	helpview "swarmcli/views/help"
 	"swarmcli/views/view"
 
@@ -24,8 +24,11 @@ func (Help) Execute(ctx api.Context, args []string) tea.Cmd {
 }
 
 func AllCommandInfos() []helpview.CommandInfo {
-	cmds := []helpview.CommandInfo{}
-	for _, cmd := range commands.All() {
+	var cmds []helpview.CommandInfo
+	// Go technicality. Need to call `registry` directly.
+	// We can't depend on the parent package, as it creates
+	// a cycle.
+	for _, cmd := range registry.All() {
 		cmds = append(cmds, helpview.CommandInfo{
 			Name:        cmd.Name(),
 			Description: cmd.Description(),
