@@ -21,9 +21,8 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		m.viewport.Height = msg.Height
 		if !m.ready {
 			m.ready = true
-			m.viewport.SetContent(m.buildContent()) // Now set the content safely
+			m.viewport.SetContent(m.buildContent())
 		}
-
 		return m, nil
 
 	case tea.KeyMsg:
@@ -44,7 +43,7 @@ func (m *Model) SetContent(msg Msg) {
 		return
 	}
 	m.viewport.GotoTop()
-	m.viewport.SetContent(m.buildContent()) // now set new content
+	m.viewport.SetContent(m.buildContent())
 	m.viewport.YOffset = 0
 }
 
@@ -52,12 +51,14 @@ func (m *Model) buildContent() string {
 	var b strings.Builder
 	visible := m.visibleStackServices()
 	start := m.stackCursor - m.stackCursor%m.viewport.Height
+
 	for i, stack := range visible {
 		cursor := "  "
 		if start+i == m.stackCursor {
 			cursor = "➜ "
 		}
-		b.WriteString(fmt.Sprintf("%s%s / %s\n", cursor, stack.StackName, stack.ServiceName))
+		// Include node ID on the left
+		b.WriteString(fmt.Sprintf("%s%-12s %s / %s\n", cursor, stack.NodeID, stack.StackName, stack.ServiceName))
 	}
 	return b.String()
 }

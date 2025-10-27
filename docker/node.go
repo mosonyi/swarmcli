@@ -6,11 +6,6 @@ import (
 	"strings"
 )
 
-type StackService struct {
-	StackName   string
-	ServiceName string
-}
-
 // ---------- Node/Service Utilities ----------
 
 func GetNodeIDs() ([]string, error) {

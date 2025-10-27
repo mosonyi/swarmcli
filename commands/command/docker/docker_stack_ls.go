@@ -15,7 +15,6 @@ func (DockerStackLs) Description() string { return "List all Docker stacks" }
 
 func (DockerStackLs) Execute(ctx api.Context, args []string) tea.Cmd {
 	return func() tea.Msg {
-		// Todo: implement stacks view to get stacks from all nodes
 		return view.NavigateToMsg{
 			ViewName: stacksview.ViewName,
 			Payload:  nil,

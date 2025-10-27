@@ -17,23 +17,15 @@ type Model struct {
 	ready         bool
 }
 
-// Create a new instance
 func New(width, height int) Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
-	return Model{
-		viewport: vp,
-		Visible:  false,
-	}
+	return Model{viewport: vp, Visible: false}
 }
 
-func (m Model) Init() tea.Cmd {
-	return nil
-}
+func (m Model) Init() tea.Cmd { return nil }
 
-func (m Model) Name() string {
-	return ViewName
-}
+func (m Model) Name() string { return ViewName }
 
 func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
@@ -46,9 +38,9 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 	}
 }
 
-func LoadNodeStacks(nodeID string) tea.Cmd {
+func LoadStacks(nodeID string) tea.Cmd {
 	return func() tea.Msg {
-		services := docker.GetNodeStacks(nodeID)
+		services := docker.GetStacks(nodeID)
 		return Msg{NodeId: nodeID, Services: services}
 	}
 }
