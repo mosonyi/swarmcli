@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -83,44 +84,79 @@ func GetServiceCount() (int, error) {
 
 // ---------- Swarm Resource Usage ----------
 
+// ---------- Swarm Resource Usage ----------
+
+// GetSwarmCPUUsage returns the total CPU usage percentage of all containers.
 func GetSwarmCPUUsage() (string, error) {
 	c, err := GetClient()
 	if err != nil {
 		return "0%", err
 	}
 
-	stats, err := c.ContainerList(context.Background(), container.ListOptions{})
+	containers, err := c.ContainerList(context.Background(), container.ListOptions{All: true})
 	if err != nil {
 		return "0%", err
 	}
 
-	var cpuTotal float64
-	for _, cont := range stats {
-		// For now we cannot get precise CPU usage via SDK without streaming stats
-		// So we leave as placeholder
-		_ = cont
+	var totalCPU float64
+	for _, cont := range containers {
+		stats, err := c.ContainerStats(context.Background(), cont.ID, false)
+		if err != nil {
+			continue
+		}
+		var s types.Stats
+		if err := json.NewDecoder(stats.Body).Decode(&s); err != nil {
+			stats.Body.Close()
+			continue
+		}
+		stats.Body.Close()
+
+		// Docker calculates CPU % as (cpu_delta / system_cpu_delta) * online_cpus * 100
+		cpuDelta := float64(s.CPUStats.CPUUsage.TotalUsage - s.PreCPUStats.CPUUsage.TotalUsage)
+		systemDelta := float64(s.CPUStats.SystemUsage - s.PreCPUStats.SystemUsage)
+		onlineCPUs := float64(s.CPUStats.OnlineCPUs)
+		if onlineCPUs == 0 {
+			onlineCPUs = float64(len(s.CPUStats.CPUUsage.PercpuUsage))
+		}
+		if systemDelta > 0 && onlineCPUs > 0 {
+			totalCPU += (cpuDelta / systemDelta) * onlineCPUs * 100
+		}
 	}
 
-	return fmt.Sprintf("%.1f%%", cpuTotal), nil
+	return fmt.Sprintf("%.1f%%", totalCPU), nil
 }
 
+// GetSwarmMemUsage returns total memory usage percentage across all containers.
 func GetSwarmMemUsage() (string, error) {
 	c, err := GetClient()
 	if err != nil {
 		return "0%", err
 	}
 
-	stats, err := c.ContainerList(context.Background(), container.ListOptions{})
+	containers, err := c.ContainerList(context.Background(), container.ListOptions{All: true})
 	if err != nil {
 		return "0%", err
 	}
 
-	var memTotal float64
-	for _, cont := range stats {
-		_ = cont
+	var totalMemPercent float64
+	for _, cont := range containers {
+		stats, err := c.ContainerStats(context.Background(), cont.ID, false)
+		if err != nil {
+			continue
+		}
+		var s types.Stats
+		if err := json.NewDecoder(stats.Body).Decode(&s); err != nil {
+			stats.Body.Close()
+			continue
+		}
+		stats.Body.Close()
+
+		if s.MemoryStats.Limit > 0 {
+			totalMemPercent += float64(s.MemoryStats.Usage) / float64(s.MemoryStats.Limit) * 100
+		}
 	}
 
-	return fmt.Sprintf("%.1f%%", memTotal), nil
+	return fmt.Sprintf("%.1f%%", totalMemPercent), nil
 }
 
 // ---------- Docker Version ----------
