@@ -8,3 +8,5 @@
 # Devcontainer metadata
 .devcontainer/*.log
 shared/*
+
+debug.log
