@@ -110,7 +110,7 @@ func GetSwarmCPUUsage() (string, error) {
 		if err != nil {
 			continue
 		}
-		var s types.Stats
+		var s container.Stats
 		if err := json.NewDecoder(stats.Body).Decode(&s); err != nil {
 			stats.Body.Close()
 			continue
@@ -150,7 +150,7 @@ func GetSwarmMemUsage() (string, error) {
 		if err != nil {
 			continue
 		}
-		var s types.Stats
+		var s container.Stats
 		if err := json.NewDecoder(stats.Body).Decode(&s); err != nil {
 			stats.Body.Close()
 			continue

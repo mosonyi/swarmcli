@@ -13,22 +13,6 @@ var (
 	nodeCacheMu   sync.RWMutex
 )
 
-// resolveHostname translates a node ID to its hostname using the cached map.
-func resolveHostname(nodeID string) string {
-	if err := ensureHostnameCache(); err != nil {
-		// fallback gracefully to nodeID if cache isn't ready
-		return nodeID
-	}
-
-	nodeCacheMu.RLock()
-	defer nodeCacheMu.RUnlock()
-
-	if name, ok := nodeCache[nodeID]; ok && name != "" {
-		return name
-	}
-	return nodeID
-}
-
 // ensureHostnameCache lazily initializes the cache once per runtime.
 func ensureHostnameCache() error {
 	nodeCacheOnce.Do(func() {
