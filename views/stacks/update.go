@@ -58,7 +58,7 @@ func (m *Model) buildContent() string {
 		if i == m.stackCursor {
 			cursor = "➜ "
 		}
-		b.WriteString(fmt.Sprintf("%s%s\n", cursor, stack.Name))
+		b.WriteString(fmt.Sprintf("%s%-20s %d services\n", cursor, stack.Name, stack.ServiceCount))
 	}
 
 	m.ensureCursorVisible()

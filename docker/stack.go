@@ -13,15 +13,12 @@ import (
 
 // Stack represents a unique Docker stack.
 type Stack struct {
-	Name string
+	Name         string
+	ServiceCount int
 }
 
-// GetStacks returns all unique stacks, optionally filtered by node.
 func GetStacks(nodeID string) []Stack {
 	c, err := GetClient()
-
-	log.Println("Getting Stacks:")
-
 	if err != nil {
 		fmt.Println("failed to init docker client:", err)
 		return nil
@@ -32,14 +29,12 @@ func GetStacks(nodeID string) []Stack {
 
 	var services []swarmTypes.Service
 	if nodeID == "" {
-		// Fast path: list all services once.
 		services, err = c.ServiceList(ctx, types.ServiceListOptions{})
 		if err != nil {
 			log.Println("failed to list services:", err)
 			return nil
 		}
 	} else {
-		// Slower path: only keep services that have tasks on the given node.
 		tasks, err := c.TaskList(ctx, types.TaskListOptions{
 			Filters: filters.NewArgs(filters.Arg("node", nodeID)),
 		})
@@ -63,19 +58,22 @@ func GetStacks(nodeID string) []Stack {
 		}
 	}
 
-	// Deduplicate stacks
-	stackSet := make(map[string]struct{})
+	// Count services per stack
+	stackCount := make(map[string]int)
 	for _, svc := range services {
 		stack := svc.Spec.Labels["com.docker.stack.namespace"]
 		if stack == "" {
 			stack = "(no-stack)"
 		}
-		stackSet[stack] = struct{}{}
+		stackCount[stack]++
 	}
 
-	stacks := make([]Stack, 0, len(stackSet))
-	for name := range stackSet {
-		stacks = append(stacks, Stack{Name: name})
+	stacks := make([]Stack, 0, len(stackCount))
+	for name, count := range stackCount {
+		stacks = append(stacks, Stack{
+			Name:         name,
+			ServiceCount: count,
+		})
 	}
 
 	sort.Slice(stacks, func(i, j int) bool {
