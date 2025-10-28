@@ -9,7 +9,6 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
-	swarmTypes "github.com/docker/docker/api/types/swarm"
 )
 
 // ---------- Swarm Node / Service Info ----------
@@ -29,9 +28,6 @@ func (s SwarmNode) String() string {
 // ListSwarmNodes returns all swarm nodes.
 func ListSwarmNodes() ([]SwarmNode, error) {
 	c, err := GetClient()
-
-	log.Println("Docker client host:", c.DaemonHost())
-	log.Println("Docker client API version:", c.ClientVersion())
 
 	if err != nil {
 		return nil, err
@@ -87,8 +83,6 @@ func GetServiceCount() (int, error) {
 	}
 	return len(services), nil
 }
-
-// ---------- Swarm Resource Usage ----------
 
 // ---------- Swarm Resource Usage ----------
 
@@ -165,8 +159,6 @@ func GetSwarmMemUsage() (string, error) {
 	return fmt.Sprintf("%.1f%%", totalMemPercent), nil
 }
 
-// ---------- Docker Version ----------
-
 func GetDockerVersion() (string, error) {
 	c, err := GetClient()
 	if err != nil {
@@ -178,36 +170,4 @@ func GetDockerVersion() (string, error) {
 		return "unknown", err
 	}
 	return info.Version, nil
-}
-
-// ---------- Docker Config Commands ----------
-
-func ListConfigs() ([]swarmTypes.Config, error) {
-	c, err := GetClient()
-	if err != nil {
-		return nil, err
-	}
-
-	return c.ConfigList(context.Background(), types.ConfigListOptions{})
-}
-
-func InspectConfig(configID string) (*swarmTypes.Config, error) {
-	c, err := GetClient()
-	if err != nil {
-		return nil, err
-	}
-
-	cfg, _, err := c.ConfigInspectWithRaw(context.Background(), configID)
-	if err != nil {
-		return nil, err
-	}
-	return &cfg, nil
-}
-
-func RemoveConfig(configID string) error {
-	c, err := GetClient()
-	if err != nil {
-		return err
-	}
-	return c.ConfigRemove(context.Background(), configID)
 }
