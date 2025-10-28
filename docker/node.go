@@ -1,100 +1,78 @@
 package docker
 
 import (
+	"context"
 	"fmt"
-	"strings"
+	"log"
+
+	"github.com/docker/docker/api/types"
 )
 
-// ---------- Node/Service Utilities ----------
+// ListSwarmNodes returns all swarm nodes.
+func ListSwarmNodes() ([]SwarmNode, error) {
+	c, err := GetClient()
 
-func GetNodeIDs() ([]string, error) {
-	lines, err := RunDocker("node", "ls", "--format", "{{.ID}}")
 	if err != nil {
 		return nil, err
 	}
-	return strings.Fields(strings.Join(lines, " ")), nil
+
+	nodes, err := c.NodeList(context.Background(), types.NodeListOptions{})
+	if err != nil {
+		log.Println("NodeList error:", err)
+		return nil, err
+	}
+
+	res := make([]SwarmNode, 0, len(nodes))
+	for _, n := range nodes {
+		managerStatus := ""
+		if n.ManagerStatus != nil {
+			managerStatus = string(n.ManagerStatus.Reachability)
+		}
+		res = append(res, SwarmNode{
+			ID:            n.ID,
+			Hostname:      n.Description.Hostname,
+			Status:        string(n.Status.State),
+			Availability:  string(n.Spec.Availability),
+			ManagerStatus: managerStatus,
+		})
+	}
+	return res, nil
+}
+
+func GetNodeIDs() ([]string, error) {
+	c, err := GetClient()
+	if err != nil {
+		return nil, err
+	}
+	defer c.Close()
+
+	nodes, err := c.NodeList(context.Background(), types.NodeListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing nodes: %w", err)
+	}
+
+	ids := make([]string, len(nodes))
+	for i, n := range nodes {
+		ids[i] = n.ID
+	}
+	return ids, nil
 }
 
 func GetNodeIDToHostnameMapFromDocker() (map[string]string, error) {
-	out, err := RunDockerSingle("node", "ls", "--format", "{{.ID}} {{.Hostname}}")
-	if err != nil {
-		return nil, fmt.Errorf("Error getting node hostnames: %v", err)
-	}
-
-	idToName := make(map[string]string)
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	for _, line := range lines {
-		parts := strings.Fields(line)
-		if len(parts) == 2 {
-			idToName[parts[0]] = parts[1]
-		}
-	}
-	return idToName, nil
-}
-
-func GetNodeTaskNames(nodeID string) ([]string, error) {
-	lines, err := RunDocker("node", "ps", nodeID, "--format", "{{.Name}}")
+	c, err := GetClient()
 	if err != nil {
 		return nil, err
 	}
-	return strings.Fields(strings.Join(lines, " ")), nil
-}
+	defer c.Close()
 
-func extractServiceNames(taskNames []string) map[string]struct{} {
-	serviceNames := make(map[string]struct{}, len(taskNames))
-	for _, name := range taskNames {
-		if parts := strings.SplitN(name, ".", 2); len(parts) > 0 && parts[0] != "" {
-			serviceNames[parts[0]] = struct{}{}
-		}
-	}
-	return serviceNames
-}
-
-func GetServiceNameToIDMap() (map[string]string, error) {
-	lines, err := RunDocker("service", "ls", "--format", "{{.ID}} {{.Name}}")
+	nodes, err := c.NodeList(context.Background(), types.NodeListOptions{})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("listing nodes: %w", err)
 	}
 
-	nameToID := make(map[string]string, len(lines))
-	for _, line := range lines {
-		parts := strings.Fields(line)
-		if len(parts) == 2 {
-			nameToID[parts[1]] = parts[0]
-		}
+	m := make(map[string]string, len(nodes))
+	for _, n := range nodes {
+		m[n.ID] = n.Description.Hostname
 	}
-	return nameToID, nil
-}
-
-func inspectStackServices(serviceIDs []string) ([]StackService, error) {
-	if len(serviceIDs) == 0 {
-		return nil, nil
-	}
-
-	args := append([]string{"service", "inspect"}, serviceIDs...)
-	args = append(args, "--format", "{{.ID}} {{ index .Spec.Labels \"com.docker.stack.namespace\" }} {{.Spec.Name}}")
-
-	lines, err := RunDocker(args...)
-	if err != nil {
-		return nil, err
-	}
-
-	unique := make(map[string]struct{})
-	stackServices := make([]StackService, 0, len(lines))
-
-	for _, line := range lines {
-		parts := strings.Fields(line)
-		if len(parts) < 3 {
-			continue
-		}
-		key := parts[1] + "|" + parts[2]
-		if _, exists := unique[key]; !exists {
-			unique[key] = struct{}{}
-			stackServices = append(stackServices, StackService{
-				StackName:   parts[1],
-				ServiceName: parts[2],
-			})
-		}
-	}
-	return stackServices, nil
+	return m, nil
 }

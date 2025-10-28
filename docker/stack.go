@@ -1,112 +1,83 @@
 package docker
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"sort"
+
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/filters"
+	swarmTypes "github.com/docker/docker/api/types/swarm"
 )
 
-// StackService represents a single service inside a stack on a node.
-type StackService struct {
-	NodeID      string // node hostname or ID
-	StackName   string // stack namespace
-	ServiceName string // service name
+// Stack represents a unique Docker stack.
+type Stack struct {
+	Name         string
+	ServiceCount int
 }
 
-// GetStacks returns stacks across all nodes if nodeID is empty,
-// or stacks only for the given node.
-func GetStacks(nodeID string) []StackService {
+func GetStacks(nodeID string) []Stack {
+	c, err := GetClient()
+	if err != nil {
+		fmt.Println("failed to init docker client:", err)
+		return nil
+	}
+	defer c.Close()
+
+	ctx := context.Background()
+
+	var services []swarmTypes.Service
 	if nodeID == "" {
-		return getStacksAllNodes()
-	}
-	return getStacksForNode(nodeID)
-}
+		services, err = c.ServiceList(ctx, types.ServiceListOptions{})
+		if err != nil {
+			log.Println("failed to list services:", err)
+			return nil
+		}
+	} else {
+		tasks, err := c.TaskList(ctx, types.TaskListOptions{
+			Filters: filters.NewArgs(filters.Arg("node", nodeID)),
+		})
+		if err != nil {
+			log.Println("failed to list tasks for node:", nodeID, ":", err)
+			return nil
+		}
 
-// getStacksForNode retrieves stack services for a specific node.
-func getStacksForNode(nodeID string) []StackService {
-	taskNames, err := GetNodeTaskNames(nodeID)
-	if err != nil {
-		return nil
-	}
-
-	serviceIDs, err := resolveServiceIDs(taskNames)
-	if err != nil || len(serviceIDs) == 0 {
-		return nil
-	}
-
-	stackServices, err := inspectStackServices(serviceIDs)
-	if err != nil {
-		return nil
-	}
-
-	nodeName := resolveHostname(nodeID)
-	for i := range stackServices {
-		stackServices[i].NodeID = nodeName
-	}
-
-	sortStackServices(stackServices)
-	return stackServices
-}
-
-// getStacksAllNodes retrieves all stacks across all nodes.
-func getStacksAllNodes() []StackService {
-	nodeIDs, err := GetNodeIDs()
-	if err != nil {
-		return nil
-	}
-
-	seen := make(map[string]struct{})
-	var all []StackService
-
-	for _, nodeID := range nodeIDs {
-		for _, s := range getStacksForNode(nodeID) {
-			s.NodeID = resolveHostname(s.NodeID)
-
-			key := fmt.Sprintf("%s|%s|%s", s.StackName, s.ServiceName, s.NodeID)
-			if _, exists := seen[key]; exists {
-				continue
+		serviceIDs := make(map[string]struct{})
+		for _, t := range tasks {
+			if t.ServiceID != "" {
+				serviceIDs[t.ServiceID] = struct{}{}
 			}
-			seen[key] = struct{}{}
-			all = append(all, s)
+		}
+
+		for id := range serviceIDs {
+			svc, _, err := c.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
+			if err == nil {
+				services = append(services, svc)
+			}
 		}
 	}
 
-	sortStackServices(all)
-	return all
-}
-
-// --- helpers ---
-
-// resolveServiceIDs maps task names → service IDs.
-func resolveServiceIDs(taskNames []string) ([]string, error) {
-	serviceNames := extractServiceNames(taskNames)
-	if len(serviceNames) == 0 {
-		return nil, nil
-	}
-
-	nameToID, err := GetServiceNameToIDMap()
-	if err != nil {
-		return nil, err
-	}
-
-	serviceIDs := make([]string, 0, len(serviceNames))
-	for name := range serviceNames {
-		if id, ok := nameToID[name]; ok {
-			serviceIDs = append(serviceIDs, id)
+	// Count services per stack
+	stackCount := make(map[string]int)
+	for _, svc := range services {
+		stack := svc.Spec.Labels["com.docker.stack.namespace"]
+		if stack == "" {
+			stack = "(no-stack)"
 		}
+		stackCount[stack]++
 	}
-	return serviceIDs, nil
-}
 
-// sortStackServices sorts stack services by stack, then node, then service name.
-func sortStackServices(stacks []StackService) {
+	stacks := make([]Stack, 0, len(stackCount))
+	for name, count := range stackCount {
+		stacks = append(stacks, Stack{
+			Name:         name,
+			ServiceCount: count,
+		})
+	}
+
 	sort.Slice(stacks, func(i, j int) bool {
-		a, b := stacks[i], stacks[j]
-		if a.StackName != b.StackName {
-			return a.StackName < b.StackName
-		}
-		if a.NodeID != b.NodeID {
-			return a.NodeID < b.NodeID
-		}
-		return a.ServiceName < b.ServiceName
+		return stacks[i].Name < stacks[j].Name
 	})
+	return stacks
 }

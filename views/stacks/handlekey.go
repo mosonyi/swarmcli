@@ -20,7 +20,7 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "q", "esc":
 		m.Visible = false
 	case "j", "down":
-		if m.stackCursor < len(m.stackServices)-1 {
+		if m.stackCursor < len(m.stacks)-1 {
 			m.stackCursor++
 			m.viewport.SetContent(m.buildContent())
 		}
@@ -34,12 +34,12 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "pgdown":
 		m.viewport.ScrollDown(m.viewport.Height)
 	case "enter":
-		if m.stackCursor < len(m.stackServices) {
-			serviceID := m.stackServices[m.stackCursor]
+		if m.stackCursor < len(m.stacks) {
+			serviceID := m.stacks[m.stackCursor]
 			return m, func() tea.Msg {
 				return view.NavigateToMsg{
 					ViewName: logsview.ViewName,
-					Payload:  serviceID.ServiceName,
+					Payload:  serviceID.Name,
 				}
 			}
 		}
@@ -57,8 +57,8 @@ func refreshStacksCmd(nodeID string) tea.Cmd {
 		// Fetch stacks for node or all nodes
 		stacks := docker.GetStacks(nodeID)
 		return Msg{
-			NodeId:   nodeID,
-			Services: stacks,
+			NodeId: nodeID,
+			Stacks: stacks,
 		}
 	}
 }

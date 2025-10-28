@@ -2,6 +2,7 @@ package app
 
 import (
 	"swarmcli/commands"
+	"swarmcli/utils/log"
 	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"
 	logsview "swarmcli/views/logs"
@@ -26,6 +27,7 @@ func registerView(name string, factory view.Factory) {
 
 // Init should be called once at the start of the application to register all views.
 func Init() {
+	log.InitDebug()
 	commands.Init()
 
 	registerView(helpview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {

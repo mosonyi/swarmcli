@@ -12,10 +12,10 @@ type Model struct {
 	viewport viewport.Model
 	Visible  bool
 
-	nodeId        string
-	stackCursor   int
-	stackServices []docker.StackService
-	ready         bool
+	nodeId      string
+	stackCursor int
+	stacks      []docker.Stack
+	ready       bool
 }
 
 func New(width, height int) Model {
@@ -42,7 +42,7 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 
 func LoadStacks(nodeID string) tea.Cmd {
 	return func() tea.Msg {
-		services := docker.GetStacks(nodeID)
-		return Msg{NodeId: nodeID, Services: services}
+		stacks := docker.GetStacks(nodeID)
+		return Msg{NodeId: nodeID, Stacks: stacks}
 	}
 }
