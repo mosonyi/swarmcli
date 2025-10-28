@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/docker/docker/api/types"
@@ -28,12 +29,17 @@ func (s SwarmNode) String() string {
 // ListSwarmNodes returns all swarm nodes.
 func ListSwarmNodes() ([]SwarmNode, error) {
 	c, err := GetClient()
+
+	log.Println("Docker client host:", c.DaemonHost())
+	log.Println("Docker client API version:", c.ClientVersion())
+
 	if err != nil {
 		return nil, err
 	}
 
 	nodes, err := c.NodeList(context.Background(), types.NodeListOptions{})
 	if err != nil {
+		log.Println("NodeList error:", err)
 		return nil, err
 	}
 
