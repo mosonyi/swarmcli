@@ -3,129 +3,83 @@ package docker
 import (
 	"context"
 	"fmt"
+	"log"
 	"sort"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
+	swarmTypes "github.com/docker/docker/api/types/swarm"
 )
 
-// GetStacks returns stacks across all nodes if nodeID is empty,
-// or stacks only for the given node.
-func GetStacks(nodeID string) []StackService {
+// Stack represents a unique Docker stack.
+type Stack struct {
+	Name string
+}
+
+// GetStacks returns all unique stacks, optionally filtered by node.
+func GetStacks(nodeID string) []Stack {
+	c, err := GetClient()
+
+	log.Println("Getting Stacks:")
+
+	if err != nil {
+		fmt.Println("failed to init docker client:", err)
+		return nil
+	}
+	defer c.Close()
+
+	ctx := context.Background()
+
+	var services []swarmTypes.Service
 	if nodeID == "" {
-		return getStacksAllNodes()
-	}
-	return getStacksForNode(nodeID)
-}
-
-func getStacksForNode(nodeID string) []StackService {
-	c, err := GetClient()
-	if err != nil {
-		fmt.Println("failed to init docker client:", err)
-		return nil
-	}
-	defer c.Close()
-
-	ctx := context.Background()
-	taskFilter := filters.NewArgs()
-	taskFilter.Add("node", nodeID)
-
-	tasks, err := c.TaskList(ctx, types.TaskListOptions{Filters: taskFilter})
-	if err != nil {
-		fmt.Println("failed to list tasks for node", nodeID, ":", err)
-		return nil
-	}
-
-	serviceIDs := make(map[string]struct{})
-	for _, t := range tasks {
-		if t.ServiceID != "" {
-			serviceIDs[t.ServiceID] = struct{}{}
-		}
-	}
-
-	var stackServices []StackService
-	for id := range serviceIDs {
-		svc, _, err := c.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
+		// Fast path: list all services once.
+		services, err = c.ServiceList(ctx, types.ServiceListOptions{})
 		if err != nil {
-			continue
+			log.Println("failed to list services:", err)
+			return nil
 		}
+	} else {
+		// Slower path: only keep services that have tasks on the given node.
+		tasks, err := c.TaskList(ctx, types.TaskListOptions{
+			Filters: filters.NewArgs(filters.Arg("node", nodeID)),
+		})
+		if err != nil {
+			log.Println("failed to list tasks for node:", nodeID, ":", err)
+			return nil
+		}
+
+		serviceIDs := make(map[string]struct{})
+		for _, t := range tasks {
+			if t.ServiceID != "" {
+				serviceIDs[t.ServiceID] = struct{}{}
+			}
+		}
+
+		for id := range serviceIDs {
+			svc, _, err := c.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
+			if err == nil {
+				services = append(services, svc)
+			}
+		}
+	}
+
+	// Deduplicate stacks
+	stackSet := make(map[string]struct{})
+	for _, svc := range services {
 		stack := svc.Spec.Labels["com.docker.stack.namespace"]
 		if stack == "" {
 			stack = "(no-stack)"
 		}
-		stackServices = append(stackServices, StackService{
-			NodeID:      resolveHostname(nodeID),
-			StackName:   stack,
-			ServiceName: svc.Spec.Name,
-		})
+		stackSet[stack] = struct{}{}
 	}
 
-	sortStackServices(stackServices)
-	return stackServices
-}
-
-func getStacksAllNodes() []StackService {
-	c, err := GetClient()
-	if err != nil {
-		fmt.Println("failed to init docker client:", err)
-		return nil
-	}
-	defer c.Close()
-
-	ctx := context.Background()
-	tasks, err := c.TaskList(ctx, types.TaskListOptions{})
-	if err != nil {
-		fmt.Println("failed to list all tasks:", err)
-		return nil
+	stacks := make([]Stack, 0, len(stackSet))
+	for name := range stackSet {
+		stacks = append(stacks, Stack{Name: name})
 	}
 
-	serviceIDs := make(map[string]struct{})
-	for _, t := range tasks {
-		if t.ServiceID != "" {
-			serviceIDs[t.ServiceID] = struct{}{}
-		}
-	}
-
-	var all []StackService
-	seen := make(map[string]struct{})
-
-	for id := range serviceIDs {
-		svc, _, err := c.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
-		if err != nil {
-			continue
-		}
-		stack := svc.Spec.Labels["com.docker.stack.namespace"]
-		if stack == "" {
-			stack = "(no-stack)"
-		}
-
-		nodeName := resolveHostname(svc.Spec.Name)
-		key := fmt.Sprintf("%s|%s|%s", stack, svc.Spec.Name, nodeName)
-		if _, exists := seen[key]; exists {
-			continue
-		}
-		seen[key] = struct{}{}
-
-		all = append(all, StackService{
-			NodeID:      nodeName,
-			StackName:   stack,
-			ServiceName: svc.Spec.Name,
-		})
-	}
-
-	sortStackServices(all)
-	return all
-}
-
-func sortStackServices(stacks []StackService) {
 	sort.Slice(stacks, func(i, j int) bool {
-		a, b := stacks[i], stacks[j]
-		if a.StackName != b.StackName {
-			return a.StackName < b.StackName
-		}
-		if a.NodeID != b.NodeID {
-			return a.NodeID < b.NodeID
-		}
-		return a.ServiceName < b.ServiceName
+		return stacks[i].Name < stacks[j].Name
 	})
+	return stacks
 }

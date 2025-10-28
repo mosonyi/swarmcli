@@ -40,7 +40,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 
 func (m *Model) SetContent(msg Msg) {
 	m.nodeId = msg.NodeId
-	m.stackServices = msg.Services
+	m.stacks = msg.Stacks
 	m.stackCursor = 0
 
 	if !m.ready {
@@ -53,12 +53,12 @@ func (m *Model) SetContent(msg Msg) {
 
 func (m *Model) buildContent() string {
 	var b strings.Builder
-	for i, stack := range m.stackServices {
+	for i, stack := range m.stacks {
 		cursor := "  "
 		if i == m.stackCursor {
 			cursor = "➜ "
 		}
-		b.WriteString(fmt.Sprintf("%s%-12s %s / %s\n", cursor, stack.NodeID, stack.StackName, stack.ServiceName))
+		b.WriteString(fmt.Sprintf("%s%s\n", cursor, stack.Name))
 	}
 
 	m.ensureCursorVisible()
