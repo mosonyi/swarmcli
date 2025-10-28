@@ -18,6 +18,7 @@ func GetServiceNameToIDMap() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer c.Close()
 
 	services, err := c.ServiceList(context.Background(), types.ServiceListOptions{})
 	if err != nil {
@@ -29,36 +30,4 @@ func GetServiceNameToIDMap() (map[string]string, error) {
 		m[s.Spec.Name] = s.ID
 	}
 	return m, nil
-}
-
-func inspectStackServices(serviceIDs []string) ([]StackService, error) {
-	if len(serviceIDs) == 0 {
-		return nil, nil
-	}
-
-	c, err := GetClient()
-	if err != nil {
-		return nil, err
-	}
-
-	ctx := context.Background()
-	stackServices := make([]StackService, 0, len(serviceIDs))
-	unique := make(map[string]struct{})
-
-	for _, id := range serviceIDs {
-		svc, _, err := c.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
-		if err != nil {
-			continue
-		}
-		stack := svc.Spec.Labels["com.docker.stack.namespace"]
-		key := stack + "|" + svc.Spec.Name
-		if _, exists := unique[key]; !exists {
-			unique[key] = struct{}{}
-			stackServices = append(stackServices, StackService{
-				StackName:   stack,
-				ServiceName: svc.Spec.Name,
-			})
-		}
-	}
-	return stackServices, nil
 }

@@ -7,7 +7,6 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/client"
 )
 
 // GetStacks returns stacks across all nodes if nodeID is empty,
@@ -19,26 +18,24 @@ func GetStacks(nodeID string) []StackService {
 	return getStacksForNode(nodeID)
 }
 
-// getStacksForNode retrieves stack services for a specific node via the Docker SDK.
 func getStacksForNode(nodeID string) []StackService {
-	ctx := context.Background()
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	c, err := GetClient()
 	if err != nil {
 		fmt.Println("failed to init docker client:", err)
 		return nil
 	}
-	defer cli.Close()
+	defer c.Close()
 
-	// Filter tasks that belong to this node
+	ctx := context.Background()
 	taskFilter := filters.NewArgs()
 	taskFilter.Add("node", nodeID)
-	tasks, err := cli.TaskList(ctx, types.TaskListOptions{Filters: taskFilter})
+
+	tasks, err := c.TaskList(ctx, types.TaskListOptions{Filters: taskFilter})
 	if err != nil {
 		fmt.Println("failed to list tasks for node", nodeID, ":", err)
 		return nil
 	}
 
-	// Collect unique service IDs
 	serviceIDs := make(map[string]struct{})
 	for _, t := range tasks {
 		if t.ServiceID != "" {
@@ -46,26 +43,19 @@ func getStacksForNode(nodeID string) []StackService {
 		}
 	}
 
-	if len(serviceIDs) == 0 {
-		return nil
-	}
-
-	// Inspect each service to get stack info
 	var stackServices []StackService
 	for id := range serviceIDs {
-		svc, _, err := cli.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
+		svc, _, err := c.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
 		if err != nil {
 			continue
 		}
-
-		stackName := svc.Spec.Labels["com.docker.stack.namespace"]
-		if stackName == "" {
-			stackName = "(no-stack)"
+		stack := svc.Spec.Labels["com.docker.stack.namespace"]
+		if stack == "" {
+			stack = "(no-stack)"
 		}
-
 		stackServices = append(stackServices, StackService{
 			NodeID:      resolveHostname(nodeID),
-			StackName:   stackName,
+			StackName:   stack,
 			ServiceName: svc.Spec.Name,
 		})
 	}
@@ -74,17 +64,16 @@ func getStacksForNode(nodeID string) []StackService {
 	return stackServices
 }
 
-// getStacksAllNodes retrieves all stacks across all nodes via the Docker SDK.
 func getStacksAllNodes() []StackService {
-	ctx := context.Background()
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	c, err := GetClient()
 	if err != nil {
 		fmt.Println("failed to init docker client:", err)
 		return nil
 	}
-	defer cli.Close()
+	defer c.Close()
 
-	tasks, err := cli.TaskList(ctx, types.TaskListOptions{})
+	ctx := context.Background()
+	tasks, err := c.TaskList(ctx, types.TaskListOptions{})
 	if err != nil {
 		fmt.Println("failed to list all tasks:", err)
 		return nil
@@ -101,19 +90,17 @@ func getStacksAllNodes() []StackService {
 	seen := make(map[string]struct{})
 
 	for id := range serviceIDs {
-		svc, _, err := cli.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
+		svc, _, err := c.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
 		if err != nil {
 			continue
 		}
-
-		stackName := svc.Spec.Labels["com.docker.stack.namespace"]
-		if stackName == "" {
-			stackName = "(no-stack)"
+		stack := svc.Spec.Labels["com.docker.stack.namespace"]
+		if stack == "" {
+			stack = "(no-stack)"
 		}
 
-		nodeName := resolveHostname(svc.Spec.Name) // fallback, if node info unavailable
-
-		key := fmt.Sprintf("%s|%s|%s", stackName, svc.Spec.Name, nodeName)
+		nodeName := resolveHostname(svc.Spec.Name)
+		key := fmt.Sprintf("%s|%s|%s", stack, svc.Spec.Name, nodeName)
 		if _, exists := seen[key]; exists {
 			continue
 		}
@@ -121,7 +108,7 @@ func getStacksAllNodes() []StackService {
 
 		all = append(all, StackService{
 			NodeID:      nodeName,
-			StackName:   stackName,
+			StackName:   stack,
 			ServiceName: svc.Spec.Name,
 		})
 	}
@@ -130,9 +117,6 @@ func getStacksAllNodes() []StackService {
 	return all
 }
 
-// --- helpers ---
-
-// sortStackServices sorts stack services by stack, then node, then service name.
 func sortStackServices(stacks []StackService) {
 	sort.Slice(stacks, func(i, j int) bool {
 		a, b := stacks[i], stacks[j]
