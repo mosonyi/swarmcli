@@ -13,21 +13,21 @@ var (
 	dockerClientErr  error
 )
 
-// GetClient returns a singleton Docker client.
+// GetClient returns a singleton Docker client that respects the environment's current Docker context.
 func GetClient() (*client.Client, error) {
 	dockerClientOnce.Do(func() {
 		var err error
-		dockerClient, err = client.NewClientWithOpts(client.FromEnv)
+		// This automatically uses DOCKER_HOST, DOCKER_TLS_VERIFY, DOCKER_CERT_PATH etc.
+		dockerClient, err = client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 		if err != nil {
 			dockerClientErr = err
 			return
 		}
-		dockerClient.NegotiateAPIVersion(context.Background())
 	})
 	return dockerClient, dockerClientErr
 }
 
-// Ping checks connection to the Docker daemon.
+// Ping checks if the Docker daemon is reachable.
 func Ping() error {
 	c, err := GetClient()
 	if err != nil {
