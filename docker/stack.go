@@ -1,16 +1,14 @@
 package docker
 
 import (
+	"context"
 	"fmt"
 	"sort"
-)
 
-// StackService represents a single service inside a stack on a node.
-type StackService struct {
-	NodeID      string // node hostname or ID
-	StackName   string // stack namespace
-	ServiceName string // service name
-}
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/client"
+)
 
 // GetStacks returns stacks across all nodes if nodeID is empty,
 // or stacks only for the given node.
@@ -21,53 +19,111 @@ func GetStacks(nodeID string) []StackService {
 	return getStacksForNode(nodeID)
 }
 
-// getStacksForNode retrieves stack services for a specific node.
+// getStacksForNode retrieves stack services for a specific node via the Docker SDK.
 func getStacksForNode(nodeID string) []StackService {
-	taskNames, err := GetNodeTaskNames(nodeID)
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
+		fmt.Println("failed to init docker client:", err)
 		return nil
 	}
+	defer cli.Close()
 
-	serviceIDs, err := resolveServiceIDs(taskNames)
-	if err != nil || len(serviceIDs) == 0 {
-		return nil
-	}
-
-	stackServices, err := inspectStackServices(serviceIDs)
+	// Filter tasks that belong to this node
+	taskFilter := filters.NewArgs()
+	taskFilter.Add("node", nodeID)
+	tasks, err := cli.TaskList(ctx, types.TaskListOptions{Filters: taskFilter})
 	if err != nil {
+		fmt.Println("failed to list tasks for node", nodeID, ":", err)
 		return nil
 	}
 
-	nodeName := resolveHostname(nodeID)
-	for i := range stackServices {
-		stackServices[i].NodeID = nodeName
+	// Collect unique service IDs
+	serviceIDs := make(map[string]struct{})
+	for _, t := range tasks {
+		if t.ServiceID != "" {
+			serviceIDs[t.ServiceID] = struct{}{}
+		}
+	}
+
+	if len(serviceIDs) == 0 {
+		return nil
+	}
+
+	// Inspect each service to get stack info
+	var stackServices []StackService
+	for id := range serviceIDs {
+		svc, _, err := cli.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
+		if err != nil {
+			continue
+		}
+
+		stackName := svc.Spec.Labels["com.docker.stack.namespace"]
+		if stackName == "" {
+			stackName = "(no-stack)"
+		}
+
+		stackServices = append(stackServices, StackService{
+			NodeID:      resolveHostname(nodeID),
+			StackName:   stackName,
+			ServiceName: svc.Spec.Name,
+		})
 	}
 
 	sortStackServices(stackServices)
 	return stackServices
 }
 
-// getStacksAllNodes retrieves all stacks across all nodes.
+// getStacksAllNodes retrieves all stacks across all nodes via the Docker SDK.
 func getStacksAllNodes() []StackService {
-	nodeIDs, err := GetNodeIDs()
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
+		fmt.Println("failed to init docker client:", err)
+		return nil
+	}
+	defer cli.Close()
+
+	tasks, err := cli.TaskList(ctx, types.TaskListOptions{})
+	if err != nil {
+		fmt.Println("failed to list all tasks:", err)
 		return nil
 	}
 
-	seen := make(map[string]struct{})
-	var all []StackService
-
-	for _, nodeID := range nodeIDs {
-		for _, s := range getStacksForNode(nodeID) {
-			s.NodeID = resolveHostname(s.NodeID)
-
-			key := fmt.Sprintf("%s|%s|%s", s.StackName, s.ServiceName, s.NodeID)
-			if _, exists := seen[key]; exists {
-				continue
-			}
-			seen[key] = struct{}{}
-			all = append(all, s)
+	serviceIDs := make(map[string]struct{})
+	for _, t := range tasks {
+		if t.ServiceID != "" {
+			serviceIDs[t.ServiceID] = struct{}{}
 		}
+	}
+
+	var all []StackService
+	seen := make(map[string]struct{})
+
+	for id := range serviceIDs {
+		svc, _, err := cli.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
+		if err != nil {
+			continue
+		}
+
+		stackName := svc.Spec.Labels["com.docker.stack.namespace"]
+		if stackName == "" {
+			stackName = "(no-stack)"
+		}
+
+		nodeName := resolveHostname(svc.Spec.Name) // fallback, if node info unavailable
+
+		key := fmt.Sprintf("%s|%s|%s", stackName, svc.Spec.Name, nodeName)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+
+		all = append(all, StackService{
+			NodeID:      nodeName,
+			StackName:   stackName,
+			ServiceName: svc.Spec.Name,
+		})
 	}
 
 	sortStackServices(all)
@@ -75,27 +131,6 @@ func getStacksAllNodes() []StackService {
 }
 
 // --- helpers ---
-
-// resolveServiceIDs maps task names → service IDs.
-func resolveServiceIDs(taskNames []string) ([]string, error) {
-	serviceNames := extractServiceNames(taskNames)
-	if len(serviceNames) == 0 {
-		return nil, nil
-	}
-
-	nameToID, err := GetServiceNameToIDMap()
-	if err != nil {
-		return nil, err
-	}
-
-	serviceIDs := make([]string, 0, len(serviceNames))
-	for name := range serviceNames {
-		if id, ok := nameToID[name]; ok {
-			serviceIDs = append(serviceIDs, id)
-		}
-	}
-	return serviceIDs, nil
-}
 
 // sortStackServices sorts stack services by stack, then node, then service name.
 func sortStackServices(stacks []StackService) {

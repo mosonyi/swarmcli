@@ -33,10 +33,10 @@ func (m Model) Init() tea.Cmd {
 
 func LoadStatus() tea.Cmd {
 	return func() tea.Msg {
-		cpu := docker.GetSwarmCPUUsage()
-		mem := docker.GetSwarmMemUsage()
-		containers := docker.GetContainerCount()
-		services := docker.GetServiceCount()
+		cpu, _ := docker.GetSwarmCPUUsage()
+		mem, _ := docker.GetSwarmMemUsage()
+		containers, _ := docker.GetContainerCount()
+		services, _ := docker.GetServiceCount()
 
 		host, _ := os.Hostname()
 		return Msg{
