@@ -53,12 +53,27 @@ func (m *Model) SetContent(msg Msg) {
 
 func (m *Model) buildContent() string {
 	var b strings.Builder
+
+	// Determine max stack name length
+	maxLen := len("Stack Name") // at least the header length
+	for _, stack := range m.stacks {
+		if l := len(stack.Name); l > maxLen {
+			maxLen = l
+		}
+	}
+	padding := maxLen + 2 // add some extra space
+
+	// Header
+	b.WriteString(fmt.Sprintf("%-*s %s\n", padding, "Stack Name", "Services"))
+	b.WriteString(strings.Repeat("-", padding+8) + "\n") // underline
+
+	// Stack rows
 	for i, stack := range m.stacks {
 		cursor := "  "
 		if i == m.stackCursor {
 			cursor = "➜ "
 		}
-		b.WriteString(fmt.Sprintf("%s%-20s %d services\n", cursor, stack.Name, stack.ServiceCount))
+		b.WriteString(fmt.Sprintf("%s%-*s %d\n", cursor, padding, stack.Name, stack.ServiceCount))
 	}
 
 	m.ensureCursorVisible()
