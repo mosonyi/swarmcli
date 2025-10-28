@@ -1,4 +1,4 @@
-package docker
+package node
 
 import (
 	"swarmcli/commands/api"
