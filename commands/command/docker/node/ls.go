@@ -1,6 +1,7 @@
 package node
 
 import (
+	"swarmcli/args"
 	"swarmcli/registry"
 	nodesview "swarmcli/views/nodes"
 
@@ -13,7 +14,7 @@ type DockerNodeLs struct{}
 func (DockerNodeLs) Name() string        { return "docker node ls" }
 func (DockerNodeLs) Description() string { return "List all Docker nodes" }
 
-func (DockerNodeLs) Execute(ctx any, args []string) tea.Cmd {
+func (DockerNodeLs) Execute(ctx any, args args.Args) tea.Cmd {
 	return func() tea.Msg {
 		return view.NavigateToMsg{
 			ViewName: nodesview.ViewName,

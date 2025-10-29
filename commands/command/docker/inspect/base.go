@@ -5,6 +5,7 @@ import (
 	"path"
 	"runtime"
 	"strings"
+	"swarmcli/args"
 	"swarmcli/commands/api"
 	"swarmcli/docker"
 	inspectview "swarmcli/views/inspect"
@@ -73,7 +74,7 @@ func (c DockerInspectBase) DescriptionText() string {
 	return c.Description
 }
 
-func (c DockerInspectBase) Execute(ctx api.Context, args []string) tea.Cmd {
+func (c DockerInspectBase) Execute(ctx api.Context, args args.Args) tea.Cmd {
 	return func() tea.Msg {
 		if c.CommandName == "" || c.Type == "" || c.Type == "unknown" {
 			tmp := c

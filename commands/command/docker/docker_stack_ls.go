@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"swarmcli/args"
 	"swarmcli/registry"
 	stacksview "swarmcli/views/stacks"
 
@@ -13,7 +14,7 @@ type DockerStackLs struct{}
 func (DockerStackLs) Name() string        { return "docker stack ls" }
 func (DockerStackLs) Description() string { return "List all Docker stacks" }
 
-func (DockerStackLs) Execute(ctx any, args []string) tea.Cmd {
+func (DockerStackLs) Execute(ctx any, args args.Args) tea.Cmd {
 	return func() tea.Msg {
 		return view.NavigateToMsg{
 			ViewName: stacksview.ViewName,

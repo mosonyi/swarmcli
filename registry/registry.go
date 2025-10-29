@@ -2,6 +2,7 @@ package registry
 
 import (
 	"strings"
+	"swarmcli/args"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -9,7 +10,7 @@ import (
 type Command interface {
 	Name() string
 	Description() string
-	Execute(ctx any, args []string) tea.Cmd
+	Execute(ctx any, args args.Args) tea.Cmd
 }
 
 var apiRegistry = map[string]Command{}
