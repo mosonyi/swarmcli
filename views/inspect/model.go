@@ -7,67 +7,70 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-type treeNode struct {
+const ViewName = "inspect"
+
+type Node struct {
 	Key      string
-	Value    any
-	Children []*treeNode
+	Raw      any
+	ValueStr string
+	Children []*Node
+	Parent   *Node
+	Expanded bool
+	Matches  bool
+	Depth    int
 	Path     string
 }
 
 type Model struct {
-	viewport      viewport.Model
-	Visible       bool
-	searchTerm    string
-	searchIndex   int
-	searchMatches []int
-	mode          string // "normal", "search"
-	inspectRoot   *treeNode
-	expanded      map[string]bool
-	inspectLines  string
-	ready         bool
-	title         string
+	viewport    viewport.Model
+	Visible     []*Node // flattened visible nodes (according to expanded/filter)
+	Root        *Node
+	Cursor      int
+	Title       string
+	SearchTerm  string
+	searchMode  bool
+	searchIndex int
+	ready       bool
+	width       int
+	height      int
 }
 
 func New(width, height int) Model {
 	vp := viewport.New(width, height)
+	vp.SetContent("")
 	return Model{
 		viewport: vp,
-		mode:     "normal",
-		expanded: make(map[string]bool),
+		Title:    "",
+		ready:    false,
+		width:    width,
+		height:   height,
 	}
 }
 
-// SetTitle sets the view title
-func (m *Model) SetTitle(title string) {
-	m.title = title
+// LoadInspectItem returns a cmd that sends a Msg(title, json)
+func LoadInspectItem(title, jsonStr string) tea.Cmd {
+	return func() tea.Msg { return Msg{Title: title, Content: jsonStr} }
 }
 
-func (m Model) Init() tea.Cmd {
-	return nil
-}
+func (m Model) Init() tea.Cmd { return nil }
 
-func (m Model) Name() string {
-	return ViewName
-}
+func (m Model) Name() string { return ViewName }
 
 func (m Model) ShortHelpItems() []helpbar.HelpEntry {
-	if m.mode == "search" {
+	if m.searchMode {
 		return []helpbar.HelpEntry{
-			{Key: "enter", Desc: "confirm"},
+			{Key: "enter", Desc: "apply"},
 			{Key: "esc", Desc: "cancel"},
-			{Key: "n/N", Desc: "next/prev"},
 		}
 	}
 	return []helpbar.HelpEntry{
 		{Key: "/", Desc: "search"},
-		{Key: "n/N", Desc: "next/prev"},
+		{Key: "space", Desc: "toggle"},
+		{Key: "← →", Desc: "collapse/expand"},
+		{Key: "j/k", Desc: "down/up"},
+		{Key: "n/N", Desc: "next/prev match"},
 		{Key: "q", Desc: "close"},
-		{Key: "space", Desc: "expand/collapse"},
 	}
 }
 
-func LoadInspectItem(lines string) tea.Cmd {
-	return func() tea.Msg {
-		return Msg(lines)
-	}
-}
+func (m *Model) SetTitle(t string) { m.Title = t }

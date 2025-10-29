@@ -6,22 +6,20 @@ import (
 )
 
 func (m Model) View() string {
-	if !m.Visible {
+	if m.Root == nil && !m.ready {
 		return ""
 	}
-
-	header := ""
-	if m.title != "" {
-		header = m.title
-	} else {
-		header = fmt.Sprintf("Inspecting (%s)", m.mode)
+	if m.Title == "" {
+		if m.searchMode {
+			m.Title = fmt.Sprintf("Inspecting (search: %s)", m.SearchTerm)
+		} else {
+			m.Title = "Inspecting"
+		}
 	}
-
-	if m.mode == "search" {
-		header += fmt.Sprintf(" - Search: %s", m.searchTerm)
+	header := m.Title
+	if m.searchMode {
+		header = fmt.Sprintf("%s  (type to search, enter to apply, esc to cancel)", header)
 	}
-
-	return styles.BorderStyle.Render(
-		fmt.Sprintf("%s\n\n%s[press q or esc to go back, / to search]", header, m.viewport.View()),
-	)
+	out := fmt.Sprintf("%s\n\n%s[press q or esc to go back, / to search]", header, m.viewport.View())
+	return styles.BorderStyle.Render(out)
 }

@@ -2,7 +2,7 @@ package app
 
 import (
 	"fmt"
-	"swarmcli/utils/log"
+	l "swarmcli/utils/log"
 	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"
 	logsview "swarmcli/views/logs"
@@ -28,7 +28,7 @@ func registerView(name string, factory view.Factory) {
 
 // Init should be called once at the start of the application to register all views.
 func Init() {
-	log.InitDebug()
+	l.InitDebug()
 
 	for _, cmd := range registry.All() {
 		fmt.Println("-", cmd.Name(), "→", cmd.Description())
@@ -41,27 +41,16 @@ func Init() {
 	registerView(logsview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		return logsview.New(w, h), logsview.Load(payload.(string))
 	})
+
 	registerView(inspectview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
-		m := inspectview.New(w, h)
+		data, _ := payload.(map[string]interface{})
+		title, _ := data["title"].(string)
+		jsonStr, _ := data["json"].(string)
 
-		data, ok := payload.(map[string]interface{})
-		if !ok {
-			// fallback: just show empty content
-			return m, inspectview.LoadInspectItem("Invalid payload")
-		}
-
-		jsonStr, ok := data["json"].(string)
-		if !ok {
-			return m, inspectview.LoadInspectItem("Invalid payload: missing 'json'")
-		}
-
-		// Optional: store title in the view if you want to show it in the header
-		if title, ok := data["title"].(string); ok {
-			m.SetTitle(title)
-		}
-
-		return m, inspectview.LoadInspectItem(jsonStr)
+		v := inspectview.New(w, h)
+		return v, inspectview.LoadInspectItem(title, jsonStr)
 	})
+
 	registerView(nodesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		return nodesview.New(w, h), nodesview.LoadNodes()
 	})
