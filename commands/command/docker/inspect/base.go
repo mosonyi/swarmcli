@@ -1,12 +1,12 @@
 package inspect
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"runtime"
 	"strings"
 	"swarmcli/args"
-	"swarmcli/commands/api"
 	"swarmcli/docker"
 	inspectview "swarmcli/views/inspect"
 	"swarmcli/views/view"
@@ -17,13 +17,16 @@ import (
 type DockerInspectBase struct {
 	Type        docker.InspectType
 	CommandName string
-	Description string
+	Desc        string
 }
 
-// inferFromPackage figures out both the command name (docker node inspect)
-// and the resource type (node, service, container, etc.) based on the file path.
+// inferFromPackage figures out the command name and type from the package path.
 func (c *DockerInspectBase) inferFromPackage() {
-	pc, _, _, ok := runtime.Caller(2) // skip two levels up for stable call site
+	if c.CommandName != "" && c.Type != "" {
+		return
+	}
+
+	pc, _, _, ok := runtime.Caller(2)
 	if !ok {
 		c.CommandName = "docker inspect"
 		c.Type = "unknown"
@@ -37,8 +40,6 @@ func (c *DockerInspectBase) inferFromPackage() {
 	}
 
 	pkgPath := path.Dir(fn.Name())
-
-	// Look for "docker/" in path
 	idx := strings.Index(pkgPath, "docker/")
 	if idx == -1 {
 		c.CommandName = "docker inspect"
@@ -46,52 +47,44 @@ func (c *DockerInspectBase) inferFromPackage() {
 		return
 	}
 
-	// Extract e.g. "docker/node/inspect"
-	cmdPart := pkgPath[idx:]
-	segments := strings.Split(cmdPart, "/")
-
-	// Build command name and type
+	segments := strings.Split(pkgPath[idx:], "/")
 	c.CommandName = strings.Join(segments, " ")
-
 	if len(segments) >= 2 {
-		c.Type = docker.InspectType(segments[1]) // "node", "service", etc.
+		c.Type = docker.InspectType(segments[1])
 	} else {
 		c.Type = "unknown"
 	}
 }
 
-// Name returns the inferred command name.
+// Name implements registry.Command
 func (c DockerInspectBase) Name() string {
-	if c.CommandName == "" {
-		tmp := c
-		tmp.inferFromPackage()
-		return tmp.CommandName
-	}
+	c.inferFromPackage()
 	return c.CommandName
 }
 
-func (c DockerInspectBase) DescriptionText() string {
-	return c.Description
+// Description implements registry.Command
+func (c DockerInspectBase) Description() string {
+	return c.Desc
 }
 
-func (c DockerInspectBase) Execute(ctx api.Context, args args.Args) tea.Cmd {
+// Execute implements registry.Command
+func (c DockerInspectBase) Execute(ctx any, a args.Args) tea.Cmd {
 	return func() tea.Msg {
-		if c.CommandName == "" || c.Type == "" || c.Type == "unknown" {
-			tmp := c
-			tmp.inferFromPackage()
-			c.CommandName = tmp.CommandName
-			c.Type = tmp.Type
-		}
+		c.inferFromPackage()
 
-		//if len(args) < 1 {
-		//return view.ErrorMsg{Message: fmt.Sprintf("Usage: %s <ID>", c.Name())}
+		//if len(a.Positionals) < 1 {
+		//	return view.ErrorMsg{
+		//		Message: fmt.Sprintf("Usage: %s <ID>", c.Name()),
+		//	}
 		//}
 
-		id := args[0]
+		id := a.Positionals[0]
 
-		jsonStr, _ := docker.Inspect(ctx, c.Type, id)
+		jsonStr, _ := docker.Inspect(context.Background(), c.Type, id)
 		//if err != nil {
-		//return view.ErrorMsg{Message: fmt.Sprintf("Failed to inspect %s %q: %v", c.Type, id, err)}
+		//	return view.ErrorMsg{
+		//		Message: fmt.Sprintf("Failed to inspect %s %q: %v", c.Type, id, err),
+		//	}
 		//}
 
 		return view.NavigateToMsg{
