@@ -82,16 +82,16 @@ func (c DockerInspectBase) Execute(ctx api.Context, args []string) tea.Cmd {
 			c.Type = tmp.Type
 		}
 
-		if len(args) < 1 {
-			//return view.ErrorMsg{Message: fmt.Sprintf("Usage: %s <ID>", c.Name())}
-		}
+		//if len(args) < 1 {
+		//return view.ErrorMsg{Message: fmt.Sprintf("Usage: %s <ID>", c.Name())}
+		//}
 
 		id := args[0]
 
-		jsonStr, err := docker.Inspect(ctx, c.Type, id)
-		if err != nil {
-			//return view.ErrorMsg{Message: fmt.Sprintf("Failed to inspect %s %q: %v", c.Type, id, err)}
-		}
+		jsonStr, _ := docker.Inspect(ctx, c.Type, id)
+		//if err != nil {
+		//return view.ErrorMsg{Message: fmt.Sprintf("Failed to inspect %s %q: %v", c.Type, id, err)}
+		//}
 
 		return view.NavigateToMsg{
 			ViewName: inspectview.ViewName,
