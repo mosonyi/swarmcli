@@ -7,8 +7,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const ViewName = "inspect"
-
 type Node struct {
 	Key      string
 	Raw      any
