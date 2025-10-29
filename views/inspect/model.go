@@ -1,12 +1,10 @@
 package inspectview
 
 import (
-	"fmt"
+	"swarmcli/views/helpbar"
+
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"os/exec"
-	"strings"
-	"swarmcli/views/helpbar"
 )
 
 type Model struct {
@@ -51,16 +49,8 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 	}
 }
 
-func LoadInspectItem(line string) tea.Cmd {
+func LoadInspectItem(lines string) tea.Cmd {
 	return func() tea.Msg {
-		item := strings.Fields(line)[0]
-		var out []byte
-		var err error
-		out, err = exec.Command("docker", "node", "inspect", item).CombinedOutput()
-
-		if err != nil {
-			return Msg(fmt.Sprintf("Error: %v\n%s", err, out))
-		}
-		return Msg(out)
+		return Msg(lines)
 	}
 }

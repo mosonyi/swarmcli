@@ -1,7 +1,7 @@
 package app
 
 import (
-	"swarmcli/commands"
+	"fmt"
 	"swarmcli/utils/log"
 	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"
@@ -12,7 +12,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	_ "swarmcli/commands"
+	_ "swarmcli/commands" // triggers autoload
+	"swarmcli/registry"
 )
 
 const (
@@ -28,7 +29,10 @@ func registerView(name string, factory view.Factory) {
 // Init should be called once at the start of the application to register all views.
 func Init() {
 	log.InitDebug()
-	commands.Init()
+
+	for _, cmd := range registry.All() {
+		fmt.Println("-", cmd.Name(), "→", cmd.Description())
+	}
 
 	registerView(helpview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		cmds, _ := payload.([]helpview.CommandInfo)

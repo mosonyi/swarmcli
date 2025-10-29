@@ -1,8 +1,7 @@
 package command
 
 import (
-	"swarmcli/commands/api"
-	"swarmcli/commands/internal/registry"
+	"swarmcli/registry"
 	helpview "swarmcli/views/help"
 	"swarmcli/views/view"
 
@@ -14,7 +13,7 @@ type Help struct{}
 func (Help) Name() string        { return "help" }
 func (Help) Description() string { return "Show all available commands" }
 
-func (Help) Execute(ctx api.Context, args []string) tea.Cmd {
+func (Help) Execute(ctx any, args []string) tea.Cmd {
 	return func() tea.Msg {
 		return view.NavigateToMsg{
 			ViewName: helpview.ViewName,
@@ -35,4 +34,10 @@ func AllCommandInfos() []helpview.CommandInfo {
 		})
 	}
 	return cmds
+}
+
+var helpCmd = Help{}
+
+func init() {
+	registry.Register(helpCmd)
 }
