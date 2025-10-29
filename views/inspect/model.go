@@ -7,15 +7,25 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+type treeNode struct {
+	Key      string
+	Value    any
+	Children []*treeNode
+	Path     string
+}
+
 type Model struct {
 	viewport      viewport.Model
 	Visible       bool
 	searchTerm    string
 	searchIndex   int
-	searchMatches []int  // indexes of match positions
+	searchMatches []int
 	mode          string // "normal", "search"
+	inspectRoot   *treeNode
+	expanded      map[string]bool
 	inspectLines  string
 	ready         bool
+	title         string
 }
 
 func New(width, height int) Model {
@@ -23,7 +33,13 @@ func New(width, height int) Model {
 	return Model{
 		viewport: vp,
 		mode:     "normal",
+		expanded: make(map[string]bool),
 	}
+}
+
+// SetTitle sets the view title
+func (m *Model) SetTitle(title string) {
+	m.title = title
 }
 
 func (m Model) Init() tea.Cmd {
@@ -46,6 +62,7 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "/", Desc: "search"},
 		{Key: "n/N", Desc: "next/prev"},
 		{Key: "q", Desc: "close"},
+		{Key: "space", Desc: "expand/collapse"},
 	}
 }
 

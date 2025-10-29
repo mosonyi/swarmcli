@@ -1,14 +1,14 @@
 package inspectview
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
 	"strings"
 	"swarmcli/utils"
 	"swarmcli/views/view"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
-
 	switch msg := msg.(type) {
 	case Msg:
 		m.SetContent(string(msg))
@@ -33,15 +33,21 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *Model) SetContent(content string) {
-	m.inspectLines = content
+func (m *Model) SetContent(jsonStr string) {
+	root, err := ParseJSON(jsonStr)
+	if err != nil {
+		m.inspectLines = "Error parsing JSON: " + err.Error()
+		m.inspectRoot = nil
+	} else {
+		m.inspectRoot = root
+		m.inspectLines = strings.Join(RenderTree(root, 0, m.expanded), "\n")
+	}
 
 	if !m.ready {
 		return
 	}
-	m.viewport.GotoTop()                    // reset scroll position
-	m.viewport.SetContent(m.buildContent()) // now set new content
-	m.viewport.YOffset = 0
+	m.viewport.GotoTop()
+	m.viewport.SetContent(m.buildContent())
 
 	m.searchMatches = nil
 	m.searchTerm = ""
@@ -49,31 +55,9 @@ func (m *Model) SetContent(content string) {
 	m.mode = "normal"
 }
 
-func (m *Model) highlightContent() {
-	if m.searchTerm != "" {
-		m.searchMatches = utils.FindAllMatches(m.inspectLines, m.searchTerm)
-	}
-	m.viewport.SetContent(m.buildContent())
-}
-
 func (m *Model) buildContent() string {
-	if len(m.searchMatches) > 0 && m.searchTerm != "" {
+	if m.searchTerm != "" && len(m.searchMatches) > 0 {
 		return utils.HighlightMatches(m.inspectLines, m.searchTerm)
-	} else {
-		return m.inspectLines
 	}
-}
-
-func (m *Model) scrollToMatch() {
-	if len(m.searchMatches) == 0 {
-		return
-	}
-	matchPos := m.searchMatches[m.searchIndex]
-	lines := strings.Split(m.inspectLines[:matchPos], "\n")
-	offset := len(lines) - m.viewport.Height/2
-	if offset < 0 {
-		offset = 0
-	}
-	m.viewport.GotoTop()
-	m.viewport.SetYOffset(offset)
+	return m.inspectLines
 }

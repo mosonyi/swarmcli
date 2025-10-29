@@ -42,7 +42,25 @@ func Init() {
 		return logsview.New(w, h), logsview.Load(payload.(string))
 	})
 	registerView(inspectview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
-		return inspectview.New(w, h), inspectview.LoadInspectItem(payload.(string))
+		m := inspectview.New(w, h)
+
+		data, ok := payload.(map[string]interface{})
+		if !ok {
+			// fallback: just show empty content
+			return m, inspectview.LoadInspectItem("Invalid payload")
+		}
+
+		jsonStr, ok := data["json"].(string)
+		if !ok {
+			return m, inspectview.LoadInspectItem("Invalid payload: missing 'json'")
+		}
+
+		// Optional: store title in the view if you want to show it in the header
+		if title, ok := data["title"].(string); ok {
+			m.SetTitle(title)
+		}
+
+		return m, inspectview.LoadInspectItem(jsonStr)
 	})
 	registerView(nodesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		return nodesview.New(w, h), nodesview.LoadNodes()
