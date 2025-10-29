@@ -69,7 +69,7 @@ func (m *Model) SetContent(jsonStr string) {
 
 // renderVisible produces the textual content for the viewport and highlights the cursor line
 func (m *Model) renderVisible() string {
-	if m.Visible == nil || len(m.Visible) == 0 {
+	if len(m.Visible) == 0 {
 		return "▶ root"
 	}
 	lines := make([]string, 0, len(m.Visible))
