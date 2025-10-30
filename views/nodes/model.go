@@ -1,18 +1,18 @@
 package nodesview
 
 import (
-	"fmt"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
 	"swarmcli/docker"
 	"swarmcli/views/helpbar"
+
+	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 type Model struct {
 	viewport viewport.Model
 	Visible  bool
 
-	nodes  []string
+	nodes  []docker.SwarmNode
 	cursor int
 
 	ready bool
@@ -53,11 +53,7 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 
 func LoadNodes() tea.Cmd {
 	return func() tea.Msg {
-		var list []string
 		nodes, _ := docker.ListSwarmNodes()
-		for _, n := range nodes {
-			list = append(list, fmt.Sprint(n))
-		}
-		return Msg(list)
+		return Msg(nodes) // now returns []SwarmNode, not []string
 	}
 }

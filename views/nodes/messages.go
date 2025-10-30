@@ -1,3 +1,5 @@
 package nodesview
 
-type Msg []string
+import "swarmcli/docker"
+
+type Msg []docker.SwarmNode
