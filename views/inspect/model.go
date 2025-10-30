@@ -24,7 +24,6 @@ type Model struct {
 	ready      bool
 	width      int
 	height     int
-	matches    []*Node
 }
 
 func New(width, height int) Model {

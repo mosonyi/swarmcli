@@ -9,8 +9,6 @@ import (
 	"swarmcli/views/view"
 )
 
-var matchStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("33")) // blueish
-
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	switch msg := msg.(type) {
 	case Msg:
