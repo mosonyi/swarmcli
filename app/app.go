@@ -1,8 +1,8 @@
 package app
 
 import (
-	"swarmcli/commands"
-	"swarmcli/utils/log"
+	"fmt"
+	l "swarmcli/utils/log"
 	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"
 	logsview "swarmcli/views/logs"
@@ -12,7 +12,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	_ "swarmcli/commands"
+	_ "swarmcli/commands" // triggers autoload
+	"swarmcli/registry"
 )
 
 const (
@@ -27,8 +28,11 @@ func registerView(name string, factory view.Factory) {
 
 // Init should be called once at the start of the application to register all views.
 func Init() {
-	log.InitDebug()
-	commands.Init()
+	l.InitDebug()
+
+	for _, cmd := range registry.All() {
+		fmt.Println("-", cmd.Name(), "→", cmd.Description())
+	}
 
 	registerView(helpview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		cmds, _ := payload.([]helpview.CommandInfo)
@@ -37,9 +41,16 @@ func Init() {
 	registerView(logsview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		return logsview.New(w, h), logsview.Load(payload.(string))
 	})
+
 	registerView(inspectview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
-		return inspectview.New(w, h), inspectview.LoadInspectItem(payload.(string))
+		data, _ := payload.(map[string]interface{})
+		title, _ := data["title"].(string)
+		jsonStr, _ := data["json"].(string)
+
+		v := inspectview.New(w, h)
+		return v, inspectview.LoadInspectItem(title, jsonStr)
 	})
+
 	registerView(nodesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		return nodesview.New(w, h), nodesview.LoadNodes()
 	})

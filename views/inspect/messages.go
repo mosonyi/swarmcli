@@ -1,3 +1,6 @@
 package inspectview
 
-type Msg string
+type Msg struct {
+	Title   string
+	Content string
+}

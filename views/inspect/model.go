@@ -1,66 +1,63 @@
 package inspectview
 
 import (
-	"fmt"
+	"swarmcli/views/helpbar"
+
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"os/exec"
-	"strings"
-	"swarmcli/views/helpbar"
 )
 
+type Node struct {
+	Key      string
+	Raw      any
+	ValueStr string
+	Children []*Node
+	Parent   *Node
+}
+
 type Model struct {
-	viewport      viewport.Model
-	Visible       bool
-	searchTerm    string
-	searchIndex   int
-	searchMatches []int  // indexes of match positions
-	mode          string // "normal", "search"
-	inspectLines  string
-	ready         bool
+	viewport   viewport.Model
+	Root       *Node
+	Title      string
+	SearchTerm string
+	searchMode bool
+	ready      bool
+	width      int
+	height     int
 }
 
 func New(width, height int) Model {
 	vp := viewport.New(width, height)
+	vp.SetContent("")
 	return Model{
 		viewport: vp,
-		mode:     "normal",
+		width:    width,
+		height:   height,
 	}
 }
 
-func (m Model) Init() tea.Cmd {
-	return nil
-}
+func (m Model) Init() tea.Cmd { return nil }
 
-func (m Model) Name() string {
-	return ViewName
+func (m Model) Name() string { return ViewName }
+
+func (m *Model) SetTitle(t string) { m.Title = t }
+
+// LoadInspectItem returns a cmd that sends a Msg(title, json)
+func LoadInspectItem(title, jsonStr string) tea.Cmd {
+	return func() tea.Msg { return Msg{Title: title, Content: jsonStr} }
 }
 
 func (m Model) ShortHelpItems() []helpbar.HelpEntry {
-	if m.mode == "search" {
+	if m.searchMode {
 		return []helpbar.HelpEntry{
-			{Key: "enter", Desc: "confirm"},
+			{Key: "enter", Desc: "apply"},
 			{Key: "esc", Desc: "cancel"},
-			{Key: "n/N", Desc: "next/prev"},
 		}
 	}
 	return []helpbar.HelpEntry{
 		{Key: "/", Desc: "search"},
-		{Key: "n/N", Desc: "next/prev"},
+		{Key: "j/k", Desc: "down/up"},
+		{Key: "n/N", Desc: "next/prev match"},
 		{Key: "q", Desc: "close"},
-	}
-}
-
-func LoadInspectItem(line string) tea.Cmd {
-	return func() tea.Msg {
-		item := strings.Fields(line)[0]
-		var out []byte
-		var err error
-		out, err = exec.Command("docker", "node", "inspect", item).CombinedOutput()
-
-		if err != nil {
-			return Msg(fmt.Sprintf("Error: %v\n%s", err, out))
-		}
-		return Msg(out)
 	}
 }

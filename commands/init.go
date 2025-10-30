@@ -1,20 +1,21 @@
 package commands
 
 import (
-	"swarmcli/commands/api"
 	"swarmcli/commands/command"
 	"swarmcli/commands/command/docker"
-	"swarmcli/commands/internal/registry"
+	"swarmcli/commands/command/docker/node"
+	"swarmcli/registry"
 )
 
 func Init() {
 	registry.Register(command.Help{})
 	registry.Register(docker.DockerStackLs{})
-	registry.Register(docker.DockerNodeLs{})
+	registry.Register(node.DockerNodeLs{})
+	registry.Register(node.DockerNodeInspect{})
 }
 
 // Public passthroughs so app code can just use `commands.Get()` or `commands.All()`
-func Register(cmd api.Command)            { registry.Register(cmd) }
-func Get(name string) (api.Command, bool) { return registry.Get(name) }
-func All() []api.Command                  { return registry.All() }
-func Suggest(prefix string) []string      { return registry.Suggest(prefix) }
+func Register(cmd registry.Command)            { registry.Register(cmd) }
+func Get(name string) (registry.Command, bool) { return registry.Get(name) }
+func All() []registry.Command                  { return registry.All() }
+func Suggest(prefix string) []string           { return registry.Suggest(prefix) }
