@@ -56,7 +56,6 @@ func (m *Model) updateViewport() {
 	m.viewport.SetContent(content)
 }
 
-// renderYAML formats the tree as YAML-like text and highlights matches
 func (m *Model) renderYAML() string {
 	if m.Root == nil {
 		return ""
@@ -66,25 +65,29 @@ func (m *Model) renderYAML() string {
 	build = func(n *Node, indent int) []string {
 		var lines []string
 		prefix := strings.Repeat("  ", indent)
-		key := lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Render(n.Key)
-		line := ""
-		if len(n.Children) == 0 || n.ValueStr != "" {
-			line = fmt.Sprintf("%s%s: %s", prefix, key, n.ValueStr)
-		} else {
-			line = fmt.Sprintf("%s%s:", prefix, key)
+
+		key := n.Key
+		value := n.ValueStr
+
+		// highlight search term in key
+		if m.SearchTerm != "" {
+			lowerKey := strings.ToLower(key)
+			lowerTerm := strings.ToLower(m.SearchTerm)
+			if idx := strings.Index(lowerKey, lowerTerm); idx != -1 {
+				key = key[:idx] + lipgloss.NewStyle().Background(lipgloss.Color("33")).Render(key[idx:idx+len(m.SearchTerm)]) + key[idx+len(m.SearchTerm):]
+			}
 		}
 
-		// highlight if matches search term
-		if m.SearchTerm != "" && strings.Contains(strings.ToLower(line), strings.ToLower(m.SearchTerm)) {
-			line = matchStyle.Render(line)
+		line := fmt.Sprintf("%s%s", prefix, key)
+		if value != "" {
+			line += fmt.Sprintf(": %s", value)
 		}
-
 		lines = append(lines, line)
 
+		// recursively render children
 		for _, c := range n.Children {
 			lines = append(lines, build(c, indent+1)...)
 		}
-
 		return lines
 	}
 
