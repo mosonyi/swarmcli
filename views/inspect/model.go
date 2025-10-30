@@ -5,10 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
-
-var keyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("33")) // blueish
 
 type Node struct {
 	Key      string

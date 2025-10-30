@@ -56,6 +56,9 @@ func (m *Model) updateViewport() {
 	m.viewport.SetContent(content)
 }
 
+var keyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("33"))                                             // blueish keys
+var searchHighlightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("11")) // yellow highlight
+
 func (m *Model) renderYAML() string {
 	if m.Root == nil {
 		return ""
@@ -71,11 +74,14 @@ func (m *Model) renderYAML() string {
 
 		// highlight search term in key
 		if m.SearchTerm != "" {
-			lowerKey := strings.ToLower(key)
-			lowerTerm := strings.ToLower(m.SearchTerm)
-			if idx := strings.Index(lowerKey, lowerTerm); idx != -1 {
-				key = key[:idx] + lipgloss.NewStyle().Background(lipgloss.Color("33")).Render(key[idx:idx+len(m.SearchTerm)]) + key[idx+len(m.SearchTerm):]
-			}
+			key = highlightMatches(key, m.SearchTerm, keyStyle)
+		} else {
+			key = keyStyle.Render(key)
+		}
+
+		// highlight search term in value
+		if value != "" && m.SearchTerm != "" {
+			value = highlightMatches(value, m.SearchTerm, lipgloss.NewStyle()) // default value style
 		}
 
 		line := fmt.Sprintf("%s%s", prefix, key)
@@ -92,4 +98,24 @@ func (m *Model) renderYAML() string {
 	}
 
 	return strings.Join(build(m.Root, 0), "\n")
+}
+
+// highlightMatches highlights all occurrences of term in text with yellow background
+func highlightMatches(text, term string, style lipgloss.Style) string {
+	lowerText := strings.ToLower(text)
+	lowerTerm := strings.ToLower(term)
+
+	result := ""
+	offset := 0
+	for {
+		idx := strings.Index(lowerText[offset:], lowerTerm)
+		if idx == -1 {
+			result += style.Render(text[offset:]) // style remaining
+			break
+		}
+		result += style.Render(text[offset : offset+idx])
+		result += searchHighlightStyle.Render(text[offset+idx : offset+idx+len(term)])
+		offset += idx + len(term)
+	}
+	return result
 }
