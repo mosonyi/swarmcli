@@ -10,13 +10,15 @@ func (m Model) View() string {
 		return ""
 	}
 
+	// build title
 	title := m.Title
 	if title == "" {
-		if m.searchMode {
-			title = fmt.Sprintf("Inspecting (search: %s)", m.SearchTerm)
-		} else {
-			title = "Inspecting"
-		}
+		title = "Inspecting"
+	}
+
+	// if in search mode, show the search input
+	if m.searchMode {
+		title = fmt.Sprintf("%s  (search: %s, enter to apply, esc to cancel)", title, m.SearchTerm)
 	}
 
 	content := m.viewport.View()

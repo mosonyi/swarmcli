@@ -3,15 +3,17 @@ package inspectview
 import (
 	"fmt"
 	"strings"
-	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"swarmcli/views/view"
 )
+
+var matchStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("33")) // blueish
 
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	switch msg := msg.(type) {
 	case Msg:
-		// New content arrived
 		m.SetTitle(msg.Title)
 		m.SetContent(msg.Content)
 		m.ready = true
@@ -21,12 +23,10 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height
 		m.ready = true
-		// refresh content
-		m.viewport.SetContent(m.renderYAML())
+		m.updateViewport()
 		return m, nil
 
 	case tea.KeyMsg:
-		// handle keys
 		if m.searchMode {
 			return handleSearchKey(m, msg)
 		}
@@ -50,15 +50,13 @@ func (m *Model) SetContent(jsonStr string) {
 	m.updateViewport()
 }
 
+// updateViewport updates viewport content, preserving scroll if possible
 func (m *Model) updateViewport() {
 	content := m.renderYAML()
 	m.viewport.SetContent(content)
-	if m.ready {
-		m.viewport.GotoTop()
-	}
 }
 
-// renderYAML formats the tree as indented YAML-like text with keys highlighted
+// renderYAML formats the tree as YAML-like text and highlights matches
 func (m *Model) renderYAML() string {
 	if m.Root == nil {
 		return ""
@@ -68,20 +66,25 @@ func (m *Model) renderYAML() string {
 	build = func(n *Node, indent int) []string {
 		var lines []string
 		prefix := strings.Repeat("  ", indent)
-		key := keyStyle.Render(n.Key)
-
-		if n.ValueStr != "" || len(n.Children) == 0 {
-			line := fmt.Sprintf("%s%s: %s", prefix, key, n.ValueStr)
-			if m.SearchTerm != "" && !strings.Contains(strings.ToLower(line), strings.ToLower(m.SearchTerm)) {
-				line = prefix + line // dim non-matching? could add subtle style
-			}
-			lines = append(lines, line)
+		key := lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Render(n.Key)
+		line := ""
+		if len(n.Children) == 0 || n.ValueStr != "" {
+			line = fmt.Sprintf("%s%s: %s", prefix, key, n.ValueStr)
 		} else {
-			lines = append(lines, fmt.Sprintf("%s%s:", prefix, key))
-			for _, c := range n.Children {
-				lines = append(lines, build(c, indent+1)...)
-			}
+			line = fmt.Sprintf("%s%s:", prefix, key)
 		}
+
+		// highlight if matches search term
+		if m.SearchTerm != "" && strings.Contains(strings.ToLower(line), strings.ToLower(m.SearchTerm)) {
+			line = matchStyle.Render(line)
+		}
+
+		lines = append(lines, line)
+
+		for _, c := range n.Children {
+			lines = append(lines, build(c, indent+1)...)
+		}
+
 		return lines
 	}
 
