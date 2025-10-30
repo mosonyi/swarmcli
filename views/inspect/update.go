@@ -22,7 +22,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		m.viewport.Height = msg.Height
 		m.ready = true
 		// refresh content
-		m.viewport.SetContent(m.renderVisible())
+		m.viewport.SetContent(m.renderYAML())
 		return m, nil
 
 	case tea.KeyMsg:
@@ -41,62 +41,49 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 func (m *Model) SetContent(jsonStr string) {
 	root, err := ParseJSON(jsonStr)
 	if err != nil {
-		// Not valid JSON: show as single-line text node
-		rawRoot := &Node{
+		root = &Node{
 			Key:      "root",
-			Raw:      jsonStr,
 			ValueStr: jsonStr,
-			Expanded: true,
-			Path:     "root",
 		}
-		m.Root = rawRoot
-	} else {
-		m.Root = root
-		m.Root.Expanded = true
 	}
-	// rebuild visible and reset cursor
-	m.rebuildVisible()
-	m.Cursor = 0
-	m.searchMode = false
-	m.SearchTerm = ""
-	m.searchIndex = 0
+	m.Root = root
+	m.updateViewport()
+}
 
+func (m *Model) updateViewport() {
+	content := m.renderYAML()
+	m.viewport.SetContent(content)
 	if m.ready {
 		m.viewport.GotoTop()
-		m.viewport.SetContent(m.renderVisible())
 	}
 }
 
-// renderVisible produces the textual content for the viewport and highlights the cursor line
-func (m *Model) renderVisible() string {
-	if len(m.Visible) == 0 {
-		return "▶ root"
+// renderYAML formats the tree as indented YAML-like text with keys highlighted
+func (m *Model) renderYAML() string {
+	if m.Root == nil {
+		return ""
 	}
-	lines := make([]string, 0, len(m.Visible))
-	for i, n := range m.Visible {
-		prefix := strings.Repeat("  ", n.Depth)
-		symbol := "  "
-		if len(n.Children) > 0 {
-			if n.Expanded {
-				symbol = "▼ "
-			} else {
-				symbol = "▶ "
+
+	var build func(n *Node, indent int) []string
+	build = func(n *Node, indent int) []string {
+		var lines []string
+		prefix := strings.Repeat("  ", indent)
+		key := keyStyle.Render(n.Key)
+
+		if n.ValueStr != "" || len(n.Children) == 0 {
+			line := fmt.Sprintf("%s%s: %s", prefix, key, n.ValueStr)
+			if m.SearchTerm != "" && !strings.Contains(strings.ToLower(line), strings.ToLower(m.SearchTerm)) {
+				line = prefix + line // dim non-matching? could add subtle style
+			}
+			lines = append(lines, line)
+		} else {
+			lines = append(lines, fmt.Sprintf("%s%s:", prefix, key))
+			for _, c := range n.Children {
+				lines = append(lines, build(c, indent+1)...)
 			}
 		}
-		lineKey := n.Key
-		if n.ValueStr != "" {
-			lineKey = fmt.Sprintf("%s: %s", n.Key, n.ValueStr)
-		}
-		line := fmt.Sprintf("%s%s%s", prefix, symbol, lineKey)
-		if i == m.Cursor {
-			line = "» " + line
-		} else if m.SearchTerm != "" && !n.Matches {
-			// dim non-matching lines during search by replacing with a faint prefix (simple approach)
-			line = "  " + line
-		} else {
-			line = "  " + line
-		}
-		lines = append(lines, line)
+		return lines
 	}
-	return strings.Join(lines, "\n")
+
+	return strings.Join(build(m.Root, 0), "\n")
 }
