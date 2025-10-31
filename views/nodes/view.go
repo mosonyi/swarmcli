@@ -27,19 +27,19 @@ func (m Model) View() string {
 
 var (
 	headerStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("81")).
-		Bold(true).
-		Underline(true)
+			Foreground(lipgloss.Color("81")).
+			Bold(true).
+			Underline(true)
 
 	cursorStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("230")).
-		Background(lipgloss.Color("63")).
-		Bold(true)
+			Foreground(lipgloss.Color("230")).
+			Background(lipgloss.Color("63")).
+			Bold(true)
 
 	statusBarStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("250")).
-		Background(lipgloss.Color("237")).
-		Padding(0, 1)
+			Foreground(lipgloss.Color("250")).
+			Background(lipgloss.Color("237")).
+			Padding(0, 1)
 )
 
 // renderNodes builds the visible list of nodes with colorized header and cursor highlight.

@@ -43,20 +43,3 @@ func (m *Model) SetContent(msg Msg) {
 	m.viewport.SetContent(m.renderNodes())
 	m.viewport.YOffset = 0
 }
-
-// ensureCursorVisible keeps the cursor within the visible viewport
-func (m *Model) ensureCursorVisible() {
-	// Prevent negative height
-	h := m.viewport.Height
-	if h < 1 {
-		h = 1
-	}
-
-	// If cursor is above the viewport, scroll up
-	if m.cursor < m.viewport.YOffset {
-		m.viewport.YOffset = m.cursor
-	} else if m.cursor >= m.viewport.YOffset+h {
-		// If cursor is below viewport, scroll down
-		m.viewport.YOffset = m.cursor - h + 1
-	}
-}
