@@ -3,7 +3,6 @@ package stacksview
 import (
 	"fmt"
 	"strings"
-	"swarmcli/docker"
 	"swarmcli/ui"
 
 	"github.com/charmbracelet/lipgloss"
@@ -15,55 +14,49 @@ func (m Model) View() string {
 	}
 
 	total := len(m.entries)
-	title := fmt.Sprintf("Stacks (%d total)", total)
-	content := m.renderStacks()
+	title := fmt.Sprintf("Stacks on Node (Total: %d)", total)
+
 	width := m.viewport.Width
 	if width <= 0 {
 		width = 80
 	}
 
-	header := renderHeader(m.entries)
+	// --- Header Style ---
+	headerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("12")) // light blue
+
+	stackColWidth := m.computeStackColWidth(width)
+	serviceColWidth := 10 // “Services” column is narrow and fixed
+	header := headerStyle.Render(fmt.Sprintf(
+		"%-*s %*s",
+		stackColWidth, "STACK",
+		serviceColWidth, "SERVICES",
+	))
+
+	content := m.viewport.View()
+
 	return ui.RenderFramedBox(title, header, content, width)
 }
 
-// --- HEADER ---
+// --- Internal Rendering ---
 
-func renderHeader(entries []docker.StackEntry) string {
-	if len(entries) == 0 {
-		return "STACK  SERVICES  NODE COUNT"
-	}
-
-	colWidths := calcColumnWidths(entries)
-	headerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("75")). // blueish tone
-		Bold(true)
-
-	return headerStyle.Render(fmt.Sprintf(
-		"%-*s  %-*s  %-*s",
-		colWidths["StackName"], "STACK",
-		colWidths["ServiceCount"], "SERVICES",
-		colWidths["NodeCount"], "NODE COUNT",
-	))
-}
-
-// --- RENDER STACKS LIST ---
-
-func (m Model) renderStacks() string {
+func (m *Model) buildContent() string {
 	if len(m.entries) == 0 {
-		return "No stacks found."
+		return "No stacks found for this node."
 	}
 
-	colWidths := calcColumnWidths(m.entries)
+	width := m.viewport.Width
+	if width <= 0 {
+		width = 80
+	}
+
+	stackColWidth := m.computeStackColWidth(width)
+	serviceColWidth := 10
+
 	var lines []string
-
 	for i, s := range m.entries {
-		line := fmt.Sprintf(
-			"%-*s  %-*d  %-*d",
-			colWidths["StackName"], s.Name,
-			colWidths["ServiceCount"], s.ServiceCount,
-			colWidths["NodeCount"], s.NodeCount,
-		)
-
+		line := fmt.Sprintf("%-*s %*d", stackColWidth, s.Name, serviceColWidth, s.ServiceCount)
 		if i == m.cursor {
 			line = ui.CursorStyle.Render(line)
 		}
@@ -72,31 +65,31 @@ func (m Model) renderStacks() string {
 
 	status := fmt.Sprintf(" Stack %d of %d ", m.cursor+1, len(m.entries))
 	lines = append(lines, "", ui.StatusBarStyle.Render(status))
+
 	return strings.Join(lines, "\n")
 }
 
-// --- COLUMN WIDTHS ---
+// computeStackColWidth dynamically adjusts the column width based on viewport width and data.
+func (m *Model) computeStackColWidth(totalWidth int) int {
+	const minWidth = 15
+	const gap = 2
+	serviceCol := 10
 
-func calcColumnWidths(entries []docker.StackEntry) map[string]int {
-	widths := map[string]int{
-		"StackName":    len("STACK"),
-		"ServiceCount": len("SERVICES"),
-		"NodeCount":    len("NODE COUNT"),
+	available := totalWidth - serviceCol - gap
+	if available < minWidth {
+		return minWidth
 	}
 
-	for _, e := range entries {
-		if len(e.Name) > widths["StackName"] {
-			widths["StackName"] = len(e.Name)
-		}
-
-		if l := len(fmt.Sprintf("%d", e.ServiceCount)); l > widths["ServiceCount"] {
-			widths["ServiceCount"] = l
-		}
-
-		if l := len(fmt.Sprintf("%d", e.NodeCount)); l > widths["NodeCount"] {
-			widths["NodeCount"] = l
+	maxName := minWidth
+	for _, s := range m.entries {
+		if l := len(s.Name); l > maxName {
+			maxName = l
 		}
 	}
 
-	return widths
+	if maxName+gap < available {
+		return maxName + gap
+	}
+
+	return available
 }
