@@ -1,9 +1,9 @@
 package nodesview
 
 import (
-	"fmt"
-	tea "github.com/charmbracelet/bubbletea"
 	"swarmcli/views/view"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
@@ -18,7 +18,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		m.viewport.Height = msg.Height
 		if !m.ready {
 			m.ready = true
-			m.viewport.SetContent(m.buildContent())
+			m.viewport.SetContent(m.renderNodes())
 		}
 		return m, nil
 
@@ -40,37 +40,6 @@ func (m *Model) SetContent(msg Msg) {
 	}
 
 	m.viewport.GotoTop()
-	m.viewport.SetContent(m.buildContent())
+	m.viewport.SetContent(m.renderNodes())
 	m.viewport.YOffset = 0
-}
-
-func (m *Model) buildContent() string {
-	var s string
-	for i, item := range m.nodes {
-		cursor := "  "
-		if i == m.cursor {
-			cursor = "→ "
-		}
-		s += fmt.Sprintf("%s%s\n", cursor, item)
-	}
-
-	m.ensureCursorVisible()
-	return s
-}
-
-// ensureCursorVisible keeps the cursor within the visible viewport
-func (m *Model) ensureCursorVisible() {
-	// Prevent negative height
-	h := m.viewport.Height
-	if h < 1 {
-		h = 1
-	}
-
-	// If cursor is above the viewport, scroll up
-	if m.cursor < m.viewport.YOffset {
-		m.viewport.YOffset = m.cursor
-	} else if m.cursor >= m.viewport.YOffset+h {
-		// If cursor is below viewport, scroll down
-		m.viewport.YOffset = m.cursor - h + 1
-	}
 }

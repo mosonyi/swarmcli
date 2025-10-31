@@ -2,7 +2,7 @@ package logsview
 
 import (
 	"fmt"
-	"swarmcli/styles"
+	"swarmcli/ui"
 )
 
 func (m Model) View() string {
@@ -15,7 +15,7 @@ func (m Model) View() string {
 		header += fmt.Sprintf(" - Search: %s", m.searchTerm)
 	}
 
-	return styles.BorderStyle.Render(
+	return ui.BorderStyle.Render(
 		fmt.Sprintf("%s\n\n%s[press q or esc to go back, / to search]", header, m.viewport.View()),
 	)
 }

@@ -1,12 +1,12 @@
 package systeminfoview
 
-import "swarmcli/styles"
+import "swarmcli/ui"
 
 const Height = 6
 const Width = 30
 
 func (m Model) View() string {
-	return styles.StatusStyle.Height(Height).
+	return ui.StatusStyle.Height(Height).
 		Width(Width).
 		Render(m.content)
 }

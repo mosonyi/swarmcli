@@ -1,9 +1,10 @@
 package nodesview
 
 import (
-	"strings"
+	"context"
+	"fmt"
+	"swarmcli/docker"
 	inspectview "swarmcli/views/inspect"
-	stacksview "swarmcli/views/stacks"
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,13 +22,13 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "j", "down":
 		if m.cursor < len(m.nodes)-1 {
 			m.cursor++
-			m.viewport.SetContent(m.buildContent())
+			m.viewport.SetContent(m.renderNodes())
 		}
 
 	case "k", "up":
 		if m.cursor > 0 {
 			m.cursor--
-			m.viewport.SetContent(m.buildContent())
+			m.viewport.SetContent(m.renderNodes())
 		}
 
 	case "pgup":
@@ -38,32 +39,24 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	case "i":
 		if m.cursor < len(m.nodes) {
+			node := m.nodes[m.cursor]
+
 			return m, func() tea.Msg {
+				inspectContent, err := docker.Inspect(context.Background(), docker.InspectNode, node.ID)
+				if err != nil {
+					inspectContent = fmt.Sprintf("Error inspecting node %q: %v", node.ID, err)
+				}
+
 				return view.NavigateToMsg{
 					ViewName: inspectview.ViewName,
-					Payload:  m.nodes[m.cursor],
+					Payload: map[string]interface{}{
+						"title": fmt.Sprintf("Node: %s", node.Hostname),
+						"json":  inspectContent,
+					},
 				}
 			}
 		}
-
-	case "s":
-		return m.selectNode()
 	}
 
 	return m, nil
-}
-
-func (m Model) selectNode() (Model, tea.Cmd) {
-	fields := strings.Fields(m.nodes[m.cursor])
-	if len(fields) == 0 {
-		return m, nil
-	}
-
-	nodeID := fields[0]
-	return m, func() tea.Msg {
-		return view.NavigateToMsg{
-			ViewName: stacksview.ViewName,
-			Payload:  nodeID,
-		}
-	}
 }

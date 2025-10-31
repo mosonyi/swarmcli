@@ -2,7 +2,7 @@ package inspectview
 
 import (
 	"fmt"
-	"swarmcli/styles"
+	"swarmcli/ui"
 )
 
 func (m Model) View() string {
@@ -23,5 +23,5 @@ func (m Model) View() string {
 
 	content := m.viewport.View()
 	out := fmt.Sprintf("%s\n\n%s\n[press q or esc to go back, / to search]", title, content)
-	return styles.BorderStyle.Render(out)
+	return ui.BorderStyle.Render(out)
 }
