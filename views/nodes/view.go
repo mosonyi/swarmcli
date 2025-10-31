@@ -3,19 +3,12 @@ package nodesview
 import (
 	"fmt"
 	"strings"
+	"swarmcli/styles"
 
 	"github.com/charmbracelet/lipgloss"
 )
 
 var (
-	titleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("81")). // bluish
-			Bold(true)
-
-	headerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("75")). // slightly bluish
-			Bold(true)
-
 	cursorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("230")).
 			Background(lipgloss.Color("63")).
@@ -27,7 +20,6 @@ var (
 			Padding(0, 1)
 )
 
-// View renders the node list with a full k9s-style border and integrated header title.
 func (m Model) View() string {
 	if !m.Visible {
 		return ""
@@ -41,56 +33,16 @@ func (m Model) View() string {
 		}
 	}
 
-	// Title text (plain)
-	titlePlain := fmt.Sprintf(" Nodes (%d total, %d manager%s) ", total, managers, plural(managers))
-	titleStyled := titleStyle.Render(titlePlain)
+	title := fmt.Sprintf("Nodes (%d total, %d manager%s)", total, managers, plural(managers))
+	header := "HOSTNAME              STATUS     AVAILABILITY   MANAGER STATUS"
 
-	// Header plain (we will style it but pad/truncate safely)
-	headerPlain := "HOSTNAME              STATUS     AVAILABILITY   MANAGER STATUS"
-	headerStyled := headerStyle.Render(headerPlain)
-
+	content := m.viewport.View()
 	width := m.viewport.Width
 	if width <= 0 {
 		width = 80
 	}
 
-	// --- Build top border with centered title
-	topBorderLeft := "╭"
-	topBorderRight := "╮"
-
-	borderWidth := width - lipgloss.Width(topBorderLeft+topBorderRight)
-	if borderWidth < lipgloss.Width(titleStyled) {
-		borderWidth = lipgloss.Width(titleStyled) + 2
-	}
-
-	leftPad := (borderWidth - lipgloss.Width(titleStyled)) / 2
-	rightPad := borderWidth - leftPad - lipgloss.Width(titleStyled)
-
-	topLine := fmt.Sprintf(
-		"%s%s%s%s%s",
-		topBorderLeft,
-		strings.Repeat("─", leftPad),
-		titleStyled,
-		strings.Repeat("─", rightPad),
-		topBorderRight,
-	)
-
-	// --- Build content area with vertical borders
-	contentLines := strings.Split(m.viewport.View(), "\n")
-
-	// The first wrapped line is the header (styled & padded safely)
-	var wrapped []string
-	wrapped = append(wrapped, fmt.Sprintf("│%s│", padLine(headerStyled, borderWidth)))
-
-	for _, line := range contentLines {
-		wrapped = append(wrapped, fmt.Sprintf("│%s│", padLine(line, borderWidth)))
-	}
-
-	// --- Bottom border
-	bottomLine := fmt.Sprintf("╰%s╯", strings.Repeat("─", borderWidth))
-
-	// --- Final render
-	return strings.Join(append([]string{topLine}, append(wrapped, bottomLine)...), "\n")
+	return styles.RenderFramedBox(title, header, content, width)
 }
 
 func plural(n int) string {
