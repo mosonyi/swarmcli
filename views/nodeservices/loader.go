@@ -43,16 +43,17 @@ func LoadEntries(nodeID, stackName string) []ServiceEntry {
 			svcStack = "-"
 		}
 
+		// Skip services not in the selected stack
 		if stackName != "" && svcStack != stackName {
 			continue
 		}
 
 		c := counts[svc.ID]
 		if c == nil {
-			continue
+			c = &count{} // ensure even services with no tasks are shown
 		}
 
-		// Only show node-specific services if nodeID is provided
+		// Only skip services if filtering by node and there are no tasks on that node
 		if nodeID != "" && c.onNode == 0 {
 			continue
 		}
