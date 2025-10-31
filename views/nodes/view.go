@@ -9,25 +9,25 @@ import (
 
 var (
 	titleStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("81")). // bluish
-		Bold(true)
+			Foreground(lipgloss.Color("81")). // bluish
+			Bold(true)
 
 	headerStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("81")).
-		Bold(true).
-		Underline(true)
+			Foreground(lipgloss.Color("75")). // slightly bluish
+			Bold(true)
 
 	cursorStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("230")).
-		Background(lipgloss.Color("63")).
-		Bold(true)
+			Foreground(lipgloss.Color("230")).
+			Background(lipgloss.Color("63")).
+			Bold(true)
 
 	statusBarStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("250")).
-		Background(lipgloss.Color("237")).
-		Padding(0, 1)
+			Foreground(lipgloss.Color("250")).
+			Background(lipgloss.Color("237")).
+			Padding(0, 1)
 )
 
+// View renders the node list with a full k9s-style border and integrated header title.
 func (m Model) View() string {
 	if !m.Visible {
 		return ""
@@ -41,49 +41,56 @@ func (m Model) View() string {
 		}
 	}
 
-	title := fmt.Sprintf(" Nodes (%d total, %d manager%s) ", total, managers, plural(managers))
-	titleRendered := titleStyle.Render(title)
+	// Title text (plain)
+	titlePlain := fmt.Sprintf(" Nodes (%d total, %d manager%s) ", total, managers, plural(managers))
+	titleStyled := titleStyle.Render(titlePlain)
 
-	// Define subtle style for the column legend
-	subtleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")) // grayish for secondary info
+	// Header plain (we will style it but pad/truncate safely)
+	headerPlain := "HOSTNAME              STATUS     AVAILABILITY   MANAGER STATUS"
+	headerStyled := headerStyle.Render(headerPlain)
 
-	// Column header like in k9s
-	header := subtleStyle.Render("HOSTNAME              STATUS     AVAILABILITY   MANAGER STATUS")
-
-	// Main table body from the viewport
-	body := m.viewport.View()
-
-	// Compute total content width
-	contentWidth := lipgloss.Width(header)
-	if w := lipgloss.Width(body); w > contentWidth {
-		contentWidth = w
+	width := m.viewport.Width
+	if width <= 0 {
+		width = 80
 	}
 
-	// Build the top border with title embedded inside
-	topBorder := fmt.Sprintf("╭%s╮", padTitleInBorder(titleRendered, contentWidth))
+	// --- Build top border with centered title
+	topBorderLeft := "╭"
+	topBorderRight := "╮"
 
-	// Build body lines wrapped in vertical borders
-	bodyLines := strings.Split(fmt.Sprintf("%s\n%s", header, body), "\n")
-	for i, line := range bodyLines {
-		bodyLines[i] = fmt.Sprintf("│%-*s│", contentWidth, line)
+	borderWidth := width - lipgloss.Width(topBorderLeft+topBorderRight)
+	if borderWidth < lipgloss.Width(titleStyled) {
+		borderWidth = lipgloss.Width(titleStyled) + 2
 	}
 
-	// Bottom border
-	bottomBorder := "╰" + strings.Repeat("─", contentWidth) + "╯"
+	leftPad := (borderWidth - lipgloss.Width(titleStyled)) / 2
+	rightPad := borderWidth - leftPad - lipgloss.Width(titleStyled)
 
-	// Join everything together
-	return strings.Join(append([]string{topBorder}, append(bodyLines, bottomBorder)...), "\n")
-}
+	topLine := fmt.Sprintf(
+		"%s%s%s%s%s",
+		topBorderLeft,
+		strings.Repeat("─", leftPad),
+		titleStyled,
+		strings.Repeat("─", rightPad),
+		topBorderRight,
+	)
 
-// padTitleInBorder places the title neatly inside the top border, like k9s does.
-func padTitleInBorder(title string, totalWidth int) string {
-	titleWidth := lipgloss.Width(title)
-	if titleWidth >= totalWidth {
-		return title
+	// --- Build content area with vertical borders
+	contentLines := strings.Split(m.viewport.View(), "\n")
+
+	// The first wrapped line is the header (styled & padded safely)
+	var wrapped []string
+	wrapped = append(wrapped, fmt.Sprintf("│%s│", padLine(headerStyled, borderWidth)))
+
+	for _, line := range contentLines {
+		wrapped = append(wrapped, fmt.Sprintf("│%s│", padLine(line, borderWidth)))
 	}
-	paddingRight := totalWidth - titleWidth
-	return title + strings.Repeat("─", paddingRight)
+
+	// --- Bottom border
+	bottomLine := fmt.Sprintf("╰%s╯", strings.Repeat("─", borderWidth))
+
+	// --- Final render
+	return strings.Join(append([]string{topLine}, append(wrapped, bottomLine)...), "\n")
 }
 
 func plural(n int) string {
@@ -91,6 +98,22 @@ func plural(n int) string {
 		return ""
 	}
 	return "s"
+}
+
+// padLine ensures lines fit within the border width without slicing ANSI escapes.
+// If the rendered width is <= width, pad with spaces. If it's larger, use lipgloss
+// to safely truncate the styled string (preserving ANSI sequences).
+func padLine(line string, width int) string {
+	lineWidth := lipgloss.Width(line)
+	if lineWidth == width {
+		return line
+	}
+	if lineWidth < width {
+		return line + strings.Repeat(" ", width-lineWidth)
+	}
+	// lineWidth > width: safely truncate styled string preserving escapes
+	// Use MaxWidth to let lipgloss do the heavy lifting.
+	return lipgloss.NewStyle().MaxWidth(width).Render(line)
 }
 
 // renderNodes builds the visible list of nodes with colorized header and cursor highlight.
