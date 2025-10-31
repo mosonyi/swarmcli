@@ -8,6 +8,7 @@ import (
 	logsview "swarmcli/views/logs"
 	nodesview "swarmcli/views/nodes"
 	stacksview "swarmcli/views/stacks"
+	stackservicesview "swarmcli/views/stackservices"
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -60,5 +61,14 @@ func Init() {
 			nodeID, _ = payload.(string)
 		}
 		return stacksview.New(w, h), stacksview.LoadStacks(nodeID)
+	})
+
+	registerView(stackservicesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
+		data, _ := payload.(map[string]interface{})
+		nodeID, _ := data["nodeID"].(string)
+		hostname, _ := data["hostname"].(string)
+
+		v := stackservicesview.New(w, h)
+		return v, stackservicesview.LoadStackServices(nodeID, hostname)
 	})
 }
