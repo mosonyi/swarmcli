@@ -43,26 +43,32 @@ func LoadEntries(nodeID, stackName string) []ServiceEntry {
 			svcStack = "-"
 		}
 
-		// Skip services not in the selected stack
 		if stackName != "" && svcStack != stackName {
 			continue
 		}
 
 		c := counts[svc.ID]
 		if c == nil {
-			c = &count{} // ensure even services with no tasks are shown
+			continue
 		}
 
-		// Only skip services if filtering by node and there are no tasks on that node
-		if nodeID != "" && c.onNode == 0 {
-			continue
+		var replicasOnNode int
+		if nodeID != "" {
+			replicasOnNode = c.onNode
+			// Skip services not running on this node
+			if replicasOnNode == 0 {
+				continue
+			}
+		} else {
+			// Stack view: show all running tasks as "on node"
+			replicasOnNode = c.total
 		}
 
 		entries = append(entries, ServiceEntry{
 			StackName:      svcStack,
 			ServiceName:    svc.Spec.Name,
 			ServiceID:      svc.ID,
-			ReplicasOnNode: c.onNode,
+			ReplicasOnNode: replicasOnNode,
 			ReplicasTotal:  c.total,
 		})
 	}
@@ -73,5 +79,6 @@ func LoadEntries(nodeID, stackName string) []ServiceEntry {
 		}
 		return entries[i].StackName < entries[j].StackName
 	})
+
 	return entries
 }
