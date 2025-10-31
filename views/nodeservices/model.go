@@ -78,21 +78,3 @@ func (m *Model) SetContent(msg Msg) {
 		m.viewport.SetContent(m.renderEntries())
 	}
 }
-
-func LoadEntriesForNode(nodeID, hostname string) tea.Cmd {
-	return func() tea.Msg {
-		return Msg{
-			Title:   "Services on Node: " + hostname,
-			Entries: LoadEntries(nodeID, ""),
-		}
-	}
-}
-
-func LoadEntriesForStack(stackName string) tea.Cmd {
-	return func() tea.Msg {
-		return Msg{
-			Title:   "Services in Stack: " + stackName,
-			Entries: LoadEntries("", stackName),
-		}
-	}
-}

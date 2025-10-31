@@ -8,9 +8,7 @@ import (
 	"github.com/docker/docker/api/types/swarm"
 )
 
-// LoadEntries returns services filtered by nodeID or stackName.
-// If both are empty, returns all services.
-func LoadEntries(nodeID, stackName string) []ServiceEntry {
+func LoadNodeServices(nodeID string) []ServiceEntry {
 	snap, err := docker.GetOrRefreshSnapshot()
 	if err != nil {
 		fmt.Println("failed to get snapshot:", err)
@@ -20,44 +18,13 @@ func LoadEntries(nodeID, stackName string) []ServiceEntry {
 	var entries []ServiceEntry
 
 	for _, svc := range snap.Services {
-		// Determine stack name
-		stack := svc.Spec.Labels["com.docker.stack.namespace"]
-		if stack == "" {
-			stack = "-"
-		}
+		stack, desired := getServiceStackAndDesired(svc, snap)
 
-		// Apply stack filter if specified
-		if stackName != "" && stack != stackName {
-			continue
-		}
+		// Count tasks running on this node
+		onNode := countTasksForNode(svc.ID, nodeID, snap)
 
-		// Determine desired replicas from service spec
-		var desired int
-		if svc.Spec.Mode.Replicated != nil && svc.Spec.Mode.Replicated.Replicas != nil {
-			desired = int(*svc.Spec.Mode.Replicated.Replicas)
-		} else if svc.Spec.Mode.Global != nil {
-			desired = len(snap.Nodes)
-		}
-
-		// Count running tasks
-		onNode := 0
-		for _, t := range snap.Tasks {
-			if t.ServiceID != svc.ID {
-				continue
-			}
-			if t.DesiredState != swarm.TaskStateRunning || t.Status.State != swarm.TaskStateRunning {
-				continue
-			}
-			if nodeID != "" && t.NodeID == nodeID {
-				onNode++
-			} else if nodeID == "" {
-				// stack view: count all nodes
-				onNode++
-			}
-		}
-
-		// Skip services that don't run on the node (only for node view)
-		if nodeID != "" && onNode == 0 {
+		// Skip if no tasks on this node
+		if onNode == 0 {
 			continue
 		}
 
@@ -70,13 +37,85 @@ func LoadEntries(nodeID, stackName string) []ServiceEntry {
 		})
 	}
 
-	// Sort by stack then service name
+	sortEntries(entries)
+	return entries
+}
+
+func LoadStackServices(stackName string) []ServiceEntry {
+	snap, err := docker.GetOrRefreshSnapshot()
+	if err != nil {
+		fmt.Println("failed to get snapshot:", err)
+		return nil
+	}
+
+	var entries []ServiceEntry
+
+	for _, svc := range snap.Services {
+		stack, desired := getServiceStackAndDesired(svc, snap)
+		if stack != stackName {
+			continue
+		}
+
+		// Count tasks on all nodes
+		onNode := countTasksForNode(svc.ID, "", snap)
+
+		entries = append(entries, ServiceEntry{
+			StackName:      stack,
+			ServiceName:    svc.Spec.Name,
+			ServiceID:      svc.ID,
+			ReplicasOnNode: onNode,
+			ReplicasTotal:  desired,
+		})
+	}
+
+	sortEntries(entries)
+	return entries
+}
+
+// --- Helpers ---
+
+// getServiceStackAndDesired returns the stack name and desired replicas for a service
+func getServiceStackAndDesired(svc swarm.Service, snap *docker.SwarmSnapshot) (stack string, desired int) {
+	stack = svc.Spec.Labels["com.docker.stack.namespace"]
+	if stack == "" {
+		stack = "-"
+	}
+
+	if svc.Spec.Mode.Replicated != nil && svc.Spec.Mode.Replicated.Replicas != nil {
+		desired = int(*svc.Spec.Mode.Replicated.Replicas)
+	} else if svc.Spec.Mode.Global != nil {
+		desired = len(snap.Nodes)
+	} else {
+		// One-off task
+		desired = 1
+	}
+
+	return
+}
+
+// countTasksForNode counts tasks for a service; if nodeID == "", counts across all nodes
+func countTasksForNode(serviceID, nodeID string, snap *docker.SwarmSnapshot) int {
+	count := 0
+	for _, t := range snap.Tasks {
+		if t.ServiceID != serviceID {
+			continue
+		}
+		if t.DesiredState != swarm.TaskStateRunning {
+			continue
+		}
+		if nodeID == "" || t.NodeID == nodeID {
+			count++
+		}
+	}
+	return count
+}
+
+// sortEntries sorts entries by stack name then service name
+func sortEntries(entries []ServiceEntry) {
 	sort.Slice(entries, func(i, j int) bool {
 		if entries[i].StackName == entries[j].StackName {
 			return entries[i].ServiceName < entries[j].ServiceName
 		}
 		return entries[i].StackName < entries[j].StackName
 	})
-
-	return entries
 }
