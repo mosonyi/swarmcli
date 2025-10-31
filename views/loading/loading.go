@@ -3,14 +3,13 @@ package loadingview
 import (
 	"fmt"
 	"strings"
+	"swarmcli/ui"
 	"swarmcli/views/helpbar"
+	"swarmcli/views/view"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-
-	"swarmcli/ui"
-	"swarmcli/views/view"
 )
 
 const ViewName = "loading"
@@ -59,40 +58,29 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	frameStyle := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		Padding(1, 2).
-		Align(lipgloss.Center)
-
 	content := fmt.Sprintf("%s %s", m.spinner.View(), m.message)
 	content = strings.TrimSpace(content)
 
-	frame := frameStyle.Render(content)
-
-	//// Center the frame
-	//xPad := max(0, (m.width-lipgloss.Width(frame))/2)
-	//yPad := max(0, (m.height-lipgloss.Height(frame))/2)
-
-	return lipgloss.Place(
+	// Center the spinner and message in the available height
+	centered := lipgloss.Place(
 		m.width,
-		m.height,
+		m.height-4, // minus borders and header space
 		lipgloss.Center,
 		lipgloss.Center,
-		frame,
-		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(lipgloss.Color("236")),
+		content,
+	)
+
+	// Render the frame using your shared helper
+	return ui.RenderFramedBox(
+		"Loading",
+		"",
+		centered,
+		m.width,
 	)
 }
 
 func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
-		{Key: "q", Desc: "close"},
+		{Key: "q", Desc: "quit"},
 	}
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
