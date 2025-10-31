@@ -19,6 +19,14 @@ type NodeEntry struct {
 	Addr     string
 }
 
+// StackEntry is a lightweight representation of a Docker stack,
+// used for display and cached in SwarmSnapshot.
+type StackEntry struct {
+	Name         string
+	ServiceCount int
+	NodeCount    int
+}
+
 // SwarmSnapshot contains the in-memory swarm state.
 type SwarmSnapshot struct {
 	Nodes    []swarm.Node
@@ -113,4 +121,50 @@ func (s SwarmSnapshot) ToNodeEntries() []NodeEntry {
 		}
 	}
 	return nodes
+}
+
+// ToStackEntries aggregates services by stack name and produces StackEntry slices.
+func (s SwarmSnapshot) ToStackEntries() []StackEntry {
+	stackMap := make(map[string]*StackEntry)
+
+	for _, svc := range s.Services {
+		// Docker stacks mark services with com.docker.stack.namespace
+		if stackName, ok := svc.Spec.Labels["com.docker.stack.namespace"]; ok {
+			entry, exists := stackMap[stackName]
+			if !exists {
+				stackMap[stackName] = &StackEntry{Name: stackName, ServiceCount: 1}
+			} else {
+				entry.ServiceCount++
+			}
+		}
+	}
+
+	// Optionally count how many nodes run tasks of that stack
+	for _, task := range s.Tasks {
+		if task.ServiceID == "" {
+			continue
+		}
+		// Find stack name from the service
+		var stackName string
+		for _, svc := range s.Services {
+			if svc.ID == task.ServiceID {
+				stackName = svc.Spec.Labels["com.docker.stack.namespace"]
+				break
+			}
+		}
+		if stackName == "" {
+			continue
+		}
+		entry := stackMap[stackName]
+		if entry != nil {
+			entry.NodeCount++ // Each task counts as one node slot, could refine if needed
+		}
+	}
+
+	stacks := make([]StackEntry, 0, len(stackMap))
+	for _, e := range stackMap {
+		stacks = append(stacks, *e)
+	}
+
+	return stacks
 }

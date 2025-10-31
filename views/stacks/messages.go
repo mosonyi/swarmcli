@@ -3,9 +3,9 @@ package stacksview
 import "swarmcli/docker"
 
 type Msg struct {
-	NodeId string
-	Stacks []docker.Stack
-	Error  string
+	NodeID string
+	Stacks []docker.StackEntry
+	Err    error
 }
 
 type RefreshErrorMsg struct {

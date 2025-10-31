@@ -1,7 +1,6 @@
 package stacksview
 
 import (
-	"swarmcli/docker"
 	logsview "swarmcli/views/logs"
 	"swarmcli/views/view"
 
@@ -15,18 +14,16 @@ func HandleKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 
 func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
-	case "r":
-		return m, refreshStacksCmd(m.nodeId)
 	case "q", "esc":
 		m.Visible = false
 	case "j", "down":
-		if m.stackCursor < len(m.stacks)-1 {
-			m.stackCursor++
+		if m.cursor < len(m.entries)-1 {
+			m.cursor++
 			m.viewport.SetContent(m.buildContent())
 		}
 	case "k", "up":
-		if m.stackCursor > 0 {
-			m.stackCursor--
+		if m.cursor > 0 {
+			m.cursor--
 			m.viewport.SetContent(m.buildContent())
 		}
 	case "pgup":
@@ -34,8 +31,8 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "pgdown":
 		m.viewport.ScrollDown(m.viewport.Height)
 	case "enter":
-		if m.stackCursor < len(m.stacks) {
-			serviceID := m.stacks[m.stackCursor]
+		if m.cursor < len(m.entries) {
+			serviceID := m.entries[m.cursor]
 			return m, func() tea.Msg {
 				return view.NavigateToMsg{
 					ViewName: logsview.ViewName,
@@ -45,20 +42,4 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	}
 	return m, nil
-}
-
-func refreshStacksCmd(nodeID string) tea.Cmd {
-	return func() tea.Msg {
-		// Refresh hostname cache first
-		if err := docker.RefreshHostnameCache(); err != nil {
-			return RefreshErrorMsg{Err: err}
-		}
-
-		// Fetch stacks for node or all nodes
-		stacks := docker.GetStacks(nodeID)
-		return Msg{
-			NodeId: nodeID,
-			Stacks: stacks,
-		}
-	}
 }

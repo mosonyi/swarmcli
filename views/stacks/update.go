@@ -39,9 +39,9 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 }
 
 func (m *Model) SetContent(msg Msg) {
-	m.nodeId = msg.NodeId
-	m.stacks = msg.Stacks
-	m.stackCursor = 0
+	m.nodeID = msg.NodeID
+	m.entries = msg.Stacks
+	m.cursor = 0
 
 	if !m.ready {
 		return
@@ -56,7 +56,7 @@ func (m *Model) buildContent() string {
 
 	// Determine max stack name length
 	maxLen := len("Stack Name") // at least the header length
-	for _, stack := range m.stacks {
+	for _, stack := range m.entries {
 		if l := len(stack.Name); l > maxLen {
 			maxLen = l
 		}
@@ -68,9 +68,9 @@ func (m *Model) buildContent() string {
 	b.WriteString(strings.Repeat("-", padding+8) + "\n") // underline
 
 	// Stack rows
-	for i, stack := range m.stacks {
+	for i, stack := range m.entries {
 		cursor := "  "
-		if i == m.stackCursor {
+		if i == m.cursor {
 			cursor = "➜ "
 		}
 		b.WriteString(fmt.Sprintf("%s%-*s %d\n", cursor, padding, stack.Name, stack.ServiceCount))
@@ -87,9 +87,9 @@ func (m *Model) ensureCursorVisible() {
 		h = 1
 	}
 
-	if m.stackCursor < m.viewport.YOffset {
-		m.viewport.YOffset = m.stackCursor
-	} else if m.stackCursor >= m.viewport.YOffset+h {
-		m.viewport.YOffset = m.stackCursor - h + 1
+	if m.cursor < m.viewport.YOffset {
+		m.viewport.YOffset = m.cursor
+	} else if m.cursor >= m.viewport.YOffset+h {
+		m.viewport.YOffset = m.cursor - h + 1
 	}
 }
