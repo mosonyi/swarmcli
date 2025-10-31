@@ -9,7 +9,7 @@ func LoadEntries(nodeID string) []ServiceEntry {
 	serviceMap, _ := docker.GetServiceNameToIDMap()
 
 	for _, stack := range stacks {
-		services := docker.GetServicesInStack(stack.Name)
+		services := docker.GetServicesInStackOnNode(stack.Name, nodeID)
 		for _, s := range services {
 			entries = append(entries, ServiceEntry{
 				StackName:   stack.Name,
