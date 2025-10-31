@@ -14,7 +14,14 @@ func (m Model) View() string {
 	}
 
 	title := fmt.Sprintf("Services on Node (Total: %d)", len(m.entries))
-	header := "SERVICE                        STACK                REPLICAS"
+	header := lipgloss.NewStyle().
+		Bold(true).
+		Underline(true).
+		Render(fmt.Sprintf("%-*s  %-*s  %-*s",
+			m.serviceColWidth, "SERVICE",
+			m.stackColWidth, "STACK",
+			m.replicaColWidth, "REPLICAS",
+		))
 
 	content := m.viewport.View()
 	width := m.viewport.Width
@@ -30,31 +37,58 @@ func (m Model) renderEntries() string {
 		return "No services found for this node."
 	}
 
-	var lines []string
+	width := m.viewport.Width
+	if width <= 0 {
+		width = 80
+	}
 
-	// Header row
-	header := lipgloss.NewStyle().
-		Bold(true).
-		Underline(true).
-		Render(fmt.Sprintf("%-30s %-20s %-10s", "SERVICE", "STACK", "REPLICAS"))
-	lines = append(lines, header)
+	// --- Dynamic column width calculation ---
+	const minService = 15
+	const minStack = 10
+	const replicaWidth = 10
+	const gap = 2
+
+	available := width - replicaWidth - 2*gap
+	serviceCol := available / 2
+	stackCol := available - serviceCol
+
+	if serviceCol < minService {
+		serviceCol = minService
+	}
+	if stackCol < minStack {
+		stackCol = minStack
+	}
+
+	// save calculated widths for View() (so header aligns)
+	m.serviceColWidth = serviceCol
+	m.stackColWidth = stackCol
+	m.replicaColWidth = replicaWidth
+
+	var lines []string
 
 	for i, e := range m.entries {
 		replicas := fmt.Sprintf("%d/%d", e.ReplicasOnNode, e.ReplicasTotal)
 
-		// Colorize replica count
+		// --- Colorize replica count ---
 		switch {
 		case e.ReplicasTotal == 0:
 			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("—")
 		case e.ReplicasOnNode == 0:
-			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(replicas) // red
+			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(replicas)
 		case e.ReplicasOnNode < e.ReplicasTotal:
-			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render(replicas) // yellow
+			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render(replicas)
 		default:
-			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(replicas) // green
+			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(replicas)
 		}
 
-		line := fmt.Sprintf("%-30s %-20s %-10s", e.ServiceName, e.StackName, replicas)
+		serviceName := truncateWithEllipsis(e.ServiceName, serviceCol)
+		stackName := truncateWithEllipsis(e.StackName, stackCol)
+
+		line := fmt.Sprintf("%-*s  %-*s  %*s",
+			serviceCol, serviceName,
+			stackCol, stackName,
+			replicaWidth, replicas,
+		)
 
 		if i == m.cursor {
 			line = ui.CursorStyle.Render(line)
@@ -63,9 +97,22 @@ func (m Model) renderEntries() string {
 		lines = append(lines, line)
 	}
 
-	// Footer with cursor info
 	status := fmt.Sprintf(" Service %d of %d ", m.cursor+1, len(m.entries))
 	lines = append(lines, "", ui.StatusBarStyle.Render(status))
 
 	return strings.Join(lines, "\n")
+}
+
+// truncateWithEllipsis shortens text to fit maxWidth, adding "…" if truncated.
+func truncateWithEllipsis(s string, maxWidth int) string {
+	if len(s) <= maxWidth {
+		return s
+	}
+	if maxWidth <= 1 {
+		return "…"
+	}
+	if maxWidth == 2 {
+		return s[:1] + "…"
+	}
+	return s[:maxWidth-1] + "…"
 }

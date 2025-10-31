@@ -15,6 +15,10 @@ type Model struct {
 	cursor  int
 	title   string
 	ready   bool
+
+	serviceColWidth int
+	stackColWidth   int
+	replicaColWidth int
 }
 
 type ServiceEntry struct {
