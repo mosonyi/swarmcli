@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"swarmcli/docker"
 	inspectview "swarmcli/views/inspect"
+	nodeservicesview "swarmcli/views/nodeservices"
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -61,7 +62,7 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			node := m.nodes[m.cursor]
 			return m, func() tea.Msg {
 				return view.NavigateToMsg{
-					ViewName: "stackservices",
+					ViewName: nodeservicesview.ViewName,
 					Payload: map[string]interface{}{
 						"nodeID":   node.ID,
 						"hostname": node.Hostname,

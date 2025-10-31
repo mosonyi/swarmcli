@@ -7,8 +7,8 @@ import (
 	inspectview "swarmcli/views/inspect"
 	logsview "swarmcli/views/logs"
 	nodesview "swarmcli/views/nodes"
+	stackservicesview "swarmcli/views/nodeservices"
 	stacksview "swarmcli/views/stacks"
-	stackservicesview "swarmcli/views/stackservices"
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"

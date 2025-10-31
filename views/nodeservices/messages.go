@@ -1,4 +1,4 @@
-package stackservicesview
+package nodeservicesview
 
 type Msg struct {
 	Title   string

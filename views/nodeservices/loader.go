@@ -1,4 +1,4 @@
-package stackservicesview
+package nodeservicesview
 
 import (
 	"swarmcli/docker"

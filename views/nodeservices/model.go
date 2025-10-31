@@ -1,4 +1,4 @@
-package stackservicesview
+package nodeservicesview
 
 import (
 	"swarmcli/views/helpbar"
