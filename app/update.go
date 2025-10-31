@@ -1,9 +1,11 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 	"swarmcli/commands/api"
 	"swarmcli/views/commandinput"
+	stacksview "swarmcli/views/stacks"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
 
@@ -12,6 +14,15 @@ import (
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case snapshotLoadedMsg:
+		// Now we can load the real data
+		return m.switchToView(stacksview.ViewName, nil)
+
+	case snapshotErrorMsg:
+		// Optionally switch to an error view or retry
+		fmt.Println("⚠️ Failed to load snapshot:", msg.Err)
+		return m, nil
+
 	case commandinput.SubmitMsg:
 		raw := strings.TrimSpace(msg.Command)
 		if raw == "" {
