@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"swarmcli/docker"
 	l "swarmcli/utils/log"
 	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"
@@ -31,6 +32,12 @@ func registerView(name string, factory view.Factory) {
 func Init() {
 	l.InitDebug()
 
+	_, err := docker.RefreshSnapshot()
+	if err != nil {
+		fmt.Println("⚠️  Failed to fetch initial swarm snapshot:", err)
+		return
+	}
+
 	for _, cmd := range registry.All() {
 		fmt.Println("-", cmd.Name(), "→", cmd.Description())
 	}
@@ -53,7 +60,7 @@ func Init() {
 	})
 
 	registerView(nodesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
-		return nodesview.New(w, h), nodesview.LoadNodes()
+		return nodesview.New(w, h), nodesview.LoadNodesCmd()
 	})
 	registerView(stacksview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		var nodeID string

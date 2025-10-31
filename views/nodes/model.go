@@ -6,14 +6,15 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/docker/docker/api/types/swarm"
 )
 
 type Model struct {
 	viewport viewport.Model
 	Visible  bool
 
-	nodes  []docker.SwarmNode
-	cursor int
+	entries []docker.NodeEntry
+	cursor  int
 
 	ready bool
 }
@@ -51,9 +52,28 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 	}
 }
 
-func LoadNodes() tea.Cmd {
+func LoadNodes() []docker.NodeEntry {
+	snapshot := docker.GetSnapshot()
+	return snapshot.ToNodeEntries()
+}
+
+func LoadNodesCmd() tea.Cmd {
 	return func() tea.Msg {
-		nodes, _ := docker.ListSwarmNodes()
-		return Msg(nodes) // now returns []SwarmNode, not []string
+		entries := LoadNodes()
+		return Msg{Entries: entries}
 	}
+}
+
+func (m *Model) SelectedNode() *swarm.Node {
+	snap := docker.GetSnapshot()
+	if len(m.entries) == 0 {
+		return nil
+	}
+	selected := m.entries[m.cursor]
+	for _, n := range snap.Nodes {
+		if n.ID == selected.ID {
+			return &n
+		}
+	}
+	return nil
 }

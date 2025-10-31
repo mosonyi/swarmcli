@@ -32,7 +32,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 }
 
 func (m *Model) SetContent(msg Msg) {
-	m.nodes = msg
+	m.entries = msg.Entries
 	m.cursor = 0
 
 	if !m.ready {
