@@ -4,20 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"swarmcli/ui"
-
-	"github.com/charmbracelet/lipgloss"
-)
-
-var (
-	cursorStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("230")).
-		Background(lipgloss.Color("63")).
-		Bold(true)
-
-	statusBarStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("250")).
-		Background(lipgloss.Color("237")).
-		Padding(0, 1)
 )
 
 func (m Model) View() string {
@@ -63,14 +49,14 @@ func (m Model) renderNodes() string {
 	for i, n := range m.nodes {
 		line := fmt.Sprintf("%-20s %-10s %-12s %-15s", n.Hostname, n.Status, n.Availability, n.ManagerStatus)
 		if i == m.cursor {
-			line = cursorStyle.Render(line)
+			line = ui.CursorStyle.Render(line)
 		}
 		lines = append(lines, line)
 	}
 
 	// Footer / status bar
 	status := fmt.Sprintf(" Node %d of %d ", m.cursor+1, len(m.nodes))
-	lines = append(lines, "", statusBarStyle.Render(status))
+	lines = append(lines, "", ui.StatusBarStyle.Render(status))
 
 	return strings.Join(lines, "\n")
 }

@@ -8,41 +8,64 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var (
-	cursorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("230")).
-			Background(lipgloss.Color("63")).
-			Bold(true)
-	headerStyle = lipgloss.NewStyle().Bold(true)
-)
-
 func (m Model) View() string {
 	if !m.Visible {
 		return ""
 	}
-	header := "STACK NAME           SERVICE NAME"
+
+	title := fmt.Sprintf("Services on Node (Total: %d)", len(m.entries))
+	header := "SERVICE                        STACK                REPLICAS"
+
 	content := m.viewport.View()
 	width := m.viewport.Width
 	if width <= 0 {
 		width = 80
 	}
-	return ui.RenderFramedBox(m.title, header, content, width)
+
+	return ui.RenderFramedBox(title, header, content, width)
 }
 
 func (m Model) renderEntries() string {
 	if len(m.entries) == 0 {
-		return "No services found."
+		return "No services found for this node."
 	}
 
 	var lines []string
+
+	// Header row
+	header := lipgloss.NewStyle().
+		Bold(true).
+		Underline(true).
+		Render(fmt.Sprintf("%-30s %-20s %-10s", "SERVICE", "STACK", "REPLICAS"))
+	lines = append(lines, header)
+
 	for i, e := range m.entries {
-		line := fmt.Sprintf("%-20s %-20s", e.StackName, e.ServiceName)
-		if i == m.cursor {
-			line = cursorStyle.Render(line)
+		replicas := fmt.Sprintf("%d/%d", e.ReplicasOnNode, e.ReplicasTotal)
+
+		// Colorize replica count
+		switch {
+		case e.ReplicasTotal == 0:
+			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("—")
+		case e.ReplicasOnNode == 0:
+			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(replicas) // red
+		case e.ReplicasOnNode < e.ReplicasTotal:
+			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render(replicas) // yellow
+		default:
+			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(replicas) // green
 		}
+
+		line := fmt.Sprintf("%-30s %-20s %-10s", e.ServiceName, e.StackName, replicas)
+
+		if i == m.cursor {
+			line = ui.CursorStyle.Render(line)
+		}
+
 		lines = append(lines, line)
 	}
+
+	// Footer with cursor info
 	status := fmt.Sprintf(" Service %d of %d ", m.cursor+1, len(m.entries))
-	lines = append(lines, "", headerStyle.Render(status))
+	lines = append(lines, "", ui.StatusBarStyle.Render(status))
+
 	return strings.Join(lines, "\n")
 }

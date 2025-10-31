@@ -27,6 +27,15 @@ var (
 			Foreground(lipgloss.Color("#888888")).
 			Italic(true).
 			Margin(1, 0)
+	CursorStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("230")).
+			Background(lipgloss.Color("63")).
+			Bold(true)
+
+	StatusBarStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("250")).
+			Background(lipgloss.Color("237")).
+			Padding(0, 1)
 )
 
 func Frame(title, content string, width int) string {

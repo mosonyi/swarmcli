@@ -18,9 +18,11 @@ type Model struct {
 }
 
 type ServiceEntry struct {
-	StackName   string
-	ServiceName string
-	ServiceID   string
+	StackName      string
+	ServiceName    string
+	ServiceID      string
+	ReplicasOnNode int
+	ReplicasTotal  int
 }
 
 // Create new instance
