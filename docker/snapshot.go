@@ -168,3 +168,13 @@ func (s SwarmSnapshot) ToStackEntries() []StackEntry {
 
 	return stacks
 }
+
+// FindService looks up a service by ID in the snapshot.
+func (s *SwarmSnapshot) FindService(serviceID string) *swarm.Service {
+	for i := range s.Services {
+		if s.Services[i].ID == serviceID {
+			return &s.Services[i]
+		}
+	}
+	return nil
+}

@@ -69,10 +69,21 @@ func Init() {
 
 	registerView(nodeservicesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		data, _ := payload.(map[string]interface{})
-		nodeID, _ := data["nodeID"].(string)
-		hostname, _ := data["hostname"].(string)
-
 		v := nodeservicesview.New(w, h)
-		return v, nodeservicesview.LoadStackServices(nodeID, hostname)
+
+		// Decide what to load based on payload
+		switch {
+		case data["nodeID"] != nil && data["hostname"] != nil:
+			nodeID, _ := data["nodeID"].(string)
+			hostname, _ := data["hostname"].(string)
+			return v, nodeservicesview.LoadEntriesForNode(nodeID, hostname)
+
+		case data["stackName"] != nil:
+			stackName, _ := data["stackName"].(string)
+			return v, nodeservicesview.LoadEntriesForStack(stackName)
+		}
+
+		// fallback: empty view
+		return v, nil
 	})
 }

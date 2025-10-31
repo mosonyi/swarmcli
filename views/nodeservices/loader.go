@@ -8,18 +8,20 @@ import (
 	"github.com/docker/docker/api/types/swarm"
 )
 
-func LoadEntries(nodeID string) []ServiceEntry {
+// LoadEntries returns services filtered by nodeID or stackName.
+// If both are empty, returns all services.
+func LoadEntries(nodeID, stackName string) []ServiceEntry {
 	snap, err := docker.GetOrRefreshSnapshot()
 	if err != nil {
 		fmt.Println("failed to get snapshot:", err)
 		return nil
 	}
 
-	// filter services/tasks for this node
 	var entries []ServiceEntry
 	type count struct{ total, onNode int }
 	counts := map[string]*count{}
 
+	// Count tasks per service
 	for _, t := range snap.Tasks {
 		if t.DesiredState != swarm.TaskStateRunning {
 			continue
@@ -30,25 +32,38 @@ func LoadEntries(nodeID string) []ServiceEntry {
 			counts[t.ServiceID] = c
 		}
 		c.total++
-		if t.NodeID == nodeID {
+		if nodeID != "" && t.NodeID == nodeID {
 			c.onNode++
 		}
 	}
 
 	for _, svc := range snap.Services {
-		stackName := svc.Spec.Labels["com.docker.stack.namespace"]
-		if stackName == "" {
-			stackName = "-"
+		svcStack := svc.Spec.Labels["com.docker.stack.namespace"]
+		if svcStack == "" {
+			svcStack = "-"
 		}
-		if c, ok := counts[svc.ID]; ok && c.onNode > 0 {
-			entries = append(entries, ServiceEntry{
-				StackName:      stackName,
-				ServiceName:    svc.Spec.Name,
-				ServiceID:      svc.ID,
-				ReplicasOnNode: c.onNode,
-				ReplicasTotal:  c.total,
-			})
+
+		if stackName != "" && svcStack != stackName {
+			continue
 		}
+
+		c := counts[svc.ID]
+		if c == nil {
+			continue
+		}
+
+		// Only show node-specific services if nodeID is provided
+		if nodeID != "" && c.onNode == 0 {
+			continue
+		}
+
+		entries = append(entries, ServiceEntry{
+			StackName:      svcStack,
+			ServiceName:    svc.Spec.Name,
+			ServiceID:      svc.ID,
+			ReplicasOnNode: c.onNode,
+			ReplicasTotal:  c.total,
+		})
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
