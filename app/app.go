@@ -7,6 +7,7 @@ import (
 	inspectview "swarmcli/views/inspect"
 	logsview "swarmcli/views/logs"
 	nodesview "swarmcli/views/nodes"
+	nodeservicesview "swarmcli/views/nodeservices"
 	stacksview "swarmcli/views/stacks"
 	"swarmcli/views/view"
 
@@ -60,5 +61,14 @@ func Init() {
 			nodeID, _ = payload.(string)
 		}
 		return stacksview.New(w, h), stacksview.LoadStacks(nodeID)
+	})
+
+	registerView(nodeservicesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
+		data, _ := payload.(map[string]interface{})
+		nodeID, _ := data["nodeID"].(string)
+		hostname, _ := data["hostname"].(string)
+
+		v := nodeservicesview.New(w, h)
+		return v, nodeservicesview.LoadStackServices(nodeID, hostname)
 	})
 }
