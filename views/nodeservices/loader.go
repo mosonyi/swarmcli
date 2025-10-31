@@ -8,8 +8,6 @@ import (
 	"github.com/docker/docker/api/types/swarm"
 )
 
-// LoadEntries returns services filtered by nodeID or stackName.
-// If both are empty, returns all services.
 func LoadEntries(nodeID, stackName string) []ServiceEntry {
 	snap, err := docker.GetOrRefreshSnapshot()
 	if err != nil {
@@ -18,61 +16,48 @@ func LoadEntries(nodeID, stackName string) []ServiceEntry {
 	}
 
 	var entries []ServiceEntry
-	type count struct{ total, onNode int }
-	counts := map[string]*count{}
 
-	// Count tasks per service
+	// Count currently running tasks per service (optionally filtered by node)
+	runningTasks := map[string]int{}
 	for _, t := range snap.Tasks {
-		if t.DesiredState != swarm.TaskStateRunning {
+		if t.DesiredState != swarm.TaskStateRunning || t.Status.State != swarm.TaskStateRunning {
 			continue
 		}
-		c := counts[t.ServiceID]
-		if c == nil {
-			c = &count{}
-			counts[t.ServiceID] = c
+		if nodeID != "" && t.NodeID != nodeID {
+			continue
 		}
-		c.total++
-		if nodeID != "" && t.NodeID == nodeID {
-			c.onNode++
-		}
+		runningTasks[t.ServiceID]++
 	}
 
 	for _, svc := range snap.Services {
-		svcStack := svc.Spec.Labels["com.docker.stack.namespace"]
-		if svcStack == "" {
-			svcStack = "-"
+		stack := svc.Spec.Labels["com.docker.stack.namespace"]
+		if stack == "" {
+			stack = "-"
 		}
-
-		if stackName != "" && svcStack != stackName {
+		if stackName != "" && stack != stackName {
 			continue
 		}
 
-		c := counts[svc.ID]
-		if c == nil {
-			continue
+		// Determine desired replicas from service spec
+		var desired int
+		if svc.Spec.Mode.Replicated != nil && svc.Spec.Mode.Replicated.Replicas != nil {
+			desired = int(*svc.Spec.Mode.Replicated.Replicas)
+		} else if svc.Spec.Mode.Global != nil {
+			desired = len(snap.Nodes)
 		}
 
-		var replicasOnNode int
-		if nodeID != "" {
-			replicasOnNode = c.onNode
-			// Skip services not running on this node
-			if replicasOnNode == 0 {
-				continue
-			}
-		} else {
-			// Stack view: show all running tasks as "on node"
-			replicasOnNode = c.total
-		}
+		onNode := runningTasks[svc.ID] // could be 0 if no tasks currently running
 
 		entries = append(entries, ServiceEntry{
-			StackName:      svcStack,
+			StackName:      stack,
 			ServiceName:    svc.Spec.Name,
 			ServiceID:      svc.ID,
-			ReplicasOnNode: replicasOnNode,
-			ReplicasTotal:  c.total,
+			ReplicasOnNode: onNode,
+			ReplicasTotal:  desired,
 		})
 	}
 
+	// Sort by stack then service
 	sort.Slice(entries, func(i, j int) bool {
 		if entries[i].StackName == entries[j].StackName {
 			return entries[i].ServiceName < entries[j].ServiceName
