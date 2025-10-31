@@ -14,7 +14,7 @@ func handleKey(m Model, msg tea.KeyMsg) (view.View, tea.Cmd) {
 	case "q", "esc":
 		m.Visible = false
 		return m, nil
-	case "i":
+	case "i", "enter":
 		if m.cursor < len(m.entries) {
 			selected := m.entries[m.cursor] // StackEntry
 			return m, func() tea.Msg {
