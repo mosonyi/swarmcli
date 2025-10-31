@@ -14,25 +14,30 @@ func (m Model) View() string {
 	}
 
 	title := fmt.Sprintf("Services on Node (Total: %d)", len(m.entries))
-	header := lipgloss.NewStyle().
-		Bold(true).
-		Underline(true).
-		Render(fmt.Sprintf("%-*s  %-*s  %-*s",
-			m.serviceColWidth, "SERVICE",
-			m.stackColWidth, "STACK",
-			m.replicaColWidth, "REPLICAS",
-		))
 
-	content := m.viewport.View()
 	width := m.viewport.Width
 	if width <= 0 {
 		width = 80
 	}
 
+	// Blueish styled header
+	headerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("12")) // light blue
+
+	header := headerStyle.Render(fmt.Sprintf(
+		"%-*s  %-*s  %-*s",
+		m.serviceColWidth, "SERVICE",
+		m.stackColWidth, "STACK",
+		m.replicaColWidth, "REPLICAS",
+	))
+
+	content := m.viewport.View()
+
 	return ui.RenderFramedBox(title, header, content, width)
 }
 
-func (m Model) renderEntries() string {
+func (m *Model) renderEntries() string {
 	if len(m.entries) == 0 {
 		return "No services found for this node."
 	}
@@ -59,7 +64,7 @@ func (m Model) renderEntries() string {
 		stackCol = minStack
 	}
 
-	// save calculated widths for View() (so header aligns)
+	// store for header alignment
 	m.serviceColWidth = serviceCol
 	m.stackColWidth = stackCol
 	m.replicaColWidth = replicaWidth
@@ -74,17 +79,18 @@ func (m Model) renderEntries() string {
 		case e.ReplicasTotal == 0:
 			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("—")
 		case e.ReplicasOnNode == 0:
-			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(replicas)
+			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(replicas) // red
 		case e.ReplicasOnNode < e.ReplicasTotal:
-			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render(replicas)
+			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render(replicas) // yellow
 		default:
-			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(replicas)
+			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(replicas) // green
 		}
 
 		serviceName := truncateWithEllipsis(e.ServiceName, serviceCol)
 		stackName := truncateWithEllipsis(e.StackName, stackCol)
 
-		line := fmt.Sprintf("%-*s  %-*s  %*s",
+		line := fmt.Sprintf(
+			"%-*s  %-*s  %*s",
 			serviceCol, serviceName,
 			stackCol, stackName,
 			replicaWidth, replicas,
