@@ -8,6 +8,8 @@ import (
 	"github.com/docker/docker/api/types/swarm"
 )
 
+// LoadEntries returns services filtered by nodeID or stackName.
+// If both are empty, returns all services.
 func LoadEntries(nodeID, stackName string) []ServiceEntry {
 	snap, err := docker.GetOrRefreshSnapshot()
 	if err != nil {
@@ -17,23 +19,14 @@ func LoadEntries(nodeID, stackName string) []ServiceEntry {
 
 	var entries []ServiceEntry
 
-	// Count currently running tasks per service (optionally filtered by node)
-	runningTasks := map[string]int{}
-	for _, t := range snap.Tasks {
-		if t.DesiredState != swarm.TaskStateRunning || t.Status.State != swarm.TaskStateRunning {
-			continue
-		}
-		if nodeID != "" && t.NodeID != nodeID {
-			continue
-		}
-		runningTasks[t.ServiceID]++
-	}
-
 	for _, svc := range snap.Services {
+		// Determine stack name
 		stack := svc.Spec.Labels["com.docker.stack.namespace"]
 		if stack == "" {
 			stack = "-"
 		}
+
+		// Apply stack filter if specified
 		if stackName != "" && stack != stackName {
 			continue
 		}
@@ -46,7 +39,27 @@ func LoadEntries(nodeID, stackName string) []ServiceEntry {
 			desired = len(snap.Nodes)
 		}
 
-		onNode := runningTasks[svc.ID] // could be 0 if no tasks currently running
+		// Count running tasks
+		onNode := 0
+		for _, t := range snap.Tasks {
+			if t.ServiceID != svc.ID {
+				continue
+			}
+			if t.DesiredState != swarm.TaskStateRunning || t.Status.State != swarm.TaskStateRunning {
+				continue
+			}
+			if nodeID != "" && t.NodeID == nodeID {
+				onNode++
+			} else if nodeID == "" {
+				// stack view: count all nodes
+				onNode++
+			}
+		}
+
+		// Skip services that don't run on the node (only for node view)
+		if nodeID != "" && onNode == 0 {
+			continue
+		}
 
 		entries = append(entries, ServiceEntry{
 			StackName:      stack,
@@ -57,7 +70,7 @@ func LoadEntries(nodeID, stackName string) []ServiceEntry {
 		})
 	}
 
-	// Sort by stack then service
+	// Sort by stack then service name
 	sort.Slice(entries, func(i, j int) bool {
 		if entries[i].StackName == entries[j].StackName {
 			return entries[i].ServiceName < entries[j].ServiceName
