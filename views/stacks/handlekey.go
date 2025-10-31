@@ -1,6 +1,7 @@
 package stacksview
 
 import (
+	nodeservicesview "swarmcli/views/nodeservices"
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,6 +14,18 @@ func handleKey(m Model, msg tea.KeyMsg) (view.View, tea.Cmd) {
 	case "q", "esc":
 		m.Visible = false
 		return m, nil
+	case "i", "enter":
+		if m.cursor < len(m.entries) {
+			selected := m.entries[m.cursor] // StackEntry
+			return m, func() tea.Msg {
+				return view.NavigateToMsg{
+					ViewName: nodeservicesview.ViewName,
+					Payload: map[string]interface{}{
+						"stackName": selected.Name,
+					},
+				}
+			}
+		}
 
 	case "r":
 		return m, LoadStacks(m.nodeID)

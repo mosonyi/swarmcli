@@ -7,6 +7,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+type FilterType int
+
+const (
+	NodeFilter FilterType = iota
+	StackFilter
+)
+
 type Model struct {
 	viewport viewport.Model
 	Visible  bool
@@ -19,6 +26,12 @@ type Model struct {
 	serviceColWidth int
 	stackColWidth   int
 	replicaColWidth int
+
+	// Filter
+	filterType FilterType
+	nodeID     string
+	hostname   string
+	stackName  string
 }
 
 type ServiceEntry struct {
@@ -55,18 +68,13 @@ func (m *Model) SetContent(msg Msg) {
 	m.title = msg.Title
 	m.entries = msg.Entries
 	m.cursor = 0
+	m.filterType = msg.FilterType
+	m.nodeID = msg.NodeID
+	m.hostname = msg.Hostname
+	m.stackName = msg.StackName
+
 	if m.ready {
 		m.viewport.GotoTop()
 		m.viewport.SetContent(m.renderEntries())
-	}
-}
-
-func LoadStackServices(nodeID, nodeHostname string) tea.Cmd {
-	return func() tea.Msg {
-		entries := LoadEntries(nodeID)
-		return Msg{
-			Title:   "Services on Node: " + nodeHostname,
-			Entries: entries,
-		}
 	}
 }
