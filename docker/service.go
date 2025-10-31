@@ -7,15 +7,20 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/swarm"
 )
 
 type StackService struct {
-	NodeID      string
-	StackName   string
-	ServiceName string
+	NodeID         string
+	StackName      string
+	ServiceName    string
+	ServiceID      string
+	ReplicasOnNode int
+	ReplicasTotal  int
 }
 
-// GetServicesInStackOnNode returns the services belonging to a given stack *and node*.
+// GetServicesInStackOnNode returns services in a stack that have tasks on the given node,
+// along with per-node replica counts (e.g. 2/3 replicas).
 func GetServicesInStackOnNode(stackName, nodeID string) []StackService {
 	c, err := GetClient()
 	if err != nil {
@@ -26,24 +31,42 @@ func GetServicesInStackOnNode(stackName, nodeID string) []StackService {
 
 	ctx := context.Background()
 
-	// 1. List all tasks on this node
-	tasks, err := c.TaskList(ctx, types.TaskListOptions{
-		Filters: filters.NewArgs(filters.Arg("node", nodeID)),
-	})
+	// 1. List all tasks across the swarm for the stack
+	taskFilter := filters.NewArgs()
+	taskFilter.Add("label", fmt.Sprintf("com.docker.stack.namespace=%s", stackName))
+	tasks, err := c.TaskList(ctx, types.TaskListOptions{Filters: taskFilter})
 	if err != nil {
-		fmt.Println("failed to list tasks for node:", nodeID, ":", err)
+		fmt.Println("failed to list tasks for stack:", stackName, ":", err)
 		return nil
 	}
 
-	// 2. Gather service IDs that belong to this node
-	nodeServiceIDs := make(map[string]struct{})
+	// 2. Count replicas by service and by node
+	type count struct {
+		total  int
+		onNode int
+	}
+	replicaCounts := make(map[string]*count)
+
 	for _, t := range tasks {
-		if t.ServiceID != "" {
-			nodeServiceIDs[t.ServiceID] = struct{}{}
+		if t.DesiredState != swarm.TaskStateRunning {
+			continue
+		}
+		svcID := t.ServiceID
+		if svcID == "" {
+			continue
+		}
+		c := replicaCounts[svcID]
+		if c == nil {
+			c = &count{}
+			replicaCounts[svcID] = c
+		}
+		c.total++
+		if t.NodeID == nodeID {
+			c.onNode++
 		}
 	}
 
-	// 3. Now get all services belonging to this stack
+	// 3. List all services belonging to the stack
 	f := filters.NewArgs()
 	f.Add("label", fmt.Sprintf("com.docker.stack.namespace=%s", stackName))
 	services, err := c.ServiceList(ctx, types.ServiceListOptions{Filters: f})
@@ -52,14 +75,17 @@ func GetServicesInStackOnNode(stackName, nodeID string) []StackService {
 		return nil
 	}
 
-	// 4. Filter only those running on this node
+	// 4. Filter services that actually have tasks on this node
 	var filtered []StackService
 	for _, svc := range services {
-		if _, ok := nodeServiceIDs[svc.ID]; ok {
+		if c, ok := replicaCounts[svc.ID]; ok && c.onNode > 0 {
 			filtered = append(filtered, StackService{
-				NodeID:      nodeID,
-				StackName:   stackName,
-				ServiceName: svc.Spec.Name,
+				NodeID:         nodeID,
+				StackName:      stackName,
+				ServiceName:    svc.Spec.Name,
+				ServiceID:      svc.ID,
+				ReplicasOnNode: c.onNode,
+				ReplicasTotal:  c.total,
 			})
 		}
 	}
