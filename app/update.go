@@ -16,7 +16,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case snapshotLoadedMsg:
 		// Now we can load the real data
-		return m.switchToView(stacksview.ViewName, nil)
+		return m.replaceView(stacksview.ViewName, nil)
 
 	case snapshotErrorMsg:
 		// Optionally switch to an error view or retry
