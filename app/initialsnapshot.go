@@ -6,15 +6,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func loadInitialSnapshot() tea.Cmd {
+// --- Async snapshot loader ---
+func loadSnapshotAsync() tea.Cmd {
 	return func() tea.Msg {
 		_, err := docker.RefreshSnapshot()
-		if err != nil {
-			return snapshotErrorMsg{Err: err}
-		}
-		return snapshotLoadedMsg{}
+		return snapshotLoadedMsg{Err: err}
 	}
 }
 
-type snapshotLoadedMsg struct{}
-type snapshotErrorMsg struct{ Err error }
+type snapshotLoadedMsg struct{ Err error }

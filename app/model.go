@@ -45,7 +45,7 @@ func InitialModel() Model {
 // and is passed into the tea.NewProgram function.
 func (m Model) Init() tea.Cmd {
 	// "" loads all stacks on all nodes
-	return tea.Batch(tick(), loadInitialSnapshot(), systeminfoview.LoadStatus())
+	return tea.Batch(tick(), loadSnapshotAsync(), systeminfoview.LoadStatus())
 }
 
 func (m Model) switchToView(name string, data any) (Model, tea.Cmd) {
@@ -63,17 +63,18 @@ func (m Model) switchToView(name string, data any) (Model, tea.Cmd) {
 	return m, tea.Batch(resizeCmd, loadCmd)
 }
 
-func (m Model) replaceView(name string, data any) (Model, tea.Cmd) {
+func (m Model) replaceView(name string, payload any) (Model, tea.Cmd) {
 	factory, ok := viewRegistry[name]
 	if !ok {
 		return m, nil
 	}
 
-	newView, loadCmd := factory(m.viewport.Width, m.viewport.Height, data)
+	newView, loadCmd := factory(m.viewport.Width, m.viewport.Height, payload)
 	newView, resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height)
 
-	m.viewStack.PopAndPush(newView)
+	// Replace current view instead of stacking
 	m.currentView = newView
+	m.viewStack.Reset()
 
 	return m, tea.Batch(resizeCmd, loadCmd)
 }
