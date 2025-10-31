@@ -3,7 +3,6 @@ package nodesview
 import (
 	"context"
 	"fmt"
-	"strings"
 	"swarmcli/docker"
 	inspectview "swarmcli/views/inspect"
 	"swarmcli/views/view"
@@ -23,13 +22,13 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "j", "down":
 		if m.cursor < len(m.nodes)-1 {
 			m.cursor++
-			m.viewport.SetContent(m.buildContent())
+			m.viewport.SetContent(m.renderNodes())
 		}
 
 	case "k", "up":
 		if m.cursor > 0 {
 			m.cursor--
-			m.viewport.SetContent(m.buildContent())
+			m.viewport.SetContent(m.renderNodes())
 		}
 
 	case "pgup":
@@ -60,13 +59,4 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 
 	return m, nil
-}
-
-func (m Model) renderNodes() string {
-	var lines []string
-	for _, n := range m.nodes {
-		line := fmt.Sprintf("%-20s %-10s %-10s %-10s", n.Hostname, n.Status, n.Availability, n.ManagerStatus)
-		lines = append(lines, line)
-	}
-	return strings.Join(lines, "\n")
 }

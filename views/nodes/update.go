@@ -2,8 +2,10 @@ package nodesview
 
 import (
 	"fmt"
-	tea "github.com/charmbracelet/bubbletea"
+	"strings"
 	"swarmcli/views/view"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
@@ -18,7 +20,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		m.viewport.Height = msg.Height
 		if !m.ready {
 			m.ready = true
-			m.viewport.SetContent(m.buildContent())
+			m.viewport.SetContent(m.renderNodes())
 		}
 		return m, nil
 
@@ -40,22 +42,33 @@ func (m *Model) SetContent(msg Msg) {
 	}
 
 	m.viewport.GotoTop()
-	m.viewport.SetContent(m.buildContent())
+	m.viewport.SetContent(m.renderNodes())
 	m.viewport.YOffset = 0
 }
 
-func (m *Model) buildContent() string {
-	var s string
-	for i, item := range m.nodes {
+// renderNodes builds the string to display in the viewport with a fixed header
+func (m Model) renderNodes() string {
+	var lines []string
+
+	// Header row
+	header := fmt.Sprintf("%-20s %-10s %-12s %-15s", "HOSTNAME", "STATUS", "AVAILABILITY", "MANAGER STATUS")
+	separator := strings.Repeat("-", len(header))
+	lines = append(lines, header, separator)
+
+	// Data rows
+	for i, n := range m.nodes {
 		cursor := "  "
 		if i == m.cursor {
 			cursor = "→ "
 		}
-		s += fmt.Sprintf("%s%s\n", cursor, item)
+
+		line := fmt.Sprintf("%-20s %-10s %-12s %-15s",
+			n.Hostname, n.Status, n.Availability, n.ManagerStatus)
+
+		lines = append(lines, cursor+line)
 	}
 
-	m.ensureCursorVisible()
-	return s
+	return strings.Join(lines, "\n")
 }
 
 // ensureCursorVisible keeps the cursor within the visible viewport
