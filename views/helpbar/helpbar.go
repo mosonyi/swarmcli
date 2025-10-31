@@ -3,7 +3,7 @@ package helpbar
 import (
 	"github.com/charmbracelet/lipgloss"
 	"strings"
-	"swarmcli/styles"
+	"swarmcli/ui"
 )
 
 type HelpEntry struct {
@@ -61,7 +61,7 @@ func (m Model) View(systemInfo string) string {
 		return systemInfo
 	}
 
-	itemStyle := styles.HelpStyle.Padding(0).Margin(0)
+	itemStyle := ui.HelpStyle.Padding(0).Margin(0)
 
 	infoWidth := lipgloss.Width(systemInfo)
 	availableWidth := m.width - infoWidth

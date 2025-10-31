@@ -2,7 +2,7 @@ package helpview
 
 import (
 	"fmt"
-	"swarmcli/styles"
+	"swarmcli/ui"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -22,7 +22,7 @@ func (m Model) View() string {
 		Foreground(lipgloss.Color("#808080")).
 		Render("[press q or esc to go back]")
 
-	return styles.BorderStyle.Render(
+	return ui.BorderStyle.Render(
 		fmt.Sprintf("%s\n\n%s\n\n%s", header, body, footer),
 	)
 }

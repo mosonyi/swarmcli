@@ -2,7 +2,7 @@ package app
 
 import (
 	"fmt"
-	"swarmcli/styles"
+	"swarmcli/ui"
 	"swarmcli/views/commandinput"
 	stacksview "swarmcli/views/stacks"
 	systeminfoview "swarmcli/views/systeminfo"
@@ -74,7 +74,7 @@ func (m Model) renderStackBar() string {
 			parts = append(parts, lipgloss.NewStyle().Faint(true).Render(" → "))
 
 		}
-		style := styles.Rainbow[i%len(styles.Rainbow)]
+		style := ui.Rainbow[i%len(ui.Rainbow)]
 		label := view.Name()
 		parts = append(parts, style.Render(fmt.Sprintf(" %s ", label)))
 	}

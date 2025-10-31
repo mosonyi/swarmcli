@@ -3,7 +3,7 @@ package nodesview
 import (
 	"fmt"
 	"strings"
-	"swarmcli/styles"
+	"swarmcli/ui"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -42,7 +42,7 @@ func (m Model) View() string {
 		width = 80
 	}
 
-	return styles.RenderFramedBox(title, header, content, width)
+	return ui.RenderFramedBox(title, header, content, width)
 }
 
 func plural(n int) string {

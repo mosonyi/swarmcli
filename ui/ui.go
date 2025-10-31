@@ -1,4 +1,4 @@
-package styles
+package ui
 
 import (
 	"fmt"
@@ -10,18 +10,18 @@ import (
 // Styles (you can override these per-view if desired)
 var (
 	FrameTitleStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("81")).
-		Bold(true)
+			Foreground(lipgloss.Color("81")).
+			Bold(true)
 
 	FrameHeaderStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("75")).
-		Bold(true)
+				Foreground(lipgloss.Color("75")).
+				Bold(true)
 
 	FrameBorderColor = lipgloss.Color("240")
 )
 
 // RenderFramedBox draws a bordered frame with a centered title, header line, and content.
-// It preserves ANSI styles and ensures the frame width is consistent.
+// It preserves ANSI ui and ensures the frame width is consistent.
 func RenderFramedBox(title string, header string, content string, width int) string {
 	if width <= 0 {
 		width = 80
