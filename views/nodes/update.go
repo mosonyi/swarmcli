@@ -6,6 +6,7 @@ import (
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
@@ -47,27 +48,23 @@ func (m *Model) SetContent(msg Msg) {
 }
 
 // renderNodes builds the string to display in the viewport with a fixed header
+var (
+	cursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("63")).Bold(true)
+)
+
 func (m Model) renderNodes() string {
 	var lines []string
-
-	// Header row
 	header := fmt.Sprintf("%-20s %-10s %-12s %-15s", "HOSTNAME", "STATUS", "AVAILABILITY", "MANAGER STATUS")
 	separator := strings.Repeat("-", len(header))
 	lines = append(lines, header, separator)
 
-	// Data rows
 	for i, n := range m.nodes {
-		cursor := "  "
+		line := fmt.Sprintf("%-20s %-10s %-12s %-15s", n.Hostname, n.Status, n.Availability, n.ManagerStatus)
 		if i == m.cursor {
-			cursor = "→ "
+			line = cursorStyle.Render(line)
 		}
-
-		line := fmt.Sprintf("%-20s %-10s %-12s %-15s",
-			n.Hostname, n.Status, n.Availability, n.ManagerStatus)
-
-		lines = append(lines, cursor+line)
+		lines = append(lines, line)
 	}
-
 	return strings.Join(lines, "\n")
 }
 
