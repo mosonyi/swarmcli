@@ -1,12 +1,9 @@
 package nodesview
 
 import (
-	"fmt"
-	"strings"
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
@@ -45,27 +42,6 @@ func (m *Model) SetContent(msg Msg) {
 	m.viewport.GotoTop()
 	m.viewport.SetContent(m.renderNodes())
 	m.viewport.YOffset = 0
-}
-
-// renderNodes builds the string to display in the viewport with a fixed header
-var (
-	cursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("63")).Bold(true)
-)
-
-func (m Model) renderNodes() string {
-	var lines []string
-	header := fmt.Sprintf("%-20s %-10s %-12s %-15s", "HOSTNAME", "STATUS", "AVAILABILITY", "MANAGER STATUS")
-	separator := strings.Repeat("-", len(header))
-	lines = append(lines, header, separator)
-
-	for i, n := range m.nodes {
-		line := fmt.Sprintf("%-20s %-10s %-12s %-15s", n.Hostname, n.Status, n.Availability, n.ManagerStatus)
-		if i == m.cursor {
-			line = cursorStyle.Render(line)
-		}
-		lines = append(lines, line)
-	}
-	return strings.Join(lines, "\n")
 }
 
 // ensureCursorVisible keeps the cursor within the visible viewport
