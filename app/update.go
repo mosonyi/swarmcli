@@ -1,9 +1,12 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 	"swarmcli/commands/api"
 	"swarmcli/views/commandinput"
+	loadingview "swarmcli/views/loading"
+	stacksview "swarmcli/views/stacks"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
 
@@ -12,6 +15,13 @@ import (
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case snapshotLoadedMsg:
+		if msg.Err != nil {
+			// Replace with error message in the loading view
+			return m.replaceView(loadingview.ViewName, fmt.Sprintf("Error loading snapshot: %v", msg.Err))
+		}
+		// Replace loading with stacks view
+		return m.replaceView(stacksview.ViewName, nil)
 	case commandinput.SubmitMsg:
 		raw := strings.TrimSpace(msg.Command)
 		if raw == "" {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"swarmcli/ui"
 	"swarmcli/views/commandinput"
-	stacksview "swarmcli/views/stacks"
+	loadingview "swarmcli/views/loading"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
 	"swarmcli/views/viewstack"
@@ -26,16 +26,19 @@ type Model struct {
 	commandInput commandinput.Model
 }
 
-// initialModel creates default model
 func InitialModel() Model {
 	vp := viewport.New(80, 20)
 	vp.YPosition = 5
 
-	stacks := stacksview.New(80, 20)
+	loading := loadingview.New(80, 20, map[string]string{
+		"title":   "Initializing",
+		"header":  "Fetching cluster info",
+		"message": "Loading Swarm nodes and stacks...",
+	})
 
 	return Model{
 		viewport:     vp,
-		currentView:  stacks,
+		currentView:  loading,
 		systemInfo:   systeminfoview.New(version),
 		viewStack:    viewstack.Stack{},
 		commandInput: cmdBar(),
@@ -46,7 +49,7 @@ func InitialModel() Model {
 // and is passed into the tea.NewProgram function.
 func (m Model) Init() tea.Cmd {
 	// "" loads all stacks on all nodes
-	return tea.Batch(tick(), stacksview.LoadStacks(""), systeminfoview.LoadStatus())
+	return tea.Batch(tick(), loadSnapshotAsync(), systeminfoview.LoadStatus())
 }
 
 func (m Model) switchToView(name string, data any) (Model, tea.Cmd) {
@@ -60,6 +63,22 @@ func (m Model) switchToView(name string, data any) (Model, tea.Cmd) {
 
 	m.viewStack.Push(m.currentView)
 	m.currentView = newView
+
+	return m, tea.Batch(resizeCmd, loadCmd)
+}
+
+func (m Model) replaceView(name string, payload any) (Model, tea.Cmd) {
+	factory, ok := viewRegistry[name]
+	if !ok {
+		return m, nil
+	}
+
+	newView, loadCmd := factory(m.viewport.Width, m.viewport.Height, payload)
+	newView, resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height)
+
+	// Replace current view instead of stacking
+	m.currentView = newView
+	m.viewStack.Reset()
 
 	return m, tea.Batch(resizeCmd, loadCmd)
 }
