@@ -10,14 +10,14 @@ import (
 
 var (
 	cursorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("230")).
-			Background(lipgloss.Color("63")).
-			Bold(true)
+		Foreground(lipgloss.Color("230")).
+		Background(lipgloss.Color("63")).
+		Bold(true)
 
 	statusBarStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("250")).
-			Background(lipgloss.Color("237")).
-			Padding(0, 1)
+		Foreground(lipgloss.Color("250")).
+		Background(lipgloss.Color("237")).
+		Padding(0, 1)
 )
 
 func (m Model) View() string {
@@ -50,22 +50,6 @@ func plural(n int) string {
 		return ""
 	}
 	return "s"
-}
-
-// padLine ensures lines fit within the border width without slicing ANSI escapes.
-// If the rendered width is <= width, pad with spaces. If it's larger, use lipgloss
-// to safely truncate the styled string (preserving ANSI sequences).
-func padLine(line string, width int) string {
-	lineWidth := lipgloss.Width(line)
-	if lineWidth == width {
-		return line
-	}
-	if lineWidth < width {
-		return line + strings.Repeat(" ", width-lineWidth)
-	}
-	// lineWidth > width: safely truncate styled string preserving escapes
-	// Use MaxWidth to let lipgloss do the heavy lifting.
-	return lipgloss.NewStyle().MaxWidth(width).Render(line)
 }
 
 // renderNodes builds the visible list of nodes with colorized header and cursor highlight.
