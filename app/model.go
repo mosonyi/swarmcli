@@ -30,7 +30,11 @@ func InitialModel() Model {
 	vp := viewport.New(80, 20)
 	vp.YPosition = 5
 
-	loading := loadingview.New(80, 20, "Loading Swarm data...")
+	loading := loadingview.New(80, 20, map[string]string{
+		"title":   "Initializing",
+		"header":  "Fetching cluster info",
+		"message": "Loading Swarm nodes and stacks...",
+	})
 
 	return Model{
 		viewport:     vp,

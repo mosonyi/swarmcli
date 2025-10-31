@@ -37,11 +37,7 @@ func Init() {
 	}
 
 	registerView(loadingview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
-		msg := "Loading Swarm data..."
-		if payloadStr, ok := payload.(string); ok {
-			msg = payloadStr
-		}
-		return loadingview.New(w, h, msg), nil
+		return loadingview.New(w, h, payload), nil
 	})
 	registerView(helpview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		cmds, _ := payload.([]helpview.CommandInfo)
