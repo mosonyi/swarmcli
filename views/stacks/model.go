@@ -12,16 +12,20 @@ type Model struct {
 	viewport viewport.Model
 	Visible  bool
 
-	nodeId      string
-	stackCursor int
-	stacks      []docker.Stack
-	ready       bool
+	nodeID  string
+	cursor  int
+	entries []docker.StackEntry
+
+	ready bool
 }
 
 func New(width, height int) Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
-	return Model{viewport: vp, Visible: false}
+	return Model{
+		viewport: vp,
+		Visible:  false,
+	}
 }
 
 func (m Model) Init() tea.Cmd { return nil }
@@ -30,10 +34,10 @@ func (m Model) Name() string { return ViewName }
 
 func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
-		{Key: "enter", Desc: "view logs"},
+		{Key: "enter", Desc: "view stack services"},
 		{Key: "r", Desc: "refresh stacks"},
-		{Key: "k/up", Desc: "scr up"},
-		{Key: "j/down", Desc: "scr down"},
+		{Key: "k/up", Desc: "scroll up"},
+		{Key: "j/down", Desc: "scroll down"},
 		{Key: "pgup", Desc: "page up"},
 		{Key: "pgdown", Desc: "page down"},
 		{Key: "q", Desc: "close"},
@@ -42,7 +46,11 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 
 func LoadStacks(nodeID string) tea.Cmd {
 	return func() tea.Msg {
-		stacks := docker.GetStacks(nodeID)
-		return Msg{NodeId: nodeID, Stacks: stacks}
+		snap, err := docker.GetOrRefreshSnapshot()
+		if err != nil {
+			return Msg{NodeID: nodeID, Stacks: nil}
+		}
+		stacks := snap.ToStackEntries()
+		return Msg{NodeID: nodeID, Stacks: stacks}
 	}
 }

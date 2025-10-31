@@ -21,7 +21,7 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.Visible = false
 
 	case "j", "down":
-		if m.cursor < len(m.nodes)-1 {
+		if m.cursor < len(m.entries)-1 {
 			m.cursor++
 			m.viewport.SetContent(m.renderNodes())
 		}
@@ -39,8 +39,8 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.viewport.ScrollDown(m.viewport.Height)
 
 	case "d":
-		if m.cursor < len(m.nodes) {
-			node := m.nodes[m.cursor]
+		if m.cursor < len(m.entries) {
+			node := m.entries[m.cursor]
 
 			return m, func() tea.Msg {
 				inspectContent, err := docker.Inspect(context.Background(), docker.InspectNode, node.ID)
@@ -58,8 +58,8 @@ func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 		}
 	case "i":
-		if m.cursor < len(m.nodes) {
-			node := m.nodes[m.cursor]
+		if m.cursor < len(m.entries) {
+			node := m.entries[m.cursor]
 			return m, func() tea.Msg {
 				return view.NavigateToMsg{
 					ViewName: nodeservicesview.ViewName,

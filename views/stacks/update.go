@@ -2,35 +2,38 @@ package stacksview
 
 import (
 	"fmt"
-	"strings"
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// Update handles messages for the stacks view.
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	switch msg := msg.(type) {
+
+	// --- Stacks loaded ---
 	case Msg:
-		m.SetContent(msg)
+		m.setStacks(msg)
 		m.Visible = true
 		return m, nil
 
+	// --- Refresh error ---
 	case RefreshErrorMsg:
 		m.Visible = true
 		m.viewport.SetContent(fmt.Sprintf("Error refreshing stacks: %v", msg.Err))
 		return m, nil
 
+	// --- Resize event ---
 	case tea.WindowSizeMsg:
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height
-		if !m.ready {
-			m.ready = true
-			m.viewport.SetContent(m.buildContent())
-		}
+		m.ready = true
+		m.viewport.SetContent(m.buildContent())
 		return m, nil
 
+	// --- Keyboard input ---
 	case tea.KeyMsg:
-		return HandleKey(m, msg)
+		return handleKey(m, msg)
 	}
 
 	var cmd tea.Cmd
@@ -38,58 +41,32 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *Model) SetContent(msg Msg) {
-	m.nodeId = msg.NodeId
-	m.stacks = msg.Stacks
-	m.stackCursor = 0
+// setStacks updates the stacks and refreshes viewport content.
+func (m *Model) setStacks(msg Msg) {
+	m.nodeID = msg.NodeID
+	m.entries = msg.Stacks
+	m.cursor = 0
 
 	if !m.ready {
 		return
 	}
+
 	m.viewport.GotoTop()
-	m.viewport.SetContent(m.buildContent())
 	m.viewport.YOffset = 0
-}
-
-func (m *Model) buildContent() string {
-	var b strings.Builder
-
-	// Determine max stack name length
-	maxLen := len("Stack Name") // at least the header length
-	for _, stack := range m.stacks {
-		if l := len(stack.Name); l > maxLen {
-			maxLen = l
-		}
-	}
-	padding := maxLen + 2 // add some extra space
-
-	// Header
-	b.WriteString(fmt.Sprintf("%-*s %s\n", padding, "Stack Name", "Services"))
-	b.WriteString(strings.Repeat("-", padding+8) + "\n") // underline
-
-	// Stack rows
-	for i, stack := range m.stacks {
-		cursor := "  "
-		if i == m.stackCursor {
-			cursor = "➜ "
-		}
-		b.WriteString(fmt.Sprintf("%s%-*s %d\n", cursor, padding, stack.Name, stack.ServiceCount))
-	}
-
+	m.viewport.SetContent(m.buildContent())
 	m.ensureCursorVisible()
-	return b.String()
 }
 
-// ensureCursorVisible keeps the cursor in view
+// ensureCursorVisible keeps the cursor in the visible viewport range.
 func (m *Model) ensureCursorVisible() {
 	h := m.viewport.Height
 	if h < 1 {
 		h = 1
 	}
 
-	if m.stackCursor < m.viewport.YOffset {
-		m.viewport.YOffset = m.stackCursor
-	} else if m.stackCursor >= m.viewport.YOffset+h {
-		m.viewport.YOffset = m.stackCursor - h + 1
+	if m.cursor < m.viewport.YOffset {
+		m.viewport.YOffset = m.cursor
+	} else if m.cursor >= m.viewport.YOffset+h {
+		m.viewport.YOffset = m.cursor - h + 1
 	}
 }
