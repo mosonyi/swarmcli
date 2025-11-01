@@ -1,0 +1,76 @@
+name: 🐳 Multi-node Swarm Integration Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    env:
+      DOCKER_HOST: tcp://localhost:22375
+      COMPOSE_PROJECT_NAME: swarmtest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Compose
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y docker-compose-plugin
+
+      - name: Start multi-node Swarm cluster
+        run: |
+          docker compose -f test/docker-compose.yaml up -d --build
+          echo "Waiting for Swarm to initialize..."
+          timeout 120 bash -c 'until docker compose ps | grep -q healthy; do sleep 3; done'
+          sleep 10
+          echo "Swarm cluster should now be up."
+
+      - name: Verify manager is accessible
+        run: |
+          docker context create swarmcli \
+            --description "SwarmCLI CI Test" \
+            --docker "host=tcp://localhost:22375"
+          docker --context swarmcli info | sed -n '/Swarm:/,/ClusterID/p'
+          docker --context swarmcli node ls
+
+      - name: Deploy a test stack
+        run: |
+          cat <<'EOF' > test-stack.yml
+          version: "3.8"
+          services:
+            whoami:
+              image: traefik/whoami:v1.10
+              deploy:
+                replicas: 2
+          EOF
+          docker --context swarmcli stack deploy -c test-stack.yml demo
+          echo "Waiting for services to start..."
+          sleep 15
+          docker --context swarmcli stack ls
+          docker --context swarmcli service ls
+
+      - name: Run Go integration tests
+        run: |
+          go test ./... -v -tags=integration
+
+      - name: Dump Swarm state on failure
+        if: failure()
+        run: |
+          echo "Dumping Swarm diagnostics..."
+          docker --context swarmcli node ls || true
+          docker --context swarmcli stack ls || true
+          docker --context swarmcli service ls || true
+          docker --context swarmcli task ls || true
+
+      - name: Tear down Swarm cluster
+        if: always()
+        run: |
+          docker compose down -v
