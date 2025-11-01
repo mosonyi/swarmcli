@@ -71,6 +71,12 @@ curl -fsS http://localhost:8080
 docker --context swarmcli service rm whoami
 ```
 
+## Deploy a quick test stack (optional)
+
+```bash
+docker --context swarmcli stack deploy -c test/test-stack.yml demo
+```
+
 ---
 
 ## Tear down
