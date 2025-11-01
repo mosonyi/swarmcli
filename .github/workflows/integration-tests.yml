@@ -20,7 +20,7 @@ jobs:
           --health-interval=2s
           --health-retries=20
           --health-timeout=2s
-          --health-start-period=5s"
+          --health-start-period=5s
         ports:
           - 22375:2375   # match your docker-compose manager
         env:
