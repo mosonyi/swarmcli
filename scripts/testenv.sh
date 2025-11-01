@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# === Config ================================================================
+COMPOSE_FILE="test/docker-compose.yml"
+MANAGER_HOST="tcp://localhost:22375"
+KEEP="${KEEP:-0}"
+FOLLOW="${FOLLOW:-0}"
+SERVICE="${SERVICE:-}"
+DOCKER_COMPOSE="docker compose -f $COMPOSE_FILE"
+
+# === Colors ================================================================
+RESET="\033[0m"
+BOLD="\033[1m"
+DIM="\033[2m"
+RED="\033[31m"
+GREEN="\033[32m"
+YELLOW="\033[33m"
+BLUE="\033[34m"
+MAGENTA="\033[35m"
+CYAN="\033[36m"
+
+timestamp() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+# === Helpers ===============================================================
+info() { echo -e "${CYAN}[$(timestamp)] [INFO]${RESET} $*"; }
+ok()   { echo -e "${GREEN}[$(timestamp)] [OK]${RESET}   $*"; }
+warn() { echo -e "${YELLOW}[$(timestamp)] [WARN]${RESET} $*"; }
+err()  { echo -e "${RED}[$(timestamp)] [ERR]${RESET}  $*" >&2; }
+
+run_or_warn() { "$@" || warn "Command failed: $*"; }
+
+# === Commands ==============================================================
+
+cmd_up() {
+  info "🚀 Starting multinode Swarm environment..."
+  $DOCKER_COMPOSE up -d
+  info "⏳ Waiting for Swarm to initialize..."
+  sleep 25
+  $DOCKER_COMPOSE ps
+
+  info "🔧 Creating Docker contexts..."
+  run_or_warn docker context create swarmcli --docker "host=${MANAGER_HOST}"
+  run_or_warn docker context create node1 --docker "host=tcp://localhost:22376"
+  run_or_warn docker context create node2 --docker "host=tcp://localhost:22377"
+
+  ok "Swarm multinode environment is up."
+}
+
+cmd_deploy() {
+  info "📦 Deploying test stack..."
+  docker --context swarmcli stack deploy -c test/test-stack.yml demo
+  info "⏳ Waiting for services to start..."
+  sleep 20
+  docker --context swarmcli stack ls
+  docker --context swarmcli service ls
+  ok "Test stack deployed successfully."
+}
+
+cmd_test() {
+  info "🧪 Running Go integration tests..."
+  DOCKER_CONTEXT=swarmcli go test -tags=integration ./...
+  ok "Integration tests completed."
+}
+
+cmd_logs() {
+  info "📜 Collecting logs..."
+
+  if [[ -n "$SERVICE" ]]; then
+    info "🎯 Filtering logs for service: ${CYAN}$SERVICE${RESET}"
+    if [[ "$FOLLOW" == "1" ]]; then
+      info "👀 Following logs..."
+      docker --context swarmcli service logs "$SERVICE" --no-task-ids --timestamps -f 2>/dev/null \
+        | sed "s/^/$(timestamp) ${CYAN}[SERVICE]${RESET} /"
+    else
+      info "Showing last 100 lines for service $SERVICE"
+      docker --context swarmcli service logs "$SERVICE" --no-task-ids --timestamps 2>/dev/null \
+        | tail -n 100 | sed "s/^/$(timestamp) ${CYAN}[SERVICE]${RESET} /"
+    fi
+  else
+    if [[ "$FOLLOW" == "1" ]]; then
+      info "👀 Streaming all logs live (Ctrl+C to stop)..."
+      (
+        $DOCKER_COMPOSE logs -f manager 2>/dev/null | sed "s/^/$(timestamp) ${GREEN}[MANAGER]${RESET} /" &
+        $DOCKER_COMPOSE logs -f worker1 2>/dev/null | sed "s/^/$(timestamp) ${BLUE}[WORKER1]${RESET} /" &
+        $DOCKER_COMPOSE logs -f worker2 2>/dev/null | sed "s/^/$(timestamp) ${MAGENTA}[WORKER2]${RESET} /" &
+        docker --context swarmcli service logs demo_whoami --no-task-ids --timestamps -f 2>/dev/null \
+          | sed "s/^/$(timestamp) ${YELLOW}[STACK]${RESET} /" &
+        wait
+      )
+    else
+      info "Showing last 100 lines of all logs..."
+      echo -e "${GREEN}=== 🟩 Manager ===${RESET}"
+      $DOCKER_COMPOSE logs --no-color manager | tail -n 100 | sed "s/^/$(timestamp) ${GREEN}[MANAGER]${RESET} /"
+      echo -e "${BLUE}=== 🟦 Worker1 ===${RESET}"
+      $DOCKER_COMPOSE logs --no-color worker1 | tail -n 100 | sed "s/^/$(timestamp) ${BLUE}[WORKER1]${RESET} /"
+      echo -e "${MAGENTA}=== 🟪 Worker2 ===${RESET}"
+      $DOCKER_COMPOSE logs --no-color worker2 | tail -n 100 | sed "s/^/$(timestamp) ${MAGENTA}[WORKER2]${RESET} /"
+      echo -e "${YELLOW}=== 🟨 Swarm Services ===${RESET}"
+      docker --context swarmcli service logs demo_whoami --no-task-ids --timestamps 2>/dev/null \
+        | tail -n 100 | sed "s/^/$(timestamp) ${YELLOW}[STACK]${RESET} /"
+    fi
+  fi
+}
+
+cmd_down() {
+  info "🧹 Tearing down Swarm environment..."
+  run_or_warn docker --context swarmcli stack rm demo
+  run_or_warn $DOCKER_COMPOSE down -v
+  ok "Swarm environment torn down."
+}
+
+cmd_clean() {
+  info "🧼 Cleaning up contexts and resources..."
+  run_or_warn docker context rm swarmcli node1 node2
+  ok "Clean up complete."
+}
+
+cmd_integration() {
+  cmd_clean
+  cmd_up
+  cmd_deploy
+  cmd_test
+
+  if [[ "$KEEP" -eq 1 ]]; then
+    warn "KEEP=1 set — leaving environment running for inspection."
+  else
+    cmd_down
+  fi
+}
+
+# === Dispatcher ============================================================
+case "${1:-}" in
+  up|deploy|test|logs|down|clean|integration)
+    cmd_"$1"
+    ;;
+  *)
+    echo -e "${BOLD}Usage:${RESET} $0 {up|deploy|test|logs|down|clean|integration}"
+    exit 1
+    ;;
+esac
