@@ -20,14 +20,14 @@ jobs:
           --health-interval=2s
           --health-retries=20
           --health-timeout=2s
-          --health-start-period=5s
+          --health-start-period=5s"
         ports:
-          - 2375:2375
+          - 22375:2375   # match your docker-compose manager
         env:
           DOCKER_TLS_CERTDIR: ""
 
     env:
-      DOCKER_HOST: tcp://localhost:2375
+      DOCKER_HOST: tcp://localhost:22375
       DOCKER_TLS_CERTDIR: ""
 
     steps:
