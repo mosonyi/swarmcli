@@ -49,6 +49,9 @@ jobs:
           go version
           docker info | sed -n '/Swarm:/,/ClusterID/p'
 
+      - name: Ensure Swarm is initialized
+        run: docker swarm init
+
       - name: Run full integration pipeline
         run: bash scripts/testenv.sh integration
 
