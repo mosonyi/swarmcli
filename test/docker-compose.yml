@@ -5,24 +5,27 @@ services:
     image: docker:27-dind
     privileged: true
     environment:
-      - DOCKER_TLS_CERTDIR=
+      - DOCKER_TLS_CERTDIR=    # disable TLS for local test
     command:
-      - --host=tcp://0.0.0.0:2375
-      - --host=unix:///var/run/docker.sock
+      - dockerd
+      - --host=tcp://0.0.0.0:2375   # listen on TCP
+      - --host=unix:///var/run/docker-temp.sock   # temporary unix socket inside container
+      - --tls=false
     ports:
-      - "22375:2375"      # expose manager's Docker API to host on 22375
+      - "22375:2375"               # expose manager Docker API to host
     volumes:
       - manager-data:/var/lib/docker
       - shared:/shared
     networks:
       swarmnet:
-        aliases: [manager]
+        aliases: [ manager ]
     healthcheck:
-      test: ["CMD-SHELL", "docker -H localhost:2375 info >/dev/null 2>&1"]
+      test: [ "CMD-SHELL", "docker -H localhost:2375 info >/dev/null 2>&1" ]
       interval: 2s
       timeout: 2s
       retries: 60
       start_period: 2s
+
 
   # Initializes Swarm on manager and writes worker join token to the shared volume
   swarm-init:

@@ -8,6 +8,7 @@ KEEP="${KEEP:-0}"
 FOLLOW="${FOLLOW:-0}"
 SERVICE="${SERVICE:-}"
 DOCKER_COMPOSE="docker compose -f $COMPOSE_FILE"
+CONTEXT_NAME="swarmcli"
 
 # === Colors ================================================================
 RESET="\033[0m"
@@ -32,36 +33,67 @@ err()  { echo -e "${RED}[$(timestamp)] [ERR]${RESET}  $*" >&2; }
 
 run_or_warn() { "$@" || warn "Command failed: $*"; }
 
+# === Helpers ==============================================================
+
+# Wait until the manager DinD exposes its Docker API on tcp://localhost:22375
+wait_for_manager() {
+  info "⏳ Waiting for DinD manager to be ready on ${MANAGER_HOST}..."
+  local retries=30
+  local wait_sec=2
+  local i
+  for i in $(seq 1 $retries); do
+    if curl -fsS "${MANAGER_HOST}" >/dev/null 2>&1 || docker -H "$MANAGER_HOST" info >/dev/null 2>&1; then
+      ok "Manager is ready!"
+      return
+    fi
+    sleep "$wait_sec"
+  done
+  err "Manager did not become ready after $((retries * wait_sec)) seconds."
+  exit 1
+}
+
+# Ensure the context exists and points to a live daemon
+ensure_context() {
+  wait_for_manager
+  if docker context inspect "$CONTEXT_NAME" >/dev/null 2>&1; then
+    info "Checking if context '$CONTEXT_NAME' is alive..."
+    if ! docker --context "$CONTEXT_NAME" info >/dev/null 2>&1; then
+      warn "Context '$CONTEXT_NAME' points to a non-running daemon. Recreating..."
+      docker context rm -f "$CONTEXT_NAME"
+      docker context create "$CONTEXT_NAME" --docker "host=$MANAGER_HOST"
+    fi
+  else
+    info "Creating Docker context '$CONTEXT_NAME'..."
+    docker context create "$CONTEXT_NAME" --docker "host=$MANAGER_HOST"
+  fi
+}
+
 # === Commands ==============================================================
 
 cmd_up() {
   info "🚀 Starting multinode Swarm environment..."
   $DOCKER_COMPOSE up -d
-  info "⏳ Waiting for Swarm to initialize..."
-  sleep 25
   $DOCKER_COMPOSE ps
 
-  info "🔧 Creating Docker contexts..."
-  run_or_warn docker context create swarmcli --docker "host=${MANAGER_HOST}"
-  run_or_warn docker context create node1 --docker "host=tcp://localhost:22376"
-  run_or_warn docker context create node2 --docker "host=tcp://localhost:22377"
+  info "🔧 Ensuring Docker context..."
+  ensure_context
 
   ok "Swarm multinode environment is up."
 }
 
 cmd_deploy() {
   info "📦 Deploying test stack..."
-  docker --context swarmcli stack deploy -c test/test-stack.yml demo
+  docker --context "$CONTEXT_NAME" stack deploy -c test/test-stack.yml demo
   info "⏳ Waiting for services to start..."
   sleep 20
-  docker --context swarmcli stack ls
-  docker --context swarmcli service ls
+  docker --context "$CONTEXT_NAME" stack ls
+  docker --context "$CONTEXT_NAME" service ls
   ok "Test stack deployed successfully."
 }
 
 cmd_test() {
   info "🧪 Running Go integration tests..."
-  DOCKER_CONTEXT=swarmcli go test -tags=integration ./...
+  DOCKER_CONTEXT="$CONTEXT_NAME" go test -tags=integration ./...
   ok "Integration tests completed."
 }
 
@@ -107,14 +139,14 @@ cmd_logs() {
 
 cmd_down() {
   info "🧹 Tearing down Swarm environment..."
-  run_or_warn docker --context swarmcli stack rm demo
+  run_or_warn docker --context "$CONTEXT_NAME" stack rm demo
   run_or_warn $DOCKER_COMPOSE down -v
   ok "Swarm environment torn down."
 }
 
 cmd_clean() {
   info "🧼 Cleaning up contexts and resources..."
-  run_or_warn docker context rm swarmcli node1 node2
+  run_or_warn docker context rm -f "$CONTEXT_NAME" node1 node2
   ok "Clean up complete."
 }
 
