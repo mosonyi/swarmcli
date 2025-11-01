@@ -105,34 +105,34 @@ cmd_logs() {
     if [[ "$FOLLOW" == "1" ]]; then
       info "👀 Following logs..."
       docker --context swarmcli service logs "$SERVICE" --no-task-ids --timestamps -f 2>/dev/null \
-        | sed "s/^/$(timestamp) ${CYAN}[SERVICE]${RESET} /"
+        | sed 's/^/'"$(timestamp) ${CYAN}[SERVICE]${RESET}"' /'
     else
       info "Showing last 100 lines for service $SERVICE"
       docker --context swarmcli service logs "$SERVICE" --no-task-ids --timestamps 2>/dev/null \
-        | tail -n 100 | sed "s/^/$(timestamp) ${CYAN}[SERVICE]${RESET} /"
+        | tail -n 100 | sed 's/^/'"$(timestamp) ${CYAN}[SERVICE]${RESET}"' /'
     fi
   else
     if [[ "$FOLLOW" == "1" ]]; then
       info "👀 Streaming all logs live (Ctrl+C to stop)..."
       (
-        $DOCKER_COMPOSE logs -f manager 2>/dev/null | sed "s/^/$(timestamp) ${GREEN}[MANAGER]${RESET} /" &
-        $DOCKER_COMPOSE logs -f worker1 2>/dev/null | sed "s/^/$(timestamp) ${BLUE}[WORKER1]${RESET} /" &
-        $DOCKER_COMPOSE logs -f worker2 2>/dev/null | sed "s/^/$(timestamp) ${MAGENTA}[WORKER2]${RESET} /" &
+        $DOCKER_COMPOSE logs -f manager 2>/dev/null | sed 's/^/'"$(timestamp) ${GREEN}[MANAGER]${RESET}"' /' &
+        $DOCKER_COMPOSE logs -f worker1 2>/dev/null | sed 's/^/'"$(timestamp) ${BLUE}[WORKER1]${RESET}"' /' &
+        $DOCKER_COMPOSE logs -f worker2 2>/dev/null | sed 's/^/'"$(timestamp) ${MAGENTA}[WORKER2]${RESET}"' /' &
         docker --context swarmcli service logs demo_whoami --no-task-ids --timestamps -f 2>/dev/null \
-          | sed "s/^/$(timestamp) ${YELLOW}[STACK]${RESET} /" &
+          | sed 's/^/'"$(timestamp) ${YELLOW}[STACK]${RESET}"' /' &
         wait
       )
     else
       info "Showing last 100 lines of all logs..."
       echo -e "${GREEN}=== 🟩 Manager ===${RESET}"
-      $DOCKER_COMPOSE logs --no-color manager | tail -n 100 | sed "s/^/$(timestamp) ${GREEN}[MANAGER]${RESET} /"
+      $DOCKER_COMPOSE logs --no-color manager | tail -n 100 | sed 's/^/'"$(timestamp) ${GREEN}[MANAGER]${RESET}"' /'
       echo -e "${BLUE}=== 🟦 Worker1 ===${RESET}"
-      $DOCKER_COMPOSE logs --no-color worker1 | tail -n 100 | sed "s/^/$(timestamp) ${BLUE}[WORKER1]${RESET} /"
+      $DOCKER_COMPOSE logs --no-color worker1 | tail -n 100 | sed 's/^/'"$(timestamp) ${BLUE}[WORKER1]${RESET}"' /'
       echo -e "${MAGENTA}=== 🟪 Worker2 ===${RESET}"
-      $DOCKER_COMPOSE logs --no-color worker2 | tail -n 100 | sed "s/^/$(timestamp) ${MAGENTA}[WORKER2]${RESET} /"
+      $DOCKER_COMPOSE logs --no-color worker2 | tail -n 100 | sed 's/^/'"$(timestamp) ${MAGENTA}[WORKER2]${RESET}"' /'
       echo -e "${YELLOW}=== 🟨 Swarm Services ===${RESET}"
       docker --context swarmcli service logs demo_whoami --no-task-ids --timestamps 2>/dev/null \
-        | tail -n 100 | sed "s/^/$(timestamp) ${YELLOW}[STACK]${RESET} /"
+        | tail -n 100 | sed 's/^/'"$(timestamp) ${YELLOW}[STACK]${RESET}"' /'
     fi
   fi
 }
