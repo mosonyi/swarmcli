@@ -1,0 +1,41 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ main, cl/integration-tests ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+
+    services:
+      docker:
+        image: docker:27-dind
+        privileged: true
+        ports:
+          - 2375:2375
+        options: >-
+          --health-cmd="docker info >/dev/null 2>&1 || exit 1"
+          --health-interval=2s
+          --health-retries=20
+          --health-timeout=2s
+          --health-start-period=5s
+        env:
+          DOCKER_TLS_CERTDIR: ""
+
+    env:
+      DOCKER_HOST: tcp://localhost:2375
+      DOCKER_TLS_CERTDIR: ""
+      COMPOSE_FILE: test/docker-compose.yml
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Compose
+        uses: docker/setup-buildx-action@v3
+
+      - name: Setup and Run Integration Tests
+        run: bash scripts/integration-test.sh integration
