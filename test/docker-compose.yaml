@@ -1,0 +1,147 @@
+
+services:
+  # ===== Manager (dockerd-in-docker) =====
+  manager:
+    image: docker:27-dind
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    command:
+      - --host=tcp://0.0.0.0:2375
+      - --host=unix:///var/run/docker.sock
+    ports:
+      - "22375:2375"      # expose manager's Docker API to host on 22375
+    volumes:
+      - manager-data:/var/lib/docker
+      - shared:/shared
+    networks:
+      swarmnet:
+        aliases: [manager]
+    healthcheck:
+      test: ["CMD-SHELL", "docker -H localhost:2375 info >/dev/null 2>&1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+      start_period: 2s
+
+  # Initializes Swarm on manager and writes worker join token to the shared volume
+  swarm-init:
+    image: docker:27
+    depends_on:
+      manager:
+        condition: service_healthy
+    environment:
+      DOCKER_HOST: tcp://manager:2375
+    volumes:
+      - shared:/shared
+    networks:
+      - swarmnet
+    command:
+      [
+        "sh","-exc",
+        "sleep 1; \
+         if ! docker info 2>/dev/null | grep -q 'Swarm: active'; then \
+           docker swarm init --advertise-addr eth0; \
+         fi; \
+         docker swarm join-token -q worker > /shared/worker_token; \
+         tail -f /dev/null"
+      ]
+
+  # ===== Worker #1 (dockerd-in-docker) =====
+  worker1:
+    image: docker:27-dind
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    command:
+      - --host=tcp://0.0.0.0:2375
+      - --host=unix:///var/run/docker.sock
+    volumes:
+      - worker1-data:/var/lib/docker
+      - shared:/shared
+    networks:
+      swarmnet:
+        aliases: [worker1]
+    healthcheck:
+      test: ["CMD-SHELL", "docker -H localhost:2375 info >/dev/null 2>&1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+      start_period: 2s
+
+  # Joins worker1 to the Swarm
+  worker1-join:
+    image: docker:27
+    depends_on:
+      worker1:
+        condition: service_healthy
+      swarm-init:
+        condition: service_started
+    environment:
+      DOCKER_HOST: tcp://worker1:2375
+    volumes:
+      - shared:/shared
+    networks:
+      - swarmnet
+    command:
+      [
+        "sh","-exc",
+        "until [ -s /shared/worker_token ]; do sleep 1; done; \
+         docker swarm leave >/dev/null 2>&1 || true; \
+         docker swarm join --token \"$(cat /shared/worker_token)\" manager:2377; \
+         tail -f /dev/null"
+      ]
+
+  # ===== Worker #2 (dockerd-in-docker) =====
+  worker2:
+    image: docker:27-dind
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    command:
+      - --host=tcp://0.0.0.0:2375
+      - --host=unix:///var/run/docker.sock
+    volumes:
+      - worker2-data:/var/lib/docker
+      - shared:/shared
+    networks:
+      swarmnet:
+        aliases: [worker2]
+    healthcheck:
+      test: ["CMD-SHELL", "docker -H localhost:2375 info >/dev/null 2>&1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+      start_period: 2s
+
+  # Joins worker2 to the Swarm
+  worker2-join:
+    image: docker:27
+    depends_on:
+      worker2:
+        condition: service_healthy
+      swarm-init:
+        condition: service_started
+    environment:
+      DOCKER_HOST: tcp://worker2:2375
+    volumes:
+      - shared:/shared
+    networks:
+      - swarmnet
+    command:
+      [
+        "sh","-exc",
+        "until [ -s /shared/worker_token ]; do sleep 1; done; \
+         docker swarm leave >/dev/null 2>&1 || true; \
+         docker swarm join --token \"$(cat /shared/worker_token)\" manager:2377; \
+         tail -f /dev/null"
+      ]
+
+networks:
+  swarmnet:
+
+volumes:
+  manager-data:
+  worker1-data:
+  worker2-data:
+  shared:
