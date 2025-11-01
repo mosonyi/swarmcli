@@ -14,7 +14,6 @@ jobs:
     services:
       docker:
         image: docker:27-dind
-        # <-- don't use `privileged: true` here (invalid). use options with --privileged
         options: >-
           --privileged
           --health-cmd="docker info >/dev/null 2>&1 || exit 1"
@@ -35,16 +34,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -y
-          # Install docker CLI, docker compose plugin, go, and other helpers.
-          # On ubuntu-latest we install the cli tools used by your script.
-          sudo apt-get install -y docker.io docker-compose-plugin golang-go curl bash
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Verify Docker availability
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify Docker & Go
         run: |
           docker version
+          go version
           docker info | sed -n '/Swarm:/,/ClusterID/p'
 
       - name: Run full integration pipeline
