@@ -14,17 +14,18 @@ jobs:
     services:
       docker:
         image: docker:27-dind
-#        privileged: true
-        ports:
-          - 2375:2375
-        env:
-          DOCKER_TLS_CERTDIR: ""
+        # <-- don't use `privileged: true` here (invalid). use options with --privileged
         options: >-
+          --privileged
           --health-cmd="docker info >/dev/null 2>&1 || exit 1"
           --health-interval=2s
           --health-retries=20
           --health-timeout=2s
           --health-start-period=5s
+        ports:
+          - 2375:2375
+        env:
+          DOCKER_TLS_CERTDIR: ""
 
     env:
       DOCKER_HOST: tcp://localhost:2375
@@ -36,8 +37,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y bash docker-compose golang-go
+          sudo apt-get update -y
+          # Install docker CLI, docker compose plugin, go, and other helpers.
+          # On ubuntu-latest we install the cli tools used by your script.
+          sudo apt-get install -y docker.io docker-compose-plugin golang-go curl bash
 
       - name: Verify Docker availability
         run: |
