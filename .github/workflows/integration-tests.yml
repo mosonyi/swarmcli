@@ -2,40 +2,61 @@ name: Integration Tests
 
 on:
   push:
-    branches: [ main, cl/integration-tests ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
 jobs:
   integration:
+    name: Run integration tests
     runs-on: ubuntu-latest
 
     services:
       docker:
         image: docker:27-dind
-        privileged: true
-        ports:
-          - 2375:2375
         options: >-
+          --privileged
           --health-cmd="docker info >/dev/null 2>&1 || exit 1"
           --health-interval=2s
           --health-retries=20
           --health-timeout=2s
           --health-start-period=5s
+        ports:
+          - 22375:2375   # match your docker-compose manager
         env:
           DOCKER_TLS_CERTDIR: ""
 
     env:
-      DOCKER_HOST: tcp://localhost:2375
+      DOCKER_HOST: tcp://localhost:22375
       DOCKER_TLS_CERTDIR: ""
-      COMPOSE_FILE: test/docker-compose.yml
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Docker Compose
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Setup and Run Integration Tests
-        run: bash scripts/integration-test.sh integration
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify Docker & Go
+        run: |
+          docker version
+          go version
+          docker info | sed -n '/Swarm:/,/ClusterID/p'
+
+      - name: Ensure Swarm is initialized
+        run: docker swarm init
+
+      - name: Run full integration pipeline
+        run: bash test-setup/testenv.sh integration
+
+      - name: Always show logs
+        if: always()
+        run: |
+          echo "=== 🪵 Showing logs for debugging ==="
+          bash test-setup/testenv.sh logs || true
