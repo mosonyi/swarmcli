@@ -2,7 +2,7 @@ name: Integration Tests
 
 on:
   push:
-    branches: [ main, cl/integration-tests ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
