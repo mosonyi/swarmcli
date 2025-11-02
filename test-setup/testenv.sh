@@ -93,7 +93,7 @@ cmd_deploy() {
 
 cmd_test() {
   info "🧪 Running Go integration tests..."
-  DOCKER_CONTEXT="$CONTEXT_NAME" go test -tags=integration ./...
+  DOCKER_CONTEXT="$CONTEXT_NAME" go test -tags=integration ./integration/...
   ok "Integration tests completed."
 }
 
