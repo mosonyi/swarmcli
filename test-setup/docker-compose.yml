@@ -5,7 +5,7 @@ services:
     image: docker:27-dind
     privileged: true
     environment:
-      - DOCKER_TLS_CERTDIR=    # disable TLS for local test
+      - DOCKER_TLS_CERTDIR=    # disable TLS for local test-setup
     command:
       - dockerd
       - --host=tcp://0.0.0.0:2375   # listen on TCP

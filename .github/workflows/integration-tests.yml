@@ -53,10 +53,10 @@ jobs:
         run: docker swarm init
 
       - name: Run full integration pipeline
-        run: bash scripts/testenv.sh integration
+        run: bash test-setup/testenv.sh integration
 
       - name: Always show logs
         if: always()
         run: |
           echo "=== 🪵 Showing logs for debugging ==="
-          bash scripts/testenv.sh logs || true
+          bash test-setup/testenv.sh logs || true

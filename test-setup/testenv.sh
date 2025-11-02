@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # === Config ================================================================
-COMPOSE_FILE="test/docker-compose.yml"
+COMPOSE_FILE="test-setup/docker-compose.yml"
 MANAGER_HOST="tcp://localhost:22375"
 KEEP="${KEEP:-0}"
 FOLLOW="${FOLLOW:-0}"
@@ -83,7 +83,7 @@ cmd_up() {
 
 cmd_deploy() {
   info "📦 Deploying test stack..."
-  docker --context "$CONTEXT_NAME" stack deploy -c test/test-stack.yml demo
+  docker --context "$CONTEXT_NAME" stack deploy -c test-setup/test-stack.yml demo
   info "⏳ Waiting for services to start..."
   sleep 20
   docker --context "$CONTEXT_NAME" stack ls
@@ -93,7 +93,7 @@ cmd_deploy() {
 
 cmd_test() {
   info "🧪 Running Go integration tests..."
-  DOCKER_CONTEXT="$CONTEXT_NAME" go test -tags=integration ./...
+  DOCKER_CONTEXT="$CONTEXT_NAME" go test-setup -tags=integration ./...
   ok "Integration tests completed."
 }
 
@@ -165,7 +165,7 @@ cmd_integration() {
 
 # === Dispatcher ============================================================
 case "${1:-}" in
-  up|deploy|test|logs|down|clean|integration)
+  up|deploy|test-setup|logs|down|clean|integration)
     cmd_"$1"
     ;;
   *)

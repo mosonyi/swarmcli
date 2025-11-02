@@ -74,7 +74,7 @@ docker --context swarmcli service rm whoami
 ## Deploy a quick test stack (optional)
 
 ```bash
-docker --context swarmcli stack deploy -c test/test-stack.yml demo
+docker --context swarmcli stack deploy -c test-setup/test-stack.yml demo
 ```
 
 ---
@@ -115,7 +115,7 @@ docker compose up -d
 
 - To force a clean project prefix for container names, run:
   ```bash
-  docker compose --project-name test up -d
+  docker compose --project-name test-setup up -d
   ```
   Then your containers will be `test-manager-1`, `test-worker1-1`, etc.
 
