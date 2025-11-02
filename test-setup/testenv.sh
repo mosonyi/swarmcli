@@ -33,18 +33,6 @@ err()  { echo -e "${RED}[$(timestamp)] [ERR]${RESET}  $*" >&2; }
 
 run_or_warn() { "$@" || warn "Command failed: $*"; }
 
-# === Helpers ==============================================================
-
-# === Before cmd_up() =======================================================
-cleanup_port() {
-  # Remove any old container using 22375 to avoid "port already allocated"
-  if docker ps -q --filter "publish=22375" | grep . >/dev/null; then
-    info "🧹 Removing old container(s) using port 22375..."
-    docker ps -q --filter "publish=22375" | xargs -r docker rm -f
-    sleep 2
-  fi
-}
-
 # Wait until the manager DinD exposes its Docker API on tcp://localhost:22375
 wait_for_manager() {
   info "⏳ Waiting for DinD manager to be ready on ${MANAGER_HOST}..."
@@ -75,6 +63,16 @@ ensure_context() {
   else
     info "Creating Docker context '$CONTEXT_NAME'..."
     docker context create "$CONTEXT_NAME" --docker "host=$MANAGER_HOST"
+  fi
+}
+
+# === Before cmd_up() =======================================================
+cleanup_port() {
+  # Remove any old container using 22375 to avoid "port already allocated"
+  if docker ps -q --filter "publish=22375" | grep . >/dev/null; then
+    info "🧹 Removing old container(s) using port 22375..."
+    docker ps -q --filter "publish=22375" | xargs -r docker rm -f
+    sleep 2
   fi
 }
 
@@ -169,7 +167,6 @@ cmd_clean() {
 }
 
 cmd_integration() {
-  # Clean up at the very end instead of before
   cmd_up
   cmd_deploy
   cmd_test
@@ -178,7 +175,7 @@ cmd_integration() {
     warn "KEEP=1 set — leaving environment running for inspection."
   else
     cmd_down
-    cmd_clean   # move clean here, after down
+    cmd_clean
   fi
 }
 
