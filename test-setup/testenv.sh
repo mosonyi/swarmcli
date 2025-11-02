@@ -93,7 +93,7 @@ cmd_deploy() {
 
 cmd_test() {
   info "🧪 Running Go integration tests..."
-  DOCKER_CONTEXT="$CONTEXT_NAME" go test-setup -tags=integration ./...
+  DOCKER_CONTEXT="$CONTEXT_NAME" go test -tags=integration ./...
   ok "Integration tests completed."
 }
 
@@ -165,7 +165,7 @@ cmd_integration() {
 
 # === Dispatcher ============================================================
 case "${1:-}" in
-  up|deploy|test-setup|logs|down|clean|integration)
+  up|deploy|test|logs|down|clean|integration)
     cmd_"$1"
     ;;
   *)
