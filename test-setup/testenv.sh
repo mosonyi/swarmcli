@@ -104,11 +104,17 @@ cmd_deploy() {
 cmd_test() {
   info "🧪 Running Go integration tests..."
 
-  local test_name="${1:-}"   # optional first argument: name of a single test
-  local args=(-tags=integration -v)
+  local test_name="${1:-}"   # optional single test
+  local args=(-tags=integration)
+
+  # Add -v if VERBOSE=1
+  if [[ "${VERBOSE:-0}" -eq 1 ]]; then
+    args+=("-v")
+    info "🔍 Verbose mode enabled"
+  fi
 
   if [[ -n "$test_name" ]]; then
-    info "🎯 Running single test: ${CYAN}$test_name${RESET}"
+    info "🎯 Running single test: $test_name"
     args+=("-run" "$test_name")
   else
     info "🧩 Running all integration tests"
@@ -116,92 +122,8 @@ cmd_test() {
 
   args+=("./integration-tests/...")
 
-  local tmp_log
-  tmp_log="$(mktemp || true)"
-  trap '[[ -n "${tmp_log:-}" ]] && rm -f "$tmp_log" || true' EXIT
-
-  local pass_count=0
-  local fail_count=0
-
-  # Run tests and parse structured output
-  if ! DOCKER_CONTEXT="$CONTEXT_NAME" go test "${args[@]}" 2>&1 | tee "$tmp_log" | while IFS= read -r line; do
-    # Determine prefix for verbose output
-    local prefix=""
-    if [[ "${VERBOSE:-0}" -eq 1 ]]; then
-      prefix="[$(timestamp)] "
-    fi
-
-    case "$line" in
-      ===\ RUN*)
-        echo -e "${prefix}${BLUE}[TEST]${RESET}  ${line#=== RUN   }"
-        ;;
-      ---\ PASS:*)
-        echo -e "${prefix}${GREEN}[OK]${RESET}    ${line#--- PASS: }"
-        ((pass_count++))
-        ;;
-      ---\ FAIL:*)
-        echo -e "${prefix}${RED}[ERR]${RESET}   ${line#--- FAIL: }"
-        ((fail_count++))
-        ;;
-      ok*\ \(*s\))
-        echo -e "${prefix}${GREEN}[PASS]${RESET}  ${line}"
-        ;;
-      FAIL*\ \(*s\))
-        echo -e "${prefix}${RED}[FAIL]${RESET}  ${line}"
-        ;;
-      FAIL*)
-        echo -e "${prefix}${RED}[FAIL]${RESET}  ${line}"
-        ;;
-      *)
-        # Print all lines in verbose mode
-        [[ "${VERBOSE:-0}" -eq 1 ]] && echo -e "${prefix}${line}"
-        ;;
-    esac
-  done; then
-    # go test failed
-    echo
-    warn "Some tests failed. Collecting failure details..."
-    echo
-
-    mapfile -t failed_tests < <(grep '^--- FAIL:' "$tmp_log" | sed 's/^--- FAIL: //; s/ (.*)//')
-
-    for test_name in "${failed_tests[@]}"; do
-      echo -e "${RED}[$(timestamp)] [FAIL]${RESET}  ${YELLOW}$test_name${RESET}"
-      echo -e "        👉 To inspect logs manually: ${CYAN}SERVICE=demo_whoami ./test-setup/testenv.sh logs${RESET}"
-      echo
-      docker --context "$CONTEXT_NAME" service logs demo_whoami --no-task-ids --timestamps 2>/dev/null \
-        | tail -n 30 | sed 's/^/'"$(timestamp) ${YELLOW}[STACK]${RESET}"' /'
-      echo
-    done
-
-    fail_count=${#failed_tests[@]}
-    pass_count=$(grep -c '^--- PASS:' "$tmp_log" || true)
-
-    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-    echo -e "${BOLD}📊 TEST SUMMARY${RESET}"
-    echo -e "  ✅ Passed: ${GREEN}${pass_count}${RESET}"
-    echo -e "  ❌ Failed: ${RED}${fail_count}${RESET}"
-    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-    echo
-
-    err "Integration tests failed."
-    return 1
-  fi
-
-  pass_count=$(grep -c '^--- PASS:' "$tmp_log" || true)
-  fail_count=$(grep -c '^--- FAIL:' "$tmp_log" || true)
-
-  echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-  echo -e "${BOLD}📊 TEST SUMMARY${RESET}"
-  echo -e "  ✅ Passed: ${GREEN}${pass_count}${RESET}"
-  echo -e "  ❌ Failed: ${RED}${fail_count}${RESET}"
-  echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-
-  if [[ "$fail_count" -eq 0 ]]; then
-    ok "Integration tests completed successfully."
-  else
-    err "Integration tests completed with failures."
-  fi
+  # Run tests directly, Go will print everything
+  DOCKER_CONTEXT="$CONTEXT_NAME" go test "${args[@]}"
 }
 
 cmd_logs() {
