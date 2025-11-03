@@ -23,10 +23,10 @@ func TestRestartWhoamiSingleService(t *testing.T) {
 
 	svc := snap.FindServiceByName(serviceName)
 	if svc == nil {
-		t.Skipf("service %s not found; skipping", serviceName)
+		t.Fatalf("service %s not found; skipping", serviceName)
 	}
 	if svc.Spec.Mode.Replicated == nil {
-		t.Skipf("service %s not in replicated mode; skipping", serviceName)
+		t.Fatalf("service %s not in replicated mode; skipping", serviceName)
 	}
 
 	original := *svc.Spec.Mode.Replicated.Replicas
