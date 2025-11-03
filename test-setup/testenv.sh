@@ -105,9 +105,9 @@ cmd_test() {
   info "🧪 Running Go integration tests..."
 
   local args=(-tags=integration ./integration-tests/...)
-  local tmp_log
-  tmp_log="$(mktemp)"
-  trap 'rm -f "$tmp_log"' EXIT
+  local tmp_log=""
+  tmp_log="$(mktemp || true)"
+  trap '[[ -n "${tmp_log:-}" ]] && rm -f "$tmp_log" || true' EXIT
 
   local pass_count=0
   local fail_count=0
