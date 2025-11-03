@@ -5,3 +5,8 @@ services:
     image: traefik/whoami:v1.10
     deploy:
       replicas: 2
+
+  whoami_single:
+    image: traefik/whoami:v1.10
+    deploy:
+      replicas: 1

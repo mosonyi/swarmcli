@@ -178,3 +178,13 @@ func (s *SwarmSnapshot) FindService(serviceID string) *swarm.Service {
 	}
 	return nil
 }
+
+// FindServiceByName looks up a service by its name in the snapshot.
+func (s *SwarmSnapshot) FindServiceByName(name string) *swarm.Service {
+	for i := range s.Services {
+		if s.Services[i].Spec.Name == name {
+			return &s.Services[i]
+		}
+	}
+	return nil
+}
