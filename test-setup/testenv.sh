@@ -103,49 +103,36 @@ cmd_deploy() {
 
 cmd_test() {
   info "🧪 Running Go integration tests..."
-  DOCKER_CONTEXT="$CONTEXT_NAME" go test -tags=integration ./integration-tests/...
-  ok "Integration tests completed."
-}
 
-cmd_logs() {
-  info "📜 Collecting logs..."
+  local test_name="${1:-}"   # optional single test
+  local format="testname"     # default local format
 
-  if [[ -n "$SERVICE" ]]; then
-    info "🎯 Filtering logs for service: ${CYAN}$SERVICE${RESET}"
-    if [[ "$FOLLOW" == "1" ]]; then
-      info "👀 Following logs..."
-      docker --context swarmcli service logs "$SERVICE" --no-task-ids --timestamps -f 2>/dev/null \
-        | sed 's/^/'"$(timestamp) ${CYAN}[SERVICE]${RESET}"' /'
-    else
-      info "Showing last 100 lines for service $SERVICE"
-      docker --context swarmcli service logs "$SERVICE" --no-task-ids --timestamps 2>/dev/null \
-        | tail -n 100 | sed 's/^/'"$(timestamp) ${CYAN}[SERVICE]${RESET}"' /'
-    fi
-  else
-    if [[ "$FOLLOW" == "1" ]]; then
-      info "👀 Streaming all logs live (Ctrl+C to stop)..."
-      (
-        $DOCKER_COMPOSE logs -f manager 2>/dev/null | sed 's/^/'"$(timestamp) ${GREEN}[MANAGER]${RESET}"' /' &
-        $DOCKER_COMPOSE logs -f worker1 2>/dev/null | sed 's/^/'"$(timestamp) ${BLUE}[WORKER1]${RESET}"' /' &
-        $DOCKER_COMPOSE logs -f worker2 2>/dev/null | sed 's/^/'"$(timestamp) ${MAGENTA}[WORKER2]${RESET}"' /' &
-        docker --context swarmcli service logs demo_whoami --no-task-ids --timestamps -f 2>/dev/null \
-          | sed 's/^/'"$(timestamp) ${YELLOW}[STACK]${RESET}"' /' &
-        wait
-      )
-    else
-      info "Showing last 100 lines of all logs..."
-      echo -e "${GREEN}=== 🟩 Manager ===${RESET}"
-      $DOCKER_COMPOSE logs --no-color manager | tail -n 100 | sed 's/^/'"$(timestamp) ${GREEN}[MANAGER]${RESET}"' /'
-      echo -e "${BLUE}=== 🟦 Worker1 ===${RESET}"
-      $DOCKER_COMPOSE logs --no-color worker1 | tail -n 100 | sed 's/^/'"$(timestamp) ${BLUE}[WORKER1]${RESET}"' /'
-      echo -e "${MAGENTA}=== 🟪 Worker2 ===${RESET}"
-      $DOCKER_COMPOSE logs --no-color worker2 | tail -n 100 | sed 's/^/'"$(timestamp) ${MAGENTA}[WORKER2]${RESET}"' /'
-      echo -e "${YELLOW}=== 🟨 Swarm Services ===${RESET}"
-      docker --context swarmcli service logs demo_whoami --no-task-ids --timestamps 2>/dev/null \
-        | tail -n 100 | sed 's/^/'"$(timestamp) ${YELLOW}[STACK]${RESET}"' /'
-    fi
+  # CI-specific settings
+  local junit_file=""
+  if [[ "${CI:-0}" -eq 1 ]]; then
+    format="github-actions"
+    junit_file="/tmp/test-report.xml"
+  elif [[ "${VERBOSE:-0}" -eq 1 ]]; then
+    format="standard-verbose"
   fi
+
+  local args=("--format=$format")
+
+  # Add JUnit file only if set
+  [[ -n "$junit_file" ]] && args+=("--junitfile=$junit_file")
+
+  if [[ -n "$test_name" ]]; then
+    info "🎯 Running single test: $test_name"
+    args+=("--") "-run" "$test_name"
+  else
+    info "🧩 Running all integration tests"
+    args+=("./integration-tests/...")
+  fi
+
+  # Run gotestsum using the Docker context
+  DOCKER_CONTEXT="$CONTEXT_NAME" gotestsum "${args[@]}"
 }
+
 
 cmd_down() {
   info "🧹 Tearing down Swarm environment..."
@@ -181,11 +168,15 @@ cmd_integration() {
 
 # === Dispatcher ============================================================
 case "${1:-}" in
-  up|deploy|test|logs|down|clean|integration)
+  up|deploy|logs|down|clean|integration)
     cmd_"$1"
     ;;
+  test)
+    # Pass optional single test name to cmd_test
+    cmd_test "${2:-}"
+    ;;
   *)
-    echo -e "${BOLD}Usage:${RESET} $0 {up|deploy|test|logs|down|clean|integration}"
+    echo -e "${BOLD}Usage:${RESET} $0 {up|deploy|test|logs|down|clean|integration} [test_name]"
     exit 1
     ;;
 esac
