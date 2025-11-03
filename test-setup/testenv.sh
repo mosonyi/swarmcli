@@ -104,8 +104,19 @@ cmd_deploy() {
 cmd_test() {
   info "🧪 Running Go integration tests..."
 
-  local args=(-tags=integration ./integration-tests/...)
-  local tmp_log=""
+  local test_name="${1:-}"   # optional first argument: name of a single test
+  local args=(-tags=integration -v)
+
+  if [[ -n "$test_name" ]]; then
+    info "🎯 Running single test: ${CYAN}$test_name${RESET}"
+    args+=("-run" "$test_name")
+  else
+    info "🧩 Running all integration tests"
+  fi
+
+  args+=("./integration-tests/...")
+
+  local tmp_log
   tmp_log="$(mktemp || true)"
   trap '[[ -n "${tmp_log:-}" ]] && rm -f "$tmp_log" || true' EXIT
 
@@ -113,7 +124,7 @@ cmd_test() {
   local fail_count=0
 
   # Run tests and parse structured output
-  if ! DOCKER_CONTEXT="$CONTEXT_NAME" go test "${args[@]}" -v 2>&1 | tee "$tmp_log" | while IFS= read -r line; do
+  if ! DOCKER_CONTEXT="$CONTEXT_NAME" go test "${args[@]}" 2>&1 | tee "$tmp_log" | while IFS= read -r line; do
     case "$line" in
       ===\ RUN*)
         echo -e "${BLUE}[$(timestamp)] [TEST]${RESET}  ${line#=== RUN   }"
@@ -137,12 +148,11 @@ cmd_test() {
         ;;
     esac
   done; then
-    # Exit code of `go test` propagates here because of `!`
+    # If go test failed
     echo
     warn "Some tests failed. Collecting failure details..."
     echo
 
-    # Print failed test names
     mapfile -t failed_tests < <(grep '^--- FAIL:' "$tmp_log" | sed 's/^--- FAIL: //; s/ (.*)//')
 
     for test_name in "${failed_tests[@]}"; do
@@ -183,6 +193,7 @@ cmd_test() {
     err "Integration tests completed with failures."
   fi
 }
+
 
 cmd_logs() {
   info "📜 Collecting logs..."
@@ -259,10 +270,11 @@ cmd_integration() {
 # === Dispatcher ============================================================
 case "${1:-}" in
   up|deploy|test|logs|down|clean|integration)
-    cmd_"$1"
+    cmd="$1"; shift
+    cmd_"$cmd" "$@"
     ;;
   *)
-    echo -e "${BOLD}Usage:${RESET} $0 {up|deploy|test|logs|down|clean|integration}"
+    echo -e "${BOLD}Usage:${RESET} $0 {up|deploy|test|logs|down|clean|integration} [args...]"
     exit 1
     ;;
 esac
