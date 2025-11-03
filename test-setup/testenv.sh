@@ -103,7 +103,52 @@ cmd_deploy() {
 
 cmd_test() {
   info "🧪 Running Go integration tests..."
-  DOCKER_CONTEXT="$CONTEXT_NAME" go test -tags=integration ./integration-tests/...
+
+  local args=(-v -tags=integration ./integration-tests/...)
+  local verbose="${VERBOSE:-0}"
+
+  local tmp_log
+  tmp_log="$(mktemp)"
+  trap 'rm -f "$tmp_log"' EXIT
+
+  DOCKER_CONTEXT="$CONTEXT_NAME" go test "${args[@]}" 2>&1 | tee "$tmp_log" | while IFS= read -r line; do
+    case "$line" in
+      ===\ RUN*)  # Start of a test
+        echo -e "${BLUE}[$(timestamp)] [TEST]${RESET}  ${line#=== RUN   }"
+        ;;
+      ---\ PASS:*) # Per-test success
+        echo -e "${GREEN}[$(timestamp)] [OK]${RESET}    ${line#--- PASS: }"
+        ;;
+      ---\ FAIL:*) # Per-test failure
+        echo -e "${RED}[$(timestamp)] [ERR]${RESET}   ${line#--- FAIL: }"
+        ;;
+      ok*\ \(*s\)) # Package passed
+        echo -e "${GREEN}[$(timestamp)] [PASS]${RESET}  ${line}"
+        ;;
+      FAIL*\ \(*s\)) # Package failed
+        echo -e "${RED}[$(timestamp)] [FAIL]${RESET}  ${line}"
+        ;;
+      FAIL*) # Top-level FAIL line
+        echo -e "${RED}[$(timestamp)] [FAIL]${RESET}  ${line}"
+        ;;
+      *)
+        # Show t.Log etc. only in VERBOSE=1 mode
+        if [[ "$verbose" -eq 1 ]]; then
+          echo -e "${DIM}[$(timestamp)] [LOG]${RESET}   ${line}"
+        fi
+        ;;
+    esac
+  done
+
+  # Check if any test failed
+  if grep -q "^FAIL" "$tmp_log"; then
+    warn "Some tests failed — showing last 30 service log lines..."
+    echo
+    docker --context "$CONTEXT_NAME" service logs demo_whoami --no-task-ids --timestamps 2>/dev/null \
+      | tail -n 30 | sed 's/^/'"$(timestamp) ${YELLOW}[STACK]${RESET}"' /'
+    echo
+  fi
+
   ok "Integration tests completed."
 }
 
