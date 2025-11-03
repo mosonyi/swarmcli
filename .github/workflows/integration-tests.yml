@@ -29,7 +29,7 @@ jobs:
     env:
       DOCKER_HOST: tcp://localhost:22375
       DOCKER_TLS_CERTDIR: ""
-      CI: "true"
+      CI: 1
 
     steps:
       - name: Checkout repository
@@ -56,8 +56,11 @@ jobs:
       - name: Ensure Swarm is initialized
         run: docker swarm init || true
 
+      - name: Setup Swarm
+        run: bash test-setup/testenv.sh up && bash test-setup/testenv.sh deploy
+
       - name: Run full integration pipeline
-        run: bash test-setup/testenv.sh integration
+        run: bash test-setup/testenv.sh test
 
       - name: Upload test report
         if: always()
