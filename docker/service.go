@@ -3,8 +3,10 @@ package docker
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/client"
 )
 
 type StackService struct {
@@ -87,4 +89,81 @@ func ScaleServiceByName(serviceName string, replicas uint64) error {
 	}
 
 	return ScaleService(svcID, replicas)
+}
+
+// RestartServiceSafely scales the given service down to 0 and back up to 1.
+// This guarantees no overlap between old and new containers — useful for
+// single-instance services like blockchain nodes to avoid double signing.
+func RestartServiceSafely(serviceName string) error {
+	c, err := GetClient()
+	if err != nil {
+		return fmt.Errorf("docker client: %w", err)
+	}
+	defer c.Close()
+
+	ctx := context.Background()
+
+	// Find the service ID
+	services, err := c.ServiceList(ctx, types.ServiceListOptions{})
+	if err != nil {
+		return fmt.Errorf("listing services: %w", err)
+	}
+
+	var svcID string
+	for _, svc := range services {
+		if svc.Spec.Name == serviceName {
+			svcID = svc.ID
+			break
+		}
+	}
+
+	if svcID == "" {
+		return fmt.Errorf("service %s not found", serviceName)
+	}
+
+	// Step 1: Scale down to 0 replicas
+	if err := ScaleService(svcID, 0); err != nil {
+		return fmt.Errorf("scale down failed: %w", err)
+	}
+
+	// Step 2: Wait until all tasks are actually removed
+	if err := waitForNoTasks(ctx, c, svcID, 10*time.Second); err != nil {
+		return fmt.Errorf("waiting for tasks to stop: %w", err)
+	}
+
+	// Step 3: Scale up again to 1 replica
+	if err := ScaleService(svcID, 1); err != nil {
+		return fmt.Errorf("scale up failed: %w", err)
+	}
+
+	return nil
+}
+
+// waitForNoTasks waits until the given service has no running tasks left.
+func waitForNoTasks(ctx context.Context, c *client.Client, serviceID string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+
+	for {
+		tasks, err := c.TaskList(ctx, types.TaskListOptions{})
+		if err != nil {
+			return fmt.Errorf("listing tasks: %w", err)
+		}
+
+		active := 0
+		for _, t := range tasks {
+			if t.ServiceID == serviceID && t.Status.State != "shutdown" && t.Status.State != "complete" {
+				active++
+			}
+		}
+
+		if active == 0 {
+			return nil
+		}
+
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout waiting for service %s to stop (%d still active)", serviceID, active)
+		}
+
+		time.Sleep(500 * time.Millisecond)
+	}
 }
