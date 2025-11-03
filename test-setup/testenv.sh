@@ -109,6 +109,9 @@ cmd_test() {
   tmp_log="$(mktemp)"
   trap 'rm -f "$tmp_log"' EXIT
 
+  local pass_count=0
+  local fail_count=0
+
   # Run tests and parse structured output
   if ! DOCKER_CONTEXT="$CONTEXT_NAME" go test "${args[@]}" -v 2>&1 | tee "$tmp_log" | while IFS= read -r line; do
     case "$line" in
@@ -117,9 +120,11 @@ cmd_test() {
         ;;
       ---\ PASS:*)
         echo -e "${GREEN}[$(timestamp)] [OK]${RESET}    ${line#--- PASS: }"
+        ((pass_count++))
         ;;
       ---\ FAIL:*)
         echo -e "${RED}[$(timestamp)] [ERR]${RESET}   ${line#--- FAIL: }"
+        ((fail_count++))
         ;;
       ok*\ \(*s\))
         echo -e "${GREEN}[$(timestamp)] [PASS]${RESET}  ${line}"
@@ -149,11 +154,34 @@ cmd_test() {
       echo
     done
 
+    fail_count=${#failed_tests[@]}
+    pass_count=$(grep -c '^--- PASS:' "$tmp_log" || true)
+
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+    echo -e "${BOLD}📊 TEST SUMMARY${RESET}"
+    echo -e "  ✅ Passed: ${GREEN}${pass_count}${RESET}"
+    echo -e "  ❌ Failed: ${RED}${fail_count}${RESET}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+    echo
+
     err "Integration tests failed."
     return 1
   fi
 
-  ok "Integration tests completed successfully."
+  pass_count=$(grep -c '^--- PASS:' "$tmp_log" || true)
+  fail_count=$(grep -c '^--- FAIL:' "$tmp_log" || true)
+
+  echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+  echo -e "${BOLD}📊 TEST SUMMARY${RESET}"
+  echo -e "  ✅ Passed: ${GREEN}${pass_count}${RESET}"
+  echo -e "  ❌ Failed: ${RED}${fail_count}${RESET}"
+  echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+
+  if [[ "$fail_count" -eq 0 ]]; then
+    ok "Integration tests completed successfully."
+  else
+    err "Integration tests completed with failures."
+  fi
 }
 
 cmd_logs() {
