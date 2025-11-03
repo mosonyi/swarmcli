@@ -91,8 +91,8 @@ func ScaleServiceByName(serviceName string, replicas uint64) error {
 	return ScaleService(svcID, replicas)
 }
 
-// RestartServiceSafely scales the given service down to 0 and back up to 1.
-// Returns an error if the service is already at 0 replicas to avoid unexpected no-op.
+// RestartServiceSafely scales a single-replica service down to 0 and back up to 1.
+// Returns an error if the service has 0 or >1 replicas to prevent unsafe operations.
 func RestartServiceSafely(serviceName string) error {
 	c, err := GetClient()
 	if err != nil {
@@ -102,14 +102,13 @@ func RestartServiceSafely(serviceName string) error {
 
 	ctx := context.Background()
 
-	// Find the service ID
+	// Find the service and current replicas
 	services, err := c.ServiceList(ctx, types.ServiceListOptions{})
 	if err != nil {
 		return fmt.Errorf("listing services: %w", err)
 	}
 
-	var svcID string
-	var svcName string
+	var svcID, svcName string
 	var currentReplicas uint64
 
 	for _, svc := range services {
@@ -127,8 +126,8 @@ func RestartServiceSafely(serviceName string) error {
 		return fmt.Errorf("service %s not found", serviceName)
 	}
 
-	if currentReplicas == 0 {
-		return fmt.Errorf("service %s already has 0 replicas", svcName)
+	if currentReplicas != 1 {
+		return fmt.Errorf("service %s has %d replicas; RestartServiceSafely requires exactly 1", svcName, currentReplicas)
 	}
 
 	// Step 1: Scale down to 0 replicas
