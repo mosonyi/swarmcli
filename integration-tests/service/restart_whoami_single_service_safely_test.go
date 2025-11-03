@@ -14,3 +14,21 @@ func TestRestartServiceSafely(t *testing.T) {
 		t.Fatalf("failed to safely restart service: %v", err)
 	}
 }
+
+func TestRestartServiceSafelySingleReplica(t *testing.T) {
+	const svcName = "demo_whoami_single"
+
+	err := docker.RestartServiceSafely(svcName)
+	if err != nil {
+		t.Fatalf("failed to safely restart service: %v", err)
+	}
+}
+
+func TestRestartServiceSafelyNonexistent(t *testing.T) {
+	const svcName = "nonexistent_service"
+
+	err := docker.RestartServiceSafely(svcName)
+	if err == nil {
+		t.Fatal("expected error for non-existent service, got nil")
+	}
+}

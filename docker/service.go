@@ -127,7 +127,7 @@ func RestartServiceSafely(serviceName string) error {
 	}
 
 	// Step 2: Wait until all tasks are actually removed
-	if err := waitForNoTasks(ctx, c, svcID, 10*time.Second); err != nil {
+	if err := WaitForNoTasks(ctx, c, svcID, 10*time.Second); err != nil {
 		return fmt.Errorf("waiting for tasks to stop: %w", err)
 	}
 
@@ -139,8 +139,8 @@ func RestartServiceSafely(serviceName string) error {
 	return nil
 }
 
-// waitForNoTasks waits until the given service has no running tasks left.
-func waitForNoTasks(ctx context.Context, c *client.Client, serviceID string, timeout time.Duration) error {
+// WaitForNoTasks waits until the given service has no running tasks left.
+func WaitForNoTasks(ctx context.Context, c *client.Client, serviceID string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 
 	for {
