@@ -269,12 +269,15 @@ cmd_integration() {
 
 # === Dispatcher ============================================================
 case "${1:-}" in
-  up|deploy|test|logs|down|clean|integration)
-    cmd="$1"; shift
-    cmd_"$cmd" "$@"
+  up|deploy|logs|down|clean|integration)
+    cmd_"$1"
+    ;;
+  test)
+    # Pass optional single test name to cmd_test
+    cmd_test "${2:-}"
     ;;
   *)
-    echo -e "${BOLD}Usage:${RESET} $0 {up|deploy|test|logs|down|clean|integration} [args...]"
+    echo -e "${BOLD}Usage:${RESET} $0 {up|deploy|test|logs|down|clean|integration} [test_name]"
     exit 1
     ;;
 esac
