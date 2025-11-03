@@ -125,30 +125,40 @@ cmd_test() {
 
   # Run tests and parse structured output
   if ! DOCKER_CONTEXT="$CONTEXT_NAME" go test "${args[@]}" 2>&1 | tee "$tmp_log" | while IFS= read -r line; do
+    # Determine prefix for verbose output
+    local prefix=""
+    if [[ "${VERBOSE:-0}" -eq 1 ]]; then
+      prefix="[$(timestamp)] "
+    fi
+
     case "$line" in
       ===\ RUN*)
-        echo -e "${BLUE}[$(timestamp)] [TEST]${RESET}  ${line#=== RUN   }"
+        echo -e "${prefix}${BLUE}[TEST]${RESET}  ${line#=== RUN   }"
         ;;
       ---\ PASS:*)
-        echo -e "${GREEN}[$(timestamp)] [OK]${RESET}    ${line#--- PASS: }"
+        echo -e "${prefix}${GREEN}[OK]${RESET}    ${line#--- PASS: }"
         ((pass_count++))
         ;;
       ---\ FAIL:*)
-        echo -e "${RED}[$(timestamp)] [ERR]${RESET}   ${line#--- FAIL: }"
+        echo -e "${prefix}${RED}[ERR]${RESET}   ${line#--- FAIL: }"
         ((fail_count++))
         ;;
       ok*\ \(*s\))
-        echo -e "${GREEN}[$(timestamp)] [PASS]${RESET}  ${line}"
+        echo -e "${prefix}${GREEN}[PASS]${RESET}  ${line}"
         ;;
       FAIL*\ \(*s\))
-        echo -e "${RED}[$(timestamp)] [FAIL]${RESET}  ${line}"
+        echo -e "${prefix}${RED}[FAIL]${RESET}  ${line}"
         ;;
       FAIL*)
-        echo -e "${RED}[$(timestamp)] [FAIL]${RESET}  ${line}"
+        echo -e "${prefix}${RED}[FAIL]${RESET}  ${line}"
+        ;;
+      *)
+        # Print all lines in verbose mode
+        [[ "${VERBOSE:-0}" -eq 1 ]] && echo -e "${prefix}${line}"
         ;;
     esac
   done; then
-    # If go test failed
+    # go test failed
     echo
     warn "Some tests failed. Collecting failure details..."
     echo
@@ -193,7 +203,6 @@ cmd_test() {
     err "Integration tests completed with failures."
   fi
 }
-
 
 cmd_logs() {
   info "📜 Collecting logs..."
