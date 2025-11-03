@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/client"
 )
 
@@ -92,7 +93,7 @@ func ScaleServiceByName(serviceName string, replicas uint64) error {
 }
 
 // RestartServiceSafely scales the given service down to 0 and back up to 1.
-// This guarantees no overlap between old and new containers — useful for
+// Guarantees no overlap between old and new containers — useful for
 // single-instance services like blockchain nodes to avoid double signing.
 func RestartServiceSafely(serviceName string) error {
 	c, err := GetClient()
@@ -103,36 +104,47 @@ func RestartServiceSafely(serviceName string) error {
 
 	ctx := context.Background()
 
-	// Find the service ID
+	// Find the service
 	services, err := c.ServiceList(ctx, types.ServiceListOptions{})
 	if err != nil {
 		return fmt.Errorf("listing services: %w", err)
 	}
 
-	var svcID string
-	for _, svc := range services {
-		if svc.Spec.Name == serviceName {
-			svcID = svc.ID
+	var svc *swarm.Service
+	for i, s := range services {
+		if s.Spec.Name == serviceName {
+			svc = &services[i]
 			break
 		}
 	}
 
-	if svcID == "" {
+	if svc == nil {
 		return fmt.Errorf("service %s not found", serviceName)
 	}
 
+	// Only support single-replica services
+	if svc.Spec.Mode.Replicated == nil {
+		return fmt.Errorf("service %s is not in replicated mode", serviceName)
+	}
+	if *svc.Spec.Mode.Replicated.Replicas != 1 {
+		return fmt.Errorf(
+			"service %s has %d replicas; RestartServiceSafely only supports single-replica services",
+			serviceName, *svc.Spec.Mode.Replicated.Replicas,
+		)
+	}
+
 	// Step 1: Scale down to 0 replicas
-	if err := ScaleService(svcID, 0); err != nil {
+	if err := ScaleService(svc.ID, 0); err != nil {
 		return fmt.Errorf("scale down failed: %w", err)
 	}
 
 	// Step 2: Wait until all tasks are actually removed
-	if err := WaitForNoTasks(ctx, c, svcID, 10*time.Second); err != nil {
+	if err := WaitForNoTasks(ctx, c, svc.ID, 10*time.Second); err != nil {
 		return fmt.Errorf("waiting for tasks to stop: %w", err)
 	}
 
 	// Step 3: Scale up again to 1 replica
-	if err := ScaleService(svcID, 1); err != nil {
+	if err := ScaleService(svc.ID, 1); err != nil {
 		return fmt.Errorf("scale up failed: %w", err)
 	}
 
