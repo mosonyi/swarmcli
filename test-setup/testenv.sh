@@ -107,18 +107,19 @@ cmd_test() {
   local test_name="${1:-}"   # optional single test
   local format="testname"     # default local format
 
-  # Use github-actions format if running in CI
+  # CI-specific settings
+  local junit_file=""
   if [[ "${CI:-0}" -eq 1 ]]; then
     format="github-actions"
+    junit_file="/tmp/test-report.xml"
   elif [[ "${VERBOSE:-0}" -eq 1 ]]; then
     format="standard-verbose"
   fi
 
   local args=("--format=$format")
 
-  # Optional JUnit XML report for CI
-  local junit_file="/tmp/test-report.xml"
-  args+=("--junitfile=$junit_file")
+  # Add JUnit file only if set
+  [[ -n "$junit_file" ]] && args+=("--junitfile=$junit_file")
 
   if [[ -n "$test_name" ]]; then
     info "🎯 Running single test: $test_name"
@@ -128,9 +129,10 @@ cmd_test() {
     args+=("./integration-tests/...")
   fi
 
-  # Run gotestsum with Docker context
+  # Run gotestsum using the Docker context
   DOCKER_CONTEXT="$CONTEXT_NAME" gotestsum "${args[@]}"
 }
+
 
 cmd_down() {
   info "🧹 Tearing down Swarm environment..."
