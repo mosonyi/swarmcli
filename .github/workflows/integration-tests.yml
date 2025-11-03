@@ -57,7 +57,7 @@ jobs:
       - name: Run full integration pipeline
         run: bash test-setup/testenv.sh integration
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: test-report
           path: /tmp/test-report.xml
