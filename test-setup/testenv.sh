@@ -104,52 +104,56 @@ cmd_deploy() {
 cmd_test() {
   info "🧪 Running Go integration tests..."
 
-  local args=(-v -tags=integration ./integration-tests/...)
-  local verbose="${VERBOSE:-0}"
-
+  local args=(-tags=integration ./integration-tests/...)
   local tmp_log
   tmp_log="$(mktemp)"
   trap 'rm -f "$tmp_log"' EXIT
 
-  DOCKER_CONTEXT="$CONTEXT_NAME" go test "${args[@]}" 2>&1 | tee "$tmp_log" | while IFS= read -r line; do
+  # Run tests and parse structured output
+  if ! DOCKER_CONTEXT="$CONTEXT_NAME" go test "${args[@]}" -v 2>&1 | tee "$tmp_log" | while IFS= read -r line; do
     case "$line" in
-      ===\ RUN*)  # Start of a test
+      ===\ RUN*)
         echo -e "${BLUE}[$(timestamp)] [TEST]${RESET}  ${line#=== RUN   }"
         ;;
-      ---\ PASS:*) # Per-test success
+      ---\ PASS:*)
         echo -e "${GREEN}[$(timestamp)] [OK]${RESET}    ${line#--- PASS: }"
         ;;
-      ---\ FAIL:*) # Per-test failure
+      ---\ FAIL:*)
         echo -e "${RED}[$(timestamp)] [ERR]${RESET}   ${line#--- FAIL: }"
         ;;
-      ok*\ \(*s\)) # Package passed
+      ok*\ \(*s\))
         echo -e "${GREEN}[$(timestamp)] [PASS]${RESET}  ${line}"
         ;;
-      FAIL*\ \(*s\)) # Package failed
+      FAIL*\ \(*s\))
         echo -e "${RED}[$(timestamp)] [FAIL]${RESET}  ${line}"
         ;;
-      FAIL*) # Top-level FAIL line
+      FAIL*)
         echo -e "${RED}[$(timestamp)] [FAIL]${RESET}  ${line}"
-        ;;
-      *)
-        # Show t.Log etc. only in VERBOSE=1 mode
-        if [[ "$verbose" -eq 1 ]]; then
-          echo -e "${DIM}[$(timestamp)] [LOG]${RESET}   ${line}"
-        fi
         ;;
     esac
-  done
+  done; then
+    # Exit code of `go test` propagates here because of `!`
+    echo
+    warn "Some tests failed. Collecting failure details..."
+    echo
 
-  # Check if any test failed
-  if grep -q "^FAIL" "$tmp_log"; then
-    warn "Some tests failed — showing last 30 service log lines..."
-    echo
-    docker --context "$CONTEXT_NAME" service logs demo_whoami --no-task-ids --timestamps 2>/dev/null \
-      | tail -n 30 | sed 's/^/'"$(timestamp) ${YELLOW}[STACK]${RESET}"' /'
-    echo
+    # Print failed test names
+    mapfile -t failed_tests < <(grep '^--- FAIL:' "$tmp_log" | sed 's/^--- FAIL: //; s/ (.*)//')
+
+    for test_name in "${failed_tests[@]}"; do
+      echo -e "${RED}[$(timestamp)] [FAIL]${RESET}  ${YELLOW}$test_name${RESET}"
+      echo -e "        👉 To inspect logs manually: ${CYAN}SERVICE=demo_whoami ./test-setup/testenv.sh logs${RESET}"
+      echo
+      docker --context "$CONTEXT_NAME" service logs demo_whoami --no-task-ids --timestamps 2>/dev/null \
+        | tail -n 30 | sed 's/^/'"$(timestamp) ${YELLOW}[STACK]${RESET}"' /'
+      echo
+    done
+
+    err "Integration tests failed."
+    return 1
   fi
 
-  ok "Integration tests completed."
+  ok "Integration tests completed successfully."
 }
 
 cmd_logs() {
