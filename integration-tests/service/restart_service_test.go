@@ -12,7 +12,6 @@ import (
 // TestRestartWhoamiSingleService_Idiomatic verifies that RestartServiceIdiomatic
 // properly forces a new task for a single-replica service using the snapshot model.
 func TestRestartWhoamiSingleService(t *testing.T) {
-	t.Parallel()
 	const serviceName = "demo_whoami_single"
 	const timeout = 45 * time.Second
 
@@ -80,7 +79,6 @@ func TestRestartWhoamiSingleService(t *testing.T) {
 // TestRestartWhoamiMultiService_Idiomatic verifies rolling restart behavior
 // for multi-replica services using snapshots.
 func TestRestartWhoamiMultiService(t *testing.T) {
-	t.Parallel()
 	const serviceName = "demo_whoami"
 	const timeout = 90 * time.Second
 
@@ -155,7 +153,6 @@ func TestRestartWhoamiMultiService(t *testing.T) {
 }
 
 func TestRestartService_NotFound_ReturnsError(t *testing.T) {
-	t.Parallel()
 	const serviceName = "nonexistent_demo_service"
 
 	err := docker.RestartService(serviceName)

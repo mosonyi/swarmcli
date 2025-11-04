@@ -11,7 +11,6 @@ import (
 
 // TestScaleWhoamiService verifies scaling demo_whoami up and down safely.
 func TestScaleWhoamiService(t *testing.T) {
-	t.Parallel()
 	const serviceName = "demo_whoami"
 	const timeout = 45 * time.Second
 
@@ -71,7 +70,6 @@ func TestScaleWhoamiService(t *testing.T) {
 // TestRestartWhoamiSingleService verifies that scaling demo_whoami_single
 // down to 0 and back to 1 correctly restarts the service.
 func TestScaleWhoamiSingleServiceTo0AndThenTo1(t *testing.T) {
-	t.Parallel()
 	const serviceName = "demo_whoami_single"
 	const timeout = 45 * time.Second
 
