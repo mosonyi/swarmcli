@@ -73,37 +73,24 @@ func Init() {
 		data, _ := payload.(map[string]interface{})
 
 		var filterType nodeservicesview.FilterType
-		var nodeID, stackName, title string
-		var loadEntries func() []nodeservicesview.ServiceEntry
+		var nodeID, stackName string
 
-		// Node view
-		if id, ok := data["nodeID"].(string); ok {
-			nodeID = id
+		if n, ok := data["nodeID"].(string); ok {
 			filterType = nodeservicesview.NodeFilter
-			title = "Services on Node: " + data["hostname"].(string)
-			loadEntries = func() []nodeservicesview.ServiceEntry {
-				return nodeservicesview.LoadNodeServices(nodeID)
-			}
-		} else if name, ok := data["stackName"].(string); ok { // Stack view
-			stackName = name
-			filterType = nodeservicesview.StackFilter
-			title = "Services in Stack: " + stackName
-			loadEntries = func() []nodeservicesview.ServiceEntry {
-				return nodeservicesview.LoadStackServices(stackName)
-			}
-		} else { // Default: all services
-			filterType = nodeservicesview.AllFilter
-			title = "All Services"
-			loadEntries = func() []nodeservicesview.ServiceEntry {
-				return nodeservicesview.LoadStackServices("")
-			}
+			nodeID = n
 		}
+		if s, ok := data["stackName"].(string); ok {
+			filterType = nodeservicesview.StackFilter
+			stackName = s
+		}
+
+		entries, title := nodeservicesview.LoadServicesForView(filterType, nodeID, stackName)
 
 		// Initialize view and return first payload
 		return v, func() tea.Msg {
 			return nodeservicesview.Msg{
 				Title:      title,
-				Entries:    loadEntries(),
+				Entries:    entries,
 				FilterType: filterType,
 				NodeID:     nodeID,
 				StackName:  stackName,

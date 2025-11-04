@@ -35,21 +35,7 @@ func refreshServicesCmd(nodeID, stackName string, filterType FilterType) tea.Cmd
 			return nil
 		}
 
-		var entries []ServiceEntry
-		var title string
-
-		switch filterType {
-		case NodeFilter:
-			entries = LoadNodeServices(nodeID)
-			title = "Services on Node: " + nodeID
-		case StackFilter:
-			entries = LoadStackServices(stackName)
-			title = "Services in Stack: " + stackName
-		default: // All services
-			entries = LoadStackServices("")
-			title = "All Services"
-		}
-
+		entries, title := LoadServicesForView(filterType, nodeID, stackName)
 		return Msg{
 			Title:      title,
 			Entries:    entries,
@@ -58,4 +44,19 @@ func refreshServicesCmd(nodeID, stackName string, filterType FilterType) tea.Cmd
 			StackName:  stackName,
 		}
 	}
+}
+
+func LoadServicesForView(filterType FilterType, nodeID, stackName string) (entries []ServiceEntry, title string) {
+	switch filterType {
+	case NodeFilter:
+		entries = LoadNodeServices(nodeID)
+		title = "Services on Node: " + nodeID
+	case StackFilter:
+		entries = LoadStackServices(stackName)
+		title = "Services in Stack: " + stackName
+	default: // All services
+		entries = LoadStackServices("")
+		title = "All Services"
+	}
+	return
 }
