@@ -1,4 +1,4 @@
-package nodeservicesview
+package servicesview
 
 import (
 	"fmt"
