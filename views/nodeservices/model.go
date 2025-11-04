@@ -1,13 +1,10 @@
 package nodeservicesview
 
 import (
-	"context"
 	"fmt"
-	"swarmcli/docker"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	loadingview "swarmcli/views/loading"
-	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -102,37 +99,4 @@ func (m *Model) loadingViewMessage(serviceName string) {
 			"message": fmt.Sprintf("Restarting %s, please wait...", serviceName),
 		},
 	)
-}
-
-func restartServiceCmd(serviceName string, filterType FilterType, nodeID, stackName string) tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
-
-		if err := docker.RestartServiceAndWait(ctx, serviceName); err != nil {
-			return fmt.Errorf("failed to restart service %s: %v", serviceName, err)
-		}
-
-		docker.RefreshSnapshot()
-
-		var entries []ServiceEntry
-		title := ""
-
-		switch filterType {
-		case NodeFilter:
-			entries = LoadNodeServices(nodeID)
-			title = "Node Services"
-		case StackFilter:
-			entries = LoadStackServices(stackName)
-			title = "Stack Services"
-		}
-
-		return Msg{
-			Title:      title,
-			Entries:    entries,
-			FilterType: filterType,
-			NodeID:     nodeID,
-			StackName:  stackName,
-		}
-	}
 }

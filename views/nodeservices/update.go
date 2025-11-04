@@ -31,13 +31,28 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		return m, nil
 
 	case confirmdialog.ResultMsg:
-		// Handle dialog result
 		m.confirmDialog.Visible = false
+
 		if msg.Confirmed && m.cursor < len(m.entries) {
 			entry := m.entries[m.cursor]
+
+			// Show loading spinner
 			m.loading.SetVisible(true)
 			m.loadingViewMessage(entry.ServiceName)
+
+			// Run restart asynchronously and return a message when done
 			return m, restartServiceCmd(entry.ServiceName, m.filterType, m.nodeID, m.stackName)
+		}
+		return m, nil
+
+	case serviceRestartedMsg:
+		// Service finished restarting → hide loading spinner
+		m.loading.SetVisible(false)
+
+		if msg.Err != nil {
+			fmt.Printf("Failed to restart service %q: %v\n", msg.ServiceName, msg.Err)
+		} else {
+			return m, refreshServicesCmd(m.nodeID, m.stackName, m.filterType)
 		}
 		return m, nil
 
