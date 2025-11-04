@@ -22,11 +22,6 @@ func (m Model) View() string {
 		return m.loading.View()
 	}
 
-	content := m.viewport.View()
-	if m.confirmDialog.Visible {
-		content += "\n" + m.confirmDialog.View()
-	}
-
 	headerStyle := ui.FrameHeaderStyle
 	header := headerStyle.Render(fmt.Sprintf(
 		"%-*s  %-*s  %-*s",
@@ -35,7 +30,19 @@ func (m Model) View() string {
 		m.replicaColWidth, "REPLICAS",
 	))
 
-	return ui.RenderFramedBox(m.title, header, m.viewport.View(), width)
+	content := ui.RenderFramedBox(m.title, header, m.viewport.View(), width)
+
+	if m.confirmDialog.Visible {
+		dialogView := m.confirmDialog.View()
+
+		// Optional: dim the background with simple ANSI effect
+		dimmed := "\033[2m" + content + "\033[0m"
+
+		// Combine dimmed base + dialog on top
+		return dimmed + "\n" + dialogView
+	}
+
+	return content
 }
 
 func (m *Model) renderEntries() string {

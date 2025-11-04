@@ -14,6 +14,7 @@ import (
 
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	switch msg := msg.(type) {
+
 	case Msg:
 		m.SetContent(msg)
 		m.Visible = true
@@ -30,14 +31,15 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		return m, nil
 
 	case confirmdialog.ResultMsg:
-		if msg.Confirmed {
+		// Handle dialog result
+		if msg.Confirmed && m.cursor < len(m.entries) {
 			entry := m.entries[m.cursor]
 			m.confirmDialog.Visible = false
-			m.loading.SetVisible(true)
 			m.loadingViewMessage(entry.ServiceName)
 			return m, restartServiceCmd(entry.ServiceName, m.filterType, m.nodeID, m.stackName)
 		}
 		m.confirmDialog.Visible = false
+		return m, nil
 
 	case tea.KeyMsg:
 		if m.confirmDialog.Visible {
@@ -46,7 +48,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 			return m, cmd
 		}
 
-		// If loading visible, ignore user input
+		// 2. Ignore keys if loading visible ---
 		if m.loading.Visible() {
 			return m, nil
 		}
@@ -54,18 +56,21 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		switch msg.String() {
 		case "q":
 			m.Visible = false
+			return m, nil
 
 		case "j", "down":
 			if m.cursor < len(m.entries)-1 {
 				m.cursor++
 				m.viewport.SetContent(m.renderEntries())
 			}
+			return m, nil
 
 		case "k", "up":
 			if m.cursor > 0 {
 				m.cursor--
 				m.viewport.SetContent(m.renderEntries())
 			}
+			return m, nil
 
 		case "i":
 			if m.cursor < len(m.entries) {
@@ -84,16 +89,19 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 					}
 				}
 			}
+			return m, nil
+
 		case "r":
 			if m.cursor < len(m.entries) {
 				entry := m.entries[m.cursor]
 				m.confirmDialog.Visible = true
 				m.confirmDialog.Message = fmt.Sprintf("Restart service %q?", entry.ServiceName)
 			}
+			return m, nil
 		}
 
+	// --- Allow spinner updates while loading ---
 	default:
-		// Allow spinner updates while loading
 		if m.loading.Visible() {
 			var cmd tea.Cmd
 			var v view.View
