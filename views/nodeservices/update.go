@@ -40,18 +40,19 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 			m.loading.SetVisible(true)
 			m.loadingViewMessage(entry.ServiceName)
 
-			// Run restart asynchronously and return a message when done
+			// Restart asynchronously; spinner will animate while waiting
 			return m, restartServiceCmd(entry.ServiceName)
 		}
 		return m, nil
 
 	case serviceRestartedMsg:
-		// Service finished restarting → hide loading spinner
+		// Hide loading spinner when done
 		m.loading.SetVisible(false)
 
 		if msg.Err != nil {
 			fmt.Printf("Failed to restart service %q: %v\n", msg.ServiceName, msg.Err)
 		} else {
+			// Refresh service list
 			return m, refreshServicesCmd(m.nodeID, m.stackName, m.filterType)
 		}
 		return m, nil

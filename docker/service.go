@@ -132,7 +132,6 @@ func RestartService(serviceName string) error {
 	return restartServiceCommon(ctx, c, svc)
 }
 
-// RestartServiceAndWait performs a restart and waits until all tasks are replaced.
 func RestartServiceAndWait(ctx context.Context, serviceName string) error {
 	c, err := GetClient()
 	if err != nil {
@@ -145,9 +144,8 @@ func RestartServiceAndWait(ctx context.Context, serviceName string) error {
 		return err
 	}
 	if svc.Spec.Mode.Replicated == nil {
-		return fmt.Errorf("service %s is not in replicated mode", serviceName)
+		return fmt.Errorf("service %s is not replicated", serviceName)
 	}
-
 	replicas := *svc.Spec.Mode.Replicated.Replicas
 
 	// Snapshot old running tasks
@@ -167,31 +165,50 @@ func RestartServiceAndWait(ctx context.Context, serviceName string) error {
 		return err
 	}
 
-	// Wait until all running tasks are replaced
+	// Wait for service to be fully stable
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("waiting for service %s: %w", serviceName, ctx.Err())
-		default:
+		case <-ticker.C:
 			tasks, err := c.TaskList(ctx, types.TaskListOptions{})
 			if err != nil {
 				return fmt.Errorf("listing tasks: %w", err)
 			}
 
-			running, newCount := 0, 0
+			running := 0
+			newRunning := 0
 			for _, t := range tasks {
-				if t.ServiceID == svc.ID && t.Status.State == "running" {
-					running++
-					if !oldTasks[t.ID] {
-						newCount++
-					}
+				if t.ServiceID != svc.ID || t.Status.State != "running" {
+					continue
+				}
+				running++
+				if !oldTasks[t.ID] {
+					newRunning++
 				}
 			}
 
-			if running == int(replicas) && newCount == running {
-				return nil // all tasks replaced
+			// Stop waiting once all replicas are running
+			if running == int(replicas) && newRunning >= int(replicas) {
+				return nil
 			}
-			time.Sleep(time.Second)
+
+			// Remove old tasks that are gone to avoid permanent blocking
+			for id := range oldTasks {
+				found := false
+				for _, t := range tasks {
+					if t.ID == id && t.Status.State == "running" {
+						found = true
+						break
+					}
+				}
+				if !found {
+					delete(oldTasks, id)
+				}
+			}
 		}
 	}
 }
