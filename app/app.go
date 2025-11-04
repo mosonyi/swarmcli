@@ -37,7 +37,7 @@ func Init() {
 	}
 
 	registerView(loadingview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
-		return loadingview.New(w, h, payload), nil
+		return loadingview.New(w, h, true, payload), nil
 	})
 	registerView(helpview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		cmds, _ := payload.([]helpview.CommandInfo)
@@ -72,32 +72,28 @@ func Init() {
 
 		data, _ := payload.(map[string]interface{})
 
-		// Node view: expects nodeID + hostname
-		if nodeID, ok := data["nodeID"].(string); ok {
-			hostname, _ := data["hostname"].(string)
-			return v, func() tea.Msg {
-				return nodeservicesview.Msg{
-					Title:   "Services on Node: " + hostname,
-					Entries: nodeservicesview.LoadNodeServices(nodeID),
-				}
-			}
+		var filterType nodeservicesview.FilterType
+		var nodeID, stackName string
+
+		if n, ok := data["nodeID"].(string); ok {
+			filterType = nodeservicesview.NodeFilter
+			nodeID = n
+		}
+		if s, ok := data["stackName"].(string); ok {
+			filterType = nodeservicesview.StackFilter
+			stackName = s
 		}
 
-		// Stack view: expects stackName
-		if stackName, ok := data["stackName"].(string); ok {
-			return v, func() tea.Msg {
-				return nodeservicesview.Msg{
-					Title:   "Services in Stack: " + stackName,
-					Entries: nodeservicesview.LoadStackServices(stackName),
-				}
-			}
-		}
+		entries, title := nodeservicesview.LoadServicesForView(filterType, nodeID, stackName)
 
-		// Default: load all services (optional)
+		// Initialize view and return first payload
 		return v, func() tea.Msg {
 			return nodeservicesview.Msg{
-				Title:   "All Services",
-				Entries: nodeservicesview.LoadStackServices(""),
+				Title:      title,
+				Entries:    entries,
+				FilterType: filterType,
+				NodeID:     nodeID,
+				StackName:  stackName,
 			}
 		}
 	})

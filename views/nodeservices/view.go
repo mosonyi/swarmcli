@@ -9,24 +9,32 @@ import (
 )
 
 func (m Model) View() string {
-	if !m.Visible {
-		return ""
-	}
-
 	width := m.viewport.Width
+	height := m.viewport.Height
 	if width <= 0 {
 		width = 80
 	}
 
-	headerStyle := ui.FrameHeaderStyle
-	header := headerStyle.Render(fmt.Sprintf(
+	// --- Render main nodeservices content ---
+	header := ui.FrameHeaderStyle.Render(fmt.Sprintf(
 		"%-*s  %-*s  %-*s",
 		m.serviceColWidth, "SERVICE",
 		m.stackColWidth, "STACK",
 		m.replicaColWidth, "REPLICAS",
 	))
+	content := ui.RenderFramedBox(m.title, header, m.viewport.View(), width)
 
-	return ui.RenderFramedBox(m.title, header, m.viewport.View(), width)
+	// --- Overlay confirm dialog if visible ---
+	if m.confirmDialog.Visible {
+		content = ui.OverlayCentered(content, m.confirmDialog.View(), width, height)
+	}
+
+	// --- Overlay loading view if visible ---
+	if m.loading.Visible() {
+		content = ui.OverlayCentered(content, m.loading.View(), width, height)
+	}
+
+	return content
 }
 
 func (m *Model) renderEntries() string {

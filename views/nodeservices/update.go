@@ -3,8 +3,11 @@ package nodeservicesview
 import (
 	"context"
 	"fmt"
+	"log"
 	"swarmcli/docker"
+	"swarmcli/views/confirmdialog"
 	inspectview "swarmcli/views/inspect"
+	loadingview "swarmcli/views/loading"
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,6 +15,7 @@ import (
 
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	switch msg := msg.(type) {
+
 	case Msg:
 		m.SetContent(msg)
 		m.Visible = true
@@ -27,22 +31,78 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		}
 		return m, nil
 
+	case confirmdialog.ResultMsg:
+		m.confirmDialog.Visible = false
+
+		if msg.Confirmed && m.cursor < len(m.entries) {
+			entry := m.entries[m.cursor]
+			m.loading.SetVisible(true)
+			m.loadingViewMessage(entry.ServiceName)
+			log.Println("Starting restartServiceWithProgressCmd for", entry.ServiceName)
+
+			// create new channel for this operation
+			m.msgCh = make(chan tea.Msg)
+
+			return m, tea.Batch(
+				restartServiceWithProgressCmd(entry.ServiceName, m.msgCh),
+				m.listenForMessages(),
+			)
+		}
+		return m, nil
+
+	case serviceProgressMsg:
+		log.Printf("[UI] Received progress: %d/%d\n", msg.Progress.Replaced, msg.Progress.Total)
+
+		m.loadingViewMessage(fmt.Sprintf(
+			"Progress: %d/%d tasks replaced...",
+			msg.Progress.Replaced, msg.Progress.Total,
+		))
+
+		if msg.Progress.Replaced == msg.Progress.Total && msg.Progress.Total > 0 {
+			log.Println("[UI] Restart finished — closing channel")
+			if m.msgCh != nil {
+				close(m.msgCh)
+				m.msgCh = nil
+			}
+
+			m.loading.SetVisible(false)
+			return m, tea.Batch(
+				refreshServicesCmd(m.nodeID, m.stackName, m.filterType),
+			)
+		}
+
+		return m, m.listenForMessages()
+
 	case tea.KeyMsg:
+		if m.confirmDialog.Visible {
+			var cmd tea.Cmd
+			m.confirmDialog, cmd = m.confirmDialog.Update(msg)
+			return m, cmd
+		}
+
+		// 2. Ignore keys if loading visible ---
+		if m.loading.Visible() {
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "q":
 			m.Visible = false
+			return m, nil
 
 		case "j", "down":
 			if m.cursor < len(m.entries)-1 {
 				m.cursor++
 				m.viewport.SetContent(m.renderEntries())
 			}
+			return m, nil
 
 		case "k", "up":
 			if m.cursor > 0 {
 				m.cursor--
 				m.viewport.SetContent(m.renderEntries())
 			}
+			return m, nil
 
 		case "i":
 			if m.cursor < len(m.entries) {
@@ -61,6 +121,26 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 					}
 				}
 			}
+			return m, nil
+
+		case "r":
+			if m.cursor < len(m.entries) {
+				entry := m.entries[m.cursor]
+				m.confirmDialog.Visible = true
+				m.confirmDialog.Message = fmt.Sprintf("Restart service %q?", entry.ServiceName)
+			}
+			return m, nil
+		}
+
+	// --- Allow spinner updates while loading ---
+	default:
+		// Forward messages to loading view if active
+		if m.loading.Visible() {
+			var cmd tea.Cmd
+			var v view.View
+			v, cmd = m.loading.Update(msg)
+			m.loading = v.(loadingview.Model)
+			return m, cmd
 		}
 	}
 

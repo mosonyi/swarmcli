@@ -23,7 +23,7 @@ type Model struct {
 	visible       bool
 }
 
-func New(width, height int, payload any) Model {
+func New(width, height int, visible bool, payload any) Model {
 	// Defaults
 	title := "Loading"
 	header := ""
@@ -59,25 +59,13 @@ func New(width, height int, payload any) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(ui.FrameBorderColor)
-
-	return Model{
-		width:   width,
-		height:  height,
-		title:   title,
-		header:  header,
-		message: message,
-		spinner: s,
-		visible: true,
-	}
+	return Model{width: width, height: height, title: title, header: header, message: message, spinner: s, visible: visible}
 }
 
-func (m Model) Name() string { return ViewName }
-
-func (m Model) Visible() bool { return m.visible }
-
+func (m Model) Visible() bool      { return m.visible }
 func (m *Model) SetVisible(v bool) { m.visible = v }
-
-func (m Model) Init() tea.Cmd { return m.spinner.Tick }
+func (m Model) Init() tea.Cmd      { return m.spinner.Tick }
+func (m Model) Name() string       { return ViewName }
 
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	var cmd tea.Cmd
@@ -86,23 +74,14 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 }
 
 func (m Model) View() string {
+	if !m.visible {
+		return ""
+	}
+
 	content := fmt.Sprintf("%s %s", m.spinner.View(), m.message)
 	content = strings.TrimSpace(content)
-
-	centered := lipgloss.Place(
-		m.width,
-		m.height-4, // leave room for frame
-		lipgloss.Center,
-		lipgloss.Center,
-		content,
-	)
-
-	return ui.RenderFramedBox(
-		m.title,
-		m.header,
-		centered,
-		m.width,
-	)
+	box := ui.RenderFramedBox(m.title, m.header, content, 0) // minimal width
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }
 
 func (m Model) ShortHelpItems() []helpbar.HelpEntry {

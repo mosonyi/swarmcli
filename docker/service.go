@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -74,8 +75,8 @@ func restartServiceCommon(ctx context.Context, c *client.Client, svc *swarm.Serv
 	if err := updateService(ctx, c, svc); err != nil {
 		return fmt.Errorf("forcing service update for %s: %w", svc.Spec.Name, err)
 	}
-	fmt.Printf("🔁 Service %s restarted (replicas: %d)\n",
-		svc.Spec.Name, *svc.Spec.Mode.Replicated.Replicas)
+	//fmt.Printf("🔁 Service %s restarted (replicas: %d)\n",
+	//	svc.Spec.Name, *svc.Spec.Mode.Replicated.Replicas)
 	return nil
 }
 
@@ -132,7 +133,6 @@ func RestartService(serviceName string) error {
 	return restartServiceCommon(ctx, c, svc)
 }
 
-// RestartServiceAndWait performs a restart and waits until all tasks are replaced.
 func RestartServiceAndWait(ctx context.Context, serviceName string) error {
 	c, err := GetClient()
 	if err != nil {
@@ -189,7 +189,93 @@ func RestartServiceAndWait(ctx context.Context, serviceName string) error {
 			}
 
 			if running == int(replicas) && newCount == running {
+				// Check for extra tasks
+				var extra []string
+				for _, t := range tasks {
+					if t.ServiceID == svc.ID && t.Status.State == "running" && !oldTasks[t.ID] && newCount > int(replicas) {
+						extra = append(extra, t.ID)
+					}
+				}
+				if len(extra) > 0 {
+					fmt.Printf("[RestartServiceAndWait] Warning: extra running tasks detected for service %q: %v\n", serviceName, extra)
+				}
+
 				return nil // all tasks replaced
+			}
+
+			time.Sleep(time.Second)
+		}
+	}
+}
+
+type ProgressUpdate struct {
+	Replaced int
+	Total    int
+}
+
+func RestartServiceWithProgress(ctx context.Context, serviceName string, progressCh chan<- ProgressUpdate) error {
+	cli, err := GetClient()
+	if err != nil {
+		return err
+	}
+	defer cli.Close()
+
+	svc, err := findServiceByName(ctx, cli, serviceName)
+	if err != nil {
+		return err
+	}
+
+	if svc.Spec.Mode.Replicated == nil {
+		return fmt.Errorf("service %s is not replicated", serviceName)
+	}
+	total := int(*svc.Spec.Mode.Replicated.Replicas)
+
+	// Snapshot old tasks
+	oldTasks := make(map[string]bool)
+	tasks, _ := cli.TaskList(ctx, types.TaskListOptions{})
+	for _, t := range tasks {
+		if t.ServiceID == svc.ID && t.Status.State == "running" {
+			oldTasks[t.ID] = true
+		}
+	}
+
+	// Trigger restart
+	if err := restartServiceCommon(ctx, cli, svc); err != nil {
+		return err
+	}
+
+	// Wait and report progress
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			tasks, _ := cli.TaskList(ctx, types.TaskListOptions{})
+			replaced := 0
+			running := 0
+			for _, t := range tasks {
+				if t.ServiceID == svc.ID && t.Status.State == "running" {
+					running++
+					if !oldTasks[t.ID] {
+						replaced++
+					}
+				}
+			}
+
+			log.Printf("Sending progress: %d/%d\n", replaced, total)
+			if progressCh != nil {
+				select {
+				case progressCh <- ProgressUpdate{Replaced: replaced, Total: total}:
+					log.Printf("[Docker] Successfully sent to channel")
+				case <-ctx.Done():
+					log.Printf("[Docker] Context done, cannot send")
+				default:
+					log.Printf("[Docker] Channel blocked, skipping send")
+				}
+			}
+
+			if running == total && replaced == total {
+				return nil
 			}
 			time.Sleep(time.Second)
 		}
