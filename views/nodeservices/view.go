@@ -9,35 +9,34 @@ import (
 )
 
 func (m Model) View() string {
-	if !m.Visible {
-		return ""
-	}
-
 	width := m.viewport.Width
 	height := m.viewport.Height
 	if width <= 0 {
 		width = 80
 	}
-	if height <= 0 {
-		height = 24
-	}
 
-	// --- Main nodeservices content ---
+	// --- Render the main nodeservices content ---
 	header := ui.FrameHeaderStyle.Render(fmt.Sprintf(
 		"%-*s  %-*s  %-*s",
 		m.serviceColWidth, "SERVICE",
 		m.stackColWidth, "STACK",
 		m.replicaColWidth, "REPLICAS",
 	))
-	baseContent := ui.RenderFramedBox(m.title, header, m.viewport.View(), width, false)
+	content := ui.RenderFramedBox(m.title, header, m.viewport.View(), width, false)
 
 	// --- Overlay confirm dialog if visible ---
 	if m.confirmDialog.Visible {
 		dialogContent := m.confirmDialog.View()
-		return overlayCentered(baseContent, dialogContent, width, height)
+		content = overlayCentered(content, dialogContent, width, height)
 	}
 
-	return baseContent
+	// --- Overlay loading view if visible ---
+	if m.loading.Visible() {
+		loadingContent := m.loading.View()
+		content = overlayCentered(content, loadingContent, width, height)
+	}
+
+	return content
 }
 
 // overlayCentered safely overlays a small dialog on top of a base box

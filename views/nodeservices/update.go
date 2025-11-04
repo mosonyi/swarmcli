@@ -32,13 +32,13 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 
 	case confirmdialog.ResultMsg:
 		// Handle dialog result
+		m.confirmDialog.Visible = false
 		if msg.Confirmed && m.cursor < len(m.entries) {
 			entry := m.entries[m.cursor]
-			m.confirmDialog.Visible = false
+			m.loading.SetVisible(true)
 			m.loadingViewMessage(entry.ServiceName)
 			return m, restartServiceCmd(entry.ServiceName, m.filterType, m.nodeID, m.stackName)
 		}
-		m.confirmDialog.Visible = false
 		return m, nil
 
 	case tea.KeyMsg:
@@ -102,6 +102,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 
 	// --- Allow spinner updates while loading ---
 	default:
+		// Forward messages to loading view if active
 		if m.loading.Visible() {
 			var cmd tea.Cmd
 			var v view.View
