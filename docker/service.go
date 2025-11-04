@@ -93,9 +93,9 @@ func ScaleServiceByName(serviceName string, replicas uint64) error {
 	return ScaleService(svcID, replicas)
 }
 
-// RestartService restarts a single-replica service safely using
-// the equivalent of "docker service update --force". It verifies that
-// the service is in replicated mode with exactly 1 replica.
+// RestartService restarts a replicated service idiomatically by performing
+// a `docker service update --force` equivalent. This triggers rolling restarts
+// according to the service’s update configuration, regardless of replica count.
 func RestartService(serviceName string) error {
 	c, err := GetClient()
 	if err != nil {
@@ -105,7 +105,7 @@ func RestartService(serviceName string) error {
 
 	ctx := context.Background()
 
-	// Find the service
+	// Find the service by name
 	services, err := c.ServiceList(ctx, types.ServiceListOptions{})
 	if err != nil {
 		return fmt.Errorf("listing services: %w", err)
@@ -123,16 +123,12 @@ func RestartService(serviceName string) error {
 		return fmt.Errorf("service %s not found", serviceName)
 	}
 
-	// Ensure replicated mode with exactly 1 replica
-	if svc.Spec.Mode.Replicated == nil || svc.Spec.Mode.Replicated.Replicas == nil {
-		return fmt.Errorf("service %s is not in replicated mode", serviceName)
-	}
-	if *svc.Spec.Mode.Replicated.Replicas != 1 {
-		return fmt.Errorf("service %s has %d replicas; RestartService requires exactly 1",
-			serviceName, *svc.Spec.Mode.Replicated.Replicas)
+	// Ensure the service uses replicated mode (not global)
+	if svc.Spec.Mode.Replicated == nil {
+		return fmt.Errorf("service %s is not in replicated mode (global services are not supported)", serviceName)
 	}
 
-	// Increment the ForceUpdate counter (this is what `--force` does)
+	// Increment the ForceUpdate counter — this is how Docker signals a restart
 	svc.Spec.TaskTemplate.ForceUpdate++
 
 	updateOpts := types.ServiceUpdateOptions{
@@ -144,9 +140,13 @@ func RestartService(serviceName string) error {
 		return fmt.Errorf("forcing service update for %s: %w", serviceName, err)
 	}
 
+	// Print any warnings returned by Docker
 	for _, w := range resp.Warnings {
 		fmt.Printf("⚠️  Warning during restart of %s: %s\n", serviceName, w)
 	}
+
+	fmt.Printf("🔁 Service %s restarted idiomatically (replicas: %d)\n",
+		serviceName, *svc.Spec.Mode.Replicated.Replicas)
 
 	return nil
 }

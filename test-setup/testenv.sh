@@ -105,7 +105,7 @@ cmd_test() {
   info "🧪 Running Go integration tests..."
 
   local test_name="${1:-}"   # optional single test
-  local format="testname"     # default local format
+  local format="testname"    # default local format
 
   # CI-specific settings
   local junit_file=""
@@ -121,18 +121,26 @@ cmd_test() {
   # Add JUnit file only if set
   [[ -n "$junit_file" ]] && args+=("--junitfile=$junit_file")
 
+  # Always include integration build tag
+  local go_test_cmd=("-tags=integration" "-v")
+
   if [[ -n "$test_name" ]]; then
     info "🎯 Running single test: $test_name"
-    args+=("--") "-run" "$test_name"
+    go_test_cmd+=("-run" "$test_name" "./integration-tests/...")
   else
     info "🧩 Running all integration tests"
-    args+=("./integration-tests/...")
+    go_test_cmd+=("./integration-tests/...")
   fi
 
-  # Run gotestsum using the Docker context
-  DOCKER_CONTEXT="$CONTEXT_NAME" gotestsum "${args[@]}"
-}
+  # Combine into gotestsum command
+  local full_cmd=("gotestsum" "${args[@]}" "--" "${go_test_cmd[@]}")
 
+  # Print full command for transparency
+  echo -e "\n📜 Executing command:\n${full_cmd[*]}\n"
+
+  # Run gotestsum using the Docker context
+  DOCKER_CONTEXT="$CONTEXT_NAME" "${full_cmd[@]}"
+}
 
 cmd_down() {
   info "🧹 Tearing down Swarm environment..."

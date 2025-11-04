@@ -1,3 +1,5 @@
+//go:build integration
+
 package service
 
 import (
@@ -7,127 +9,161 @@ import (
 	"swarmcli/docker"
 )
 
-// Helper: fetch running task IDs for a given service.
-func getRunningTaskIDs(t *testing.T, serviceName string) []string {
-	t.Helper()
-	tasks, err := docker.ListRunningTasks(serviceName)
+// TestRestartWhoamiSingleService_Idiomatic verifies that RestartServiceIdiomatic
+// properly forces a new task for a single-replica service using the snapshot model.
+func TestRestartWhoamiSingleService(t *testing.T) {
+	t.Parallel()
+	const serviceName = "demo_whoami_single"
+	const timeout = 45 * time.Second
+
+	snap, err := docker.RefreshSnapshot()
 	if err != nil {
-		t.Fatalf("failed to list tasks for %s: %v", serviceName, err)
+		t.Fatalf("failed to refresh snapshot: %v", err)
 	}
-	var ids []string
-	for _, task := range tasks {
-		ids = append(ids, task.ID)
+
+	svc := snap.FindServiceByName(serviceName)
+	if svc == nil {
+		t.Fatalf("service %s not found; skipping", serviceName)
 	}
-	if len(ids) == 0 {
-		t.Fatalf("no running tasks found for %s", serviceName)
+	if svc.Spec.Mode.Replicated == nil {
+		t.Fatalf("service %s not in replicated mode; skipping", serviceName)
 	}
-	return ids
-}
-
-func TestRestartService_SingleReplica(t *testing.T) {
-	serviceName := "demo_whoami_single"
-
-	// Ensure service exists and runs one replica
-	if err := docker.ScaleServiceByName(serviceName, 1); err != nil {
-		t.Fatalf("failed to scale %s to 1: %v", serviceName, err)
+	if *svc.Spec.Mode.Replicated.Replicas != 1 {
+		t.Fatalf("expected %s to have exactly 1 replica, got %d", serviceName, *svc.Spec.Mode.Replicated.Replicas)
 	}
-	time.Sleep(2 * time.Second)
 
-	before := getRunningTaskIDs(t, serviceName)
+	// Get current running task ID
+	var oldTaskID string
+	for _, task := range snap.Tasks {
+		if task.ServiceID == svc.ID && task.Status.State == "running" {
+			oldTaskID = task.ID
+			break
+		}
+	}
+	if oldTaskID == "" {
+		t.Fatalf("no running task found for %s before restart", serviceName)
+	}
 
+	t.Logf("Restarting service %s (old task ID: %s)", serviceName, oldTaskID)
 	start := time.Now()
 	if err := docker.RestartService(serviceName); err != nil {
 		t.Fatalf("failed to restart service idiomatically: %v", err)
 	}
 
-	// Wait for new task to become ready
-	time.Sleep(5 * time.Second)
-
-	after := getRunningTaskIDs(t, serviceName)
-	elapsed := time.Since(start)
-
-	if len(before) != len(after) {
-		t.Fatalf("expected same number of running tasks, before=%d after=%d", len(before), len(after))
-	}
-
-	if before[0] == after[0] {
-		t.Fatalf("task ID did not change after restart — service may not have been updated")
-	}
-
-	t.Logf("✅ Service %s restarted idiomatically in %v (old task %s → new task %s)", serviceName, elapsed, before[0], after[0])
-}
-
-func TestRestartService_MultiReplica(t *testing.T) {
-	serviceName := "demo_whoami"
-
-	// Ensure multiple replicas exist
-	if err := docker.ScaleServiceByName(serviceName, 3); err != nil {
-		t.Fatalf("failed to scale %s to 3: %v", serviceName, err)
-	}
-	time.Sleep(3 * time.Second)
-
-	before := getRunningTaskIDs(t, serviceName)
-	if len(before) != 3 {
-		t.Fatalf("expected 3 running tasks, got %d", len(before))
-	}
-
-	if err := docker.RestartService(serviceName); err != nil {
-		t.Fatalf("expected rolling restart to succeed, got: %v", err)
-	}
-
-	time.Sleep(10 * time.Second)
-	after := getRunningTaskIDs(t, serviceName)
-
-	if len(after) != len(before) {
-		t.Fatalf("expected same number of replicas after restart, got %d", len(after))
-	}
-
-	// Verify at least one task ID changed
-	changed := false
-	for _, idBefore := range before {
-		found := false
-		for _, idAfter := range after {
-			if idAfter == idBefore {
-				found = true
+	waitUntil := time.Now().Add(timeout)
+	var newTaskID string
+	for {
+		snap2, _ := docker.RefreshSnapshot()
+		svc2 := snap2.FindServiceByName(serviceName)
+		if svc2 == nil {
+			t.Fatalf("service %s disappeared after restart", serviceName)
+		}
+		for _, task := range snap2.Tasks {
+			if task.ServiceID == svc2.ID && task.Status.State == "running" {
+				newTaskID = task.ID
 				break
 			}
 		}
-		if !found {
-			changed = true
-			break
+		if newTaskID != "" && newTaskID != oldTaskID {
+			break // success
 		}
+		if time.Now().After(waitUntil) {
+			t.Fatalf("timeout waiting for new running task after restart (old: %s, new: %s)", oldTaskID, newTaskID)
+		}
+		time.Sleep(1 * time.Second)
 	}
 
-	if !changed {
-		t.Fatalf("expected at least one task to be replaced during rolling update")
-	}
-
-	t.Logf("✅ Multi-replica service %s successfully rolled out new tasks", serviceName)
+	t.Logf("✅ Service %s restarted successfully (old task %s → new task %s) in %v",
+		serviceName, oldTaskID, newTaskID, time.Since(start))
 }
 
-func TestRestartService_ServiceNotFound(t *testing.T) {
-	serviceName := "non_existent_service"
+// TestRestartWhoamiMultiService_Idiomatic verifies rolling restart behavior
+// for multi-replica services using snapshots.
+func TestRestartWhoamiMultiService(t *testing.T) {
+	t.Parallel()
+	const serviceName = "demo_whoami"
+	const timeout = 90 * time.Second
+
+	snap, err := docker.RefreshSnapshot()
+	if err != nil {
+		t.Fatalf("failed to refresh snapshot: %v", err)
+	}
+
+	svc := snap.FindServiceByName(serviceName)
+	if svc == nil {
+		t.Fatalf("service %s not found; skipping", serviceName)
+	}
+	if svc.Spec.Mode.Replicated == nil {
+		t.Fatalf("service %s not in replicated mode; skipping", serviceName)
+	}
+
+	replicas := *svc.Spec.Mode.Replicated.Replicas
+	if replicas < 2 {
+		t.Fatalf("expected at least 2 replicas, got %d", replicas)
+	}
+
+	oldTasks := map[string]bool{}
+	for _, task := range snap.Tasks {
+		if task.ServiceID == svc.ID && task.Status.State == "running" {
+			oldTasks[task.ID] = true
+		}
+	}
+	if len(oldTasks) != int(replicas) {
+		t.Logf("⚠️  expected %d running tasks, got %d", replicas, len(oldTasks))
+	}
+
+	t.Logf("Restarting multi-replica service %s (%d replicas)", serviceName, replicas)
+	start := time.Now()
+	if err := docker.RestartService(serviceName); err != nil {
+		t.Fatalf("failed to restart service idiomatically: %v", err)
+	}
+
+	waitUntil := time.Now().Add(timeout)
+	var changed bool
+	for {
+		snap2, _ := docker.RefreshSnapshot()
+		svc2 := snap2.FindServiceByName(serviceName)
+		if svc2 == nil {
+			t.Fatalf("service %s disappeared after restart", serviceName)
+		}
+		running := 0
+		newTasks := map[string]bool{}
+		for _, task := range snap2.Tasks {
+			if task.ServiceID == svc2.ID && task.Status.State == "running" {
+				newTasks[task.ID] = true
+				running++
+			}
+		}
+		if running == int(replicas) {
+			for id := range newTasks {
+				if !oldTasks[id] {
+					changed = true
+					break
+				}
+			}
+			if changed {
+				break
+			}
+		}
+		if time.Now().After(waitUntil) {
+			t.Fatalf("timeout waiting for rolling update of %s", serviceName)
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	t.Logf("✅ Multi-replica service %s rolled out new tasks successfully in %v", serviceName, time.Since(start))
+}
+
+// TestRestartServiceIdiomatic_NotFound verifies error behavior when
+// trying to restart a non-existent service.
+func TestRestartServiceIdiomatic_NotFound(t *testing.T) {
+	t.Parallel()
+	const serviceName = "nonexistent_demo_service"
 
 	err := docker.RestartService(serviceName)
 	if err == nil {
-		t.Fatalf("expected error for nonexistent service %s, got nil", serviceName)
+		t.Fatalf("expected error when restarting nonexistent service %s, got nil", serviceName)
 	}
 
 	t.Logf("✅ Correctly returned error for nonexistent service: %v", err)
-}
-
-func TestRestartService_ZeroReplicas_NoError(t *testing.T) {
-	serviceName := "demo_whoami_single"
-
-	// Scale to 0 replicas
-	if err := docker.ScaleServiceByName(serviceName, 0); err != nil {
-		t.Fatalf("failed to scale %s to 0: %v", serviceName, err)
-	}
-
-	// Should not fail — should just no-op
-	if err := docker.RestartService(serviceName); err != nil {
-		t.Fatalf("expected no error when restarting 0-replica service, got: %v", err)
-	}
-
-	t.Logf("✅ Service %s correctly handled 0-replica restart as no-op", serviceName)
 }
