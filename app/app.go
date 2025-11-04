@@ -8,7 +8,7 @@ import (
 	loadingview "swarmcli/views/loading"
 	logsview "swarmcli/views/logs"
 	nodesview "swarmcli/views/nodes"
-	nodeservicesview "swarmcli/views/nodeservices"
+	servicesview "swarmcli/views/services"
 	stacksview "swarmcli/views/stacks"
 	"swarmcli/views/view"
 
@@ -67,28 +67,28 @@ func Init() {
 		return stacksview.New(w, h), stacksview.LoadStacks(nodeID)
 	})
 
-	registerView(nodeservicesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
-		v := nodeservicesview.New(w, h)
+	registerView(servicesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
+		v := servicesview.New(w, h)
 
 		data, _ := payload.(map[string]interface{})
 
-		var filterType nodeservicesview.FilterType
+		var filterType servicesview.FilterType
 		var nodeID, stackName string
 
 		if n, ok := data["nodeID"].(string); ok {
-			filterType = nodeservicesview.NodeFilter
+			filterType = servicesview.NodeFilter
 			nodeID = n
 		}
 		if s, ok := data["stackName"].(string); ok {
-			filterType = nodeservicesview.StackFilter
+			filterType = servicesview.StackFilter
 			stackName = s
 		}
 
-		entries, title := nodeservicesview.LoadServicesForView(filterType, nodeID, stackName)
+		entries, title := servicesview.LoadServicesForView(filterType, nodeID, stackName)
 
 		// Initialize view and return first payload
 		return v, func() tea.Msg {
-			return nodeservicesview.Msg{
+			return servicesview.Msg{
 				Title:      title,
 				Entries:    entries,
 				FilterType: filterType,

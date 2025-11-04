@@ -1,4 +1,4 @@
-package nodeservicesview
+package servicesview
 
 import (
 	"fmt"
@@ -15,7 +15,7 @@ func (m Model) View() string {
 		width = 80
 	}
 
-	// --- Render main nodeservices content ---
+	// --- Render main services content ---
 	header := ui.FrameHeaderStyle.Render(fmt.Sprintf(
 		"%-*s  %-*s  %-*s",
 		m.serviceColWidth, "SERVICE",
