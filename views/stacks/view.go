@@ -36,7 +36,7 @@ func (m Model) View() string {
 
 	content := m.viewport.View()
 
-	return ui.RenderFramedBox(title, header, content, width, false)
+	return ui.RenderFramedBox(title, header, content, width)
 }
 
 // --- Internal Rendering ---

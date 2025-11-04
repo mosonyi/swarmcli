@@ -22,18 +22,17 @@ func (m Model) View() string {
 		m.stackColWidth, "STACK",
 		m.replicaColWidth, "REPLICAS",
 	))
-	content := ui.RenderFramedBox(m.title, header, m.viewport.View(), width, false)
+	// In View()
+	content := ui.RenderFramedBox(m.title, header, m.viewport.View(), width)
 
-	// --- Overlay confirm dialog if visible ---
+	// Overlay confirm dialog
 	if m.confirmDialog.Visible {
-		dialogContent := m.confirmDialog.View()
-		content = overlayCentered(content, dialogContent, width, height)
+		content = ui.OverlayCentered(content, m.confirmDialog.View(), width, height)
 	}
 
-	// --- Overlay loading view if visible ---
+	// Overlay loading
 	if m.loading.Visible() {
-		loadingContent := m.loading.View()
-		content = overlayCentered(content, loadingContent, width, height)
+		content = ui.OverlayCentered(content, m.loading.View(), width, height)
 	}
 
 	return content
