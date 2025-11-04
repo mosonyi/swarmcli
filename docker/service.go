@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -74,8 +75,8 @@ func restartServiceCommon(ctx context.Context, c *client.Client, svc *swarm.Serv
 	if err := updateService(ctx, c, svc); err != nil {
 		return fmt.Errorf("forcing service update for %s: %w", svc.Spec.Name, err)
 	}
-	fmt.Printf("🔁 Service %s restarted (replicas: %d)\n",
-		svc.Spec.Name, *svc.Spec.Mode.Replicated.Replicas)
+	//fmt.Printf("🔁 Service %s restarted (replicas: %d)\n",
+	//	svc.Spec.Name, *svc.Spec.Mode.Replicated.Replicas)
 	return nil
 }
 
@@ -207,34 +208,28 @@ func RestartServiceAndWait(ctx context.Context, serviceName string) error {
 	}
 }
 
-// Progress represents the number of replaced tasks in a service
-type ServiceRestartProgress struct {
-	ServiceName string
-	Running     int
-	Replicas    int
+type ProgressUpdate struct {
+	Replaced int
+	Total    int
 }
 
-// RestartServiceWithProgress triggers a service restart and reports progress via a callback
-func RestartServiceWithProgress(ctx context.Context, serviceName string, pollInterval time.Duration, progressCb func(ServiceRestartProgress)) error {
-	c, err := GetClient()
-	if err != nil {
-		return fmt.Errorf("docker client: %w", err)
-	}
-	defer c.Close()
+func RestartServiceWithProgress(ctx context.Context, serviceName string, progressCh chan<- ProgressUpdate) error {
+	cli, err := GetClient()
+	defer cli.Close()
 
-	svc, err := findServiceByName(ctx, c, serviceName)
+	svc, err := findServiceByName(ctx, cli, serviceName)
 	if err != nil {
 		return err
 	}
 
-	replicas := 1
-	if svc.Spec.Mode.Replicated != nil && svc.Spec.Mode.Replicated.Replicas != nil {
-		replicas = int(*svc.Spec.Mode.Replicated.Replicas)
+	if svc.Spec.Mode.Replicated == nil {
+		return fmt.Errorf("service %s is not replicated", serviceName)
 	}
+	total := int(*svc.Spec.Mode.Replicated.Replicas)
 
-	// Snapshot old running tasks
+	// Snapshot old tasks
 	oldTasks := make(map[string]bool)
-	tasks, _ := c.TaskList(ctx, types.TaskListOptions{})
+	tasks, _ := cli.TaskList(ctx, types.TaskListOptions{})
 	for _, t := range tasks {
 		if t.ServiceID == svc.ID && t.Status.State == "running" {
 			oldTasks[t.ID] = true
@@ -242,38 +237,37 @@ func RestartServiceWithProgress(ctx context.Context, serviceName string, pollInt
 	}
 
 	// Trigger restart
-	if err := restartServiceCommon(ctx, c, svc); err != nil {
+	if err := restartServiceCommon(ctx, cli, svc); err != nil {
 		return err
 	}
 
-	// Poll progress
+	// Wait and report progress
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("waiting for service %s: %w", serviceName, ctx.Err())
+			return ctx.Err()
 		default:
-			tasks, _ := c.TaskList(ctx, types.TaskListOptions{})
-			running, newCount := 0, 0
+			tasks, _ := cli.TaskList(ctx, types.TaskListOptions{})
+			replaced := 0
+			running := 0
 			for _, t := range tasks {
 				if t.ServiceID == svc.ID && t.Status.State == "running" {
 					running++
 					if !oldTasks[t.ID] {
-						newCount++
+						replaced++
 					}
 				}
 			}
 
-			// Callback with progress
-			progressCb(ServiceRestartProgress{
-				ServiceName: serviceName,
-				Running:     newCount,
-				Replicas:    replicas,
-			})
+			log.Printf("Sending progress: %d/%d\n", replaced, total)
 
-			if running == replicas && newCount == replicas {
+			if progressCh != nil {
+				progressCh <- ProgressUpdate{Replaced: replaced, Total: total}
+			}
+			if running == total && replaced == total {
 				return nil
 			}
-			time.Sleep(pollInterval)
+			time.Sleep(time.Second)
 		}
 	}
 }
