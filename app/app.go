@@ -37,7 +37,7 @@ func Init() {
 	}
 
 	registerView(loadingview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
-		return loadingview.New(w, h, payload), nil
+		return loadingview.New(w, h, true, payload), nil
 	})
 	registerView(helpview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		cmds, _ := payload.([]helpview.CommandInfo)

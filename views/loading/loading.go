@@ -23,7 +23,7 @@ type Model struct {
 	visible       bool
 }
 
-func New(width, height int, payload any) Model {
+func New(width, height int, visible bool, payload any) Model {
 	// Defaults
 	title := "Loading"
 	header := ""
@@ -67,7 +67,7 @@ func New(width, height int, payload any) Model {
 		header:  header,
 		message: message,
 		spinner: s,
-		visible: true,
+		visible: visible,
 	}
 }
 

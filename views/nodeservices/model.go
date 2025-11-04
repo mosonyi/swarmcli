@@ -54,7 +54,7 @@ type ServiceEntry struct {
 // Create new instance
 func New(width, height int) Model {
 	vp := viewport.New(width, height)
-	ld := loadingview.New(width, height, "Please wait...")
+	ld := loadingview.New(width, height, false, "Please wait...")
 	return Model{
 		viewport:      vp,
 		Visible:       false,
@@ -71,6 +71,7 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "i", Desc: "inspect"},
 		{Key: "k/up", Desc: "up"},
+		{Key: "r", Desc: "restart service"},
 		{Key: "j/down", Desc: "down"},
 		{Key: "q", Desc: "close"},
 	}
@@ -95,6 +96,7 @@ func (m *Model) loadingViewMessage(serviceName string) {
 	m.loading = loadingview.New(
 		m.viewport.Width,
 		m.viewport.Height,
+		true,
 		map[string]string{
 			"title":   "Restarting service",
 			"message": fmt.Sprintf("Restarting %s, please wait...", serviceName),
