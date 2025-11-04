@@ -72,32 +72,41 @@ func Init() {
 
 		data, _ := payload.(map[string]interface{})
 
-		// Node view: expects nodeID + hostname
-		if nodeID, ok := data["nodeID"].(string); ok {
-			hostname, _ := data["hostname"].(string)
-			return v, func() tea.Msg {
-				return nodeservicesview.Msg{
-					Title:   "Services on Node: " + hostname,
-					Entries: nodeservicesview.LoadNodeServices(nodeID),
-				}
+		var filterType nodeservicesview.FilterType
+		var nodeID, stackName, title string
+		var loadEntries func() []nodeservicesview.ServiceEntry
+
+		// Node view
+		if id, ok := data["nodeID"].(string); ok {
+			nodeID = id
+			filterType = nodeservicesview.NodeFilter
+			title = "Services on Node: " + data["hostname"].(string)
+			loadEntries = func() []nodeservicesview.ServiceEntry {
+				return nodeservicesview.LoadNodeServices(nodeID)
+			}
+		} else if name, ok := data["stackName"].(string); ok { // Stack view
+			stackName = name
+			filterType = nodeservicesview.StackFilter
+			title = "Services in Stack: " + stackName
+			loadEntries = func() []nodeservicesview.ServiceEntry {
+				return nodeservicesview.LoadStackServices(stackName)
+			}
+		} else { // Default: all services
+			filterType = nodeservicesview.AllFilter
+			title = "All Services"
+			loadEntries = func() []nodeservicesview.ServiceEntry {
+				return nodeservicesview.LoadStackServices("")
 			}
 		}
 
-		// Stack view: expects stackName
-		if stackName, ok := data["stackName"].(string); ok {
-			return v, func() tea.Msg {
-				return nodeservicesview.Msg{
-					Title:   "Services in Stack: " + stackName,
-					Entries: nodeservicesview.LoadStackServices(stackName),
-				}
-			}
-		}
-
-		// Default: load all services (optional)
+		// Initialize view and return first payload
 		return v, func() tea.Msg {
 			return nodeservicesview.Msg{
-				Title:   "All Services",
-				Entries: nodeservicesview.LoadStackServices(""),
+				Title:      title,
+				Entries:    loadEntries(),
+				FilterType: filterType,
+				NodeID:     nodeID,
+				StackName:  stackName,
 			}
 		}
 	})

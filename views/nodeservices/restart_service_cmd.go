@@ -28,7 +28,6 @@ func restartServiceCmd(serviceName string, filterType FilterType, nodeID, stackN
 	}
 }
 
-// refreshServicesCmd refreshes the services list (optional)
 func refreshServicesCmd(nodeID, stackName string, filterType FilterType) tea.Cmd {
 	return func() tea.Msg {
 		_, err := docker.RefreshSnapshot()
@@ -37,15 +36,18 @@ func refreshServicesCmd(nodeID, stackName string, filterType FilterType) tea.Cmd
 		}
 
 		var entries []ServiceEntry
-		title := ""
+		var title string
 
 		switch filterType {
 		case NodeFilter:
 			entries = LoadNodeServices(nodeID)
-			title = "Node Services"
+			title = "Services on Node: " + nodeID
 		case StackFilter:
 			entries = LoadStackServices(stackName)
-			title = "Stack Services"
+			title = "Services in Stack: " + stackName
+		default: // All services
+			entries = LoadStackServices("")
+			title = "All Services"
 		}
 
 		return Msg{

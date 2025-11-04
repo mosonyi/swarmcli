@@ -15,6 +15,7 @@ type FilterType int
 const (
 	NodeFilter FilterType = iota
 	StackFilter
+	AllFilter
 )
 
 type Model struct {
