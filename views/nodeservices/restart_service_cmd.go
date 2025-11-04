@@ -31,7 +31,10 @@ func restartServiceCmd(serviceName string, filterType FilterType, nodeID, stackN
 // refreshServicesCmd refreshes the services list (optional)
 func refreshServicesCmd(nodeID, stackName string, filterType FilterType) tea.Cmd {
 	return func() tea.Msg {
-		docker.RefreshSnapshot()
+		_, err := docker.RefreshSnapshot()
+		if err != nil {
+			return nil
+		}
 
 		var entries []ServiceEntry
 		title := ""

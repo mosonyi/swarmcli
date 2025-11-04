@@ -10,12 +10,12 @@ import (
 // Styles (you can override these per-view if desired)
 var (
 	FrameTitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("81")).
-			Bold(true)
+		Foreground(lipgloss.Color("81")).
+		Bold(true)
 
 	FrameHeaderStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("75")).
-				Bold(true)
+		Foreground(lipgloss.Color("75")).
+		Bold(true)
 
 	FrameBorderColor = lipgloss.Color("240")
 )
@@ -156,19 +156,4 @@ func OverlayCentered(base, overlay string, width, height int) string {
 	}
 
 	return strings.Join(canvas, "\n")
-}
-
-func padRight(s string, width int) string {
-	l := lipgloss.Width(s)
-	if l >= width {
-		return s
-	}
-	return s + strings.Repeat(" ", width-l)
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
