@@ -23,10 +23,10 @@ func TestRestartWhoamiSingleService(t *testing.T) {
 
 	svc := snap.FindServiceByName(serviceName)
 	if svc == nil {
-		t.Fatalf("service %s not found; skipping", serviceName)
+		t.Fatalf("service %s not found", serviceName)
 	}
 	if svc.Spec.Mode.Replicated == nil {
-		t.Fatalf("service %s not in replicated mode; skipping", serviceName)
+		t.Fatalf("service %s not in replicated mode", serviceName)
 	}
 	if *svc.Spec.Mode.Replicated.Replicas != 1 {
 		t.Fatalf("expected %s to have exactly 1 replica, got %d", serviceName, *svc.Spec.Mode.Replicated.Replicas)
@@ -47,7 +47,7 @@ func TestRestartWhoamiSingleService(t *testing.T) {
 	t.Logf("Restarting service %s (old task ID: %s)", serviceName, oldTaskID)
 	start := time.Now()
 	if err := docker.RestartService(serviceName); err != nil {
-		t.Fatalf("failed to restart service idiomatically: %v", err)
+		t.Fatalf("failed to restart service: %v", err)
 	}
 
 	waitUntil := time.Now().Add(timeout)
@@ -91,10 +91,10 @@ func TestRestartWhoamiMultiService(t *testing.T) {
 
 	svc := snap.FindServiceByName(serviceName)
 	if svc == nil {
-		t.Fatalf("service %s not found; skipping", serviceName)
+		t.Fatalf("service %s not found", serviceName)
 	}
 	if svc.Spec.Mode.Replicated == nil {
-		t.Fatalf("service %s not in replicated mode; skipping", serviceName)
+		t.Fatalf("service %s not in replicated mode", serviceName)
 	}
 
 	replicas := *svc.Spec.Mode.Replicated.Replicas
@@ -115,7 +115,7 @@ func TestRestartWhoamiMultiService(t *testing.T) {
 	t.Logf("Restarting multi-replica service %s (%d replicas)", serviceName, replicas)
 	start := time.Now()
 	if err := docker.RestartService(serviceName); err != nil {
-		t.Fatalf("failed to restart service idiomatically: %v", err)
+		t.Fatalf("failed to restart service: %v", err)
 	}
 
 	waitUntil := time.Now().Add(timeout)
@@ -154,9 +154,7 @@ func TestRestartWhoamiMultiService(t *testing.T) {
 	t.Logf("✅ Multi-replica service %s rolled out new tasks successfully in %v", serviceName, time.Since(start))
 }
 
-// TestRestartServiceIdiomatic_NotFound verifies error behavior when
-// trying to restart a non-existent service.
-func TestRestartServiceIdiomatic_NotFound(t *testing.T) {
+func TestRestartService_NotFound_ReturnsError(t *testing.T) {
 	t.Parallel()
 	const serviceName = "nonexistent_demo_service"
 
