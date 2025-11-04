@@ -143,7 +143,7 @@ func RestartService(serviceName string) error {
 		fmt.Printf("⚠️  Warning during restart of %s: %s\n", serviceName, w)
 	}
 
-	fmt.Printf("🔁 Service %s restarted idiomatically (replicas: %d)\n",
+	fmt.Printf("🔁 Service %s restarted (replicas: %d)\n",
 		serviceName, *svc.Spec.Mode.Replicated.Replicas)
 
 	return nil
