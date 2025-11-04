@@ -45,14 +45,18 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		}
 		return m, nil
 
-	case serviceRestartedMsg:
-		// Hide loading spinner when done
-		m.loading.SetVisible(false)
+	case serviceRestartProgressMsg:
+		m.loadingViewMessage(fmt.Sprintf(
+			"Restarting %s: %d/%d tasks replaced...",
+			msg.ServiceName, msg.Running, msg.Replicas,
+		))
+		return m, nil
 
+	case serviceRestartedMsg:
+		m.loading.SetVisible(false)
 		if msg.Err != nil {
 			fmt.Printf("Failed to restart service %q: %v\n", msg.ServiceName, msg.Err)
 		} else {
-			// Refresh service list
 			return m, refreshServicesCmd(m.nodeID, m.stackName, m.filterType)
 		}
 		return m, nil

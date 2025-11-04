@@ -14,17 +14,46 @@ type serviceRestartedMsg struct {
 	Err         error
 }
 
+// Progress message for task replacement
+type serviceRestartProgressMsg struct {
+	ServiceName string
+	Running     int
+	Replicas    int
+}
+
 func restartServiceCmd(serviceName string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
+		ch := make(chan tea.Msg)
 
-		err := docker.RestartServiceAndWait(ctx, serviceName)
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			defer cancel()
 
-		return serviceRestartedMsg{
-			ServiceName: serviceName,
-			Err:         err,
-		}
+			err := docker.RestartServiceWithProgress(ctx, serviceName, 1*time.Second, func(p docker.ServiceRestartProgress) {
+				// Send progress updates
+				ch <- serviceRestartProgressMsg{
+					ServiceName: p.ServiceName,
+					Running:     p.Running,
+					Replicas:    p.Replicas,
+				}
+			})
+
+			// Done: send final message
+			ch <- serviceRestartedMsg{
+				ServiceName: serviceName,
+				Err:         err,
+			}
+			close(ch)
+		}()
+
+		// Read messages from the channel as Tea messages
+		return func() tea.Msg {
+			msg, ok := <-ch
+			if !ok {
+				return nil
+			}
+			return msg
+		}()
 	}
 }
 
