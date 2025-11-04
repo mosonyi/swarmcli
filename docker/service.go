@@ -91,7 +91,7 @@ func ScaleServiceByName(serviceName string, replicas uint64) error {
 	return ScaleService(svcID, replicas)
 }
 
-// RestartService restarts a replicated service idiomatically by performing
+// RestartService restarts a replicated service by performing
 // a `docker service update --force` equivalent. This triggers rolling restarts
 // according to the service’s update configuration, regardless of replica count.
 func RestartService(serviceName string) error {
@@ -149,7 +149,7 @@ func RestartService(serviceName string) error {
 	return nil
 }
 
-// RestartServiceAndWait restarts a service safely (via --force)
+// RestartServiceAndWait restarts a service `RestartService`
 // and waits until a new task is running again, or the context expires.
 // It also verifies that the new task ID differs from the previous one.
 func RestartServiceAndWait(ctx context.Context, serviceName string) error {
