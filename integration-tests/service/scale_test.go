@@ -11,7 +11,6 @@ import (
 
 // TestScaleWhoamiService verifies scaling demo_whoami up and down safely.
 func TestScaleWhoamiService(t *testing.T) {
-	t.Parallel()
 	const serviceName = "demo_whoami"
 	const timeout = 45 * time.Second
 
@@ -22,10 +21,10 @@ func TestScaleWhoamiService(t *testing.T) {
 
 	svc := snap.FindServiceByName(serviceName)
 	if svc == nil {
-		t.Fatalf("service %s not found; skipping", serviceName)
+		t.Fatalf("service %s not found", serviceName)
 	}
 	if svc.Spec.Mode.Replicated == nil {
-		t.Fatalf("service %s not in replicated mode; skipping", serviceName)
+		t.Fatalf("service %s not in replicated mode", serviceName)
 	}
 
 	original := *svc.Spec.Mode.Replicated.Replicas
@@ -71,7 +70,6 @@ func TestScaleWhoamiService(t *testing.T) {
 // TestRestartWhoamiSingleService verifies that scaling demo_whoami_single
 // down to 0 and back to 1 correctly restarts the service.
 func TestScaleWhoamiSingleServiceTo0AndThenTo1(t *testing.T) {
-	t.Parallel()
 	const serviceName = "demo_whoami_single"
 	const timeout = 45 * time.Second
 
@@ -82,10 +80,10 @@ func TestScaleWhoamiSingleServiceTo0AndThenTo1(t *testing.T) {
 
 	svc := snap.FindServiceByName(serviceName)
 	if svc == nil {
-		t.Fatalf("service %s not found; skipping", serviceName)
+		t.Fatalf("service %s not found", serviceName)
 	}
 	if svc.Spec.Mode.Replicated == nil {
-		t.Fatalf("service %s not in replicated mode; skipping", serviceName)
+		t.Fatalf("service %s not in replicated mode", serviceName)
 	}
 
 	original := *svc.Spec.Mode.Replicated.Replicas
