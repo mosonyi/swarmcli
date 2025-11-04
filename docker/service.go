@@ -215,6 +215,9 @@ type ProgressUpdate struct {
 
 func RestartServiceWithProgress(ctx context.Context, serviceName string, progressCh chan<- ProgressUpdate) error {
 	cli, err := GetClient()
+	if err != nil {
+		return err
+	}
 	defer cli.Close()
 
 	svc, err := findServiceByName(ctx, cli, serviceName)

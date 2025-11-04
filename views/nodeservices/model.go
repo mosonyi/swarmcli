@@ -3,7 +3,6 @@ package nodeservicesview
 import (
 	"fmt"
 	"log"
-	"swarmcli/docker"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	loadingview "swarmcli/views/loading"
@@ -39,8 +38,7 @@ type Model struct {
 	hostname   string
 	stackName  string
 
-	progress docker.ProgressUpdate
-	msgCh    chan tea.Msg
+	msgCh chan tea.Msg
 
 	confirmDialog confirmdialog.Model
 	loading       loadingview.Model
