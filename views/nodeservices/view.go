@@ -8,20 +8,22 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// View renders the nodeservices view with optional loading or confirm overlays.
 func (m Model) View() string {
 	if !m.Visible {
 		return ""
 	}
 
 	width := m.viewport.Width
+	height := m.viewport.Height
 	if width <= 0 {
 		width = 80
 	}
-
-	if m.loading.Visible() {
-		return m.loading.View()
+	if height <= 0 {
+		height = 24
 	}
 
+	// --- Build the main framed content ---
 	headerStyle := ui.FrameHeaderStyle
 	header := headerStyle.Render(fmt.Sprintf(
 		"%-*s  %-*s  %-*s",
@@ -32,17 +34,90 @@ func (m Model) View() string {
 
 	content := ui.RenderFramedBox(m.title, header, m.viewport.View(), width)
 
+	// --- Overlay loading view if visible ---
+	if m.loading.Visible() {
+		loadingContent := m.loading.View()
+		return overlayCentered(content, loadingContent, width, height)
+	}
+
+	// --- Overlay confirm dialog if visible ---
 	if m.confirmDialog.Visible {
-		dialogView := m.confirmDialog.View()
-
-		// Optional: dim the background with simple ANSI effect
-		dimmed := "\033[2m" + content + "\033[0m"
-
-		// Combine dimmed base + dialog on top
-		return dimmed + "\n" + dialogView
+		dialogContent := m.confirmDialog.View()
+		return overlayCentered(content, dialogContent, width, height)
 	}
 
 	return content
+}
+
+// overlayCentered returns a new string with the overlay centered on top of the base content.
+func overlayCentered(base, overlay string, width, height int) string {
+	baseLines := splitLines(base)
+	canvasHeight := max(len(baseLines), height)
+	canvas := make([]string, canvasHeight)
+
+	// Fill canvas with base lines (or empty if short)
+	for i := 0; i < canvasHeight; i++ {
+		if i < len(baseLines) {
+			canvas[i] = padRight(baseLines[i], width)
+		} else {
+			canvas[i] = strings.Repeat(" ", width)
+		}
+	}
+
+	// Overlay lines
+	overlayLines := splitLines(overlay)
+	dialogHeight := len(overlayLines)
+	dialogWidth := 0
+	for _, l := range overlayLines {
+		if w := lipgloss.Width(l); w > dialogWidth {
+			dialogWidth = w
+		}
+	}
+
+	startRow := (canvasHeight - dialogHeight) / 2
+	if startRow < 0 {
+		startRow = 0
+	}
+	startCol := (width - dialogWidth) / 2
+	if startCol < 0 {
+		startCol = 0
+	}
+
+	// Place overlay
+	for i, line := range overlayLines {
+		row := startRow + i
+		if row >= len(canvas) {
+			break
+		}
+		padding := strings.Repeat(" ", startCol)
+		rest := ""
+		if startCol+lipgloss.Width(line) < width {
+			rest = strings.Repeat(" ", width-startCol-lipgloss.Width(line))
+		}
+		canvas[row] = padding + line + rest
+	}
+
+	return strings.Join(canvas, "\n")
+}
+
+// Helpers
+func splitLines(s string) []string {
+	return strings.Split(s, "\n")
+}
+
+func padRight(s string, width int) string {
+	l := lipgloss.Width(s)
+	if l >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-l)
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func (m *Model) renderEntries() string {
