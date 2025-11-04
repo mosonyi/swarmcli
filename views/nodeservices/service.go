@@ -14,7 +14,7 @@ type serviceRestartedMsg struct {
 	Err         error
 }
 
-func restartServiceCmd(serviceName string, filterType FilterType, nodeID, stackName string) tea.Cmd {
+func restartServiceCmd(serviceName string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()

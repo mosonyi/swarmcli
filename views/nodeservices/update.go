@@ -41,7 +41,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 			m.loadingViewMessage(entry.ServiceName)
 
 			// Run restart asynchronously and return a message when done
-			return m, restartServiceCmd(entry.ServiceName, m.filterType, m.nodeID, m.stackName)
+			return m, restartServiceCmd(entry.ServiceName)
 		}
 		return m, nil
 
