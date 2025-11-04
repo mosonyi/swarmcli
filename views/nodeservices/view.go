@@ -49,13 +49,12 @@ func (m Model) View() string {
 	return content
 }
 
-// overlayCentered returns a new string with the overlay centered on top of the base content.
 func overlayCentered(base, overlay string, width, height int) string {
 	baseLines := splitLines(base)
 	canvasHeight := max(len(baseLines), height)
 	canvas := make([]string, canvasHeight)
 
-	// Fill canvas with base lines (or empty if short)
+	// Copy base lines safely
 	for i := 0; i < canvasHeight; i++ {
 		if i < len(baseLines) {
 			canvas[i] = padRight(baseLines[i], width)
@@ -64,9 +63,13 @@ func overlayCentered(base, overlay string, width, height int) string {
 		}
 	}
 
-	// Overlay lines
 	overlayLines := splitLines(overlay)
 	dialogHeight := len(overlayLines)
+	if dialogHeight == 0 {
+		return strings.Join(canvas, "\n")
+	}
+
+	// Compute overlay width
 	dialogWidth := 0
 	for _, l := range overlayLines {
 		if w := lipgloss.Width(l); w > dialogWidth {
@@ -74,20 +77,28 @@ func overlayCentered(base, overlay string, width, height int) string {
 		}
 	}
 
+	// Centering coordinates
 	startRow := (canvasHeight - dialogHeight) / 2
-	if startRow < 0 {
-		startRow = 0
+	if startRow < 1 {
+		startRow = 1 // leave top border
 	}
+	if startRow+dialogHeight > canvasHeight-1 {
+		startRow = canvasHeight - dialogHeight - 1 // leave bottom border
+		if startRow < 1 {
+			startRow = 1
+		}
+	}
+
 	startCol := (width - dialogWidth) / 2
 	if startCol < 0 {
 		startCol = 0
 	}
 
-	// Place overlay
+	// Overlay the dialog safely
 	for i, line := range overlayLines {
 		row := startRow + i
-		if row >= len(canvas) {
-			break
+		if row >= len(canvas)-1 || row < 0 { // never touch top/bottom border, never negative
+			continue
 		}
 		padding := strings.Repeat(" ", startCol)
 		rest := ""
