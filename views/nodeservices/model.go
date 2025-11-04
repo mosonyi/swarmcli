@@ -1,7 +1,13 @@
 package nodeservicesview
 
 import (
+	"context"
+	"fmt"
+	"swarmcli/docker"
+	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
+	loadingview "swarmcli/views/loading"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -32,6 +38,9 @@ type Model struct {
 	nodeID     string
 	hostname   string
 	stackName  string
+
+	confirmDialog confirmdialog.Model
+	loading       loadingview.Model
 }
 
 type ServiceEntry struct {
@@ -45,9 +54,12 @@ type ServiceEntry struct {
 // Create new instance
 func New(width, height int) Model {
 	vp := viewport.New(width, height)
+	ld := loadingview.New(width, height, "Please wait...")
 	return Model{
-		viewport: vp,
-		Visible:  false,
+		viewport:      vp,
+		Visible:       false,
+		confirmDialog: confirmdialog.New(width, height),
+		loading:       ld,
 	}
 }
 
@@ -76,5 +88,49 @@ func (m *Model) SetContent(msg Msg) {
 	if m.ready {
 		m.viewport.GotoTop()
 		m.viewport.SetContent(m.renderEntries())
+	}
+}
+
+func (m *Model) loadingViewMessage(serviceName string) {
+	m.loading = loadingview.New(
+		m.viewport.Width,
+		m.viewport.Height,
+		map[string]string{
+			"title":   "Restarting service",
+			"message": fmt.Sprintf("Restarting %s, please wait...", serviceName),
+		},
+	)
+}
+
+func restartServiceCmd(serviceName string, filterType FilterType, nodeID, stackName string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+
+		if err := docker.RestartServiceAndWait(ctx, serviceName); err != nil {
+			return fmt.Errorf("failed to restart service %s: %v", serviceName, err)
+		}
+
+		docker.RefreshSnapshot()
+
+		var entries []ServiceEntry
+		title := ""
+
+		switch filterType {
+		case NodeFilter:
+			entries = LoadNodeServices(nodeID)
+			title = "Node Services"
+		case StackFilter:
+			entries = LoadStackServices(stackName)
+			title = "Stack Services"
+		}
+
+		return Msg{
+			Title:      title,
+			Entries:    entries,
+			FilterType: filterType,
+			NodeID:     nodeID,
+			StackName:  stackName,
+		}
 	}
 }

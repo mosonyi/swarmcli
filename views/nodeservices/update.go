@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"swarmcli/docker"
+	"swarmcli/views/confirmdialog"
 	inspectview "swarmcli/views/inspect"
+	loadingview "swarmcli/views/loading"
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,7 +29,28 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		}
 		return m, nil
 
+	case confirmdialog.ResultMsg:
+		if msg.Confirmed {
+			entry := m.entries[m.cursor]
+			m.confirmDialog.Visible = false
+			m.loading.SetVisible(true)
+			m.loadingViewMessage(entry.ServiceName)
+			return m, restartServiceCmd(entry.ServiceName, m.filterType, m.nodeID, m.stackName)
+		}
+		m.confirmDialog.Visible = false
+
 	case tea.KeyMsg:
+		if m.confirmDialog.Visible {
+			var cmd tea.Cmd
+			m.confirmDialog, cmd = m.confirmDialog.Update(msg)
+			return m, cmd
+		}
+
+		// If loading visible, ignore user input
+		if m.loading.Visible() {
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "q":
 			m.Visible = false
@@ -61,6 +84,22 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 					}
 				}
 			}
+		case "r":
+			if m.cursor < len(m.entries) {
+				entry := m.entries[m.cursor]
+				m.confirmDialog.Visible = true
+				m.confirmDialog.Message = fmt.Sprintf("Restart service %q?", entry.ServiceName)
+			}
+		}
+
+	default:
+		// Allow spinner updates while loading
+		if m.loading.Visible() {
+			var cmd tea.Cmd
+			var v view.View
+			v, cmd = m.loading.Update(msg)
+			m.loading = v.(loadingview.Model)
+			return m, cmd
 		}
 	}
 

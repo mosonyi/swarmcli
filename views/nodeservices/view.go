@@ -18,6 +18,15 @@ func (m Model) View() string {
 		width = 80
 	}
 
+	if m.loading.Visible() {
+		return m.loading.View()
+	}
+
+	content := m.viewport.View()
+	if m.confirmDialog.Visible {
+		content += "\n" + m.confirmDialog.View()
+	}
+
 	headerStyle := ui.FrameHeaderStyle
 	header := headerStyle.Render(fmt.Sprintf(
 		"%-*s  %-*s  %-*s",
