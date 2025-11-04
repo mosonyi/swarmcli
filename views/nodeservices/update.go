@@ -51,17 +51,26 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		return m, nil
 
 	case serviceProgressMsg:
-		log.Printf("Received progress message: %d/%d\n", msg.Progress.Replaced, msg.Progress.Total)
+		log.Printf("[UI] Received progress: %d/%d\n", msg.Progress.Replaced, msg.Progress.Total)
+
 		m.loadingViewMessage(fmt.Sprintf(
 			"Progress: %d/%d tasks replaced...",
 			msg.Progress.Replaced, msg.Progress.Total,
 		))
 
-		// Hide loading when complete
 		if msg.Progress.Replaced == msg.Progress.Total && msg.Progress.Total > 0 {
+			log.Println("[UI] Restart finished — closing channel")
+			if m.msgCh != nil {
+				close(m.msgCh)
+				m.msgCh = nil
+			}
+
 			m.loading.SetVisible(false)
-			return m, refreshServicesCmd(m.nodeID, m.stackName, m.filterType)
+			return m, tea.Batch(
+				refreshServicesCmd(m.nodeID, m.stackName, m.filterType),
+			)
 		}
+
 		return m, m.listenForMessages()
 
 	case tea.KeyMsg:

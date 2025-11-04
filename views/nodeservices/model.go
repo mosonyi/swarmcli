@@ -117,13 +117,17 @@ func sendMsg(ch chan tea.Msg, msg tea.Msg) {
 }
 
 func (m Model) listenForMessages() tea.Cmd {
+	if m.msgCh == nil {
+		log.Println("[listenForMessages] no message channel, skipping")
+		return nil
+	}
+
 	return func() tea.Msg {
 		msg, ok := <-m.msgCh
 		if !ok {
-			log.Println("[listenForMessages] channel closed")
+			log.Println("[listenForMessages] channel closed — stopping listener")
 			return nil
 		}
-		log.Println("[listenForMessages] forwarding message to Update loop")
 		return msg
 	}
 }
