@@ -2,6 +2,8 @@ package nodeservicesview
 
 import (
 	"fmt"
+	"log"
+	"swarmcli/docker"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	loadingview "swarmcli/views/loading"
@@ -37,6 +39,9 @@ type Model struct {
 	hostname   string
 	stackName  string
 
+	progress docker.ProgressUpdate
+	msgCh    chan tea.Msg
+
 	confirmDialog confirmdialog.Model
 	loading       loadingview.Model
 }
@@ -58,6 +63,7 @@ func New(width, height int) Model {
 		Visible:       false,
 		confirmDialog: confirmdialog.New(width, height),
 		loading:       ld,
+		msgCh:         make(chan tea.Msg, 10),
 	}
 }
 
@@ -100,4 +106,24 @@ func (m *Model) loadingViewMessage(serviceName string) {
 			"message": fmt.Sprintf("Restarting %s, please wait...", serviceName),
 		},
 	)
+}
+
+func sendMsg(ch chan tea.Msg, msg tea.Msg) {
+	select {
+	case ch <- msg:
+	default:
+		log.Println("[sendMsg] msg channel full, dropping message")
+	}
+}
+
+func (m Model) listenForMessages() tea.Cmd {
+	return func() tea.Msg {
+		msg, ok := <-m.msgCh
+		if !ok {
+			log.Println("[listenForMessages] channel closed")
+			return nil
+		}
+		log.Println("[listenForMessages] forwarding message to Update loop")
+		return msg
+	}
 }

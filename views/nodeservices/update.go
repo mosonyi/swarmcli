@@ -3,6 +3,7 @@ package nodeservicesview
 import (
 	"context"
 	"fmt"
+	"log"
 	"swarmcli/docker"
 	"swarmcli/views/confirmdialog"
 	inspectview "swarmcli/views/inspect"
@@ -35,31 +36,33 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 
 		if msg.Confirmed && m.cursor < len(m.entries) {
 			entry := m.entries[m.cursor]
-
-			// Show loading spinner
 			m.loading.SetVisible(true)
 			m.loadingViewMessage(entry.ServiceName)
+			log.Println("Starting restartServiceWithProgressCmd for", entry.ServiceName)
 
-			// Restart asynchronously; spinner will animate while waiting
-			return m, restartServiceCmd(entry.ServiceName)
+			// create new channel for this operation
+			m.msgCh = make(chan tea.Msg)
+
+			return m, tea.Batch(
+				restartServiceWithProgressCmd(entry.ServiceName, m.msgCh),
+				m.listenForMessages(),
+			)
 		}
 		return m, nil
 
-	case serviceRestartProgressMsg:
+	case serviceProgressMsg:
+		log.Printf("Received progress message: %d/%d\n", msg.Progress.Replaced, msg.Progress.Total)
 		m.loadingViewMessage(fmt.Sprintf(
-			"Restarting %s: %d/%d tasks replaced...",
-			msg.ServiceName, msg.Running, msg.Replicas,
+			"Progress: %d/%d tasks replaced...",
+			msg.Progress.Replaced, msg.Progress.Total,
 		))
-		return m, nil
 
-	case serviceRestartedMsg:
-		m.loading.SetVisible(false)
-		if msg.Err != nil {
-			fmt.Printf("Failed to restart service %q: %v\n", msg.ServiceName, msg.Err)
-		} else {
+		// Hide loading when complete
+		if msg.Progress.Replaced == msg.Progress.Total && msg.Progress.Total > 0 {
+			m.loading.SetVisible(false)
 			return m, refreshServicesCmd(m.nodeID, m.stackName, m.filterType)
 		}
-		return m, nil
+		return m, m.listenForMessages()
 
 	case tea.KeyMsg:
 		if m.confirmDialog.Visible {

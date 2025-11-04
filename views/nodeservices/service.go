@@ -2,58 +2,43 @@ package nodeservicesview
 
 import (
 	"context"
+	"log"
 	"swarmcli/docker"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Message sent when a service has finished restarting
-type serviceRestartedMsg struct {
-	ServiceName string
-	Err         error
+// serviceProgressMsg wraps a Docker progress update
+type serviceProgressMsg struct {
+	Progress docker.ProgressUpdate
 }
 
-// Progress message for task replacement
-type serviceRestartProgressMsg struct {
-	ServiceName string
-	Running     int
-	Replicas    int
-}
-
-func restartServiceCmd(serviceName string) tea.Cmd {
+func restartServiceWithProgressCmd(serviceName string, msgCh chan tea.Msg) tea.Cmd {
 	return func() tea.Msg {
-		ch := make(chan tea.Msg)
+		log.Printf("[CMD] Starting restart with progress for %s", serviceName)
+
+		progressCh := make(chan docker.ProgressUpdate, 10)
 
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-			defer cancel()
-
-			err := docker.RestartServiceWithProgress(ctx, serviceName, 1*time.Second, func(p docker.ServiceRestartProgress) {
-				// Send progress updates
-				ch <- serviceRestartProgressMsg{
-					ServiceName: p.ServiceName,
-					Running:     p.Running,
-					Replicas:    p.Replicas,
-				}
-			})
-
-			// Done: send final message
-			ch <- serviceRestartedMsg{
-				ServiceName: serviceName,
-				Err:         err,
+			log.Println("[Goroutine] Calling RestartServiceWithProgress ...")
+			err := docker.RestartServiceWithProgress(context.Background(), serviceName, progressCh)
+			if err != nil {
+				log.Printf("[Goroutine] RestartServiceWithProgress failed: %v", err)
 			}
-			close(ch)
+			log.Println("[Goroutine] RestartServiceWithProgress returned")
+			close(progressCh)
 		}()
 
-		// Read messages from the channel as Tea messages
-		return func() tea.Msg {
-			msg, ok := <-ch
-			if !ok {
-				return nil
+		go func() {
+			log.Println("[Listener] Starting progress listener loop")
+			for progress := range progressCh {
+				log.Printf("[Listener] Got update: %d/%d", progress.Replaced, progress.Total)
+				sendMsg(msgCh, serviceProgressMsg{progress})
 			}
-			return msg
+			log.Println("[Listener] Progress listener loop exiting")
 		}()
+
+		return nil
 	}
 }
 

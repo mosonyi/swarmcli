@@ -260,10 +260,17 @@ func RestartServiceWithProgress(ctx context.Context, serviceName string, progres
 			}
 
 			log.Printf("Sending progress: %d/%d\n", replaced, total)
-
 			if progressCh != nil {
-				progressCh <- ProgressUpdate{Replaced: replaced, Total: total}
+				select {
+				case progressCh <- ProgressUpdate{Replaced: replaced, Total: total}:
+					log.Printf("[Docker] Successfully sent to channel")
+				case <-ctx.Done():
+					log.Printf("[Docker] Context done, cannot send")
+				default:
+					log.Printf("[Docker] Channel blocked, skipping send")
+				}
 			}
+
 			if running == total && replaced == total {
 				return nil
 			}
