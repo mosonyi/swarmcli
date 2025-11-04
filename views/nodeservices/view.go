@@ -43,68 +43,57 @@ func (m Model) View() string {
 // overlayCentered safely overlays a small dialog on top of a base box
 func overlayCentered(base, overlay string, width, height int) string {
 	baseLines := strings.Split(base, "\n")
-	canvasHeight := max(len(baseLines), height)
+	canvasHeight := len(baseLines)
 	canvas := make([]string, canvasHeight)
-
-	// Copy base lines safely
-	for i := 0; i < canvasHeight; i++ {
-		if i < len(baseLines) {
-			canvas[i] = padRight(baseLines[i], width)
-		} else {
-			canvas[i] = strings.Repeat(" ", width)
-		}
-	}
+	copy(canvas, baseLines)
 
 	overlayLines := strings.Split(overlay, "\n")
 	dialogHeight := len(overlayLines)
 	if dialogHeight == 0 {
-		return strings.Join(canvas, "\n")
+		return base
 	}
 
-	// Vertical centering
+	// Compute overlay width
+	dialogWidth := 0
+	for _, l := range overlayLines {
+		if w := lipgloss.Width(l); w > dialogWidth {
+			dialogWidth = w
+		}
+	}
+
+	// Center vertically within the base box (skip top/bottom border)
 	startRow := (canvasHeight - dialogHeight) / 2
-	if startRow < 0 {
-		startRow = 0
+	if startRow < 1 {
+		startRow = 1
+	}
+	if startRow+dialogHeight > canvasHeight-1 {
+		startRow = canvasHeight - dialogHeight - 1
+		if startRow < 1 {
+			startRow = 1
+		}
 	}
 
-	// Horizontal centering
+	// Center horizontally within the base box (preserve left/right border)
 	for i, line := range overlayLines {
 		row := startRow + i
-		if row < 0 || row >= len(canvas) {
+		if row <= 0 || row >= canvasHeight-1 {
 			continue
 		}
 
 		lineWidth := lipgloss.Width(line)
-		if lineWidth > width {
-			line = lipgloss.NewStyle().MaxWidth(width).Render(line)
-			lineWidth = lipgloss.Width(line)
-		}
-
-		leftPad := (width - lineWidth) / 2
+		leftPad := (width - 2 - lineWidth) / 2 // subtract 2 for left/right border
 		if leftPad < 0 {
 			leftPad = 0
 		}
+		rightPad := width - 2 - lineWidth - leftPad
+		if rightPad < 0 {
+			rightPad = 0
+		}
 
-		// Build safe overlay line
-		canvas[row] = strings.Repeat(" ", leftPad) + line + strings.Repeat(" ", width-leftPad-lineWidth)
+		canvas[row] = "│" + strings.Repeat(" ", leftPad) + line + strings.Repeat(" ", rightPad) + "│"
 	}
 
 	return strings.Join(canvas, "\n")
-}
-
-func padRight(s string, width int) string {
-	l := lipgloss.Width(s)
-	if l >= width {
-		return s
-	}
-	return s + strings.Repeat(" ", width-l)
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func (m *Model) renderEntries() string {
