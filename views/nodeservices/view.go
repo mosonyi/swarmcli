@@ -37,62 +37,6 @@ func (m Model) View() string {
 	return content
 }
 
-// overlayCentered safely overlays a small dialog on top of a base box
-func overlayCentered(base, overlay string, width, height int) string {
-	baseLines := strings.Split(base, "\n")
-	canvasHeight := len(baseLines)
-	canvas := make([]string, canvasHeight)
-	copy(canvas, baseLines)
-
-	overlayLines := strings.Split(overlay, "\n")
-	dialogHeight := len(overlayLines)
-	if dialogHeight == 0 {
-		return base
-	}
-
-	// Compute overlay width
-	dialogWidth := 0
-	for _, l := range overlayLines {
-		if w := lipgloss.Width(l); w > dialogWidth {
-			dialogWidth = w
-		}
-	}
-
-	// Center vertically within the base box (skip top/bottom border)
-	startRow := (canvasHeight - dialogHeight) / 2
-	if startRow < 1 {
-		startRow = 1
-	}
-	if startRow+dialogHeight > canvasHeight-1 {
-		startRow = canvasHeight - dialogHeight - 1
-		if startRow < 1 {
-			startRow = 1
-		}
-	}
-
-	// Center horizontally within the base box (preserve left/right border)
-	for i, line := range overlayLines {
-		row := startRow + i
-		if row <= 0 || row >= canvasHeight-1 {
-			continue
-		}
-
-		lineWidth := lipgloss.Width(line)
-		leftPad := (width - 2 - lineWidth) / 2 // subtract 2 for left/right border
-		if leftPad < 0 {
-			leftPad = 0
-		}
-		rightPad := width - 2 - lineWidth - leftPad
-		if rightPad < 0 {
-			rightPad = 0
-		}
-
-		canvas[row] = "│" + strings.Repeat(" ", leftPad) + line + strings.Repeat(" ", rightPad) + "│"
-	}
-
-	return strings.Join(canvas, "\n")
-}
-
 func (m *Model) renderEntries() string {
 	if len(m.entries) == 0 {
 		return "No services found."
