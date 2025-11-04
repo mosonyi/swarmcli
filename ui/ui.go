@@ -86,52 +86,73 @@ func padLine(line string, width int) string {
 	return line + strings.Repeat(" ", width-l)
 }
 
-// overlayCentered overlays `overlay` on top of `base` content, centered.
-// Base content remains fully visible; overlay is drawn on top.
 func OverlayCentered(base, overlay string, width, height int) string {
 	baseLines := strings.Split(base, "\n")
-	canvasHeight := max(len(baseLines), height)
+	canvasHeight := len(baseLines)
 	canvas := make([]string, canvasHeight)
-
-	// Copy base lines
-	for i := 0; i < canvasHeight; i++ {
-		if i < len(baseLines) {
-			canvas[i] = padRight(baseLines[i], width)
-		} else {
-			canvas[i] = strings.Repeat(" ", width)
-		}
-	}
+	copy(canvas, baseLines)
 
 	overlayLines := strings.Split(overlay, "\n")
-	overlayHeight := len(overlayLines)
-	overlayWidth := 0
+	dialogHeight := len(overlayLines)
+	if dialogHeight == 0 {
+		return base
+	}
+
+	// Compute overlay width (visible width)
+	dialogWidth := 0
 	for _, l := range overlayLines {
-		if w := lipgloss.Width(l); w > overlayWidth {
-			overlayWidth = w
+		if w := lipgloss.Width(l); w > dialogWidth {
+			dialogWidth = w
 		}
 	}
 
-	startRow := (canvasHeight - overlayHeight) / 2
-	if startRow < 0 {
-		startRow = 0
+	// Center vertically (skip top/bottom border)
+	startRow := (canvasHeight - dialogHeight) / 2
+	if startRow < 1 {
+		startRow = 1
 	}
-	startCol := (width - overlayWidth) / 2
+	if startRow+dialogHeight > canvasHeight-1 {
+		startRow = canvasHeight - dialogHeight - 1
+	}
+
+	// Center horizontally inside frame (subtract 2 for borders)
+	innerWidth := width - 2
+	startCol := (innerWidth - dialogWidth) / 2
 	if startCol < 0 {
 		startCol = 0
 	}
 
-	// Draw overlay
 	for i, line := range overlayLines {
 		row := startRow + i
-		if row >= len(canvas) {
-			break
+		if row <= 0 || row >= canvasHeight-1 {
+			continue
 		}
-		prefix := strings.Repeat(" ", startCol)
-		suffix := ""
-		if startCol+lipgloss.Width(line) < width {
-			suffix = strings.Repeat(" ", width-startCol-lipgloss.Width(line))
+
+		baseLine := canvas[row]
+		if lipgloss.Width(baseLine) < 2 {
+			continue
 		}
-		canvas[row] = prefix + line + suffix
+
+		// Left/right borders
+		leftBorder := string([]rune(baseLine)[0])
+		rightBorder := string([]rune(baseLine)[len([]rune(baseLine))-1])
+
+		// Fill inner area: pad left, overlay content, pad right
+		rightPad := innerWidth - startCol - lipgloss.Width(line)
+		if rightPad < 0 {
+			rightPad = 0
+		}
+
+		inner := strings.Repeat(" ", startCol) + line + strings.Repeat(" ", rightPad)
+
+		// Clamp inner to innerWidth exactly
+		if lipgloss.Width(inner) > innerWidth {
+			inner = lipgloss.NewStyle().MaxWidth(innerWidth).Render(inner)
+		} else if lipgloss.Width(inner) < innerWidth {
+			inner += strings.Repeat(" ", innerWidth-lipgloss.Width(inner))
+		}
+
+		canvas[row] = leftBorder + inner + rightBorder
 	}
 
 	return strings.Join(canvas, "\n")

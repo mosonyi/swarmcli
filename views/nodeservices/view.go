@@ -15,22 +15,21 @@ func (m Model) View() string {
 		width = 80
 	}
 
-	// --- Render the main nodeservices content ---
+	// --- Render main nodeservices content ---
 	header := ui.FrameHeaderStyle.Render(fmt.Sprintf(
 		"%-*s  %-*s  %-*s",
 		m.serviceColWidth, "SERVICE",
 		m.stackColWidth, "STACK",
 		m.replicaColWidth, "REPLICAS",
 	))
-	// In View()
 	content := ui.RenderFramedBox(m.title, header, m.viewport.View(), width)
 
-	// Overlay confirm dialog
+	// --- Overlay confirm dialog if visible ---
 	if m.confirmDialog.Visible {
 		content = ui.OverlayCentered(content, m.confirmDialog.View(), width, height)
 	}
 
-	// Overlay loading
+	// --- Overlay loading view if visible ---
 	if m.loading.Visible() {
 		content = ui.OverlayCentered(content, m.loading.View(), width, height)
 	}
