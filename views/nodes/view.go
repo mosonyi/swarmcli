@@ -32,7 +32,7 @@ func (m Model) View() string {
 	// Blueish styled header
 	header := renderHeader(m.entries)
 
-	return ui.RenderFramedBox(title, header, content, width)
+	return ui.RenderFramedBox(title, header, content, width, false)
 }
 
 func plural(n int) string {

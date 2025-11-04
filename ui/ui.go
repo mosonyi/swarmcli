@@ -20,15 +20,24 @@ var (
 	FrameBorderColor = lipgloss.Color("240")
 )
 
-// RenderFramedBox draws a bordered frame with a centered title, header line, and content.
-// It preserves ANSI ui and ensures the frame width is consistent.
-func RenderFramedBox(title string, header string, content string, width int) string {
+// RenderFramedBox draws a bordered frame with a title, header, and content.
+// If frameless=true, it only renders the content without top/bottom/side borders.
+func RenderFramedBox(title string, header string, content string, width int, frameless bool) string {
 	if width <= 0 {
 		width = 80
 	}
 
 	titleStyled := FrameTitleStyle.Render(" " + title + " ")
 	headerStyled := FrameHeaderStyle.Render(header)
+
+	if frameless {
+		lines := []string{}
+		if header != "" {
+			lines = append(lines, headerStyled)
+		}
+		lines = append(lines, strings.Split(content, "\n")...)
+		return strings.Join(lines, "\n")
+	}
 
 	// Build top border with centered title
 	topBorderLeft := "╭"

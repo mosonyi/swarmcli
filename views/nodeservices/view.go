@@ -18,34 +18,78 @@ func (m Model) View() string {
 	if width <= 0 {
 		width = 80
 	}
-
-	// Show loading view if active
-	if m.loading.Visible() {
-		return m.loading.View()
+	if height <= 0 {
+		height = 24
 	}
 
-	// --- Render the main nodeservices content ---
-	headerStyle := ui.FrameHeaderStyle
-	header := headerStyle.Render(fmt.Sprintf(
+	// --- Main nodeservices content ---
+	header := ui.FrameHeaderStyle.Render(fmt.Sprintf(
 		"%-*s  %-*s  %-*s",
 		m.serviceColWidth, "SERVICE",
 		m.stackColWidth, "STACK",
 		m.replicaColWidth, "REPLICAS",
 	))
-	content := ui.RenderFramedBox(m.title, header, m.viewport.View(), width)
+	baseContent := ui.RenderFramedBox(m.title, header, m.viewport.View(), width, false)
 
 	// --- Overlay confirm dialog if visible ---
 	if m.confirmDialog.Visible {
 		dialogContent := m.confirmDialog.View()
-		return overlayCentered(content, dialogContent, width, height)
+		return overlayCentered(baseContent, dialogContent, width, height)
 	}
 
-	return content
+	return baseContent
 }
 
-// Helpers
-func splitLines(s string) []string {
-	return strings.Split(s, "\n")
+// overlayCentered safely overlays a small dialog on top of a base box
+func overlayCentered(base, overlay string, width, height int) string {
+	baseLines := strings.Split(base, "\n")
+	canvasHeight := max(len(baseLines), height)
+	canvas := make([]string, canvasHeight)
+
+	// Copy base lines safely
+	for i := 0; i < canvasHeight; i++ {
+		if i < len(baseLines) {
+			canvas[i] = padRight(baseLines[i], width)
+		} else {
+			canvas[i] = strings.Repeat(" ", width)
+		}
+	}
+
+	overlayLines := strings.Split(overlay, "\n")
+	dialogHeight := len(overlayLines)
+	if dialogHeight == 0 {
+		return strings.Join(canvas, "\n")
+	}
+
+	// Vertical centering
+	startRow := (canvasHeight - dialogHeight) / 2
+	if startRow < 0 {
+		startRow = 0
+	}
+
+	// Horizontal centering
+	for i, line := range overlayLines {
+		row := startRow + i
+		if row < 0 || row >= len(canvas) {
+			continue
+		}
+
+		lineWidth := lipgloss.Width(line)
+		if lineWidth > width {
+			line = lipgloss.NewStyle().MaxWidth(width).Render(line)
+			lineWidth = lipgloss.Width(line)
+		}
+
+		leftPad := (width - lineWidth) / 2
+		if leftPad < 0 {
+			leftPad = 0
+		}
+
+		// Build safe overlay line
+		canvas[row] = strings.Repeat(" ", leftPad) + line + strings.Repeat(" ", width-leftPad-lineWidth)
+	}
+
+	return strings.Join(canvas, "\n")
 }
 
 func padRight(s string, width int) string {
@@ -61,68 +105,6 @@ func max(a, b int) int {
 		return a
 	}
 	return b
-}
-
-func overlayCentered(base, overlay string, width, height int) string {
-	baseLines := splitLines(base)
-	canvasHeight := max(len(baseLines), height)
-	canvas := make([]string, canvasHeight)
-
-	// Copy base lines safely
-	for i := 0; i < canvasHeight; i++ {
-		if i < len(baseLines) {
-			canvas[i] = padRight(baseLines[i], width)
-		} else {
-			canvas[i] = strings.Repeat(" ", width)
-		}
-	}
-
-	overlayLines := splitLines(overlay)
-	dialogHeight := len(overlayLines)
-	if dialogHeight == 0 {
-		return strings.Join(canvas, "\n")
-	}
-
-	// Compute overlay width
-	dialogWidth := 0
-	for _, l := range overlayLines {
-		if w := lipgloss.Width(l); w > dialogWidth {
-			dialogWidth = w
-		}
-	}
-
-	// Centering coordinates
-	startRow := (canvasHeight - dialogHeight) / 2
-	if startRow < 1 {
-		startRow = 1 // leave top border
-	}
-	if startRow+dialogHeight > canvasHeight-1 {
-		startRow = canvasHeight - dialogHeight - 1 // leave bottom border
-		if startRow < 1 {
-			startRow = 1
-		}
-	}
-
-	startCol := (width - dialogWidth) / 2
-	if startCol < 0 {
-		startCol = 0
-	}
-
-	// Overlay the dialog safely
-	for i, line := range overlayLines {
-		row := startRow + i
-		if row >= len(canvas)-1 || row < 0 { // never touch top/bottom border, never negative
-			continue
-		}
-		padding := strings.Repeat(" ", startCol)
-		rest := ""
-		if startCol+lipgloss.Width(line) < width {
-			rest = strings.Repeat(" ", width-startCol-lipgloss.Width(line))
-		}
-		canvas[row] = padding + line + rest
-	}
-
-	return strings.Join(canvas, "\n")
 }
 
 func (m *Model) renderEntries() string {

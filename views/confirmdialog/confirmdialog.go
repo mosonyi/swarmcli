@@ -1,3 +1,4 @@
+// confirmdialog/view.go
 package confirmdialog
 
 import (
@@ -48,14 +49,13 @@ func (m Model) View() string {
 		return ""
 	}
 
-	// --- Prepare content ---
 	lines := []string{
 		fmt.Sprintf("⚠️  %s", m.Message),
 		"",
 		"[y] Yes   [n] No",
 	}
 
-	// Compute minimal width
+	// Compute minimal width of content
 	contentWidth := 0
 	for _, l := range lines {
 		if w := lipgloss.Width(l); w > contentWidth {
@@ -67,34 +67,25 @@ func (m Model) View() string {
 	boxWidth := contentWidth + hPad*2
 	paddedLines := []string{}
 
-	// top padding
+	// Top padding
 	for i := 0; i < vPad; i++ {
 		paddedLines = append(paddedLines, strings.Repeat(" ", contentWidth))
 	}
-	// content lines
+
+	// Content lines
 	for _, l := range lines {
 		left := strings.Repeat(" ", hPad)
 		right := strings.Repeat(" ", contentWidth-lipgloss.Width(l))
 		paddedLines = append(paddedLines, left+l+right)
 	}
-	// bottom padding
+
+	// Bottom padding
 	for i := 0; i < vPad; i++ {
 		paddedLines = append(paddedLines, strings.Repeat(" ", contentWidth))
 	}
 
 	boxContent := strings.Join(paddedLines, "\n")
 
-	// --- Render the framed box ---
-	overlayBox := ui.RenderFramedBox("Confirm", "", boxContent, boxWidth)
-
-	// --- Center over parent viewport ---
-	centered := lipgloss.Place(
-		m.Width,
-		m.Height,
-		lipgloss.Center,
-		lipgloss.Center,
-		overlayBox,
-	)
-
-	return centered
+	// Render framed box
+	return ui.RenderFramedBox("Confirm", "", boxContent, boxWidth, false)
 }

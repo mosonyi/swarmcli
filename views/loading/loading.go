@@ -102,6 +102,7 @@ func (m Model) View() string {
 		m.header,
 		centered,
 		m.width,
+		false,
 	)
 }
 
