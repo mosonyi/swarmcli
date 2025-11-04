@@ -6,9 +6,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/swarm"
-	"github.com/docker/docker/client"
 )
 
 type StackService struct {
@@ -218,25 +216,4 @@ func RestartServiceAndWait(ctx context.Context, serviceName string) error {
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
-}
-
-func ListRunningTasks(serviceName string) ([]swarm.Task, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv)
-	if err != nil {
-		return nil, err
-	}
-	filter := filters.NewArgs()
-	filter.Add("service", serviceName)
-	filter.Add("desired-state", "running")
-	tasks, err := cli.TaskList(context.Background(), types.TaskListOptions{Filters: filter})
-	if err != nil {
-		return nil, err
-	}
-	var result []swarm.Task
-	for _, t := range tasks {
-		if t.Status.State == swarm.TaskStateRunning {
-			result = append(result, t)
-		}
-	}
-	return result, nil
 }
