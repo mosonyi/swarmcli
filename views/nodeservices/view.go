@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// View renders the nodeservices view with optional loading or confirm overlays.
 func (m Model) View() string {
 	if !m.Visible {
 		return ""
@@ -19,11 +18,13 @@ func (m Model) View() string {
 	if width <= 0 {
 		width = 80
 	}
-	if height <= 0 {
-		height = 24
+
+	// Show loading view if active
+	if m.loading.Visible() {
+		return m.loading.View()
 	}
 
-	// --- Build the main framed content ---
+	// --- Render the main nodeservices content ---
 	headerStyle := ui.FrameHeaderStyle
 	header := headerStyle.Render(fmt.Sprintf(
 		"%-*s  %-*s  %-*s",
@@ -31,14 +32,7 @@ func (m Model) View() string {
 		m.stackColWidth, "STACK",
 		m.replicaColWidth, "REPLICAS",
 	))
-
 	content := ui.RenderFramedBox(m.title, header, m.viewport.View(), width)
-
-	// --- Overlay loading view if visible ---
-	if m.loading.Visible() {
-		loadingContent := m.loading.View()
-		return overlayCentered(content, loadingContent, width, height)
-	}
 
 	// --- Overlay confirm dialog if visible ---
 	if m.confirmDialog.Visible {
@@ -47,6 +41,26 @@ func (m Model) View() string {
 	}
 
 	return content
+}
+
+// Helpers
+func splitLines(s string) []string {
+	return strings.Split(s, "\n")
+}
+
+func padRight(s string, width int) string {
+	l := lipgloss.Width(s)
+	if l >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-l)
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func overlayCentered(base, overlay string, width, height int) string {
@@ -109,26 +123,6 @@ func overlayCentered(base, overlay string, width, height int) string {
 	}
 
 	return strings.Join(canvas, "\n")
-}
-
-// Helpers
-func splitLines(s string) []string {
-	return strings.Split(s, "\n")
-}
-
-func padRight(s string, width int) string {
-	l := lipgloss.Width(s)
-	if l >= width {
-		return s
-	}
-	return s + strings.Repeat(" ", width-l)
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func (m *Model) renderEntries() string {
