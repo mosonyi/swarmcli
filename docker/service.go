@@ -144,8 +144,9 @@ func RestartServiceAndWait(ctx context.Context, serviceName string) error {
 		return err
 	}
 	if svc.Spec.Mode.Replicated == nil {
-		return fmt.Errorf("service %s is not replicated", serviceName)
+		return fmt.Errorf("service %s is not in replicated mode", serviceName)
 	}
+
 	replicas := *svc.Spec.Mode.Replicated.Replicas
 
 	// Snapshot old running tasks
@@ -165,50 +166,31 @@ func RestartServiceAndWait(ctx context.Context, serviceName string) error {
 		return err
 	}
 
-	// Wait for service to be fully stable
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
+	// Wait until all tasks are replaced
 	for {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("waiting for service %s: %w", serviceName, ctx.Err())
-		case <-ticker.C:
+		default:
 			tasks, err := c.TaskList(ctx, types.TaskListOptions{})
 			if err != nil {
 				return fmt.Errorf("listing tasks: %w", err)
 			}
 
-			running := 0
 			newRunning := 0
 			for _, t := range tasks {
-				if t.ServiceID != svc.ID || t.Status.State != "running" {
-					continue
-				}
-				running++
-				if !oldTasks[t.ID] {
-					newRunning++
+				if t.ServiceID == svc.ID && t.Status.State == "running" {
+					if !oldTasks[t.ID] {
+						newRunning++
+					}
 				}
 			}
 
-			// Stop waiting once all replicas are running
-			if running == int(replicas) && newRunning >= int(replicas) {
+			if newRunning == int(replicas) {
 				return nil
 			}
 
-			// Remove old tasks that are gone to avoid permanent blocking
-			for id := range oldTasks {
-				found := false
-				for _, t := range tasks {
-					if t.ID == id && t.Status.State == "running" {
-						found = true
-						break
-					}
-				}
-				if !found {
-					delete(oldTasks, id)
-				}
-			}
+			time.Sleep(time.Second)
 		}
 	}
 }
