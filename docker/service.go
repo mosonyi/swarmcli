@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/client"
 )
 
@@ -91,9 +93,10 @@ func ScaleServiceByName(serviceName string, replicas uint64) error {
 	return ScaleService(svcID, replicas)
 }
 
-// RestartServiceSafely scales a single-replica service down to 0 and back up to 1.
-// Returns an error if the service has 0 or >1 replicas to prevent unsafe operations.
-func RestartServiceSafely(serviceName string) error {
+// RestartService restarts a single-replica service safely using
+// the equivalent of "docker service update --force". It verifies that
+// the service is in replicated mode with exactly 1 replica.
+func RestartService(serviceName string) error {
 	c, err := GetClient()
 	if err != nil {
 		return fmt.Errorf("docker client: %w", err)
@@ -102,77 +105,138 @@ func RestartServiceSafely(serviceName string) error {
 
 	ctx := context.Background()
 
-	// Find the service and current replicas
+	// Find the service
 	services, err := c.ServiceList(ctx, types.ServiceListOptions{})
 	if err != nil {
 		return fmt.Errorf("listing services: %w", err)
 	}
 
-	var svcID, svcName string
-	var currentReplicas uint64
-
-	for _, svc := range services {
-		if svc.Spec.Name == serviceName {
-			svcID = svc.ID
-			svcName = svc.Spec.Name
-			if svc.Spec.Mode.Replicated != nil && svc.Spec.Mode.Replicated.Replicas != nil {
-				currentReplicas = *svc.Spec.Mode.Replicated.Replicas
-			}
+	var svc *swarm.Service
+	for i := range services {
+		if services[i].Spec.Name == serviceName {
+			svc = &services[i]
 			break
 		}
 	}
 
-	if svcID == "" {
+	if svc == nil {
 		return fmt.Errorf("service %s not found", serviceName)
 	}
 
-	if currentReplicas != 1 {
-		return fmt.Errorf("service %s has %d replicas; RestartServiceSafely requires exactly 1", svcName, currentReplicas)
+	// Ensure replicated mode with exactly 1 replica
+	if svc.Spec.Mode.Replicated == nil || svc.Spec.Mode.Replicated.Replicas == nil {
+		return fmt.Errorf("service %s is not in replicated mode", serviceName)
+	}
+	if *svc.Spec.Mode.Replicated.Replicas != 1 {
+		return fmt.Errorf("service %s has %d replicas; RestartService requires exactly 1",
+			serviceName, *svc.Spec.Mode.Replicated.Replicas)
 	}
 
-	// Step 1: Scale down to 0 replicas
-	if err := ScaleService(svcID, 0); err != nil {
-		return fmt.Errorf("scale down failed: %w", err)
+	// Increment the ForceUpdate counter (this is what `--force` does)
+	svc.Spec.TaskTemplate.ForceUpdate++
+
+	updateOpts := types.ServiceUpdateOptions{
+		RegistryAuthFrom: types.RegistryAuthFromSpec,
 	}
 
-	// Step 2: Wait until all tasks are actually removed
-	if err := WaitForNoTasks(ctx, c, svcID, 10*time.Second); err != nil {
-		return fmt.Errorf("waiting for tasks to stop: %w", err)
+	resp, err := c.ServiceUpdate(ctx, svc.ID, svc.Version, svc.Spec, updateOpts)
+	if err != nil {
+		return fmt.Errorf("forcing service update for %s: %w", serviceName, err)
 	}
 
-	// Step 3: Scale up again to 1 replica
-	if err := ScaleService(svcID, 1); err != nil {
-		return fmt.Errorf("scale up failed: %w", err)
+	for _, w := range resp.Warnings {
+		fmt.Printf("⚠️  Warning during restart of %s: %s\n", serviceName, w)
 	}
 
 	return nil
 }
 
-// WaitForNoTasks waits until the given service has no running tasks left.
-func WaitForNoTasks(ctx context.Context, c *client.Client, serviceID string, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-
-	for {
-		tasks, err := c.TaskList(ctx, types.TaskListOptions{})
-		if err != nil {
-			return fmt.Errorf("listing tasks: %w", err)
-		}
-
-		active := 0
-		for _, t := range tasks {
-			if t.ServiceID == serviceID && t.Status.State != "shutdown" && t.Status.State != "complete" {
-				active++
-			}
-		}
-
-		if active == 0 {
-			return nil
-		}
-
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout waiting for service %s to stop (%d still active)", serviceID, active)
-		}
-
-		time.Sleep(500 * time.Millisecond)
+// RestartServiceAndWait restarts a service safely (via --force)
+// and waits until a new task is running again, or the context expires.
+// It also verifies that the new task ID differs from the previous one.
+func RestartServiceAndWait(ctx context.Context, serviceName string) error {
+	c, err := GetClient()
+	if err != nil {
+		return fmt.Errorf("docker client: %w", err)
 	}
+	defer c.Close()
+
+	// Step 1: Locate service and its current running task (if any)
+	services, err := c.ServiceList(ctx, types.ServiceListOptions{})
+	if err != nil {
+		return fmt.Errorf("listing services: %w", err)
+	}
+
+	var svc *swarm.Service
+	for i := range services {
+		if services[i].Spec.Name == serviceName {
+			svc = &services[i]
+			break
+		}
+	}
+	if svc == nil {
+		return fmt.Errorf("service %s not found", serviceName)
+	}
+
+	oldTaskID := ""
+	tasks, err := c.TaskList(ctx, types.TaskListOptions{})
+	if err != nil {
+		return fmt.Errorf("listing tasks: %w", err)
+	}
+	for _, t := range tasks {
+		if t.ServiceID == svc.ID && t.Status.State == "running" {
+			oldTaskID = t.ID
+			break
+		}
+	}
+
+	// Step 2: Restart safely
+	if err := RestartService(serviceName); err != nil {
+		return err
+	}
+
+	// Step 3: Wait for a new running task (different ID)
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("waiting for service %s: %w", serviceName, ctx.Err())
+
+		default:
+			tasks, err := c.TaskList(ctx, types.TaskListOptions{})
+			if err != nil {
+				return fmt.Errorf("listing tasks: %w", err)
+			}
+
+			for _, t := range tasks {
+				if t.ServiceID == svc.ID && t.Status.State == "running" {
+					if t.ID != oldTaskID {
+						return nil // New task is running — restart complete
+					}
+				}
+			}
+
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+}
+
+func ListRunningTasks(serviceName string) ([]swarm.Task, error) {
+	cli, err := client.NewClientWithOpts(client.FromEnv)
+	if err != nil {
+		return nil, err
+	}
+	filter := filters.NewArgs()
+	filter.Add("service", serviceName)
+	filter.Add("desired-state", "running")
+	tasks, err := cli.TaskList(context.Background(), types.TaskListOptions{Filters: filter})
+	if err != nil {
+		return nil, err
+	}
+	var result []swarm.Task
+	for _, t := range tasks {
+		if t.Status.State == swarm.TaskStateRunning {
+			result = append(result, t)
+		}
+	}
+	return result, nil
 }
