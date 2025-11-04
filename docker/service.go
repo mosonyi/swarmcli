@@ -149,9 +149,8 @@ func RestartService(serviceName string) error {
 	return nil
 }
 
-// RestartServiceAndWait restarts a service `RestartService`
-// and waits until a new task is running again, or the context expires.
-// It also verifies that the new task ID differs from the previous one.
+// RestartServiceAndWait restarts a service safely (via --force)
+// and waits until all tasks have been replaced with new ones.
 func RestartServiceAndWait(ctx context.Context, serviceName string) error {
 	c, err := GetClient()
 	if err != nil {
@@ -159,7 +158,7 @@ func RestartServiceAndWait(ctx context.Context, serviceName string) error {
 	}
 	defer c.Close()
 
-	// Step 1: Locate service and its current running task (if any)
+	// Step 1: Locate the service
 	services, err := c.ServiceList(ctx, types.ServiceListOptions{})
 	if err != nil {
 		return fmt.Errorf("listing services: %w", err)
@@ -175,45 +174,63 @@ func RestartServiceAndWait(ctx context.Context, serviceName string) error {
 	if svc == nil {
 		return fmt.Errorf("service %s not found", serviceName)
 	}
+	if svc.Spec.Mode.Replicated == nil {
+		return fmt.Errorf("service %s is not in replicated mode", serviceName)
+	}
 
-	oldTaskID := ""
+	replicas := *svc.Spec.Mode.Replicated.Replicas
+
+	// Step 2: Snapshot old running tasks
+	oldTasks := map[string]bool{}
 	tasks, err := c.TaskList(ctx, types.TaskListOptions{})
 	if err != nil {
 		return fmt.Errorf("listing tasks: %w", err)
 	}
 	for _, t := range tasks {
 		if t.ServiceID == svc.ID && t.Status.State == "running" {
-			oldTaskID = t.ID
-			break
+			oldTasks[t.ID] = true
 		}
 	}
 
-	// Step 2: Restart safely
+	// Step 3: Trigger a restart
 	if err := RestartService(serviceName); err != nil {
 		return err
 	}
 
-	// Step 3: Wait for a new running task (different ID)
+	// Step 4: Wait until all running tasks are new
 	for {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("waiting for service %s: %w", serviceName, ctx.Err())
 
 		default:
+			newTasks := map[string]bool{}
 			tasks, err := c.TaskList(ctx, types.TaskListOptions{})
 			if err != nil {
 				return fmt.Errorf("listing tasks: %w", err)
 			}
+			running := 0
+			newCount := 0
 
 			for _, t := range tasks {
 				if t.ServiceID == svc.ID && t.Status.State == "running" {
-					if t.ID != oldTaskID {
-						return nil // New task is running — restart complete
+					running++
+					newTasks[t.ID] = true
+					if !oldTasks[t.ID] {
+						newCount++
 					}
 				}
 			}
 
-			time.Sleep(500 * time.Millisecond)
+			// only continue once we have full running set
+			if running == int(replicas) {
+				if newCount == running {
+					// all tasks replaced
+					return nil
+				}
+			}
+
+			time.Sleep(1 * time.Second)
 		}
 	}
 }

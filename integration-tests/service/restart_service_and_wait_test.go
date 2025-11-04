@@ -10,64 +10,111 @@ import (
 	"swarmcli/docker"
 )
 
-// TestRestartServiceAndWait_Success ensures RestartServiceAndWait blocks until
-// a new running task appears for a single-replica service.
-func TestRestartServiceAndWait_Success(t *testing.T) {
-	const serviceName = "demo_whoami_single"
+// restartTestCase defines one restart scenario.
+type restartTestCase struct {
+	name         string
+	serviceName  string
+	expectAllNew bool // true = all replicas must be replaced
+	timeout      time.Duration
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	// Refresh snapshot to get the current running task
-	snap, err := docker.RefreshSnapshot()
-	if err != nil {
-		t.Fatalf("failed to refresh snapshot: %v", err)
-	}
-	svc := snap.FindServiceByName(serviceName)
-	if svc == nil {
-		t.Fatalf("service %s not found", serviceName)
-	}
-
-	var oldTaskID string
-	for _, task := range snap.Tasks {
-		if task.ServiceID == svc.ID && task.Status.State == "running" {
-			oldTaskID = task.ID
-			break
-		}
-	}
-	if oldTaskID == "" {
-		t.Fatalf("no running task found for %s before restart", serviceName)
+// TestRestartServiceAndWait_Parametrized verifies both single- and multi-replica
+// service restart behavior, using RestartServiceAndWait as the restart mechanism.
+func TestRestartServiceAndWait(t *testing.T) {
+	cases := []restartTestCase{
+		{
+			name:         "single replica service (demo_whoami_single)",
+			serviceName:  "demo_whoami_single",
+			expectAllNew: true,
+			timeout:      45 * time.Second,
+		},
+		{
+			name:         "multi replica service (demo_whoami)",
+			serviceName:  "demo_whoami",
+			expectAllNew: true, // wait until *all* replicas replaced
+			timeout:      2 * time.Minute,
+		},
 	}
 
-	t.Logf("Restarting service %s and waiting for new task...", serviceName)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), tc.timeout)
+			defer cancel()
 
-	start := time.Now()
-	if err := docker.RestartServiceAndWait(ctx, serviceName); err != nil {
-		t.Fatalf("RestartServiceAndWait failed: %v", err)
-	}
-	elapsed := time.Since(start)
+			// Initial snapshot
+			snap, err := docker.RefreshSnapshot()
+			if err != nil {
+				t.Fatalf("failed to refresh snapshot: %v", err)
+			}
 
-	// Verify a new task has replaced the old one
-	snap2, err := docker.RefreshSnapshot()
-	if err != nil {
-		t.Fatalf("failed to refresh snapshot after restart: %v", err)
-	}
-	var newTaskID string
-	for _, task := range snap2.Tasks {
-		if task.ServiceID == svc.ID && task.Status.State == "running" {
-			newTaskID = task.ID
-			break
-		}
-	}
-	if newTaskID == "" {
-		t.Fatalf("no running task found after restart")
-	}
-	if newTaskID == oldTaskID {
-		t.Fatalf("expected a new running task, but got same task ID %s", oldTaskID)
-	}
+			svc := snap.FindServiceByName(tc.serviceName)
+			if svc == nil {
+				t.Fatalf("service %s not found", tc.serviceName)
+			}
+			if svc.Spec.Mode.Replicated == nil {
+				t.Fatalf("service %s not in replicated mode", tc.serviceName)
+			}
 
-	t.Logf("✅ RestartServiceAndWait succeeded: old task %s → new task %s in %v",
-		oldTaskID, newTaskID, elapsed)
+			replicas := *svc.Spec.Mode.Replicated.Replicas
+			oldTasks := map[string]bool{}
+			for _, task := range snap.Tasks {
+				if task.ServiceID == svc.ID && task.Status.State == "running" {
+					oldTasks[task.ID] = true
+				}
+			}
+			t.Logf("📦 Found %d old running tasks for %s", len(oldTasks), tc.serviceName)
+
+			// Restart idiomatically and wait
+			t.Logf("🔁 Restarting service %s (replicas: %d)...", tc.serviceName, replicas)
+			start := time.Now()
+			if err := docker.RestartServiceAndWait(ctx, tc.serviceName); err != nil {
+				t.Fatalf("failed to restart service: %v", err)
+			}
+
+			// Verify new tasks appeared
+			snap2, err := docker.RefreshSnapshot()
+			if err != nil {
+				t.Fatalf("failed to refresh snapshot after restart: %v", err)
+			}
+
+			svc2 := snap2.FindServiceByName(tc.serviceName)
+			if svc2 == nil {
+				t.Fatalf("service %s disappeared after restart", tc.serviceName)
+			}
+
+			newTasks := map[string]bool{}
+			for _, task := range snap2.Tasks {
+				if task.ServiceID == svc2.ID && task.Status.State == "running" {
+					newTasks[task.ID] = true
+				}
+			}
+
+			if len(newTasks) != int(replicas) {
+				t.Fatalf("expected %d running tasks after restart, got %d", replicas, len(newTasks))
+			}
+
+			// Determine how many tasks changed
+			changed := 0
+			for id := range newTasks {
+				if !oldTasks[id] {
+					changed++
+				}
+			}
+
+			if tc.expectAllNew {
+				if changed != len(newTasks) {
+					t.Fatalf("expected all %d tasks replaced, but only %d changed", len(newTasks), changed)
+				}
+			} else {
+				if changed == 0 {
+					t.Fatalf("expected at least one task replaced, but none changed")
+				}
+			}
+
+			t.Logf("✅ %s successfully restarted (%d/%d new tasks) in %v",
+				tc.serviceName, changed, len(newTasks), time.Since(start))
+		})
+	}
 }
 
 // TestRestartServiceAndWait_Timeout verifies that RestartServiceAndWait
