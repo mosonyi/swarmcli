@@ -166,7 +166,7 @@ func RestartServiceAndWait(ctx context.Context, serviceName string) error {
 		return err
 	}
 
-	// Wait until all tasks are replaced
+	// Wait until all running tasks are replaced
 	for {
 		select {
 		case <-ctx.Done():
@@ -177,17 +177,29 @@ func RestartServiceAndWait(ctx context.Context, serviceName string) error {
 				return fmt.Errorf("listing tasks: %w", err)
 			}
 
-			newRunning := 0
+			running, newCount := 0, 0
 			for _, t := range tasks {
 				if t.ServiceID == svc.ID && t.Status.State == "running" {
+					running++
 					if !oldTasks[t.ID] {
-						newRunning++
+						newCount++
 					}
 				}
 			}
 
-			if newRunning == int(replicas) {
-				return nil
+			if running == int(replicas) && newCount == running {
+				// Check for extra tasks
+				var extra []string
+				for _, t := range tasks {
+					if t.ServiceID == svc.ID && t.Status.State == "running" && !oldTasks[t.ID] && newCount > int(replicas) {
+						extra = append(extra, t.ID)
+					}
+				}
+				if len(extra) > 0 {
+					fmt.Printf("[RestartServiceAndWait] Warning: extra running tasks detected for service %q: %v\n", serviceName, extra)
+				}
+
+				return nil // all tasks replaced
 			}
 
 			time.Sleep(time.Second)
