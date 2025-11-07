@@ -88,7 +88,6 @@ func selectLogPath(appName, mode string) string {
 		fileName = "app-debug.log"
 	} else {
 		fileName = "app.log"
-
 	}
 
 	if xdg := os.Getenv("XDG_STATE_HOME"); xdg != "" {
