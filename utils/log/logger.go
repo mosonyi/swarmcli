@@ -79,7 +79,7 @@ func Init(appName string) {
 	}
 
 	core := zapcore.NewCore(encoder, writer, atomicLevel)
-	raw = zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
+	raw = zap.New(core, zap.AddCaller())
 	logger = &SwarmLogger{raw.Sugar()}
 
 	logger.Infof("logger initialized in %s mode. Writing to %s", mode, logPath)
@@ -97,7 +97,7 @@ func InitTest() {
 	cfg := zap.NewDevelopmentConfig()
 	cfg.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
 	cfg.OutputPaths = []string{"stdout"}
-	raw, _ = cfg.Build(zap.AddCaller(), zap.AddCallerSkip(1))
+	raw, _ = cfg.Build(zap.AddCaller())
 	logger = &SwarmLogger{raw.Sugar()}
 }
 
