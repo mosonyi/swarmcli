@@ -3,7 +3,6 @@ package docker
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -262,15 +261,15 @@ func RestartServiceWithProgress(ctx context.Context, serviceName string, progres
 				}
 			}
 
-			log.Printf("Sending progress: %d/%d\n", replaced, total)
+			l().Debugf("Sending progress: %d/%d\n", replaced, total)
 			if progressCh != nil {
 				select {
 				case progressCh <- ProgressUpdate{Replaced: replaced, Total: total}:
-					log.Printf("[Docker] Successfully sent to channel")
+					l().Debugf("[Docker] Successfully sent to channel")
 				case <-ctx.Done():
-					log.Printf("[Docker] Context done, cannot send")
+					l().Debugf("[Docker] Context done, cannot send")
 				default:
-					log.Printf("[Docker] Channel blocked, skipping send")
+					l().Debugf("[Docker] Channel blocked, skipping send")
 				}
 			}
 
