@@ -92,8 +92,15 @@ func Sync() {
 	}
 }
 
-// InitTest creates a lightweight logger for tests that logs to stdout.
-func InitTest() {
+// InitTestIfTestLogEnv creates a lightweight logger for tests that logs to stdout if the
+// `TEST_LOG` env is set.
+func InitTestIfTestLogEnv() {
+	if os.Getenv("TEST_LOG") == "" {
+		// No logging in CI by default
+		logger = noopLogger
+		return
+	}
+
 	cfg := zap.NewDevelopmentConfig()
 	cfg.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
 	cfg.OutputPaths = []string{"stdout"}
