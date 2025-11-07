@@ -9,7 +9,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"go.uber.org/zap"
 )
 
 type FilterType int
@@ -20,8 +19,8 @@ const (
 	AllFilter
 )
 
-func l() *zap.SugaredLogger {
-	return swarmlog.Logger.With("view", "services")
+func l() *swarmlog.SwarmLogger {
+	return swarmlog.Logger.With("docker", "client")
 }
 
 type Model struct {

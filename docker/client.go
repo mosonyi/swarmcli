@@ -10,10 +10,9 @@ import (
 	swarmlog "swarmcli/utils/log"
 
 	"github.com/docker/docker/client"
-	"go.uber.org/zap"
 )
 
-func l() *zap.SugaredLogger {
+func l() *swarmlog.SwarmLogger {
 	return swarmlog.Logger.With("docker", "client")
 }
 

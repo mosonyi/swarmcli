@@ -10,7 +10,19 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-var Logger *zap.SugaredLogger
+var (
+	Logger *SwarmLogger
+	raw    *zap.Logger
+)
+
+type SwarmLogger struct {
+	*zap.SugaredLogger
+}
+
+// With adds structured fields to the logger and returns a new *Logger
+func (l *SwarmLogger) With(args ...interface{}) *SwarmLogger {
+	return &SwarmLogger{l.SugaredLogger.With(args...)}
+}
 
 // Init initializes the global logger.
 // It automatically determines the environment using the SWARMCLI_ENV variable:
@@ -48,8 +60,8 @@ func Init(appName string) {
 	}
 
 	core := zapcore.NewCore(encoder, writer, zap.DebugLevel)
-	logger := zap.New(core, zap.AddCaller())
-	Logger = logger.Sugar()
+	raw = zap.New(core, zap.AddCaller())
+	Logger = &SwarmLogger{raw.Sugar()}
 
 	Logger.Infof("Logger initialized in %s mode. Writing to %s", mode, logPath)
 }
@@ -65,8 +77,8 @@ func Sync() {
 func InitTest() {
 	cfg := zap.NewDevelopmentConfig()
 	cfg.OutputPaths = []string{"stdout"}
-	logger, _ := cfg.Build()
-	Logger = logger.Sugar()
+	raw, _ = cfg.Build()
+	Logger = &SwarmLogger{raw.Sugar()}
 }
 
 // detectMode determines dev or prod mode from SWARMCLI_ENV.
