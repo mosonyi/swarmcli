@@ -10,7 +10,7 @@ import (
 func LoadNodeServices(nodeID string) []ServiceEntry {
 	snap, err := docker.GetOrRefreshSnapshot()
 	if err != nil {
-		l().Infoln("failed to get snapshot:", err)
+		l().Infof("failed to get snapshot:", err)
 		return nil
 	}
 
@@ -43,7 +43,7 @@ func LoadNodeServices(nodeID string) []ServiceEntry {
 func LoadStackServices(stackName string) []ServiceEntry {
 	snap, err := docker.GetOrRefreshSnapshot()
 	if err != nil {
-		l().Infoln("failed to get snapshot:", err)
+		l().Infof("failed to get snapshot:", err)
 		return nil
 	}
 

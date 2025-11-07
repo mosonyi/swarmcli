@@ -68,8 +68,8 @@ func GetClient() (*client.Client, error) {
 	cert := filepath.Join(tlsPath, "cert.pem")
 	key := filepath.Join(tlsPath, "key.pem")
 
-	l().Infoln("[GetClient] host=%q tlsPath=%q skipVerify=%v", host, tlsPath, skipVerify)
-	l().Infoln("[GetClient] certs present: ca=%t cert=%t key=%t",
+	l().Infof("[GetClient] host=%q tlsPath=%q skipVerify=%v", host, tlsPath, skipVerify)
+	l().Infof("[GetClient] certs present: ca=%t cert=%t key=%t",
 		fileExists(ca), fileExists(cert), fileExists(key))
 
 	opts := []client.Opt{
@@ -81,7 +81,7 @@ func GetClient() (*client.Client, error) {
 	if fileExists(ca) && fileExists(cert) && fileExists(key) {
 		opts = append(opts, client.WithTLSClientConfig(ca, cert, key))
 	} else if skipVerify {
-		l().Infoln("[GetClient] skipVerify=true but no certs found")
+		l().Infof("[GetClient] skipVerify=true but no certs found")
 	}
 
 	cli, err := client.NewClientWithOpts(opts...)

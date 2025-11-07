@@ -74,7 +74,7 @@ func restartServiceCommon(ctx context.Context, c *client.Client, svc *swarm.Serv
 	if err := updateService(ctx, c, svc); err != nil {
 		return fmt.Errorf("forcing service update for %s: %w", svc.Spec.Name, err)
 	}
-	l().Warnf("🔁 Service %s restarted (replicas: %d)\n",
+	l().Infof("🔁 Service %s restarted (replicas: %d)\n",
 		svc.Spec.Name, *svc.Spec.Mode.Replicated.Replicas)
 	return nil
 }

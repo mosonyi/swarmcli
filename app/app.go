@@ -35,7 +35,7 @@ func Init() {
 
 	swarmlog.Logger.Infow("starting Swarm CLI", "version", version)
 
-	swarmlog.Logger.Infoln("Available Commands:")
+	swarmlog.Logger.Infof("Available Commands:")
 	for _, cmd := range registry.All() {
 		swarmlog.Logger.Infoln("-", cmd.Name(), "→", cmd.Description())
 	}
