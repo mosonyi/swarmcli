@@ -39,3 +39,6 @@ jobs:
 
     - name: Build CLI
       run: go build -v -o swarmcli .
+
+    - name: Build Docker Image
+      run : docker build -t swarmcli-dev .
