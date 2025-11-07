@@ -11,17 +11,31 @@ import (
 )
 
 var (
-	Logger *SwarmLogger
+	// We keep the logger private to prevent uninitialized access.
+	logger *SwarmLogger
 	raw    *zap.Logger
+	// Noop logger used as fallback if no logger initialized
+	noopLogger = &SwarmLogger{zap.NewNop().Sugar()}
 )
 
 type SwarmLogger struct {
 	*zap.SugaredLogger
 }
 
-// With adds structured fields to the logger and returns a new *Logger
+// With adds structured fields to the logger and returns a new *logger
 func (l *SwarmLogger) With(args ...interface{}) *SwarmLogger {
+	if l == nil {
+		return noopLogger
+	}
 	return &SwarmLogger{l.SugaredLogger.With(args...)}
+}
+
+// L gets a safe loggeru
+func L() *SwarmLogger {
+	if logger == nil {
+		return noopLogger
+	}
+	return logger
 }
 
 // Init initializes the global logger.
@@ -61,15 +75,15 @@ func Init(appName string) {
 
 	core := zapcore.NewCore(encoder, writer, zap.DebugLevel)
 	raw = zap.New(core, zap.AddCaller())
-	Logger = &SwarmLogger{raw.Sugar()}
+	logger = &SwarmLogger{raw.Sugar()}
 
-	Logger.Infof("Logger initialized in %s mode. Writing to %s", mode, logPath)
+	logger.Infof("logger initialized in %s mode. Writing to %s", mode, logPath)
 }
 
 // Sync flushes pending log entries.
 func Sync() {
-	if Logger != nil {
-		_ = Logger.Sync()
+	if logger != nil {
+		_ = logger.Sync()
 	}
 }
 
@@ -78,7 +92,7 @@ func InitTest() {
 	cfg := zap.NewDevelopmentConfig()
 	cfg.OutputPaths = []string{"stdout"}
 	raw, _ = cfg.Build()
-	Logger = &SwarmLogger{raw.Sugar()}
+	logger = &SwarmLogger{raw.Sugar()}
 }
 
 // detectMode determines dev or prod mode from SWARMCLI_ENV.

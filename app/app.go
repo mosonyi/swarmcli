@@ -31,13 +31,14 @@ func registerView(name string, factory view.Factory) {
 // Init should be called once at the start of the application to register all views.
 func Init() {
 	swarmlog.Init(appName)
+	l := swarmlog.L()
 	defer swarmlog.Sync()
 
-	swarmlog.Logger.Infow("starting Swarm CLI", "version", version)
+	l.Infow("starting Swarm CLI", "version", version)
 
-	swarmlog.Logger.Infof("Available Commands:")
+	l.Infof("Available Commands:")
 	for _, cmd := range registry.All() {
-		swarmlog.Logger.Infoln("-", cmd.Name(), "→", cmd.Description())
+		l.Infoln("-", cmd.Name(), "→", cmd.Description())
 	}
 
 	registerView(loadingview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {

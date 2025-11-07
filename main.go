@@ -15,6 +15,6 @@ func main() {
 	p := tea.NewProgram(app.InitialModel(), tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {
-		swarmlog.Logger.Fatal(err)
+		swarmlog.L().Fatal(err)
 	}
 }

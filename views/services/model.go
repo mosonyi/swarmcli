@@ -20,7 +20,7 @@ const (
 )
 
 func l() *swarmlog.SwarmLogger {
-	return swarmlog.Logger.With("docker", "client")
+	return swarmlog.L().With("docker", "client")
 }
 
 type Model struct {
