@@ -15,8 +15,8 @@ var Logger *zap.SugaredLogger
 // Init initializes the global logger.
 // It automatically determines the environment using the SWARMCLI_ENV variable:
 //
-//	SWARMCLI_ENV=dev   → human-readable logs in ~/.local/state/<app>/debug.log
-//	SWARMCLI_ENV=prod  → JSON logs in /var/log/<app>/app.log
+//	SWARMCLI_ENV=dev   → human-readable logs in ~/.local/state/<app>/app-debug.log
+//	SWARMCLI_ENV=prod  → JSON logs in in ~/.local/state/<app>/app.log
 //
 // If unset, defaults to "prod" for safety.
 func Init(appName string) {
