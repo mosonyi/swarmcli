@@ -19,22 +19,22 @@ func restartServiceWithProgressCmd(serviceName string, msgCh chan tea.Msg) tea.C
 		progressCh := make(chan docker.ProgressUpdate, 10)
 
 		go func() {
-			l().Debugln("[Goroutine] Calling RestartServiceWithProgress ...")
+			l().Debugf("[Goroutine] Calling RestartServiceWithProgress ...")
 			err := docker.RestartServiceWithProgress(context.Background(), serviceName, progressCh)
 			if err != nil {
-				l().Debugln("[Goroutine] RestartServiceWithProgress failed: %v", err)
+				l().Debugf("[Goroutine] RestartServiceWithProgress failed: %v", err)
 			}
-			l().Debugln("[Goroutine] RestartServiceWithProgress returned")
+			l().Debugf("[Goroutine] RestartServiceWithProgress returned")
 			close(progressCh)
 		}()
 
 		go func() {
-			l().Debugln("[Listener] Starting progress listener loop")
+			l().Debugf("[Listener] Starting progress listener loop")
 			for progress := range progressCh {
-				l().Debugln("[Listener] Got update: %d/%d", progress.Replaced, progress.Total)
+				l().Debugf("[Listener] Got update: %d/%d", progress.Replaced, progress.Total)
 				sendMsg(msgCh, serviceProgressMsg{progress})
 			}
-			l().Debugln("[Listener] Progress listener loop exiting")
+			l().Debugf("[Listener] Progress listener loop exiting")
 		}()
 
 		return nil

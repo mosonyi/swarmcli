@@ -2,7 +2,6 @@ package servicesview
 
 import (
 	"fmt"
-	"log"
 	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
@@ -116,20 +115,20 @@ func sendMsg(ch chan tea.Msg, msg tea.Msg) {
 	select {
 	case ch <- msg:
 	default:
-		log.Println("[sendMsg] msg channel full, dropping message")
+		l().Infof("[sendMsg] msg channel full, dropping message")
 	}
 }
 
 func (m Model) listenForMessages() tea.Cmd {
 	if m.msgCh == nil {
-		log.Println("[listenForMessages] no message channel, skipping")
+		l().Debugf("[listenForMessages] no message channel, skipping")
 		return nil
 	}
 
 	return func() tea.Msg {
 		msg, ok := <-m.msgCh
 		if !ok {
-			log.Println("[listenForMessages] channel closed — stopping listener")
+			l().Debugf("[listenForMessages] channel closed — stopping listener")
 			return nil
 		}
 		return msg
