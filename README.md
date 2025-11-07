@@ -81,3 +81,15 @@ Then run:
 ```
 go run .
 ```
+
+## Logging
+
+```bash
+# Production (default)
+$ go run .
+# → writes JSON logs to /var/log/swarmcli/app.log
+
+# Development
+$ SWARMCLI_ENV=dev go run .
+# → writes pretty logs to ~/.local/state/swarmcli/debug.log
+```

@@ -2,7 +2,7 @@ package app
 
 import (
 	"fmt"
-	l "swarmcli/utils/log"
+	"swarmcli/utils/log"
 	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"
 	loadingview "swarmcli/views/loading"
@@ -20,6 +20,7 @@ import (
 
 const (
 	version string = "dev"
+	appName string = "swarmcli"
 )
 
 var viewRegistry = map[string]view.Factory{}
@@ -30,7 +31,10 @@ func registerView(name string, factory view.Factory) {
 
 // Init should be called once at the start of the application to register all views.
 func Init() {
-	l.InitDebug()
+	log.Init(appName)
+	defer log.Sync()
+
+	log.Logger.Infow("starting Swarm CLI", "version", version)
 
 	for _, cmd := range registry.All() {
 		fmt.Println("-", cmd.Name(), "→", cmd.Description())
