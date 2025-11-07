@@ -93,3 +93,10 @@ $ go run .
 $ SWARMCLI_ENV=dev go run .
 # → writes pretty logs to ~/.local/state/swarmcli/app-debug.log
 ```
+
+### Integration tests
+The logs for the integration tests can be enabled with:
+
+```bash
+TEST_LOG=1 ./test-setup/testenv.sh test
+```
