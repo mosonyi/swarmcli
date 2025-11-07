@@ -3,12 +3,14 @@ package servicesview
 import (
 	"fmt"
 	"log"
+	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	loadingview "swarmcli/views/loading"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"go.uber.org/zap"
 )
 
 type FilterType int
@@ -18,6 +20,10 @@ const (
 	StackFilter
 	AllFilter
 )
+
+func l() *zap.SugaredLogger {
+	return swarmlog.Logger.With("view", "services")
+}
 
 type Model struct {
 	viewport viewport.Model

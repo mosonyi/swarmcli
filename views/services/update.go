@@ -3,7 +3,6 @@ package servicesview
 import (
 	"context"
 	"fmt"
-	"log"
 	"swarmcli/docker"
 	"swarmcli/views/confirmdialog"
 	inspectview "swarmcli/views/inspect"
@@ -38,7 +37,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 			entry := m.entries[m.cursor]
 			m.loading.SetVisible(true)
 			m.loadingViewMessage(entry.ServiceName)
-			log.Println("Starting restartServiceWithProgressCmd for", entry.ServiceName)
+			l().Debugln("Starting restartServiceWithProgressCmd for", entry.ServiceName)
 
 			// create new channel for this operation
 			m.msgCh = make(chan tea.Msg)
@@ -51,7 +50,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		return m, nil
 
 	case serviceProgressMsg:
-		log.Printf("[UI] Received progress: %d/%d\n", msg.Progress.Replaced, msg.Progress.Total)
+		l().Debugln("[UI] Received progress: %d/%d\n", msg.Progress.Replaced, msg.Progress.Total)
 
 		m.loadingViewMessage(fmt.Sprintf(
 			"Progress: %d/%d tasks replaced...",
@@ -59,7 +58,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		))
 
 		if msg.Progress.Replaced == msg.Progress.Total && msg.Progress.Total > 0 {
-			log.Println("[UI] Restart finished — closing channel")
+			l().Debugln("[UI] Restart finished — closing channel")
 			if m.msgCh != nil {
 				close(m.msgCh)
 				m.msgCh = nil

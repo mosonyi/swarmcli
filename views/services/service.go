@@ -2,7 +2,6 @@ package servicesview
 
 import (
 	"context"
-	"log"
 	"swarmcli/docker"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -15,27 +14,27 @@ type serviceProgressMsg struct {
 
 func restartServiceWithProgressCmd(serviceName string, msgCh chan tea.Msg) tea.Cmd {
 	return func() tea.Msg {
-		log.Printf("[CMD] Starting restart with progress for %s", serviceName)
+		l().Debugln("[CMD] Starting restart with progress for %s", serviceName)
 
 		progressCh := make(chan docker.ProgressUpdate, 10)
 
 		go func() {
-			log.Println("[Goroutine] Calling RestartServiceWithProgress ...")
+			l().Debugln("[Goroutine] Calling RestartServiceWithProgress ...")
 			err := docker.RestartServiceWithProgress(context.Background(), serviceName, progressCh)
 			if err != nil {
-				log.Printf("[Goroutine] RestartServiceWithProgress failed: %v", err)
+				l().Debugln("[Goroutine] RestartServiceWithProgress failed: %v", err)
 			}
-			log.Println("[Goroutine] RestartServiceWithProgress returned")
+			l().Debugln("[Goroutine] RestartServiceWithProgress returned")
 			close(progressCh)
 		}()
 
 		go func() {
-			log.Println("[Listener] Starting progress listener loop")
+			l().Debugln("[Listener] Starting progress listener loop")
 			for progress := range progressCh {
-				log.Printf("[Listener] Got update: %d/%d", progress.Replaced, progress.Total)
+				l().Debugln("[Listener] Got update: %d/%d", progress.Replaced, progress.Total)
 				sendMsg(msgCh, serviceProgressMsg{progress})
 			}
-			log.Println("[Listener] Progress listener loop exiting")
+			l().Debugln("[Listener] Progress listener loop exiting")
 		}()
 
 		return nil

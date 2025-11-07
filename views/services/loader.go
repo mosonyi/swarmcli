@@ -1,7 +1,6 @@
 package servicesview
 
 import (
-	"fmt"
 	"sort"
 	"swarmcli/docker"
 
@@ -11,7 +10,7 @@ import (
 func LoadNodeServices(nodeID string) []ServiceEntry {
 	snap, err := docker.GetOrRefreshSnapshot()
 	if err != nil {
-		fmt.Println("failed to get snapshot:", err)
+		l().Infoln("failed to get snapshot:", err)
 		return nil
 	}
 
@@ -44,7 +43,7 @@ func LoadNodeServices(nodeID string) []ServiceEntry {
 func LoadStackServices(stackName string) []ServiceEntry {
 	snap, err := docker.GetOrRefreshSnapshot()
 	if err != nil {
-		fmt.Println("failed to get snapshot:", err)
+		l().Infoln("failed to get snapshot:", err)
 		return nil
 	}
 
