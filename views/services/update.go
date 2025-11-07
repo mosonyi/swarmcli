@@ -50,7 +50,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		return m, nil
 
 	case serviceProgressMsg:
-		l().Debugln("[UI] Received progress: %d/%d\n", msg.Progress.Replaced, msg.Progress.Total)
+		l().Debugf("[UI] Received progress: %d/%d\n", msg.Progress.Replaced, msg.Progress.Total)
 
 		m.loadingViewMessage(fmt.Sprintf(
 			"Progress: %d/%d tasks replaced...",
