@@ -11,18 +11,23 @@ import (
 )
 
 var (
-	// We keep the logger private to prevent uninitialized access.
+	// Keep the global logger private to prevent uninitialized access.
 	logger *SwarmLogger
 	raw    *zap.Logger
-	// Noop logger used as fallback if no logger initialized
+
+	// Noop logger as safe fallback when not initialized.
 	noopLogger = &SwarmLogger{zap.NewNop().Sugar()}
+
+	// Atomic log level allows dynamic runtime level changes if desired.
+	atomicLevel zap.AtomicLevel
 )
 
+// SwarmLogger wraps zap’s SugaredLogger for convenience.
 type SwarmLogger struct {
 	*zap.SugaredLogger
 }
 
-// With adds structured fields to the logger and returns a new *logger
+// With adds structured fields to the logger and returns a new instance.
 func (l *SwarmLogger) With(args ...interface{}) *SwarmLogger {
 	if l == nil {
 		return noopLogger
@@ -30,7 +35,7 @@ func (l *SwarmLogger) With(args ...interface{}) *SwarmLogger {
 	return &SwarmLogger{l.SugaredLogger.With(args...)}
 }
 
-// L gets a safe loggeru
+// L returns the global logger or a no-op fallback if uninitialized.
 func L() *SwarmLogger {
 	if logger == nil {
 		return noopLogger
@@ -39,15 +44,19 @@ func L() *SwarmLogger {
 }
 
 // Init initializes the global logger.
-// It automatically determines the environment using the SWARMCLI_ENV variable:
 //
-//	SWARMCLI_ENV=dev   → human-readable logs in ~/.local/state/<app>/app-debug.log
-//	SWARMCLI_ENV=prod  → JSON logs in in ~/.local/state/<app>/app.log
+// It automatically determines the environment using SWARMCLI_ENV:
 //
-// If unset, defaults to "prod" for safety.
+//   - SWARMCLI_ENV=dev   → human-readable logs in ~/.local/state/<app>/app-debug.log
+//   - SWARMCLI_ENV=prod  → JSON logs in ~/.local/state/<app>/app.log
+//
+// The log level is controlled via LOG_LEVEL (debug, info, warn, error, etc).
+// If unset, defaults to debug in dev mode and info in prod mode.
 func Init(appName string) {
 	mode := detectMode()
 	logPath := selectLogPath(appName, mode)
+
+	atomicLevel = zap.NewAtomicLevelAt(detectLogLevel())
 
 	writer := zapcore.AddSync(&lumberjack.Logger{
 		Filename:   logPath,
@@ -62,37 +71,41 @@ func Init(appName string) {
 	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
 	encoderCfg.EncodeLevel = zapcore.CapitalLevelEncoder
 
-	level := detectLogLevel()
-
 	var encoder zapcore.Encoder
 	if mode == "dev" {
 		encoder = zapcore.NewConsoleEncoder(encoderCfg)
-		zapcore.NewCore(encoder, writer, level)
 	} else {
 		encoder = zapcore.NewJSONEncoder(encoderCfg)
-		zapcore.NewCore(encoder, writer, level)
 	}
 
-	core := zapcore.NewCore(encoder, writer, zap.DebugLevel)
-	raw = zap.New(core, zap.AddCaller())
+	core := zapcore.NewCore(encoder, writer, atomicLevel)
+	raw = zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
 	logger = &SwarmLogger{raw.Sugar()}
 
 	logger.Infof("logger initialized in %s mode. Writing to %s", mode, logPath)
 }
 
-// Sync flushes pending log entries.
+// Sync flushes any buffered log entries.
 func Sync() {
 	if logger != nil {
 		_ = logger.Sync()
 	}
 }
 
-// InitTest creates a test logger that logs to stdout.
+// InitTest creates a lightweight logger for tests that logs to stdout.
 func InitTest() {
 	cfg := zap.NewDevelopmentConfig()
+	cfg.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
 	cfg.OutputPaths = []string{"stdout"}
-	raw, _ = cfg.Build()
+	raw, _ = cfg.Build(zap.AddCaller(), zap.AddCallerSkip(1))
 	logger = &SwarmLogger{raw.Sugar()}
+}
+
+// SetLevel allows changing the log level at runtime.
+func SetLevel(level zapcore.Level) {
+	if atomicLevel != (zap.AtomicLevel{}) {
+		atomicLevel.SetLevel(level)
+	}
 }
 
 // detectMode determines dev or prod mode from SWARMCLI_ENV.
@@ -108,30 +121,32 @@ func detectMode() string {
 
 // selectLogPath picks a standard file location for logs.
 func selectLogPath(appName, mode string) string {
-	var fileName string
-
+	fileName := "app.log"
 	if mode == "dev" {
 		fileName = "app-debug.log"
-	} else {
-		fileName = "app.log"
 	}
 
 	if xdg := os.Getenv("XDG_STATE_HOME"); xdg != "" {
-		_ = os.MkdirAll(filepath.Join(xdg, appName), 0755)
-		return filepath.Join(xdg, appName, fileName)
+		path := filepath.Join(xdg, appName)
+		_ = os.MkdirAll(path, 0755)
+		return filepath.Join(path, fileName)
 	}
+
 	if home, err := os.UserHomeDir(); err == nil {
 		path := filepath.Join(home, ".local", "state", appName)
 		_ = os.MkdirAll(path, 0755)
 		return filepath.Join(path, fileName)
 	}
 
-	return filepath.Join("tmp", appName, fileName)
+	// Fallback for restrictive environments
+	path := filepath.Join(os.TempDir(), appName)
+	_ = os.MkdirAll(path, 0755)
+	return filepath.Join(path, fileName)
 }
 
+// detectLogLevel picks the initial log level from LOG_LEVEL.
 func detectLogLevel() zapcore.Level {
-	level := strings.ToLower(os.Getenv("LOG_LEVEL"))
-	switch level {
+	switch strings.ToLower(os.Getenv("LOG_LEVEL")) {
 	case "debug":
 		return zap.DebugLevel
 	case "warn", "warning":
@@ -145,7 +160,6 @@ func detectLogLevel() zapcore.Level {
 	case "fatal":
 		return zap.FatalLevel
 	default:
-		// Default: more verbose in dev, quieter in prod
 		if detectMode() == "dev" {
 			return zap.DebugLevel
 		}
