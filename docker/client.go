@@ -4,13 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	swarmlog "swarmcli/utils/log"
 
 	"github.com/docker/docker/client"
+	"go.uber.org/zap"
 )
+
+func l() *zap.SugaredLogger {
+	return swarmlog.Logger.With("docker", "client")
+}
 
 type dockerContext struct {
 	Endpoints struct {
@@ -63,8 +68,8 @@ func GetClient() (*client.Client, error) {
 	cert := filepath.Join(tlsPath, "cert.pem")
 	key := filepath.Join(tlsPath, "key.pem")
 
-	log.Printf("[GetClient] host=%q tlsPath=%q skipVerify=%v", host, tlsPath, skipVerify)
-	log.Printf("[GetClient] certs present: ca=%t cert=%t key=%t",
+	l().Infoln("[GetClient] host=%q tlsPath=%q skipVerify=%v", host, tlsPath, skipVerify)
+	l().Infoln("[GetClient] certs present: ca=%t cert=%t key=%t",
 		fileExists(ca), fileExists(cert), fileExists(key))
 
 	opts := []client.Opt{
@@ -76,7 +81,7 @@ func GetClient() (*client.Client, error) {
 	if fileExists(ca) && fileExists(cert) && fileExists(key) {
 		opts = append(opts, client.WithTLSClientConfig(ca, cert, key))
 	} else if skipVerify {
-		log.Printf("[GetClient] skipVerify=true but no certs found")
+		l().Infoln("[GetClient] skipVerify=true but no certs found")
 	}
 
 	cli, err := client.NewClientWithOpts(opts...)

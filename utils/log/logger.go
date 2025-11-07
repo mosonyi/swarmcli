@@ -1,4 +1,4 @@
-package log
+package swarmlog
 
 import (
 	"os"
@@ -48,7 +48,7 @@ func Init(appName string) {
 	}
 
 	core := zapcore.NewCore(encoder, writer, zap.DebugLevel)
-	logger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
+	logger := zap.New(core, zap.AddCaller())
 	Logger = logger.Sugar()
 
 	Logger.Infof("Logger initialized in %s mode. Writing to %s", mode, logPath)
@@ -82,20 +82,26 @@ func detectMode() string {
 
 // selectLogPath picks a standard file location for logs.
 func selectLogPath(appName, mode string) string {
+	var fileName string
+
 	if mode == "dev" {
-		if xdg := os.Getenv("XDG_STATE_HOME"); xdg != "" {
-			_ = os.MkdirAll(filepath.Join(xdg, appName), 0755)
-			return filepath.Join(xdg, appName, "debug.log")
-		}
-		if home, err := os.UserHomeDir(); err == nil {
-			path := filepath.Join(home, ".local", "state", appName)
-			_ = os.MkdirAll(path, 0755)
-			return filepath.Join(path, "debug.log")
-		}
+		fileName = "app-debug.log"
+	} else {
+		fileName = "app.log"
+
 	}
-	path := filepath.Join("/var", "log", appName)
-	_ = os.MkdirAll(path, 0755)
-	return filepath.Join(path, "app.log")
+
+	if xdg := os.Getenv("XDG_STATE_HOME"); xdg != "" {
+		_ = os.MkdirAll(filepath.Join(xdg, appName), 0755)
+		return filepath.Join(xdg, appName, fileName)
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		path := filepath.Join(home, ".local", "state", appName)
+		_ = os.MkdirAll(path, 0755)
+		return filepath.Join(path, fileName)
+	}
+
+	return filepath.Join("tmp", appName, fileName)
 }
 
 func detectLogLevel() zapcore.Level {
