@@ -36,11 +36,15 @@ func Init(appName string) {
 	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
 	encoderCfg.EncodeLevel = zapcore.CapitalLevelEncoder
 
+	level := detectLogLevel()
+
 	var encoder zapcore.Encoder
 	if mode == "dev" {
 		encoder = zapcore.NewConsoleEncoder(encoderCfg)
+		zapcore.NewCore(encoder, writer, level)
 	} else {
 		encoder = zapcore.NewJSONEncoder(encoderCfg)
+		zapcore.NewCore(encoder, writer, level)
 	}
 
 	core := zapcore.NewCore(encoder, writer, zap.DebugLevel)
@@ -92,4 +96,28 @@ func selectLogPath(appName, mode string) string {
 	path := filepath.Join("/var", "log", appName)
 	_ = os.MkdirAll(path, 0755)
 	return filepath.Join(path, "app.log")
+}
+
+func detectLogLevel() zapcore.Level {
+	level := strings.ToLower(os.Getenv("LOG_LEVEL"))
+	switch level {
+	case "debug":
+		return zap.DebugLevel
+	case "warn", "warning":
+		return zap.WarnLevel
+	case "error":
+		return zap.ErrorLevel
+	case "dpanic":
+		return zap.DPanicLevel
+	case "panic":
+		return zap.PanicLevel
+	case "fatal":
+		return zap.FatalLevel
+	default:
+		// Default: more verbose in dev, quieter in prod
+		if detectMode() == "dev" {
+			return zap.DebugLevel
+		}
+		return zap.InfoLevel
+	}
 }

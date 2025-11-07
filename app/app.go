@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"swarmcli/utils/log"
 	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"
@@ -36,8 +35,9 @@ func Init() {
 
 	log.Logger.Infow("starting Swarm CLI", "version", version)
 
+	log.Logger.Infoln("Available Commands:")
 	for _, cmd := range registry.All() {
-		fmt.Println("-", cmd.Name(), "→", cmd.Description())
+		log.Logger.Infoln("-", cmd.Name(), "→", cmd.Description())
 	}
 
 	registerView(loadingview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
