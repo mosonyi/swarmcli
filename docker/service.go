@@ -48,7 +48,7 @@ func updateService(ctx context.Context, c *client.Client, svc *swarm.Service) er
 		return fmt.Errorf("updating service %s: %w", svc.Spec.Name, err)
 	}
 	for _, w := range resp.Warnings {
-		fmt.Printf("⚠️  Warning for service %s: %s\n", svc.Spec.Name, w)
+		l().Warnf("⚠️  Warning for service %s: %s\n", svc.Spec.Name, w)
 	}
 	return nil
 }
@@ -75,8 +75,8 @@ func restartServiceCommon(ctx context.Context, c *client.Client, svc *swarm.Serv
 	if err := updateService(ctx, c, svc); err != nil {
 		return fmt.Errorf("forcing service update for %s: %w", svc.Spec.Name, err)
 	}
-	//fmt.Printf("🔁 Service %s restarted (replicas: %d)\n",
-	//	svc.Spec.Name, *svc.Spec.Mode.Replicated.Replicas)
+	l().Warnf("🔁 Service %s restarted (replicas: %d)\n",
+		svc.Spec.Name, *svc.Spec.Mode.Replicated.Replicas)
 	return nil
 }
 
@@ -197,7 +197,7 @@ func RestartServiceAndWait(ctx context.Context, serviceName string) error {
 					}
 				}
 				if len(extra) > 0 {
-					fmt.Printf("[RestartServiceAndWait] Warning: extra running tasks detected for service %q: %v\n", serviceName, extra)
+					l().Warnf("[RestartServiceAndWait] Warning: extra running tasks detected for service %q: %v\n", serviceName, extra)
 				}
 
 				return nil // all tasks replaced
