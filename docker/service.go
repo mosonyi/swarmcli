@@ -3,7 +3,6 @@ package docker
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -48,7 +47,7 @@ func updateService(ctx context.Context, c *client.Client, svc *swarm.Service) er
 		return fmt.Errorf("updating service %s: %w", svc.Spec.Name, err)
 	}
 	for _, w := range resp.Warnings {
-		fmt.Printf("⚠️  Warning for service %s: %s\n", svc.Spec.Name, w)
+		l().Warnf("⚠️  Warning for service %s: %s\n", svc.Spec.Name, w)
 	}
 	return nil
 }
@@ -75,8 +74,8 @@ func restartServiceCommon(ctx context.Context, c *client.Client, svc *swarm.Serv
 	if err := updateService(ctx, c, svc); err != nil {
 		return fmt.Errorf("forcing service update for %s: %w", svc.Spec.Name, err)
 	}
-	//fmt.Printf("🔁 Service %s restarted (replicas: %d)\n",
-	//	svc.Spec.Name, *svc.Spec.Mode.Replicated.Replicas)
+	l().Infof("🔁 Service %s restarted (replicas: %d)\n",
+		svc.Spec.Name, *svc.Spec.Mode.Replicated.Replicas)
 	return nil
 }
 
@@ -197,7 +196,7 @@ func RestartServiceAndWait(ctx context.Context, serviceName string) error {
 					}
 				}
 				if len(extra) > 0 {
-					fmt.Printf("[RestartServiceAndWait] Warning: extra running tasks detected for service %q: %v\n", serviceName, extra)
+					l().Warnf("[RestartServiceAndWait] Warning: extra running tasks detected for service %q: %v\n", serviceName, extra)
 				}
 
 				return nil // all tasks replaced
@@ -262,15 +261,15 @@ func RestartServiceWithProgress(ctx context.Context, serviceName string, progres
 				}
 			}
 
-			log.Printf("Sending progress: %d/%d\n", replaced, total)
+			l().Debugf("Sending progress: %d/%d\n", replaced, total)
 			if progressCh != nil {
 				select {
 				case progressCh <- ProgressUpdate{Replaced: replaced, Total: total}:
-					log.Printf("[Docker] Successfully sent to channel")
+					l().Debugf("[Docker] Successfully sent to channel")
 				case <-ctx.Done():
-					log.Printf("[Docker] Context done, cannot send")
+					l().Debugf("[Docker] Context done, cannot send")
 				default:
-					log.Printf("[Docker] Channel blocked, skipping send")
+					l().Debugf("[Docker] Channel blocked, skipping send")
 				}
 			}
 

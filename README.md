@@ -81,3 +81,28 @@ Then run:
 ```
 go run .
 ```
+
+## Logging
+
+```bash
+# Production (default)
+$ go run .
+# → writes JSON logs to  ~/.local/state/swarmcli/app.log
+
+# Development
+$ SWARMCLI_ENV=dev go run .
+# → writes pretty logs to ~/.local/state/swarmcli/app-debug.log
+```
+
+Colorize log tails. Not perfect but simple:
+```bash
+sudo apt install ccze
+tail -f ~/.local/state/swarmcli/app-debug.log | ccze -A 
+```
+
+### Integration tests
+The logs for the integration tests can be enabled with:
+
+```bash
+TEST_LOG=1 ./test-setup/testenv.sh test
+```

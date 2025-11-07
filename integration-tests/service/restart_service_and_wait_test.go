@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	swarmlog "swarmcli/utils/log"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ type restartTestCase struct {
 // TestRestartServiceAndWait_Parametrized verifies both single- and multi-replica
 // service restart behavior, using RestartServiceAndWait as the restart mechanism.
 func TestRestartServiceAndWait(t *testing.T) {
+	swarmlog.InitTestIfTestLogEnv()
 	cases := []restartTestCase{
 		{
 			name:         "single replica service (demo_whoami_single)",

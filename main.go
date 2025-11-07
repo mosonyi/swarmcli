@@ -1,9 +1,10 @@
 package main
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
-	"log"
 	"swarmcli/app"
+	swarmlog "swarmcli/utils/log"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func init() {
@@ -14,6 +15,6 @@ func main() {
 	p := tea.NewProgram(app.InitialModel(), tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {
-		log.Fatal(err)
+		swarmlog.L().Fatal(err)
 	}
 }
