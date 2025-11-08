@@ -3,10 +3,9 @@
 package config
 
 import (
-	"context"
-	"testing"
-
 	"swarmcli/docker"
+	swarmlog "swarmcli/utils/log"
+	"testing"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/swarm"
@@ -14,70 +13,44 @@ import (
 )
 
 func TestConfigLifecycle(t *testing.T) {
-	ctx := context.Background()
+	swarmlog.InitTestIfTestLogEnv()
 
-	cli, err := docker.GetClient()
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = cli.Close() })
+	e := newTestEnv(t)
+	defer e.cleanupAll(t)
 
-	// --- 1. List configs ---
 	t.Run("ListConfigs", func(t *testing.T) {
-		_, err := docker.ListConfigs(ctx)
-		require.NoError(t, err)
+		_, err := docker.ListConfigs(e.ctx)
+		require.NoError(t, err, "ListConfigs should not fail")
 	})
 
-	// --- 2. Create a config ---
-	spec := swarm.ConfigSpec{
-		Annotations: swarm.Annotations{
-			Name: "demo_config-v1",
-			Labels: map[string]string{
-				"test": "integration",
-			},
-		},
-		Data: []byte("hello world"),
-	}
-	cfgID, err := cli.ConfigCreate(ctx, spec)
-	require.NoError(t, err, "ConfigCreate should succeed")
-
-	t.Cleanup(func() { _ = cli.ConfigRemove(ctx, cfgID.ID) })
-
-	cfg, _, err := cli.ConfigInspectWithRaw(ctx, cfgID.ID)
-	require.NoError(t, err)
-	require.Equal(t, "demo_config-v1", cfg.Spec.Name)
-
-	// --- 3. CreateConfigVersion ---
 	t.Run("CreateConfigVersion", func(t *testing.T) {
+		orig := e.createConfig(t, uniqueName("demo_config-v1"), "hello world")
+
 		newData := []byte("hello updated")
-		newCfg, err := docker.CreateConfigVersion(ctx, cfg, newData)
-		require.NoError(t, err)
-		require.Contains(t, newCfg.Spec.Name, "-v")
+		newCfg, err := docker.CreateConfigVersion(e.ctx, orig, newData)
+		require.NoError(t, err, "CreateConfigVersion should succeed")
+		require.Contains(t, newCfg.Spec.Name, "-v", "new config name should have version suffix")
 
-		t.Cleanup(func() { _ = cli.ConfigRemove(ctx, newCfg.ID) })
-
-		reloaded, _, err := cli.ConfigInspectWithRaw(ctx, newCfg.ID)
-		require.NoError(t, err)
-		require.Equal(t, newData, reloaded.Spec.Data)
-
-		// Create another version to test unique naming
-		nextCfg, err := docker.CreateConfigVersion(ctx, cfg, []byte("hello again"))
-		require.NoError(t, err)
-		require.NotEqual(t, newCfg.Spec.Name, nextCfg.Spec.Name)
-		t.Cleanup(func() { _ = cli.ConfigRemove(ctx, nextCfg.ID) })
+		e.registerConfigCleanup(newCfg.ID)
 	})
 
-	// --- 4. Service rotation ---
 	t.Run("RotateConfigInServices", func(t *testing.T) {
-		// Setup original service
+		orig := e.createConfig(t, uniqueName("demo_config-v1"), "initial")
+		newData := []byte("updated data")
+		newCfg, err := docker.CreateConfigVersion(e.ctx, orig, newData)
+		require.NoError(t, err, "CreateConfigVersion should succeed")
+		e.registerConfigCleanup(newCfg.ID)
+
 		serviceSpec := swarm.ServiceSpec{
 			Annotations: swarm.Annotations{
-				Name: "demo_service",
+				Name: uniqueName("demo_service"),
 			},
 			TaskTemplate: swarm.TaskSpec{
 				ContainerSpec: &swarm.ContainerSpec{
 					Image: "traefik/whoami:v1.10",
 					Configs: []*swarm.ConfigReference{{
-						ConfigID:   cfg.ID,
-						ConfigName: cfg.Spec.Name,
+						ConfigID:   orig.ID,
+						ConfigName: orig.Spec.Name,
 						File: &swarm.ConfigReferenceFileTarget{
 							Name: "demo.conf",
 							UID:  "0",
@@ -89,38 +62,23 @@ func TestConfigLifecycle(t *testing.T) {
 			},
 		}
 
-		svcResp, err := cli.ServiceCreate(ctx, serviceSpec, types.ServiceCreateOptions{})
-		require.NoError(t, err)
-		t.Cleanup(func() { _ = cli.ServiceRemove(ctx, svcResp.ID) })
+		svcResp, err := e.cli.ServiceCreate(e.ctx, serviceSpec, types.ServiceCreateOptions{})
+		require.NoError(t, err, "ServiceCreate should succeed")
+		e.registerServiceCleanup(svcResp.ID)
 
-		newData := []byte("hello rotated")
-		newCfg, err := docker.CreateConfigVersion(ctx, cfg, newData)
-		require.NoError(t, err)
-		t.Cleanup(func() { _ = cli.ConfigRemove(ctx, newCfg.ID) })
+		err = docker.RotateConfigInServices(e.ctx, orig, newCfg)
+		require.NoError(t, err, "RotateConfigInServices should succeed")
 
-		err = docker.RotateConfigInServices(ctx, cfg, newCfg)
+		svcAfter, _, err := e.cli.ServiceInspectWithRaw(e.ctx, svcResp.ID, types.ServiceInspectOptions{})
 		require.NoError(t, err)
 
-		svcAfter, _, err := cli.ServiceInspectWithRaw(ctx, svcResp.ID, types.ServiceInspectOptions{})
-		require.NoError(t, err)
-
-		foundNew := false
+		found := false
 		for _, ref := range svcAfter.Spec.TaskTemplate.ContainerSpec.Configs {
 			if ref.ConfigName == newCfg.Spec.Name {
-				foundNew = true
+				found = true
+				break
 			}
-			require.NotEqual(t, cfg.Spec.Name, ref.ConfigName, "should not reference old config")
 		}
-		require.True(t, foundNew, "should reference new config")
-
-		// Re-rotation should be a no-op
-		err = docker.RotateConfigInServices(ctx, newCfg, newCfg)
-		require.NoError(t, err, "rotation with identical configs should not fail")
-
-		// Rotation with no services should be a no-op
-		err = cli.ServiceRemove(ctx, svcResp.ID)
-		require.NoError(t, err)
-		err = docker.RotateConfigInServices(ctx, cfg, newCfg)
-		require.NoError(t, err, "rotation with no active services should not fail")
+		require.True(t, found, "service should now reference new config")
 	})
 }

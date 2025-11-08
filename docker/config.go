@@ -3,7 +3,8 @@ package docker
 import (
 	"context"
 	"fmt"
-	"strings"
+	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -156,12 +157,13 @@ func RotateConfigInServices(ctx context.Context, oldCfg, newCfg swarm.Config) er
 
 // --- Helpers ---
 
+var versionSuffix = regexp.MustCompile(`^(.*)-v(\d+)$`)
+
 func nextConfigVersionName(baseName string) string {
-	if idx := strings.LastIndex(baseName, "-v"); idx != -1 {
-		var v int
-		if _, err := fmt.Sscanf(baseName[idx+2:], "%d", &v); err == nil {
-			return fmt.Sprintf("%s-v%d", baseName[:idx], v+1)
-		}
+	if m := versionSuffix.FindStringSubmatch(baseName); len(m) == 3 {
+		prefix := m[1]
+		v, _ := strconv.Atoi(m[2])
+		return fmt.Sprintf("%s-v%d", prefix, v+1)
 	}
 	return fmt.Sprintf("%s-v2", baseName)
 }
