@@ -13,5 +13,8 @@ type (
 		Old docker.ConfigWithDecodedData
 		New docker.ConfigWithDecodedData
 	}
+	editConfigMsg struct {
+		Name string
+	}
 	errorMsg error
 )

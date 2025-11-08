@@ -1,10 +1,10 @@
 package configsview
 
 import (
-	"fmt"
-	"swarmcli/views/confirmdialog"
+	"swarmcli/docker"
 	"swarmcli/views/view"
 
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -13,13 +13,10 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		m.list.SetSize(msg.Width, msg.Height-3)
-		m.confirmDialog.Width = msg.Width
-		m.confirmDialog.Height = msg.Height
 		return m, nil
 
-	// ---- Async results ----
 	case configsLoadedMsg:
-		items := make([]tea.Item, len(msg))
+		items := make([]list.Item, len(msg))
 		for i, cfg := range msg {
 			items[i] = configItemFromSwarm(cfg.Config)
 		}
@@ -34,54 +31,41 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	case configRotatedMsg:
 		return m, tea.Printf("Rotated %s → %s", msg.Old.Config.Spec.Name, msg.New.Config.Spec.Name)
 
+	case editConfigMsg:
+		// Suspend Bubble Tea to safely run an external editor
+		cleanup := tea.Suspend()
+		defer cleanup()
+
+		newCfg, err := runEditorForConfig(msg.Name)
+		if err != nil {
+			return m, tea.Printf("Editor failed: %v", err)
+		}
+		if newCfg == nil {
+			return m, tea.Printf("No changes made to %s", msg.Name)
+		}
+		return m, configUpdatedMsg{
+			Old: docker.ConfigWithDecodedData{Config: newCfg.Config}, // optional
+			New: *newCfg,
+		}
+
 	case errorMsg:
 		m.state = stateError
 		m.err = msg
 		return m, nil
 
-	// ---- Confirmation handling ----
 	case tea.KeyMsg:
-		if m.confirmDialog.Visible {
-			var cmd tea.Cmd
-			m.confirmDialog, cmd = m.confirmDialog.Update(msg)
-			return m, cmd
-		}
-
 		switch msg.String() {
 		case "q", "esc":
 			return nil, view.SwitchBack()
 		case "r":
-			cfg := m.selectedConfig()
-			if cfg == "" {
-				return m, nil
-			}
-			m.pendingAction = "rotate"
-			m.confirmDialog.Visible = true
-			m.confirmDialog.Message = fmt.Sprintf("Rotate config %q across all services?", cfg)
-			return m, nil
+			return m, rotateConfigCmd(m.selectedConfig())
 		case "e":
 			return m, editConfigCmd(m.selectedConfig())
 		case "enter":
 			return m, inspectConfigCmd(m.selectedConfig())
 		}
-
-	case confirmdialog.ResultMsg:
-		if !msg.Confirmed {
-			m.pendingAction = ""
-			m.confirmDialog.Visible = false
-			return m, nil
-		}
-
-		cfg := m.selectedConfig()
-		switch m.pendingAction {
-		case "rotate":
-			m.pendingAction = ""
-			m.confirmDialog.Visible = false
-			return m, rotateConfigCmd(cfg)
-		}
 	}
 
-	// ---- State-driven updates ----
 	switch m.state {
 	case stateLoading:
 		var cmd tea.Cmd
