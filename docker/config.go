@@ -157,12 +157,11 @@ func RotateConfigInServices(ctx context.Context, oldCfg, newCfg swarm.Config) er
 // --- Helpers ---
 
 func nextConfigVersionName(baseName string) string {
-	if idx := strings.LastIndex(baseName, "@v"); idx != -1 {
-		verStr := baseName[idx+2:]
+	if idx := strings.LastIndex(baseName, "-v"); idx != -1 {
 		var v int
-		if _, err := fmt.Sscanf(verStr, "%d", &v); err == nil {
-			return fmt.Sprintf("%s@v%d", baseName[:idx], v+1)
+		if _, err := fmt.Sscanf(baseName[idx+2:], "%d", &v); err == nil {
+			return fmt.Sprintf("%s-v%d", baseName[:idx], v+1)
 		}
 	}
-	return fmt.Sprintf("%s@v2", baseName)
+	return fmt.Sprintf("%s-v2", baseName)
 }
