@@ -35,7 +35,7 @@ jobs:
         version: latest
 
     - name: Run lint
-      run: golangci-lint run ./...
+      run: golangci-lint run ./... --build-tags=integration
 
     - name: Build CLI
       run: go build -v -o swarmcli .
