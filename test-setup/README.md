@@ -29,9 +29,16 @@ docker compose ps manager worker1 worker2
 ```
 
 Create a Docker context pointing to the manager API on 22375:
-```bash
-docker context create swarmcli --description "Test SwarmCLI" --docker "host=tcp://localhost:22375"
-```
+* If you're using devcontainer:
+  ```bash
+  docker context create swarmcli --description "Test SwarmCLI" --docker "host=tcp://host.docker.internal:22375"
+  ```
+
+* Otherwise:
+  ```bash
+  docker context create swarmcli --description "Test SwarmCLI" --docker "host=tcp://localhost:22375"
+  ```
+
 
 Use the new context:
 ```bash
