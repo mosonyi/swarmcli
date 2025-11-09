@@ -43,6 +43,10 @@ func New(width, height int) Model {
 func (m Model) Name() string { return ViewName }
 
 func (m Model) Init() tea.Cmd {
+	return nil
+}
+
+func LoadConfigs() tea.Cmd {
 	return loadConfigsCmd()
 }
 
