@@ -61,22 +61,20 @@ func rotateConfigCmd(name string) tea.Cmd {
 func inspectConfigCmd(name string) tea.Cmd {
 	return func() tea.Msg {
 		cfg, err := docker.InspectConfig(context.Background(), name)
-		var json string
+		jsonStr := ""
 		if err != nil {
-			json = fmt.Sprintf("Error inspecting config %q: %v", name, err)
-		}
-		jsonConfig, err := cfg.JSON()
-		if err != nil {
-			json = fmt.Sprintf("Error marshalling config %q: %v", name, err)
+			jsonStr = fmt.Sprintf("Error inspecting config %q: %v", name, err)
+		} else if data, err := cfg.JSON(); err != nil {
+			jsonStr = fmt.Sprintf("Error marshalling config %q: %v", name, err)
 		} else {
-			json = string(jsonConfig)
+			jsonStr = string(data)
 		}
 
 		return view.NavigateToMsg{
 			ViewName: inspectview.ViewName,
 			Payload: map[string]interface{}{
 				"title": fmt.Sprintf("Config: %s", name),
-				"json":  json,
+				"json":  jsonStr,
 				"meta": map[string]interface{}{
 					"ID":   cfg.Config.ID,
 					"Name": cfg.Config.Spec.Name,
