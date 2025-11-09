@@ -2,9 +2,11 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -15,6 +17,39 @@ import (
 type ConfigWithDecodedData struct {
 	Config swarm.Config
 	Data   []byte
+}
+
+func (cfg *ConfigWithDecodedData) JSON() ([]byte, error) {
+	type jsonConfig struct {
+		Config     swarm.Config `json:"Config"`
+		DataParsed any          `json:"DataParsed,omitempty"`
+	}
+
+	obj := jsonConfig{Config: cfg.Config}
+
+	parsedMap := make(map[string]string)
+	parsed := true
+
+	for _, line := range strings.Split(string(cfg.Data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			parsed = false
+			break
+		}
+		parsedMap[parts[0]] = parts[1]
+	}
+
+	if parsed && len(parsedMap) > 0 {
+		obj.DataParsed = parsedMap
+	} else {
+		obj.DataParsed = string(cfg.Data)
+	}
+
+	return json.Marshal(obj)
 }
 
 // ListConfigs retrieves all Docker Swarm configs.

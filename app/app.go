@@ -2,6 +2,7 @@ package app
 
 import (
 	"swarmcli/utils/log"
+	configsview "swarmcli/views/configs"
 	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"
 	loadingview "swarmcli/views/loading"
@@ -50,6 +51,10 @@ func Init() {
 	})
 	registerView(logsview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		return logsview.New(w, h), logsview.Load(payload.(string))
+	})
+
+	registerView(configsview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
+		return configsview.New(w, h), configsview.LoadConfigs()
 	})
 
 	registerView(inspectview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {

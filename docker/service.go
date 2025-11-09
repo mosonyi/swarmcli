@@ -132,90 +132,24 @@ func RestartService(serviceName string) error {
 	return restartServiceCommon(ctx, c, svc)
 }
 
-func RestartServiceAndWait(ctx context.Context, serviceName string) error {
-	c, err := GetClient()
-	if err != nil {
-		return fmt.Errorf("docker client: %w", err)
-	}
-	defer c.Close()
-
-	svc, err := findServiceByName(ctx, c, serviceName)
-	if err != nil {
-		return err
-	}
-	if svc.Spec.Mode.Replicated == nil {
-		return fmt.Errorf("service %s is not in replicated mode", serviceName)
-	}
-
-	replicas := *svc.Spec.Mode.Replicated.Replicas
-
-	// Snapshot old running tasks
-	oldTasks := make(map[string]bool)
-	tasks, err := c.TaskList(ctx, types.TaskListOptions{})
-	if err != nil {
-		return fmt.Errorf("listing tasks: %w", err)
-	}
-	for _, t := range tasks {
-		if t.ServiceID == svc.ID && t.Status.State == "running" {
-			oldTasks[t.ID] = true
-		}
-	}
-
-	// Trigger restart
-	if err := restartServiceCommon(ctx, c, svc); err != nil {
-		return err
-	}
-
-	// Wait until all running tasks are replaced
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("waiting for service %s: %w", serviceName, ctx.Err())
-		default:
-			tasks, err := c.TaskList(ctx, types.TaskListOptions{})
-			if err != nil {
-				return fmt.Errorf("listing tasks: %w", err)
-			}
-
-			running, newCount := 0, 0
-			for _, t := range tasks {
-				if t.ServiceID == svc.ID && t.Status.State == "running" {
-					running++
-					if !oldTasks[t.ID] {
-						newCount++
-					}
-				}
-			}
-
-			if running == int(replicas) && newCount == running {
-				// Check for extra tasks
-				var extra []string
-				for _, t := range tasks {
-					if t.ServiceID == svc.ID && t.Status.State == "running" && !oldTasks[t.ID] && newCount > int(replicas) {
-						extra = append(extra, t.ID)
-					}
-				}
-				if len(extra) > 0 {
-					l().Warnf("[RestartServiceAndWait] Warning: extra running tasks detected for service %q: %v\n", serviceName, extra)
-				}
-
-				return nil // all tasks replaced
-			}
-
-			time.Sleep(time.Second)
-		}
-	}
-}
-
 type ProgressUpdate struct {
 	Replaced int
+	Running  int
 	Total    int
 }
 
+func RestartServiceAndWait(ctx context.Context, serviceName string) error {
+	return restartServiceAndWaitInternal(ctx, serviceName, nil)
+}
+
 func RestartServiceWithProgress(ctx context.Context, serviceName string, progressCh chan<- ProgressUpdate) error {
+	return restartServiceAndWaitInternal(ctx, serviceName, progressCh)
+}
+
+func restartServiceAndWaitInternal(ctx context.Context, serviceName string, progressCh chan<- ProgressUpdate) error {
 	cli, err := GetClient()
 	if err != nil {
-		return err
+		return fmt.Errorf("docker client: %w", err)
 	}
 	defer cli.Close()
 
@@ -223,60 +157,110 @@ func RestartServiceWithProgress(ctx context.Context, serviceName string, progres
 	if err != nil {
 		return err
 	}
-
 	if svc.Spec.Mode.Replicated == nil {
-		return fmt.Errorf("service %s is not replicated", serviceName)
+		return fmt.Errorf("service %s is not in replicated mode", serviceName)
 	}
+
 	total := int(*svc.Spec.Mode.Replicated.Replicas)
+	l().Infof("🔁 Restarting service %s (replicas: %d)...", serviceName, total)
 
 	// Snapshot old tasks
-	oldTasks := make(map[string]bool)
-	tasks, _ := cli.TaskList(ctx, types.TaskListOptions{})
+	oldTasks := map[string]swarm.Task{}
+	tasks, err := cli.TaskList(ctx, types.TaskListOptions{})
+	if err != nil {
+		return fmt.Errorf("listing initial tasks: %w", err)
+	}
 	for _, t := range tasks {
-		if t.ServiceID == svc.ID && t.Status.State == "running" {
-			oldTasks[t.ID] = true
+		if t.ServiceID == svc.ID && t.DesiredState == swarm.TaskStateRunning {
+			oldTasks[t.ID] = t
 		}
 	}
+	l().Debugf("📦 Snapshot: %d old running tasks for %s", len(oldTasks), serviceName)
 
-	// Trigger restart
+	// Trigger rolling restart
 	if err := restartServiceCommon(ctx, cli, svc); err != nil {
-		return err
+		return fmt.Errorf("restart trigger: %w", err)
 	}
 
-	// Wait and report progress
+	type slotState struct {
+		oldTaskID string
+		newTaskID string
+	}
+
+	slots := make(map[int]slotState)
+	for _, t := range oldTasks {
+		slots[t.Slot] = slotState{oldTaskID: t.ID}
+	}
+
+	stableStart := time.Now()
+	lastProgress := time.Now()
+
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("waiting for %s restart: %w", serviceName, ctx.Err())
 		default:
-			tasks, _ := cli.TaskList(ctx, types.TaskListOptions{})
-			replaced := 0
-			running := 0
-			for _, t := range tasks {
-				if t.ServiceID == svc.ID && t.Status.State == "running" {
-					running++
-					if !oldTasks[t.ID] {
-						replaced++
-					}
-				}
+		}
+
+		tasks, err := cli.TaskList(ctx, types.TaskListOptions{})
+		if err != nil {
+			return fmt.Errorf("listing tasks: %w", err)
+		}
+
+		running := 0
+		replaced := 0
+		updating := 0
+
+		for _, t := range tasks {
+			if t.ServiceID != svc.ID || t.DesiredState != swarm.TaskStateRunning {
+				continue
 			}
 
-			l().Debugf("Sending progress: %d/%d\n", replaced, total)
-			if progressCh != nil {
-				select {
-				case progressCh <- ProgressUpdate{Replaced: replaced, Total: total}:
-					l().Debugf("[Docker] Successfully sent to channel")
-				case <-ctx.Done():
-					l().Debugf("[Docker] Context done, cannot send")
-				default:
-					l().Debugf("[Docker] Channel blocked, skipping send")
-				}
-			}
+			state := t.Status.State
+			slot := t.Slot
+			s := slots[slot]
 
-			if running == total && replaced == total {
+			if state == swarm.TaskStateRunning {
+				running++
+				if s.oldTaskID != "" && t.ID != s.oldTaskID {
+					s.newTaskID = t.ID
+					replaced++
+				}
+				slots[slot] = s
+			} else if state == swarm.TaskStatePreparing ||
+				state == swarm.TaskStateStarting ||
+				state == swarm.TaskStatePending ||
+				state == swarm.TaskStateAssigned {
+				updating++
+			}
+		}
+
+		if progressCh != nil && time.Since(lastProgress) > 1*time.Second {
+			select {
+			case progressCh <- ProgressUpdate{Replaced: replaced, Running: running, Total: total}:
+			default:
+			}
+			lastProgress = time.Now()
+		}
+
+		// If all slots have a new running task, we’re done
+		allReplaced := true
+		for _, s := range slots {
+			if s.newTaskID == "" {
+				allReplaced = false
+				break
+			}
+		}
+
+		if allReplaced && running >= total && updating == 0 {
+			if time.Since(stableStart) > 3*time.Second {
+				l().Infof("✅ Service %s stable: %d/%d new tasks running", serviceName, replaced, total)
 				return nil
 			}
-			time.Sleep(time.Second)
+		} else {
+			stableStart = time.Now()
 		}
+
+		time.Sleep(500 * time.Millisecond)
 	}
 }
