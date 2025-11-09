@@ -21,19 +21,22 @@ type ConfigWithDecodedData struct {
 
 // JSON returns a JSON representation of the config suitable for the inspect view.
 // The Data field is parsed as key=value lines into a nested JSON object if possible.
+// JSON returns a JSON representation of the config suitable for the inspect view.
+// The Data field is parsed as key=value lines into a nested JSON object if possible,
+// otherwise it is shown as a UTF-8 string.
 func (cfg *ConfigWithDecodedData) JSON() ([]byte, error) {
 	type jsonConfig struct {
-		Config     swarm.Config      `json:"Config"`
-		DataParsed map[string]string `json:"DataParsed,omitempty"`
+		Config     swarm.Config `json:"Config"`
+		DataParsed any          `json:"DataParsed,omitempty"`
 	}
 
 	obj := jsonConfig{
 		Config: cfg.Config,
 	}
 
-	// Attempt to parse key=value lines
-	parsedMap := make(map[string]string)
+	// Attempt key=value parsing
 	lines := strings.Split(string(cfg.Data), "\n")
+	parsedMap := make(map[string]string)
 	parsed := true
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -47,8 +50,12 @@ func (cfg *ConfigWithDecodedData) JSON() ([]byte, error) {
 		}
 		parsedMap[parts[0]] = parts[1]
 	}
+
 	if parsed && len(parsedMap) > 0 {
 		obj.DataParsed = parsedMap
+	} else {
+		// fallback: show as UTF-8 string
+		obj.DataParsed = string(cfg.Data)
 	}
 
 	return json.Marshal(obj)
