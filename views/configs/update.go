@@ -55,7 +55,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "r":
-			//return m, rotateConfigCmd(m.selectedConfig())
+			return m, rotateConfigCmd(m.selectedConfig())
 		case "e":
 			return m, editConfigCmd(m.selectedConfig())
 		case "enter":
