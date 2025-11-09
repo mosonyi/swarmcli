@@ -1,10 +1,12 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -44,12 +46,39 @@ func (cfg *ConfigWithDecodedData) JSON() ([]byte, error) {
 	}
 
 	if parsed && len(parsedMap) > 0 {
-		obj.DataParsed = parsedMap
+		// Sort keys for consistent ordering
+		keys := make([]string, 0, len(parsedMap))
+		for k := range parsedMap {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		ordered := make(map[string]string, len(parsedMap))
+		for _, k := range keys {
+			ordered[k] = parsedMap[k]
+		}
+		obj.DataParsed = ordered
 	} else {
 		obj.DataParsed = string(cfg.Data)
 	}
 
 	return json.Marshal(obj)
+}
+
+// PrettyJSON returns the JSON representation of the config,
+// but pretty-printed (indented) for human-readable editing.
+func (cfg *ConfigWithDecodedData) PrettyJSON() ([]byte, error) {
+	raw, err := cfg.JSON()
+	if err != nil {
+		return nil, err
+	}
+
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, raw, "", "  "); err != nil {
+		return nil, err
+	}
+
+	return pretty.Bytes(), nil
 }
 
 // ListConfigs retrieves all Docker Swarm configs.
