@@ -19,7 +19,7 @@ services:
         echo "Starting whoami service...";
         while true; do
           echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r" \
-          "Service: whoami\nConfig:\n$(cat /etc/whoami/config)\n\n" \
+          "Service: whoami\nConfig:\n$$(cat /etc/whoami/config)\n\n" \
           | nc -l -p 80 -q 1;
         done
       '
@@ -38,7 +38,7 @@ services:
         echo "Starting whoami_single service...";
         while true; do
           echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r" \
-          "Service: whoami_single\nConfig:\n$(cat /etc/whoami/config)\n\n" \
+          "Service: whoami_single\nConfig:\n$$(cat /etc/whoami/config)\n\n" \
           | nc -l -p 80 -q 1;
         done
       '
