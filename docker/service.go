@@ -160,80 +160,107 @@ func restartServiceAndWaitInternal(ctx context.Context, serviceName string, prog
 	if svc.Spec.Mode.Replicated == nil {
 		return fmt.Errorf("service %s is not in replicated mode", serviceName)
 	}
+
 	total := int(*svc.Spec.Mode.Replicated.Replicas)
+	l().Infof("🔁 Restarting service %s (replicas: %d)...", serviceName, total)
 
 	// Snapshot old tasks
-	oldTasks := make(map[string]bool)
-	tasks, _ := cli.TaskList(ctx, types.TaskListOptions{})
+	oldTasks := map[string]swarm.Task{}
+	tasks, err := cli.TaskList(ctx, types.TaskListOptions{})
+	if err != nil {
+		return fmt.Errorf("listing initial tasks: %w", err)
+	}
 	for _, t := range tasks {
 		if t.ServiceID == svc.ID && t.DesiredState == swarm.TaskStateRunning {
-			oldTasks[t.ID] = true
+			oldTasks[t.ID] = t
 		}
 	}
+	l().Debugf("📦 Snapshot: %d old running tasks for %s", len(oldTasks), serviceName)
 
-	// Trigger restart
+	// Trigger rolling restart
 	if err := restartServiceCommon(ctx, cli, svc); err != nil {
-		return err
+		return fmt.Errorf("restart trigger: %w", err)
 	}
 
-	// Wait loop
-	stableSince := time.Now()
+	type slotState struct {
+		oldTaskID string
+		newTaskID string
+	}
+
+	slots := make(map[int]slotState)
+	for _, t := range oldTasks {
+		slots[t.Slot] = slotState{oldTaskID: t.ID}
+	}
+
+	stableStart := time.Now()
+	lastProgress := time.Now()
+
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("waiting for service %s: %w", serviceName, ctx.Err())
-
+			return fmt.Errorf("waiting for %s restart: %w", serviceName, ctx.Err())
 		default:
-			tasks, err := cli.TaskList(ctx, types.TaskListOptions{})
-			if err != nil {
-				return fmt.Errorf("listing tasks: %w", err)
-			}
-
-			running := 0
-			replaced := 0
-			updating := 0
-			stuck := 0
-
-			for _, t := range tasks {
-				if t.ServiceID != svc.ID {
-					continue
-				}
-
-				switch t.Status.State {
-				case swarm.TaskStateRunning:
-					if t.DesiredState == swarm.TaskStateRunning {
-						running++
-						if !oldTasks[t.ID] {
-							replaced++
-						}
-					}
-				case swarm.TaskStatePreparing, swarm.TaskStateStarting, swarm.TaskStatePending:
-					updating++
-				case swarm.TaskStateShutdown, swarm.TaskStateComplete, swarm.TaskStateFailed, swarm.TaskStateRejected:
-					// these should eventually disappear, but may linger briefly
-					stuck++
-				}
-			}
-
-			// Send progress update if channel provided
-			if progressCh != nil {
-				select {
-				case progressCh <- ProgressUpdate{Replaced: replaced, Running: running, Total: total}:
-				default:
-				}
-			}
-
-			// If all desired replicas are running and no updates are in flight, consider stable
-			if running >= total && updating == 0 {
-				// Require stability for a few seconds to avoid false positives
-				if time.Since(stableSince) > 5*time.Second {
-					return nil
-				}
-			} else {
-				stableSince = time.Now()
-			}
-
-			time.Sleep(time.Second)
 		}
+
+		tasks, err := cli.TaskList(ctx, types.TaskListOptions{})
+		if err != nil {
+			return fmt.Errorf("listing tasks: %w", err)
+		}
+
+		running := 0
+		replaced := 0
+		updating := 0
+
+		for _, t := range tasks {
+			if t.ServiceID != svc.ID || t.DesiredState != swarm.TaskStateRunning {
+				continue
+			}
+
+			state := t.Status.State
+			slot := t.Slot
+			s := slots[slot]
+
+			if state == swarm.TaskStateRunning {
+				running++
+				if s.oldTaskID != "" && t.ID != s.oldTaskID {
+					s.newTaskID = t.ID
+					replaced++
+				}
+				slots[slot] = s
+			} else if state == swarm.TaskStatePreparing ||
+				state == swarm.TaskStateStarting ||
+				state == swarm.TaskStatePending ||
+				state == swarm.TaskStateAssigned {
+				updating++
+			}
+		}
+
+		if progressCh != nil && time.Since(lastProgress) > 1*time.Second {
+			select {
+			case progressCh <- ProgressUpdate{Replaced: replaced, Running: running, Total: total}:
+			default:
+			}
+			lastProgress = time.Now()
+		}
+
+		// If all slots have a new running task, we’re done
+		allReplaced := true
+		for _, s := range slots {
+			if s.newTaskID == "" {
+				allReplaced = false
+				break
+			}
+		}
+
+		if allReplaced && running >= total && updating == 0 {
+			if time.Since(stableStart) > 3*time.Second {
+				l().Infof("✅ Service %s stable: %d/%d new tasks running", serviceName, replaced, total)
+				return nil
+			}
+		} else {
+			stableStart = time.Now()
+		}
+
+		time.Sleep(500 * time.Millisecond)
 	}
 }
