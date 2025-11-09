@@ -28,12 +28,6 @@ func loadConfigsCmd() tea.Cmd {
 	}
 }
 
-func editConfigCmd(name string) tea.Cmd {
-	return func() tea.Msg {
-		return editConfigMsg{Name: name}
-	}
-}
-
 func rotateConfigCmd(name string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
