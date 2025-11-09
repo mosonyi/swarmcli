@@ -18,7 +18,7 @@ type (
 	}
 	editConfigDoneMsg struct {
 		Name    string
-		Updated bool
+		Changed bool
 		Config  docker.ConfigWithDecodedData
 	}
 	editConfigErrorMsg struct {

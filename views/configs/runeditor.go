@@ -10,63 +10,78 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Runs the external editor and returns a message when done
+// editConfigInEditorCmd runs the external editor using ExecProcess
 func editConfigInEditorCmd(name string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		cfg, err := docker.InspectConfig(ctx, name)
 		if err != nil {
-			return err
+			return editConfigErrorMsg{err}
 		}
 
+		l().Infoln("Creating tmp dir")
 		tmp, err := os.CreateTemp("", fmt.Sprintf("%s-*.conf", cfg.Config.Spec.Name))
 		if err != nil {
-			return fmt.Errorf("failed to create temp file: %w", err)
+			return editConfigErrorMsg{fmt.Errorf("failed to create temp file: %w", err)}
 		}
 		defer os.Remove(tmp.Name())
 
 		if _, err := tmp.Write(cfg.Data); err != nil {
-			return fmt.Errorf("failed to write config to temp file: %w", err)
+			return editConfigErrorMsg{fmt.Errorf("failed to write config to temp file: %w", err)}
 		}
 		tmp.Close()
+		l().Infoln("Created tmp file")
 
 		editor := os.Getenv("EDITOR")
+
+		l().Infoln("Opening editor:", editor)
 		if editor == "" {
 			editor = "nano"
 		}
+
+		l().Infoln("Executing command")
 
 		cmd := exec.Command(editor, tmp.Name())
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("editor failed: %w", err)
-		}
+		// THIS IS THE FIX: return the tea.Cmd directly
+		return tea.ExecProcess(cmd, func(err error) tea.Msg {
+			l().Infoln("In t.ExecProcess")
+			if err != nil {
+				return editConfigErrorMsg{fmt.Errorf("editor failed: %w", err)}
+			}
 
-		newData, err := os.ReadFile(tmp.Name())
-		if err != nil {
-			return fmt.Errorf("failed to read modified file: %w", err)
-		}
+			newData, err := os.ReadFile(tmp.Name())
+			if err != nil {
+				return editConfigErrorMsg{fmt.Errorf("failed to read edited file: %w", err)}
+			}
 
-		if string(newData) == string(cfg.Data) {
-			return editConfigDoneMsg{cfg.Config.Spec.Name, false, docker.ConfigWithDecodedData{Config: cfg.Config, Data: cfg.Data}} // no changes
-		}
+			if string(newData) == string(cfg.Data) {
+				return editConfigDoneMsg{
+					Name:    cfg.Config.Spec.Name,
+					Changed: false,
+					Config: docker.ConfigWithDecodedData{
+						Config: cfg.Config,
+						Data:   cfg.Data,
+					},
+				}
+			}
 
-		newCfg, err := docker.CreateConfigVersion(ctx, cfg.Config, newData)
-		if err != nil {
-			return err
-		}
+			newCfg, err := docker.CreateConfigVersion(ctx, cfg.Config, newData)
+			if err != nil {
+				return editConfigErrorMsg{err}
+			}
 
-		wrapped := docker.ConfigWithDecodedData{
-			Config: newCfg,
-			Data:   newData,
-		}
-
-		return editConfigDoneMsg{
-			newCfg.Spec.Name,
-			true,
-			wrapped,
-		}
+			return editConfigDoneMsg{
+				Name:    newCfg.Spec.Name,
+				Changed: true,
+				Config: docker.ConfigWithDecodedData{
+					Config: newCfg,
+					Data:   newData,
+				},
+			}
+		})
 	}
 }

@@ -31,15 +31,13 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		return m, tea.Printf("Rotated %s → %s", msg.Old.Config.Spec.Name, msg.New.Config.Spec.Name)
 
 	case editConfigMsg:
-		// First, trigger a suspend message so we can safely run the editor next update.
-		return m, func() tea.Msg { return tea.Suspend() }
-
-	case tea.SuspendMsg:
-		// Now the TUI is safely suspended. Launch the external editor.
+		// Launch editor via ExecProcess, suspending TUI automatically
 		return m, editConfigInEditorCmd(m.selectedConfig())
 
 	case editConfigDoneMsg:
-		// Custom message returned after editing finishes successfully.
+		if msg.Changed {
+			m.list.InsertItem(0, configItemFromSwarm(msg.Config.Config))
+		}
 		return m, tea.Printf("Edited config: %s", msg.Name)
 
 	case editConfigErrorMsg:
@@ -57,7 +55,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		case "r":
 			return m, rotateConfigCmd(m.selectedConfig())
 		case "e":
-			return m, editConfigCmd(m.selectedConfig())
+			return m, editConfigInEditorCmd(m.selectedConfig())
 		case "enter":
 			return m, inspectConfigCmd(m.selectedConfig())
 		}
@@ -66,7 +64,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	switch m.state {
 	case stateLoading:
 		var cmd tea.Cmd
-		//m.loadingView, cmd = m.loadingView.Update(msg)
+		// m.loadingView, cmd = m.loadingView.Update(msg)
 		return m, cmd
 	case stateReady:
 		var cmd tea.Cmd

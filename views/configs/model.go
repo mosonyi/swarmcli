@@ -15,9 +15,9 @@ type Model struct {
 	loadingView   loading.Model
 	confirmDialog confirmdialog.Model
 
-	state state
-	//pendingAction string
-	err error
+	state         state
+	pendingAction string
+	err           error
 }
 
 type state int
