@@ -9,6 +9,13 @@ import (
 )
 
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
+	var cmd tea.Cmd
+	var consumed bool
+	m, cmd, consumed = m.handleConfirmDialog(msg)
+	if consumed {
+		return m, cmd
+	}
+
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:
