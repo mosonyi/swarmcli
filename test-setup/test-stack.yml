@@ -1,10 +1,46 @@
+version: "3.9"
+
+configs:
+  whoami_config:
+    file: ./configs/whoami.conf
+  whoami_single_config:
+    file: ./configs/whoami_single.conf
+
 services:
   whoami:
-    image: traefik/whoami:v1.10
+    image: alpine:3.20
+    configs:
+      - source: whoami_config
+        target: /etc/whoami/config
     deploy:
       replicas: 2
+    command: >
+      sh -c '
+        echo "Starting whoami service...";
+        while true; do
+          echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r" \
+          "Service: whoami\nConfig:\n$(cat /etc/whoami/config)\n\n" \
+          | nc -l -p 80 -q 1;
+        done
+      '
+    ports:
+      - "8081:80"
 
   whoami_single:
-    image: traefik/whoami:v1.10
+    image: alpine:3.20
+    configs:
+      - source: whoami_single_config
+        target: /etc/whoami/config
     deploy:
       replicas: 1
+    command: >
+      sh -c '
+        echo "Starting whoami_single service...";
+        while true; do
+          echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r" \
+          "Service: whoami_single\nConfig:\n$(cat /etc/whoami/config)\n\n" \
+          | nc -l -p 80 -q 1;
+        done
+      '
+    ports:
+      - "8082:80"
