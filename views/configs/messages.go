@@ -16,5 +16,10 @@ type (
 	editConfigMsg struct {
 		Name string
 	}
-	errorMsg error
+	editConfigDoneMsg struct {
+		updated bool
+		config  docker.ConfigWithDecodedData
+	}
+	editConfigErrorMsg error
+	errorMsg           error
 )

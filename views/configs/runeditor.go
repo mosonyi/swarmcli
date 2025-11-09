@@ -6,57 +6,66 @@ import (
 	"os"
 	"os/exec"
 	"swarmcli/docker"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
-func runEditorForConfig(name string) (*docker.ConfigWithDecodedData, error) {
-	ctx := context.Background()
-	cfg, err := docker.InspectConfig(ctx, name)
-	if err != nil {
-		return nil, err
-	}
+// Runs the external editor and returns a message when done
+func editConfigInEditorCmd(name string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		cfg, err := docker.InspectConfig(ctx, name)
+		if err != nil {
+			return err
+		}
 
-	tmp, err := os.CreateTemp("", fmt.Sprintf("%s-*.conf", cfg.Config.Spec.Name))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temp file: %w", err)
-	}
-	defer os.Remove(tmp.Name())
+		tmp, err := os.CreateTemp("", fmt.Sprintf("%s-*.conf", cfg.Config.Spec.Name))
+		if err != nil {
+			return fmt.Errorf("failed to create temp file: %w", err)
+		}
+		defer os.Remove(tmp.Name())
 
-	if _, err := tmp.Write(cfg.Data); err != nil {
-		return nil, fmt.Errorf("failed to write config to temp file: %w", err)
-	}
-	tmp.Close()
+		if _, err := tmp.Write(cfg.Data); err != nil {
+			return fmt.Errorf("failed to write config to temp file: %w", err)
+		}
+		tmp.Close()
 
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "nano"
-	}
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			editor = "nano"
+		}
 
-	cmd := exec.Command(editor, tmp.Name())
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+		cmd := exec.Command(editor, tmp.Name())
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("editor failed: %w", err)
-	}
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("editor failed: %w", err)
+		}
 
-	newData, err := os.ReadFile(tmp.Name())
-	if err != nil {
-		return nil, fmt.Errorf("failed to read modified file: %w", err)
-	}
+		newData, err := os.ReadFile(tmp.Name())
+		if err != nil {
+			return fmt.Errorf("failed to read modified file: %w", err)
+		}
 
-	if string(newData) == string(cfg.Data) {
-		return nil, nil // no changes
-	}
+		if string(newData) == string(cfg.Data) {
+			return editConfigDoneMsg{false, docker.ConfigWithDecodedData{cfg.Config, cfg.Data}} // no changes
+		}
 
-	newCfg, err := docker.CreateConfigVersion(ctx, cfg.Config, newData)
-	if err != nil {
-		return nil, err
-	}
+		newCfg, err := docker.CreateConfigVersion(ctx, cfg.Config, newData)
+		if err != nil {
+			return err
+		}
 
-	wrapped := docker.ConfigWithDecodedData{
-		Config: newCfg,
-		Data:   newData,
+		wrapped := docker.ConfigWithDecodedData{
+			Config: newCfg,
+			Data:   newData,
+		}
+
+		return editConfigDoneMsg{
+			true,
+			wrapped,
+		}
 	}
-	return &wrapped, nil
 }

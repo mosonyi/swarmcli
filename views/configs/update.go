@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"golang.org/x/text/message"
 )
 
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
@@ -32,21 +33,11 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		return m, tea.Printf("Rotated %s → %s", msg.Old.Config.Spec.Name, msg.New.Config.Spec.Name)
 
 	case editConfigMsg:
-		// Suspend Bubble Tea to safely run an external editor
-		cleanup := tea.Suspend()
-		defer cleanup()
-
-		newCfg, err := runEditorForConfig(msg.Name)
-		if err != nil {
-			return m, tea.Printf("Editor failed: %v", err)
-		}
-		if newCfg == nil {
-			return m, tea.Printf("No changes made to %s", msg.Name)
-		}
-		return m, configUpdatedMsg{
-			Old: docker.ConfigWithDecodedData{Config: newCfg.Config}, // optional
-			New: *newCfg,
-		}
+		// Suspend the TUI before launching the editor
+		return m, tea.Sequence(
+			tea.Suspend(), // temporarily leaves alt screen and stops TUI input
+			editConfigInEditorCmd(msg.Name),
+		)
 
 	case errorMsg:
 		m.state = stateError
