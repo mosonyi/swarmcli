@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"swarmcli/docker"
 
@@ -24,10 +25,10 @@ func editConfigInEditorCmd(name string) tea.Cmd {
 	}
 	l().Infoln("InspectConfig OK")
 
-	// Serialize config to JSON for human-readable editing
+	// Serialize config to pretty JSON for human-readable editing
 	content, err := cfg.PrettyJSON()
 	if err != nil {
-		l().Infoln("JSON marshal error:", err)
+		l().Infoln("PrettyJSON error:", err)
 		return func() tea.Msg { return editConfigErrorMsg{fmt.Errorf("failed to marshal config: %w", err)} }
 	}
 
@@ -76,10 +77,10 @@ func editConfigInEditorCmd(name string) tea.Cmd {
 			return editConfigErrorMsg{fmt.Errorf("failed to read edited file: %w", err)}
 		}
 
-		// Parse edited JSON back into a struct
+		// Parse edited JSON back into a struct with flexible DataParsed type
 		var tmpStruct struct {
 			Config     docker.ConfigWithDecodedData `json:"Config"`
-			DataParsed map[string]string            `json:"DataParsed,omitempty"`
+			DataParsed any                          `json:"DataParsed,omitempty"`
 			RawData    string                       `json:"DataRaw,omitempty"`
 		}
 		if err := json.Unmarshal(editedJSON, &tmpStruct); err != nil {
@@ -87,16 +88,28 @@ func editConfigInEditorCmd(name string) tea.Cmd {
 			return editConfigErrorMsg{fmt.Errorf("failed to parse edited JSON: %w", err)}
 		}
 
-		// Rebuild the config Data
+		// Rebuild the config Data based on the type of DataParsed
 		var newData []byte
-		if tmpStruct.DataParsed != nil && len(tmpStruct.DataParsed) > 0 {
-			lines := make([]string, 0, len(tmpStruct.DataParsed))
-			for k, v := range tmpStruct.DataParsed {
-				lines = append(lines, fmt.Sprintf("%s=%s", k, v))
+		switch v := tmpStruct.DataParsed.(type) {
+		case map[string]any:
+			// Preserve key order for consistent base64 and editing
+			keys := make([]string, 0, len(v))
+			for k := range v {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+
+			lines := make([]string, 0, len(v))
+			for _, k := range keys {
+				lines = append(lines, fmt.Sprintf("%s=%v", k, v[k]))
 			}
 			newData = []byte(strings.Join(lines, "\n"))
-		} else {
-			newData = []byte(tmpStruct.RawData)
+
+		case string:
+			newData = []byte(v) // use raw string
+
+		default:
+			newData = tmpStruct.Config.Data // fallback to original data
 		}
 		l().Infoln("Rebuilt newData length:", len(newData))
 
