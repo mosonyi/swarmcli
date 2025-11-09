@@ -25,7 +25,7 @@ func editConfigInEditorCmd(name string) tea.Cmd {
 	l().Infoln("InspectConfig OK")
 
 	// Serialize config to JSON for human-readable editing
-	content, err := cfg.JSON()
+	content, err := cfg.PrettyJSON()
 	if err != nil {
 		l().Infoln("JSON marshal error:", err)
 		return func() tea.Msg { return editConfigErrorMsg{fmt.Errorf("failed to marshal config: %w", err)} }

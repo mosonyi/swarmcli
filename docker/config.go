@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -50,6 +51,22 @@ func (cfg *ConfigWithDecodedData) JSON() ([]byte, error) {
 	}
 
 	return json.Marshal(obj)
+}
+
+// PrettyJSON returns the JSON representation of the config,
+// but pretty-printed (indented) for human-readable editing.
+func (cfg *ConfigWithDecodedData) PrettyJSON() ([]byte, error) {
+	raw, err := cfg.JSON()
+	if err != nil {
+		return nil, err
+	}
+
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, raw, "", "  "); err != nil {
+		return nil, err
+	}
+
+	return pretty.Bytes(), nil
 }
 
 // ListConfigs retrieves all Docker Swarm configs.
