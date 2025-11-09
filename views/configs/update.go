@@ -2,6 +2,7 @@ package configsview
 
 import (
 	"fmt"
+	"swarmcli/views/confirmdialog"
 	"swarmcli/views/view"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -9,12 +10,6 @@ import (
 )
 
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
-	var cmd tea.Cmd
-	var consumed bool
-	m, cmd, consumed = m.handleConfirmDialog(msg)
-	if consumed {
-		return m, cmd
-	}
 
 	switch msg := msg.(type) {
 
@@ -64,7 +59,29 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		m.err = msg
 		return m, nil
 
+	case confirmdialog.ResultMsg:
+		l().Debugln("Confirm dialog result")
+		if msg.Confirmed {
+			l().Debugln("Confirm dialog confirmed")
+			cfg := m.selectedConfig()
+			switch m.pendingAction {
+			case "rotate":
+				m.pendingAction = ""
+				m.confirmDialog.Visible = false
+				return m, rotateConfigCmd(cfg)
+			}
+		} else {
+			m.pendingAction = ""
+			m.confirmDialog.Visible = false
+		}
+
 	case tea.KeyMsg:
+		if m.confirmDialog.Visible {
+			var cmd tea.Cmd
+			m.confirmDialog, cmd = m.confirmDialog.Update(msg)
+			return m, cmd
+		}
+
 		switch msg.String() {
 		case "r":
 			cfgName := m.selectedConfig()

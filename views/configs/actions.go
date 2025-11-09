@@ -29,7 +29,10 @@ func loadConfigsCmd() tea.Cmd {
 }
 
 func rotateConfigCmd(name string) tea.Cmd {
+	l().Debugln("Starting to rotate config", name)
 	return func() tea.Msg {
+		l().Debugln("In rotate config", name)
+
 		ctx := context.Background()
 		cfg, err := docker.InspectConfig(ctx, name)
 		if err != nil {

@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"strings"
 
+	"swarmcli/ui"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"swarmcli/ui"
 )
 
 type ResultMsg struct{ Confirmed bool }
@@ -30,9 +31,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		switch msg.String() {
 		case "y", "Y":
-			return Model{Visible: false}, func() tea.Msg { return ResultMsg{Confirmed: true} }
+			m.Visible = false
+			return m, func() tea.Msg { return ResultMsg{Confirmed: true} }
 		case "n", "N", "esc":
-			return Model{Visible: false}, func() tea.Msg { return ResultMsg{Confirmed: false} }
+			return m, func() tea.Msg { return ResultMsg{Confirmed: false} }
 		}
 	}
 	return m, nil
