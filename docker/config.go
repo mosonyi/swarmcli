@@ -21,11 +21,12 @@ type ConfigWithDecodedData struct {
 }
 
 func (cfg *ConfigWithDecodedData) JSON() ([]byte, error) {
-	// Decode the base64 content
-	decoded, err := base64.StdEncoding.DecodeString(string(cfg.Data))
+	rawData := cfg.Data
+
+	// Try base64 decode; fallback to raw bytes if decoding fails
+	decoded, err := base64.StdEncoding.DecodeString(string(rawData))
 	if err != nil {
-		// fallback: keep as-is if not base64
-		decoded = cfg.Data
+		decoded = rawData
 	}
 
 	// Convert key=value lines into a map
