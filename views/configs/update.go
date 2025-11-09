@@ -1,6 +1,7 @@
 package configsview
 
 import (
+	"fmt"
 	"swarmcli/views/view"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -36,7 +37,13 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 
 	case editConfigDoneMsg:
 		if msg.Changed {
+			// Insert the new version into the list
 			m.list.InsertItem(0, configItemFromSwarm(msg.Config.Config))
+
+			// Ask user if they want to rotate the new version
+			m.pendingAction = "rotate"
+			m.confirmDialog.Visible = true
+			m.confirmDialog.Message = fmt.Sprintf("Rotate config %s now?", msg.Config.Config.Spec.Name)
 		}
 		return m, tea.Printf("Edited config: %s", msg.Name)
 
@@ -53,7 +60,15 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "r":
-			return m, rotateConfigCmd(m.selectedConfig())
+			cfgName := m.selectedConfig()
+			if cfgName == "" {
+				return m, nil
+			}
+			// Show confirm dialog
+			m.pendingAction = "rotate"
+			m.confirmDialog.Visible = true
+			m.confirmDialog.Message = fmt.Sprintf("Rotate config %s?", cfgName)
+			return m, nil
 		case "e":
 			return m, editConfigInEditorCmd(m.selectedConfig())
 		case "enter":
