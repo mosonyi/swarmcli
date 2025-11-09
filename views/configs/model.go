@@ -1,7 +1,6 @@
 package configsview
 
 import (
-	"fmt"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	loading "swarmcli/views/loading"
@@ -56,23 +55,6 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "e", Desc: "Edit"},
 		{Key: "r", Desc: "rotate"},
 		{Key: "q", Desc: "Back"},
-	}
-}
-
-func (m Model) View() string {
-	switch m.state {
-	case stateLoading:
-		return m.loadingView.View()
-	case stateError:
-		return fmt.Sprintf("Error loading configs:\n\n%s\n\nPress q to go back.", m.err)
-	case stateReady:
-		view := m.list.View() + "\n"
-		if m.confirmDialog.Visible {
-			view += "\n" + m.confirmDialog.View()
-		}
-		return view
-	default:
-		return ""
 	}
 }
 
