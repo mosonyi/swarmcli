@@ -66,7 +66,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	switch m.state {
 	case stateLoading:
 		var cmd tea.Cmd
-		m.loadingView, cmd = m.loadingView.Update(msg)
+		//m.loadingView, cmd = m.loadingView.Update(msg)
 		return m, cmd
 	case stateReady:
 		var cmd tea.Cmd

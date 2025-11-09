@@ -29,7 +29,6 @@ const (
 )
 
 func New(width, height int) Model {
-
 	m := Model{
 		list:          list.New([]list.Item{}, itemDelegate{}, 0, 0),
 		loadingView:   loading.New(width, height, false, "Loading Docker configs..."),
