@@ -2,7 +2,6 @@ package docker
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -20,41 +19,39 @@ type ConfigWithDecodedData struct {
 	Data   []byte
 }
 
+// JSON returns a JSON representation of the config suitable for the inspect view.
+// The Data field is parsed as key=value lines into a nested JSON object if possible.
 func (cfg *ConfigWithDecodedData) JSON() ([]byte, error) {
-	rawData := cfg.Data
-
-	// Try base64 decode; fallback to raw bytes if decoding fails
-	decoded, err := base64.StdEncoding.DecodeString(string(rawData))
-	if err != nil {
-		decoded = rawData
+	type jsonConfig struct {
+		Config     swarm.Config      `json:"Config"`
+		DataParsed map[string]string `json:"DataParsed,omitempty"`
 	}
 
-	// Convert key=value lines into a map
-	dataMap := make(map[string]string)
-	lines := strings.Split(string(decoded), "\n")
+	obj := jsonConfig{
+		Config: cfg.Config,
+	}
+
+	// Attempt to parse key=value lines
+	parsedMap := make(map[string]string)
+	lines := strings.Split(string(cfg.Data), "\n")
+	parsed := true
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
 		parts := strings.SplitN(line, "=", 2)
-		if len(parts) == 2 {
-			dataMap[parts[0]] = parts[1]
+		if len(parts) != 2 {
+			parsed = false
+			break
 		}
+		parsedMap[parts[0]] = parts[1]
+	}
+	if parsed && len(parsedMap) > 0 {
+		obj.DataParsed = parsedMap
 	}
 
-	// Marshal Config + parsed Data map
-	type jsonConfig struct {
-		Config swarm.Config      `json:"Config"`
-		Data   map[string]string `json:"Data"`
-	}
-
-	obj := jsonConfig{
-		Config: cfg.Config,
-		Data:   dataMap,
-	}
-
-	return json.MarshalIndent(obj, "", "  ")
+	return json.Marshal(obj)
 }
 
 // ListConfigs retrieves all Docker Swarm configs.
