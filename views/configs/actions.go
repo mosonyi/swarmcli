@@ -28,17 +28,16 @@ func loadConfigsCmd() tea.Cmd {
 	}
 }
 
-func rotateConfigCmd(name string) tea.Cmd {
-	l().Debugln("Starting to rotate config", name)
+func rotateConfigCmd(cfg *docker.ConfigWithDecodedData) tea.Cmd {
+	if cfg == nil {
+		return nil
+	}
+
+	l().Debugln("Starting to rotate config", cfg.Config.Spec.Name)
 	return func() tea.Msg {
-		l().Debugln("In rotate config", name)
-
 		ctx := context.Background()
-		cfg, err := docker.InspectConfig(ctx, name)
-		if err != nil {
-			return errorMsg(err)
-		}
 
+		// Use the edited config data
 		newCfg, err := docker.CreateConfigVersion(ctx, cfg.Config, cfg.Data)
 		if err != nil {
 			return errorMsg(err)

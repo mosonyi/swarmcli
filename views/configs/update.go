@@ -34,7 +34,6 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		return m, tea.Printf("Rotated %s → %s", msg.Old.Config.Spec.Name, msg.New.Config.Spec.Name)
 
 	case editConfigMsg:
-		// Launch editor via ExecProcess, suspending TUI automatically
 		return m, editConfigInEditorCmd(m.selectedConfig())
 
 	case editConfigDoneMsg:
@@ -46,6 +45,9 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 			m.pendingAction = "rotate"
 			m.confirmDialog.Visible = true
 			m.confirmDialog.Message = fmt.Sprintf("Rotate config %s now?", msg.Config.Config.Spec.Name)
+
+			// Store edited config for rotation
+			m.configToRotate = &msg.Config
 		}
 		return m, tea.Printf("Edited config: %s", msg.Name)
 
@@ -60,20 +62,20 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		return m, nil
 
 	case confirmdialog.ResultMsg:
-		l().Debugln("Confirm dialog result")
-		if msg.Confirmed {
-			l().Debugln("Confirm dialog confirmed")
-			cfg := m.selectedConfig()
-			switch m.pendingAction {
-			case "rotate":
-				m.pendingAction = ""
-				m.confirmDialog.Visible = false
-				return m, rotateConfigCmd(cfg)
-			}
-		} else {
+		if msg.Confirmed && m.configToRotate != nil {
+			// Rotate using stored edited config
 			m.pendingAction = ""
 			m.confirmDialog.Visible = false
+			cmd := rotateConfigCmd(m.configToRotate)
+			m.configToRotate = nil
+			return m, cmd
 		}
+
+		// Cancel rotation
+		m.pendingAction = ""
+		m.confirmDialog.Visible = false
+		m.configToRotate = nil
+		return m, nil
 
 	case tea.KeyMsg:
 		if m.confirmDialog.Visible {
@@ -84,14 +86,14 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 
 		switch msg.String() {
 		case "r":
-			cfgName := m.selectedConfig()
-			if cfgName == "" {
+			cfg := m.selectedConfig()
+			if cfg == "" {
 				return m, nil
 			}
 			// Show confirm dialog
 			m.pendingAction = "rotate"
 			m.confirmDialog.Visible = true
-			m.confirmDialog.Message = fmt.Sprintf("Rotate config %s?", cfgName)
+			m.confirmDialog.Message = fmt.Sprintf("Rotate config %s?", cfg)
 			return m, nil
 		case "e":
 			return m, editConfigInEditorCmd(m.selectedConfig())

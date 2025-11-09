@@ -1,6 +1,7 @@
 package configsview
 
 import (
+	"swarmcli/docker"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	loading "swarmcli/views/loading"
@@ -10,13 +11,13 @@ import (
 )
 
 type Model struct {
-	list          list.Model
-	loadingView   loading.Model
-	confirmDialog confirmdialog.Model
-
-	state         state
-	pendingAction string
-	err           error
+	list           list.Model
+	state          state
+	err            error
+	pendingAction  string
+	confirmDialog  confirmdialog.Model
+	loadingView    loading.Model
+	configToRotate *docker.ConfigWithDecodedData // store edited config for rotation
 }
 
 type state int
