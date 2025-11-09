@@ -50,7 +50,7 @@ func editConfigInEditorCmd(name string) tea.Cmd {
 		}
 
 		if string(newData) == string(cfg.Data) {
-			return editConfigDoneMsg{false, docker.ConfigWithDecodedData{cfg.Config, cfg.Data}} // no changes
+			return editConfigDoneMsg{cfg.Config.Spec.Name, false, docker.ConfigWithDecodedData{cfg.Config, cfg.Data}} // no changes
 		}
 
 		newCfg, err := docker.CreateConfigVersion(ctx, cfg.Config, newData)
@@ -64,6 +64,7 @@ func editConfigInEditorCmd(name string) tea.Cmd {
 		}
 
 		return editConfigDoneMsg{
+			newCfg.Spec.Name,
 			true,
 			wrapped,
 		}

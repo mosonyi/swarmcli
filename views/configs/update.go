@@ -1,12 +1,10 @@
 package configsview
 
 import (
-	"swarmcli/docker"
 	"swarmcli/views/view"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
-	"golang.org/x/text/message"
 )
 
 func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
@@ -33,11 +31,21 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		return m, tea.Printf("Rotated %s → %s", msg.Old.Config.Spec.Name, msg.New.Config.Spec.Name)
 
 	case editConfigMsg:
-		// Suspend the TUI before launching the editor
-		return m, tea.Sequence(
-			tea.Suspend(), // temporarily leaves alt screen and stops TUI input
-			editConfigInEditorCmd(msg.Name),
-		)
+		// First, trigger a suspend message so we can safely run the editor next update.
+		return m, func() tea.Msg { return tea.Suspend() }
+
+	case tea.SuspendMsg:
+		// Now the TUI is safely suspended. Launch the external editor.
+		return m, editConfigInEditorCmd(m.selectedConfig())
+
+	case editConfigDoneMsg:
+		// Custom message returned after editing finishes successfully.
+		return m, tea.Printf("Edited config: %s", msg.Name)
+
+	case editConfigErrorMsg:
+		m.state = stateError
+		m.err = msg.err
+		return m, tea.Printf("Error editing config: %v", msg.err)
 
 	case errorMsg:
 		m.state = stateError
@@ -46,10 +54,8 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "esc":
-			return nil, view.SwitchBack()
 		case "r":
-			return m, rotateConfigCmd(m.selectedConfig())
+			//return m, rotateConfigCmd(m.selectedConfig())
 		case "e":
 			return m, editConfigCmd(m.selectedConfig())
 		case "enter":
