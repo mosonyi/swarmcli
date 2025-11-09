@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"swarmcli/docker"
+	inspectview "swarmcli/views/inspect"
+	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -58,7 +60,29 @@ func rotateConfigCmd(name string) tea.Cmd {
 
 func inspectConfigCmd(name string) tea.Cmd {
 	return func() tea.Msg {
-		return nil
-		//return view.SwitchTo("inspect", name)
+		cfg, err := docker.InspectConfig(context.Background(), name)
+		var json string
+		if err != nil {
+			json = fmt.Sprintf("Error inspecting config %q: %v", name, err)
+		}
+		jsonConfig, err := cfg.JSON()
+		if err != nil {
+			json = fmt.Sprintf("Error marshalling config %q: %v", name, err)
+		} else {
+			json = string(jsonConfig)
+		}
+
+		return view.NavigateToMsg{
+			ViewName: inspectview.ViewName,
+			Payload: map[string]interface{}{
+				"title": fmt.Sprintf("Config: %s", name),
+				"json":  json,
+				"meta": map[string]interface{}{
+					"ID":   cfg.Config.ID,
+					"Name": cfg.Config.Spec.Name,
+					"Data": len(cfg.Config.Spec.Data),
+				},
+			},
+		}
 	}
 }

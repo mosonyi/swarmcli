@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -15,6 +16,19 @@ import (
 type ConfigWithDecodedData struct {
 	Config swarm.Config
 	Data   []byte
+}
+
+// JSON returns the raw JSON representation of the underlying swarm.Config.
+func (c *ConfigWithDecodedData) JSON() ([]byte, error) {
+	if c == nil {
+		return nil, fmt.Errorf("ConfigWithDecodedData is nil")
+	}
+	// Marshal the original swarm.Config object
+	body, err := json.Marshal(c.Config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal config %q to JSON: %w", c.Config.ID, err)
+	}
+	return body, nil
 }
 
 // ListConfigs retrieves all Docker Swarm configs.
