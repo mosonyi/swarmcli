@@ -2,6 +2,7 @@ package configsview
 
 import (
 	"fmt"
+	"swarmcli/docker"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	loading "swarmcli/views/loading"
@@ -11,13 +12,16 @@ import (
 )
 
 type Model struct {
-	list          list.Model
-	loadingView   loading.Model
-	confirmDialog confirmdialog.Model
-
-	state state
-	//pendingAction string
-	err error
+	list               list.Model
+	state              state
+	err                error
+	pendingAction      string
+	confirmDialog      confirmdialog.Model
+	loadingView        loading.Model
+	configs            []docker.ConfigWithDecodedData // cache original docker configs
+	configToRotateFrom *docker.ConfigWithDecodedData  // store edited config for rotation
+	configToRotateInto *docker.ConfigWithDecodedData  // store edited config for rotation
+	configToDelete     *docker.ConfigWithDecodedData  // 👈 add this
 }
 
 type state int
@@ -59,26 +63,23 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 	}
 }
 
-func (m Model) View() string {
-	switch m.state {
-	case stateLoading:
-		return m.loadingView.View()
-	case stateError:
-		return fmt.Sprintf("Error loading configs:\n\n%s\n\nPress q to go back.", m.err)
-	case stateReady:
-		view := m.list.View() + "\n"
-		if m.confirmDialog.Visible {
-			view += "\n" + m.confirmDialog.View()
-		}
-		return view
-	default:
-		return ""
-	}
-}
-
 func (m Model) selectedConfig() string {
 	if item, ok := m.list.SelectedItem().(configItem); ok {
 		return item.Name
 	}
 	return ""
+}
+
+func (m *Model) findConfigByName(name string) (*docker.ConfigWithDecodedData, error) {
+	for _, item := range m.configs { // or wherever you keep your configsLoadedMsg data
+		if item.Config.Spec.Name == name {
+			return &item, nil
+		}
+	}
+	return nil, fmt.Errorf("config %q not found", name)
+}
+
+func (m *Model) addConfig(cfg docker.ConfigWithDecodedData) {
+	m.list.InsertItem(0, configItemFromSwarm(cfg.Config))
+	m.configs = append(m.configs, cfg)
 }

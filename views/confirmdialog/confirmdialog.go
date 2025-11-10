@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"strings"
 
+	"swarmcli/ui"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"swarmcli/ui"
 )
 
 type ResultMsg struct{ Confirmed bool }
@@ -30,9 +31,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		switch msg.String() {
 		case "y", "Y":
-			return Model{Visible: false}, func() tea.Msg { return ResultMsg{Confirmed: true} }
+			m.Visible = false
+			return m, func() tea.Msg { return ResultMsg{Confirmed: true} }
 		case "n", "N", "esc":
-			return Model{Visible: false}, func() tea.Msg { return ResultMsg{Confirmed: false} }
+			return m, func() tea.Msg { return ResultMsg{Confirmed: false} }
 		}
 	}
 	return m, nil
@@ -53,4 +55,20 @@ func (m Model) View() string {
 	box := ui.RenderFramedBox("Confirm", "", content, 0) // width=0 → minimal width
 
 	return lipgloss.Place(m.Width, m.Height, lipgloss.Center, lipgloss.Center, box)
+}
+
+func (m Model) WithMessage(msg string) Model {
+	m.Message = msg
+	return m
+}
+
+func (m Model) Show(msg string) Model {
+	m.Visible = true
+	m.Message = msg
+	return m
+}
+
+func (m Model) Hide() Model {
+	m.Visible = false
+	return m
 }

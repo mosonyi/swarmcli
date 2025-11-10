@@ -28,26 +28,21 @@ func loadConfigsCmd() tea.Cmd {
 	}
 }
 
-func rotateConfigCmd(name string) tea.Cmd {
+func rotateConfigCmd(oldCfg *docker.ConfigWithDecodedData, newCfg *docker.ConfigWithDecodedData) tea.Cmd {
+	if newCfg == nil {
+		return nil
+	}
+
+	l().Debugln("Starting to rotate config", newCfg.Config.Spec.Name)
 	return func() tea.Msg {
 		ctx := context.Background()
-		cfg, err := docker.InspectConfig(ctx, name)
-		if err != nil {
-			return errorMsg(err)
-		}
 
-		newCfg, err := docker.CreateConfigVersion(ctx, cfg.Config, cfg.Data)
-		if err != nil {
-			return errorMsg(err)
-		}
-
-		if err := docker.RotateConfigInServices(ctx, cfg.Config, newCfg); err != nil {
+		if err := docker.RotateConfigInServices(ctx, &oldCfg.Config, newCfg.Config); err != nil {
 			return errorMsg(err)
 		}
 
 		return configRotatedMsg{
-			Old: *cfg,
-			New: docker.ConfigWithDecodedData{Config: newCfg, Data: cfg.Data},
+			New: *newCfg,
 		}
 	}
 }
@@ -76,5 +71,16 @@ func inspectConfigCmd(name string) tea.Cmd {
 				},
 			},
 		}
+	}
+}
+
+func deleteConfigCmd(name string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		err := docker.DeleteConfig(ctx, name)
+		if err != nil {
+			return errorMsg(fmt.Errorf("failed to delete config %q: %w", name, err))
+		}
+		return configDeletedMsg{Name: name}
 	}
 }

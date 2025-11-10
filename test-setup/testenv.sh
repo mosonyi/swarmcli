@@ -144,15 +144,36 @@ cmd_test() {
 
 cmd_down() {
   info "🧹 Tearing down Swarm environment..."
-  # Re-create context if missing to avoid "context not found"
+
+  # Ensure context exists
   if ! docker context inspect "$CONTEXT_NAME" >/dev/null 2>&1; then
     info "Creating Docker context '$CONTEXT_NAME' for teardown..."
     docker context create "$CONTEXT_NAME" --docker "host=$MANAGER_HOST"
   fi
 
+  # Remove the stack (ignore errors if it doesn't exist)
   run_or_warn docker --context "$CONTEXT_NAME" stack rm demo
+
+  # Bring down compose services and volumes
   run_or_warn $DOCKER_COMPOSE down -v
-  ok "Swarm environment torn down."
+
+  # Remove stopped containers
+  info "🗑 Removing all stopped containers..."
+  docker container prune -f || warn "Failed to prune containers"
+
+  # Remove unused volumes
+  info "🗑 Removing unused volumes..."
+  docker volume prune -f || warn "Failed to prune volumes"
+
+  # Remove unused networks
+  info "🗑 Removing unused networks..."
+  docker network prune -f || warn "Failed to prune networks"
+
+  # Remove dangling images
+  info "🗑 Removing dangling images..."
+  docker image prune -f || warn "Failed to prune images"
+
+  ok "Swarm environment and unused resources cleaned up."
 }
 
 cmd_clean() {
