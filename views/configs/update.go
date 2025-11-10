@@ -23,6 +23,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		for i, cfg := range msg {
 			items[i] = configItemFromSwarm(cfg.Config)
 		}
+		m.configs = msg
 		m.list.SetItems(items)
 		m.state = stateReady
 		return m, nil
@@ -52,6 +53,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		l().Infof("Edit finished: config changed, inserting new version %s", name)
 
 		m.list.InsertItem(0, configItemFromSwarm(msg.Config.Config))
+		m.configs = append(m.configs, msg.Config)
 		m.pendingAction = "rotate"
 		m.configToRotate = &msg.Config
 
@@ -102,16 +104,24 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 
 		switch msg.String() {
 		case "r":
-			cfg := m.selectedConfig()
-			if cfg == "" {
+			cfgName := m.selectedConfig()
+			if cfgName == "" {
 				l().Warn("Rotate key pressed but no config selected")
 				return m, nil
 			}
 
-			l().Infof("Rotate key pressed for config: %s", cfg)
+			cfg, err := m.findConfigByName(cfgName)
+			if err != nil {
+				l().Errorf("Failed to find config %q for rotation: %v", cfgName, err)
+				return m, tea.Printf("Cannot rotate: %v", err)
+			}
+
+			l().Infof("Rotate key pressed for config: %s", cfgName)
+
 			m.pendingAction = "rotate"
-			m.confirmDialog = m.confirmDialog.
-				Show(fmt.Sprintf("Rotate config %s?", cfg))
+			m.configToRotate = cfg
+			m.confirmDialog = m.confirmDialog.Show(fmt.Sprintf("Rotate config %s?", cfgName))
+
 			return m, nil
 
 		case "e":

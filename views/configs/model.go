@@ -1,6 +1,7 @@
 package configsview
 
 import (
+	"fmt"
 	"swarmcli/docker"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
@@ -17,7 +18,8 @@ type Model struct {
 	pendingAction  string
 	confirmDialog  confirmdialog.Model
 	loadingView    loading.Model
-	configToRotate *docker.ConfigWithDecodedData // store edited config for rotation
+	configs        []docker.ConfigWithDecodedData // cache original docker configs
+	configToRotate *docker.ConfigWithDecodedData  // store edited config for rotation
 }
 
 type state int
@@ -64,4 +66,13 @@ func (m Model) selectedConfig() string {
 		return item.Name
 	}
 	return ""
+}
+
+func (m *Model) findConfigByName(name string) (*docker.ConfigWithDecodedData, error) {
+	for _, item := range m.configs { // or wherever you keep your configsLoadedMsg data
+		if item.Config.Spec.Name == name {
+			return &item, nil
+		}
+	}
+	return nil, fmt.Errorf("config %q not found", name)
 }
