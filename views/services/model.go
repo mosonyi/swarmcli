@@ -6,6 +6,7 @@ import (
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	loadingview "swarmcli/views/loading"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -65,7 +66,7 @@ func New(width, height int) Model {
 		Visible:       false,
 		confirmDialog: confirmdialog.New(width, height),
 		loading:       ld,
-		msgCh:         make(chan tea.Msg, 10),
+		msgCh:         make(chan tea.Msg),
 	}
 }
 
@@ -111,10 +112,11 @@ func (m *Model) loadingViewMessage(serviceName string) {
 }
 
 func sendMsg(ch chan tea.Msg, msg tea.Msg) {
+	// Block briefly until UI consumes, to avoid drop storm at the end
 	select {
 	case ch <- msg:
-	default:
-		l().Infof("[sendMsg] msg channel full, dropping message")
+	case <-time.After(200 * time.Millisecond):
+		l().Infof("[sendMsg] timeout waiting to deliver progress update")
 	}
 }
 

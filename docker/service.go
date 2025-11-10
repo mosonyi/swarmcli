@@ -186,14 +186,17 @@ func restartServiceAndWaitInternal(ctx context.Context, serviceName string, prog
 		oldTaskID string
 		newTaskID string
 	}
-
 	slots := make(map[int]slotState)
 	for _, t := range oldTasks {
 		slots[t.Slot] = slotState{oldTaskID: t.ID}
 	}
 
-	stableStart := time.Now()
-	lastProgress := time.Now()
+	var (
+		lastProgress ProgressUpdate
+		stableSince  time.Time
+		lastActivity time.Time
+	)
+	lastActivity = time.Now()
 
 	for {
 		select {
@@ -220,30 +223,31 @@ func restartServiceAndWaitInternal(ctx context.Context, serviceName string, prog
 			slot := t.Slot
 			s := slots[slot]
 
-			if state == swarm.TaskStateRunning {
+			switch state {
+			case swarm.TaskStateRunning:
 				running++
 				if s.oldTaskID != "" && t.ID != s.oldTaskID {
 					s.newTaskID = t.ID
 					replaced++
 				}
 				slots[slot] = s
-			} else if state == swarm.TaskStatePreparing ||
-				state == swarm.TaskStateStarting ||
-				state == swarm.TaskStatePending ||
-				state == swarm.TaskStateAssigned {
+			case swarm.TaskStatePreparing,
+				swarm.TaskStateStarting,
+				swarm.TaskStatePending,
+				swarm.TaskStateAssigned:
 				updating++
 			}
 		}
 
-		if progressCh != nil && time.Since(lastProgress) > 1*time.Second {
-			select {
-			case progressCh <- ProgressUpdate{Replaced: replaced, Running: running, Total: total}:
-			default:
-			}
-			lastProgress = time.Now()
+		currentProgress := ProgressUpdate{Replaced: replaced, Running: running, Total: total}
+		if progressCh != nil && currentProgress != lastProgress {
+			trySendProgress(progressCh, currentProgress)
+			lastProgress = currentProgress
+			lastActivity = time.Now()
+			l().Debugf("[Docker] Progress update: %d/%d replaced, %d running", replaced, total, running)
 		}
 
-		// If all slots have a new running task, we’re done
+		// Determine stability
 		allReplaced := true
 		for _, s := range slots {
 			if s.newTaskID == "" {
@@ -253,14 +257,29 @@ func restartServiceAndWaitInternal(ctx context.Context, serviceName string, prog
 		}
 
 		if allReplaced && running >= total && updating == 0 {
-			if time.Since(stableStart) > 3*time.Second {
+			if stableSince.IsZero() {
+				stableSince = time.Now()
+			} else if time.Since(stableSince) > 3*time.Second {
 				l().Infof("✅ Service %s stable: %d/%d new tasks running", serviceName, replaced, total)
 				return nil
 			}
 		} else {
-			stableStart = time.Now()
+			stableSince = time.Time{}
 		}
 
-		time.Sleep(500 * time.Millisecond)
+		// Adaptive polling — faster while changing, slower when idle
+		sleep := 500 * time.Millisecond
+		if time.Since(lastActivity) > 5*time.Second {
+			sleep = 2 * time.Second
+		}
+		time.Sleep(sleep)
+	}
+}
+
+func trySendProgress(ch chan<- ProgressUpdate, v ProgressUpdate) {
+	select {
+	case ch <- v:
+	default:
+		// drop silently; UI may be busy
 	}
 }
