@@ -9,6 +9,10 @@ type (
 		Old docker.ConfigWithDecodedData
 		New docker.ConfigWithDecodedData
 	}
+	configDeletedMsg struct {
+		Name  string
+		Index int
+	}
 	editConfigMsg struct {
 		Name string
 	}

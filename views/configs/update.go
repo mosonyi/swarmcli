@@ -32,6 +32,10 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		l().Infof("Config rotated: %s → %s", msg.Old.Config.Spec.Name, msg.New.Config.Spec.Name)
 		return m, tea.Printf("Rotated %s → %s", msg.Old.Config.Spec.Name, msg.New.Config.Spec.Name)
 
+	case configDeletedMsg:
+		l().Infof("Config deleted successfully: %s", msg.Name)
+		return m, loadConfigsCmd()
+
 	case editConfigMsg:
 		cfg := m.selectedConfig()
 		l().Infof("Editing config: %s", cfg)
@@ -49,8 +53,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 
 		l().Infof("Edit finished: config changed, inserting new version %s", newName)
 
-		m.list.InsertItem(0, configItemFromSwarm(msg.NewConfig.Config))
-		m.configs = append(m.configs, msg.NewConfig)
+		m.addConfig(msg.NewConfig)
 		m.pendingAction = "rotate"
 		m.configToRotateFrom = &msg.OldConfig
 		m.configToRotateInto = &msg.NewConfig
@@ -75,21 +78,36 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		l().Debugf("Confirm dialog result: confirmed=%v (pendingAction=%s)", msg.Confirmed, m.pendingAction)
 		defer func() {
 			m.pendingAction = ""
+			m.confirmDialog.Visible = false
+			m.configToRotateFrom = nil
 			m.configToRotateInto = nil
-			m.confirmDialog = m.confirmDialog.Hide()
+			m.configToDelete = nil
 		}()
 
-		if msg.Confirmed {
-			if m.configToRotateInto == nil {
-				l().Warnln("Confirmed in dialog, but configToRotateInto is nil. This is a bug!")
-				return m, nil
-			}
-
-			l().Infof("Confirmed rotation for %s", m.configToRotateInto.Config.Spec.Name)
-			return m, rotateConfigCmd(m.configToRotateFrom, m.configToRotateInto)
+		if !msg.Confirmed {
+			l().Info("Action cancelled by user")
+			return m, nil
 		}
 
-		l().Info("Rotation cancelled by user")
+		switch m.pendingAction {
+		case "rotate":
+			if m.configToRotateInto == nil {
+				l().Warnln("Confirmed rotation but configToRotate is nil")
+				return m, nil
+			}
+			l().Infof("Confirmed rotation for %s", m.configToRotateInto.Config.Spec.Name)
+			return m, rotateConfigCmd(m.configToRotateFrom, m.configToRotateInto)
+
+		case "delete":
+			if m.configToDelete == nil {
+				l().Warnln("Confirmed delete but configToDelete is nil")
+				return m, nil
+			}
+			name := m.configToDelete.Config.Spec.Name
+			l().Infof("Confirmed deletion for config %s", name)
+			return m, deleteConfigCmd(name)
+		}
+
 		return m, nil
 
 	case tea.KeyMsg:
@@ -119,6 +137,23 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 			m.pendingAction = "rotate"
 			m.configToRotateInto = cfg
 			m.confirmDialog = m.confirmDialog.Show(fmt.Sprintf("Rotate config %s?", cfgName))
+
+			return m, nil
+
+		case "d":
+			if len(m.list.Items()) == 0 {
+				return m, nil
+			}
+			selected, ok := m.list.SelectedItem().(configItem)
+			if !ok {
+				return m, nil
+			}
+
+			m.pendingAction = "delete"
+			m.confirmDialog.Visible = true
+			m.confirmDialog.Message = fmt.Sprintf("Delete config %s?", selected.Name)
+			m.configToRotateInto = nil // just to be explicit
+			m.configToDelete, _ = m.findConfigByName(selected.Name)
 
 			return m, nil
 

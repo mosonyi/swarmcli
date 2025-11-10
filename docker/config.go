@@ -210,6 +210,34 @@ func RotateConfigInServices(ctx context.Context, oldCfg *swarm.Config, newCfg sw
 	return nil
 }
 
+// DeleteConfig deletes a config only if it's not referenced by any service.
+func DeleteConfig(ctx context.Context, nameOrID string) error {
+	cfg, err := InspectConfig(ctx, nameOrID)
+	if err != nil {
+		return err
+	}
+
+	cli, err := GetClient()
+	if err != nil {
+		return err
+	}
+	defer cli.Close()
+
+	svcs, err := listServicesUsingConfig(ctx, cli, cfg.Config.ID)
+	if err != nil {
+		return err
+	}
+	if len(svcs) > 0 {
+		names := make([]string, len(svcs))
+		for i, s := range svcs {
+			names[i] = s.Spec.Name
+		}
+		return fmt.Errorf("cannot delete config %q: still used by services %v", cfg.Config.Spec.Name, names)
+	}
+
+	return cli.ConfigRemove(ctx, cfg.Config.ID)
+}
+
 // --- Helpers ---
 
 var versionSuffix = regexp.MustCompile(`^(.*)-v(\d+)$`)

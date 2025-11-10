@@ -73,3 +73,14 @@ func inspectConfigCmd(name string) tea.Cmd {
 		}
 	}
 }
+
+func deleteConfigCmd(name string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		err := docker.DeleteConfig(ctx, name)
+		if err != nil {
+			return errorMsg(fmt.Errorf("failed to delete config %q: %w", name, err))
+		}
+		return configDeletedMsg{Name: name}
+	}
+}
