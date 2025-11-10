@@ -66,7 +66,7 @@ func TestConfigLifecycle(t *testing.T) {
 		require.NoError(t, err, "ServiceCreate should succeed")
 		e.registerServiceCleanup(svcResp.ID)
 
-		err = docker.RotateConfigInServices(e.ctx, orig, newCfg)
+		err = docker.RotateConfigInServices(e.ctx, &orig, newCfg)
 		require.NoError(t, err, "RotateConfigInServices should succeed")
 
 		svcAfter, _, err := e.cli.ServiceInspectWithRaw(e.ctx, svcResp.ID, types.ServiceInspectOptions{})
