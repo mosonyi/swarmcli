@@ -90,11 +90,6 @@ func (m *Model) renderConfigs() string {
 		return "No configs found."
 	}
 
-	width := m.list.Width()
-	if width <= 0 {
-		width = 80
-	}
-
 	var lines []string
 	delegate := itemDelegate{}
 
