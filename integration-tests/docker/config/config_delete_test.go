@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"swarmcli/docker"
 	swarmlog "swarmcli/utils/log"
 	"testing"
@@ -29,7 +30,11 @@ func TestDeleteConfig(t *testing.T) {
 	t.Run("Delete nonexistent config fails", func(t *testing.T) {
 		err := docker.DeleteConfig(e.ctx, "nonexistent-config-xyz")
 		require.Error(t, err, "DeleteConfig should fail for nonexistent config")
-		require.Contains(t, err.Error(), "no such config", "Error should mention missing config")
+		require.True(t,
+			strings.Contains(err.Error(), "failed to inspect config") &&
+				strings.Contains(err.Error(), "not found"),
+			"Expected wrapped inspect error mentioning not found, got: %v", err,
+		)
 	})
 
 	t.Run("Delete config in use fails", func(t *testing.T) {
