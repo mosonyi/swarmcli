@@ -62,8 +62,9 @@ func (m Model) WithMessage(msg string) Model {
 	return m
 }
 
-func (m Model) Show() Model {
+func (m Model) Show(msg string) Model {
 	m.Visible = true
+	m.Message = msg
 	return m
 }
 

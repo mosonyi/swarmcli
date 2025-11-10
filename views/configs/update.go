@@ -42,25 +42,22 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		return m, editConfigInEditorCmd(cfg)
 
 	case editConfigDoneMsg:
-		cfgName := msg.Name
-		if msg.Changed {
-			newCfg := msg.Config.Config
-			l().Infof("Edit completed for %s: changes detected, new version %s created", cfgName, newCfg.Spec.Name)
+		name := msg.Config.Config.Spec.Name
 
-			m.list.InsertItem(0, configItemFromSwarm(newCfg))
-
-			// Prepare for optional rotation
-			m.pendingAction = "rotate"
-			m.configToRotate = &msg.Config
-			m.confirmDialog = m.confirmDialog.
-				WithMessage(fmt.Sprintf("Rotate config %s now?", newCfg.Spec.Name)).
-				Show()
-
-		} else {
-			l().Debugf("Edit completed for %s: no changes detected", cfgName)
+		if !msg.Changed {
+			l().Debugf("Edit finished: no changes detected for %s", name)
+			return m, tea.Printf("No changes made to config: %s", name)
 		}
 
-		return m, tea.Printf("Edit complete: %s", cfgName)
+		l().Infof("Edit finished: config changed, inserting new version %s", name)
+
+		m.list.InsertItem(0, configItemFromSwarm(msg.Config.Config))
+		m.pendingAction = "rotate"
+		m.configToRotate = &msg.Config
+
+		m.confirmDialog.Show(fmt.Sprintf("Rotate config %s now?", name))
+
+		return m, tea.Printf("Config %s edited and queued for rotation", name)
 
 	case editConfigErrorMsg:
 		l().Errorf("Error editing config: %v", msg.err)
@@ -114,8 +111,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 			l().Infof("Rotate key pressed for config: %s", cfg)
 			m.pendingAction = "rotate"
 			m.confirmDialog = m.confirmDialog.
-				WithMessage(fmt.Sprintf("Rotate config %s?", cfg)).
-				Show()
+				Show(fmt.Sprintf("Rotate config %s?", cfg))
 			return m, nil
 
 		case "e":
