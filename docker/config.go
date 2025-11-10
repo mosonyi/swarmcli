@@ -13,6 +13,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/swarm"
+	"github.com/docker/docker/client"
 )
 
 // ConfigWithDecodedData is a helper struct with the decoded data included.
@@ -158,64 +159,54 @@ func CreateConfigVersion(ctx context.Context, baseConfig swarm.Config, newData [
 	return newCfg, nil
 }
 
-// RotateConfigInServices replaces the old config with the new one across all services using it.
-func RotateConfigInServices(ctx context.Context, oldCfg, newCfg swarm.Config) error {
-	l().Infof("[RotateConfig] Starting rotation: %q → %q", oldCfg.Spec.Name, newCfg.Spec.Name)
+// RotateConfigInServices updates all services that reference oldCfg to use newCfg.
+// If oldCfg is nil, it tries to infer affected services automatically based on labels or content.
+func RotateConfigInServices(ctx context.Context, oldCfg *swarm.Config, newCfg swarm.Config) error {
+	if newCfg.ID == "" {
+		return fmt.Errorf("new config must have a valid ID")
+	}
 
-	cli, err := GetClient()
+	client, err := GetClient()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get docker client: %w", err)
 	}
-	defer cli.Close()
+	defer client.Close()
 
-	services, err := cli.ServiceList(ctx, types.ServiceListOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to list services: %w", err)
-	}
-
-	affected := 0
-	for _, svc := range services {
-		needsUpdate := false
-		spec := svc.Spec
-
-		// Check configs
-		for i, ref := range spec.TaskTemplate.ContainerSpec.Configs {
-			if ref.ConfigName == oldCfg.Spec.Name {
-				l().Debugf("[RotateConfig] Service %s uses %q → replacing with %q",
-					svc.Spec.Name, oldCfg.Spec.Name, newCfg.Spec.Name)
-
-				spec.TaskTemplate.ContainerSpec.Configs[i] = &swarm.ConfigReference{
-					ConfigName: newCfg.Spec.Name,
-					ConfigID:   newCfg.ID,
-					File:       ref.File,
-				}
-				needsUpdate = true
-			}
-		}
-
-		if needsUpdate {
-			affected++
-			l().Infof("[RotateConfig] Updating service %s", svc.Spec.Name)
-
-			response, err := cli.ServiceUpdate(ctx, svc.ID, svc.Version, spec, types.ServiceUpdateOptions{})
-			if err != nil {
-				l().Errorf("[RotateConfig] Failed to update service %s: %v", svc.Spec.Name, err)
-				return fmt.Errorf("failed to update service %q: %w", svc.Spec.Name, err)
-			}
-
-			if len(response.Warnings) > 0 {
-				for _, w := range response.Warnings {
-					l().Warnf("[RotateConfig] Warning for service %s: %s", svc.Spec.Name, w)
-				}
-			}
-		}
-	}
-
-	if affected == 0 {
-		l().Infof("[RotateConfig] No services were using config %q", oldCfg.Spec.Name)
+	// --- 1. Find affected services
+	var services []swarm.Service
+	if oldCfg != nil {
+		services, err = listServicesUsingConfig(ctx, client, oldCfg.ID)
 	} else {
-		l().Infof("[RotateConfig] Rotation complete — updated %d service(s)", affected)
+		services, err = listServicesUsingConfigName(ctx, client, newCfg.Spec.Name)
 	}
+	if err != nil {
+		return fmt.Errorf("failed to list services for rotation: %w", err)
+	}
+
+	if len(services) == 0 {
+		l().Infof("No services found using config %s", newCfg.Spec.Name)
+		return nil
+	}
+
+	// --- 2. Apply updates
+	for _, svc := range services {
+		updated := svc.Spec
+		for i, cfgRef := range updated.TaskTemplate.ContainerSpec.Configs {
+			// Match by old ID or by name if oldCfg is nil
+			if (oldCfg != nil && cfgRef.ConfigID == oldCfg.ID) ||
+				(oldCfg == nil && cfgRef.ConfigName == newCfg.Spec.Name) {
+				updated.TaskTemplate.ContainerSpec.Configs[i].ConfigID = newCfg.ID
+				updated.TaskTemplate.ContainerSpec.Configs[i].ConfigName = newCfg.Spec.Name
+			}
+		}
+
+		if _, err := client.ServiceUpdate(ctx, svc.ID, svc.Version, updated, types.ServiceUpdateOptions{}); err != nil {
+			return fmt.Errorf("failed to rotate config in service %s: %w", svc.Spec.Name, err)
+		}
+
+		l().Infof("Rotated config in service %s to %s", svc.Spec.Name, newCfg.Spec.Name)
+	}
+
 	return nil
 }
 
@@ -230,4 +221,38 @@ func nextConfigVersionName(baseName string) string {
 		return fmt.Sprintf("%s-v%d", prefix, v+1)
 	}
 	return fmt.Sprintf("%s-v2", baseName)
+}
+
+func listServicesUsingConfig(ctx context.Context, client *client.Client, configID string) ([]swarm.Service, error) {
+	services, err := client.ServiceList(ctx, types.ServiceListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	var filtered []swarm.Service
+	for _, s := range services {
+		for _, c := range s.Spec.TaskTemplate.ContainerSpec.Configs {
+			if c.ConfigID == configID {
+				filtered = append(filtered, s)
+				break
+			}
+		}
+	}
+	return filtered, nil
+}
+
+func listServicesUsingConfigName(ctx context.Context, client *client.Client, name string) ([]swarm.Service, error) {
+	services, err := client.ServiceList(ctx, types.ServiceListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	var filtered []swarm.Service
+	for _, s := range services {
+		for _, c := range s.Spec.TaskTemplate.ContainerSpec.Configs {
+			if c.ConfigName == name {
+				filtered = append(filtered, s)
+				break
+			}
+		}
+	}
+	return filtered, nil
 }

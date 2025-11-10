@@ -37,19 +37,12 @@ func rotateConfigCmd(cfg *docker.ConfigWithDecodedData) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 
-		// Use the edited config data
-		newCfg, err := docker.CreateConfigVersion(ctx, cfg.Config, cfg.Data)
-		if err != nil {
-			return errorMsg(err)
-		}
-
-		if err := docker.RotateConfigInServices(ctx, cfg.Config, newCfg); err != nil {
+		if err := docker.RotateConfigInServices(ctx, nil, cfg.Config); err != nil {
 			return errorMsg(err)
 		}
 
 		return configRotatedMsg{
-			Old: *cfg,
-			New: docker.ConfigWithDecodedData{Config: newCfg, Data: cfg.Data},
+			New: *cfg,
 		}
 	}
 }
