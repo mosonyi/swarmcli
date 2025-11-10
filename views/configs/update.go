@@ -70,25 +70,24 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 
 	case confirmdialog.ResultMsg:
 		l().Debugf("Confirm dialog result: confirmed=%v (pendingAction=%s)", msg.Confirmed, m.pendingAction)
-		if msg.Confirmed {
-			if m.configToRotate == nil {
-				l().Warnln("Confirmed in dialog, but config to rotate is nil. This is a bug!")
-				m.pendingAction = ""
-				m.confirmDialog.Visible = false
-				return m, nil
-			}
-			l().Infof("Confirmed rotation for %s", m.configToRotate.Config.Spec.Name)
+
+		defer func() {
 			m.pendingAction = ""
 			m.confirmDialog.Visible = false
-			cmd := rotateConfigCmd(m.configToRotate)
 			m.configToRotate = nil
-			return m, cmd
+		}()
+
+		if msg.Confirmed {
+			if m.configToRotate == nil {
+				l().Warnln("Confirmed in dialog, but configToRotate is nil. This is a bug!")
+				return m, nil
+			}
+
+			l().Infof("Confirmed rotation for %s", m.configToRotate.Config.Spec.Name)
+			return m, rotateConfigCmd(m.configToRotate)
 		}
 
 		l().Info("Rotation cancelled by user")
-		m.pendingAction = ""
-		m.confirmDialog.Visible = false
-		m.configToRotate = nil
 		return m, nil
 
 	case tea.KeyMsg:
