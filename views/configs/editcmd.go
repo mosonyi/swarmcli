@@ -117,9 +117,10 @@ func editConfigInEditorCmd(name string) tea.Cmd {
 		if string(newData) == string(cfg.Data) {
 			l().Infoln("No changes made to config")
 			return editConfigDoneMsg{
-				Name:    cfg.Config.Spec.Name,
-				Changed: false,
-				Config:  *cfg,
+				Name:      cfg.Config.Spec.Name,
+				Changed:   false,
+				OldConfig: *cfg,
+				NewConfig: *cfg,
 			}
 		}
 
@@ -137,9 +138,10 @@ func editConfigInEditorCmd(name string) tea.Cmd {
 		}
 
 		return editConfigDoneMsg{
-			Name:    newCfg.Spec.Name,
-			Changed: true,
-			Config:  wrapped,
+			Name:      newCfg.Spec.Name,
+			Changed:   true,
+			OldConfig: *cfg,
+			NewConfig: wrapped,
 		}
 	})
 }

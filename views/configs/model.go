@@ -12,14 +12,15 @@ import (
 )
 
 type Model struct {
-	list           list.Model
-	state          state
-	err            error
-	pendingAction  string
-	confirmDialog  confirmdialog.Model
-	loadingView    loading.Model
-	configs        []docker.ConfigWithDecodedData // cache original docker configs
-	configToRotate *docker.ConfigWithDecodedData  // store edited config for rotation
+	list               list.Model
+	state              state
+	err                error
+	pendingAction      string
+	confirmDialog      confirmdialog.Model
+	loadingView        loading.Model
+	configs            []docker.ConfigWithDecodedData // cache original docker configs
+	configToRotateFrom *docker.ConfigWithDecodedData  // store edited config for rotation
+	configToRotateInto *docker.ConfigWithDecodedData  // store edited config for rotation
 }
 
 type state int

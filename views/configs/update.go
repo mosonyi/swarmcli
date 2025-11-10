@@ -28,11 +28,6 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		m.state = stateReady
 		return m, nil
 
-	case configUpdatedMsg:
-		l().Infof("Config updated: created new version %s", msg.New.Config.Spec.Name)
-		m.list.InsertItem(0, configItemFromSwarm(msg.New.Config))
-		return m, tea.Printf("Created new config version: %s", msg.New.Config.Spec.Name)
-
 	case configRotatedMsg:
 		l().Infof("Config rotated: %s → %s", msg.Old.Config.Spec.Name, msg.New.Config.Spec.Name)
 		return m, tea.Printf("Rotated %s → %s", msg.Old.Config.Spec.Name, msg.New.Config.Spec.Name)
@@ -43,23 +38,26 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		return m, editConfigInEditorCmd(cfg)
 
 	case editConfigDoneMsg:
-		name := msg.Config.Config.Spec.Name
+		oldName := msg.OldConfig.Config.Spec.Name
 
 		if !msg.Changed {
-			l().Debugf("Edit finished: no changes detected for %s", name)
-			return m, tea.Printf("No changes made to config: %s", name)
+			l().Debugf("Edit finished: no changes detected for %s", oldName)
+			return m, tea.Printf("No changes made to config: %s", oldName)
 		}
 
-		l().Infof("Edit finished: config changed, inserting new version %s", name)
+		newName := msg.NewConfig.Config.Spec.Name
 
-		m.list.InsertItem(0, configItemFromSwarm(msg.Config.Config))
-		m.configs = append(m.configs, msg.Config)
+		l().Infof("Edit finished: config changed, inserting new version %s", newName)
+
+		m.list.InsertItem(0, configItemFromSwarm(msg.NewConfig.Config))
+		m.configs = append(m.configs, msg.NewConfig)
 		m.pendingAction = "rotate"
-		m.configToRotate = &msg.Config
+		m.configToRotateFrom = &msg.OldConfig
+		m.configToRotateInto = &msg.NewConfig
 
-		m.confirmDialog.Show(fmt.Sprintf("Rotate config %s now?", name))
+		m.confirmDialog.Show(fmt.Sprintf("Rotate config %s now?", newName))
 
-		return m, tea.Printf("Config %s edited and queued for rotation", name)
+		return m, tea.Printf("Config %s edited and queued for rotation", newName)
 
 	case editConfigErrorMsg:
 		l().Errorf("Error editing config: %v", msg.err)
@@ -77,18 +75,18 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		l().Debugf("Confirm dialog result: confirmed=%v (pendingAction=%s)", msg.Confirmed, m.pendingAction)
 		defer func() {
 			m.pendingAction = ""
-			m.configToRotate = nil
+			m.configToRotateInto = nil
 			m.confirmDialog = m.confirmDialog.Hide()
 		}()
 
 		if msg.Confirmed {
-			if m.configToRotate == nil {
-				l().Warnln("Confirmed in dialog, but configToRotate is nil. This is a bug!")
+			if m.configToRotateInto == nil {
+				l().Warnln("Confirmed in dialog, but configToRotateInto is nil. This is a bug!")
 				return m, nil
 			}
 
-			l().Infof("Confirmed rotation for %s", m.configToRotate.Config.Spec.Name)
-			return m, rotateConfigCmd(m.configToRotate)
+			l().Infof("Confirmed rotation for %s", m.configToRotateInto.Config.Spec.Name)
+			return m, rotateConfigCmd(m.configToRotateFrom, m.configToRotateInto)
 		}
 
 		l().Info("Rotation cancelled by user")
@@ -119,7 +117,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 			l().Infof("Rotate key pressed for config: %s", cfgName)
 
 			m.pendingAction = "rotate"
-			m.configToRotate = cfg
+			m.configToRotateInto = cfg
 			m.confirmDialog = m.confirmDialog.Show(fmt.Sprintf("Rotate config %s?", cfgName))
 
 			return m, nil

@@ -5,10 +5,6 @@ import "swarmcli/docker"
 // Messages for async ops
 type (
 	configsLoadedMsg []docker.ConfigWithDecodedData
-	configUpdatedMsg struct {
-		Old docker.ConfigWithDecodedData
-		New docker.ConfigWithDecodedData
-	}
 	configRotatedMsg struct {
 		Old docker.ConfigWithDecodedData
 		New docker.ConfigWithDecodedData
@@ -17,9 +13,10 @@ type (
 		Name string
 	}
 	editConfigDoneMsg struct {
-		Name    string
-		Changed bool
-		Config  docker.ConfigWithDecodedData
+		Name      string
+		Changed   bool
+		OldConfig docker.ConfigWithDecodedData
+		NewConfig docker.ConfigWithDecodedData
 	}
 	editConfigErrorMsg struct {
 		err error
