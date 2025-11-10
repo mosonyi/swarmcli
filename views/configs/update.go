@@ -42,19 +42,23 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		return m, editConfigInEditorCmd(cfg)
 
 	case editConfigDoneMsg:
+		cfgName := msg.Name
 		if msg.Changed {
-			l().Infof("Edit finished: config changed, inserting new version %s", msg.Config.Config.Spec.Name)
-			m.list.InsertItem(0, configItemFromSwarm(msg.Config.Config))
+			newCfg := msg.Config.Config
+			l().Infof("Edit completed for %s: changes detected, new version %s created", cfgName, newCfg.Spec.Name)
 
+			// Insert new version at top of list
+			m.list.InsertItem(0, configItemFromSwarm(newCfg))
+
+			// Prepare for optional rotation
 			m.pendingAction = "rotate"
-			m.confirmDialog.Visible = true
-			m.confirmDialog.Message = fmt.Sprintf("Rotate config %s now?", msg.Config.Config.Spec.Name)
-
 			m.configToRotate = &msg.Config
+			m.confirmDialog = m.confirmDialog.WithMessage(fmt.Sprintf("Rotate config %s now?", newCfg.Spec.Name)).Show()
 		} else {
-			l().Debugf("Edit finished: no changes detected for %s", msg.Name)
+			l().Debugf("Edit completed for %s: no changes detected", cfgName)
 		}
-		return m, tea.Printf("Edited config: %s", msg.Name)
+
+		return m, tea.Printf("Edit complete: %s", cfgName)
 
 	case editConfigErrorMsg:
 		l().Errorf("Error editing config: %v", msg.err)

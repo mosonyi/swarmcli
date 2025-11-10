@@ -56,3 +56,13 @@ func (m Model) View() string {
 
 	return lipgloss.Place(m.Width, m.Height, lipgloss.Center, lipgloss.Center, box)
 }
+
+func (m Model) WithMessage(msg string) Model {
+	m.Message = msg
+	return m
+}
+
+func (m Model) Show() Model {
+	m.Visible = true
+	return m
+}
