@@ -47,13 +47,15 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 			newCfg := msg.Config.Config
 			l().Infof("Edit completed for %s: changes detected, new version %s created", cfgName, newCfg.Spec.Name)
 
-			// Insert new version at top of list
 			m.list.InsertItem(0, configItemFromSwarm(newCfg))
 
 			// Prepare for optional rotation
 			m.pendingAction = "rotate"
 			m.configToRotate = &msg.Config
-			m.confirmDialog = m.confirmDialog.WithMessage(fmt.Sprintf("Rotate config %s now?", newCfg.Spec.Name)).Show()
+			m.confirmDialog = m.confirmDialog.
+				WithMessage(fmt.Sprintf("Rotate config %s now?", newCfg.Spec.Name)).
+				Show()
+
 		} else {
 			l().Debugf("Edit completed for %s: no changes detected", cfgName)
 		}
@@ -74,11 +76,10 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 
 	case confirmdialog.ResultMsg:
 		l().Debugf("Confirm dialog result: confirmed=%v (pendingAction=%s)", msg.Confirmed, m.pendingAction)
-
 		defer func() {
 			m.pendingAction = ""
-			m.confirmDialog.Visible = false
 			m.configToRotate = nil
+			m.confirmDialog = m.confirmDialog.Hide()
 		}()
 
 		if msg.Confirmed {
@@ -109,10 +110,12 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 				l().Warn("Rotate key pressed but no config selected")
 				return m, nil
 			}
+
 			l().Infof("Rotate key pressed for config: %s", cfg)
 			m.pendingAction = "rotate"
-			m.confirmDialog.Visible = true
-			m.confirmDialog.Message = fmt.Sprintf("Rotate config %s?", cfg)
+			m.confirmDialog = m.confirmDialog.
+				WithMessage(fmt.Sprintf("Rotate config %s?", cfg)).
+				Show()
 			return m, nil
 
 		case "e":
@@ -129,19 +132,15 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 
 	switch m.state {
 	case stateLoading:
-		//l().Debugln("State=Loading: skipping list updates")
 		var cmd tea.Cmd
-		// m.loadingView, cmd = m.loadingView.Update(msg)
 		return m, cmd
 
 	case stateReady:
-		//l().Debugln("State=Ready: updating list")
 		var cmd tea.Cmd
 		m.list, cmd = m.list.Update(msg)
 		return m, cmd
 
 	default:
-		//l().Warnf("Unhandled state: %v", m.state)
 		return m, nil
 	}
 }

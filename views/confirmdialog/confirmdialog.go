@@ -66,3 +66,8 @@ func (m Model) Show() Model {
 	m.Visible = true
 	return m
 }
+
+func (m Model) Hide() Model {
+	m.Visible = false
+	return m
+}
