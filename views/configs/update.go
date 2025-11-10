@@ -58,7 +58,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		m.configToRotateFrom = &msg.OldConfig
 		m.configToRotateInto = &msg.NewConfig
 
-		m.confirmDialog.Show(fmt.Sprintf("Rotate config %s now?", newName))
+		m.confirmDialog = m.confirmDialog.Show(fmt.Sprintf("Rotate config %s now?", newName))
 
 		return m, tea.Printf("Config %s edited and queued for rotation", newName)
 
