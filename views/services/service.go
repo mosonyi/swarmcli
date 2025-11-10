@@ -26,7 +26,6 @@ func restartServiceWithProgressCmd(serviceName string, msgCh chan tea.Msg) tea.C
 				l().Debugf("[Goroutine] RestartServiceWithProgress failed: %v", err)
 			}
 			l().Debugf("[Goroutine] RestartServiceWithProgress returned")
-			close(progressCh)
 		}()
 
 		go func() {
