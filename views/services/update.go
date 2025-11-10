@@ -58,12 +58,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		))
 
 		if msg.Progress.Replaced == msg.Progress.Total && msg.Progress.Total > 0 {
-			l().Debugln("[UI] Restart finished — closing channel")
-			if m.msgCh != nil {
-				close(m.msgCh)
-				m.msgCh = nil
-			}
-
+			l().Debugln("[UI] Restart finished")
 			m.loading.SetVisible(false)
 			return m, tea.Batch(
 				refreshServicesCmd(m.nodeID, m.stackName, m.filterType),

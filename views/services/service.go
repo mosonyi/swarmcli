@@ -35,6 +35,7 @@ func restartServiceWithProgressCmd(serviceName string, msgCh chan tea.Msg) tea.C
 				sendMsg(msgCh, serviceProgressMsg{progress})
 			}
 			l().Debugf("[Listener] Progress listener loop exiting")
+			close(msgCh)
 		}()
 
 		return nil
