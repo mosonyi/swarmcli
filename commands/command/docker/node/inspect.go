@@ -15,11 +15,11 @@ import (
 type DockerNodeInspect struct{}
 
 func (c DockerNodeInspect) Name() string {
-	return "docker node inspect"
+	return "node inspect"
 }
 
 func (c DockerNodeInspect) Description() string {
-	return "Inspect details about a Docker node"
+	return "docker node inspect <ID>"
 }
 
 func (c DockerNodeInspect) Execute(ctx any, args args.Args) tea.Cmd {
