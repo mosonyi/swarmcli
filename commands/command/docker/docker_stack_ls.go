@@ -11,7 +11,7 @@ import "swarmcli/views/view"
 
 type DockerStackLs struct{}
 
-func (DockerStackLs) Name() string        { return "stack ls" }
+func (DockerStackLs) Name() string        { return "stack" }
 func (DockerStackLs) Description() string { return "List all Docker stacks: docker stack ls" }
 
 func (DockerStackLs) Execute(ctx any, args args.Args) tea.Cmd {

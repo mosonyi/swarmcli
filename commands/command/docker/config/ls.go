@@ -11,7 +11,7 @@ import "swarmcli/views/view"
 
 type DockerConfigLs struct{}
 
-func (DockerConfigLs) Name() string        { return "config ls" }
+func (DockerConfigLs) Name() string        { return "config" }
 func (DockerConfigLs) Description() string { return "docker config ls" }
 
 func (DockerConfigLs) Execute(ctx any, args args.Args) tea.Cmd {
