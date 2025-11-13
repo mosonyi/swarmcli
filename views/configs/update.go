@@ -88,6 +88,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 
 		if !msg.Confirmed {
 			l().Info("Action cancelled by user")
+			m.confirmDialog.Visible = false
 			return m, nil
 		}
 
