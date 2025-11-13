@@ -2,18 +2,15 @@ package configsview
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
-	"sort"
-	"strings"
 	"swarmcli/docker"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// editConfigInEditorCmd launches the editor with human-readable JSON for a config
+// editConfigInEditorCmd launches the editor to edit only the decoded DataParsed content as plain text.
 func editConfigInEditorCmd(name string) tea.Cmd {
 	l().Infoln("editConfigInEditorCmd: started")
 
@@ -25,26 +22,22 @@ func editConfigInEditorCmd(name string) tea.Cmd {
 	}
 	l().Infoln("InspectConfig OK")
 
-	// Serialize config to pretty JSON for human-readable editing
-	content, err := cfg.PrettyJSON()
-	if err != nil {
-		l().Infoln("PrettyJSON error:", err)
-		return func() tea.Msg { return editConfigErrorMsg{fmt.Errorf("failed to marshal config: %w", err)} }
-	}
+	// Get the human-readable UTF-8 content to edit
+	content := cfg.Data
+	l().Infoln("Prepared editable content, length:", len(content))
 
-	tmp, err := os.CreateTemp("", fmt.Sprintf("%s-*.json", cfg.Config.Spec.Name))
+	tmp, err := os.CreateTemp("", fmt.Sprintf("%s-*.txt", cfg.Config.Spec.Name))
 	if err != nil {
 		l().Infoln("CreateTemp error:", err)
 		return func() tea.Msg { return editConfigErrorMsg{fmt.Errorf("failed to create temp file: %w", err)} }
 	}
-	l().Infoln("Created tmp file:", tmp.Name())
+	defer tmp.Close()
 
 	if _, err := tmp.Write(content); err != nil {
 		l().Infoln("Write temp error:", err)
 		return func() tea.Msg { return editConfigErrorMsg{fmt.Errorf("failed to write temp file: %w", err)} }
 	}
-	tmp.Close()
-	l().Infoln("Wrote JSON to temp file, length:", len(content))
+	l().Infoln("Wrote plain data to temp file:", tmp.Name())
 
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
@@ -57,9 +50,7 @@ func editConfigInEditorCmd(name string) tea.Cmd {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	l().Infoln("Prepared command:", cmd.String())
-	l().Infoln("Returning ExecProcess cmd")
 
-	// Run editor via Bubble Tea ExecProcess
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		defer os.Remove(tmp.Name())
 
@@ -70,50 +61,15 @@ func editConfigInEditorCmd(name string) tea.Cmd {
 		}
 		l().Infoln("Editor finished successfully")
 
-		// Read edited JSON
-		editedJSON, err := os.ReadFile(tmp.Name())
+		// Read the edited plain UTF-8 data
+		newData, err := os.ReadFile(tmp.Name())
 		if err != nil {
 			l().Infoln("ReadFile error:", err)
 			return editConfigErrorMsg{fmt.Errorf("failed to read edited file: %w", err)}
 		}
+		l().Infoln("Read edited data, length:", len(newData))
 
-		// Parse edited JSON back into a struct with flexible DataParsed type
-		var tmpStruct struct {
-			Config     docker.ConfigWithDecodedData `json:"Config"`
-			DataParsed any                          `json:"DataParsed,omitempty"`
-			RawData    string                       `json:"DataRaw,omitempty"`
-		}
-		if err := json.Unmarshal(editedJSON, &tmpStruct); err != nil {
-			l().Infoln("JSON unmarshal error:", err)
-			return editConfigErrorMsg{fmt.Errorf("failed to parse edited JSON: %w", err)}
-		}
-
-		// Rebuild the config Data based on the type of DataParsed
-		var newData []byte
-		switch v := tmpStruct.DataParsed.(type) {
-		case map[string]any:
-			// Preserve key order for consistent base64 and editing
-			keys := make([]string, 0, len(v))
-			for k := range v {
-				keys = append(keys, k)
-			}
-			sort.Strings(keys)
-
-			lines := make([]string, 0, len(v))
-			for _, k := range keys {
-				lines = append(lines, fmt.Sprintf("%s=%v", k, v[k]))
-			}
-			newData = []byte(strings.Join(lines, "\n"))
-
-		case string:
-			newData = []byte(v) // use raw string
-
-		default:
-			newData = tmpStruct.Config.Data // fallback to original data
-		}
-		l().Infoln("Rebuilt newData length:", len(newData))
-
-		// Check if nothing changed
+		// Check if content changed
 		if string(newData) == string(cfg.Data) {
 			l().Infoln("No changes made to config")
 			return editConfigDoneMsg{
@@ -124,7 +80,7 @@ func editConfigInEditorCmd(name string) tea.Cmd {
 			}
 		}
 
-		// Create a new Docker config version
+		// Create a new Docker config version with the edited data
 		newCfg, err := docker.CreateConfigVersion(ctx, cfg.Config, newData)
 		if err != nil {
 			l().Infoln("CreateConfigVersion error:", err)
