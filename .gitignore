@@ -7,6 +7,9 @@
 
 # Devcontainer metadata
 .devcontainer/*.log
+.devcontainer/devcontainer.local.json
+.devcontainer/certs/*.pem
+.devcontainer/certs/*.crt
 shared/*
 
 debug.log

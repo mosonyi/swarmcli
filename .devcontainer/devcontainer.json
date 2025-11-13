@@ -1,13 +1,20 @@
 {
   "name": "Swarm Agent Dev",
-  "dockerFile": "Dockerfile",
-  "context": "..",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "args": {
+      "HTTP_PROXY": "${localEnv:HTTP_PROXY}",
+      "HTTPS_PROXY": "${localEnv:HTTPS_PROXY}",
+      "NO_PROXY": "${localEnv:NO_PROXY}"
+    }
+  },
   "runArgs": [
     "--group-add=1001",
     "--volume=/var/run/docker.sock:/var/run/docker.sock"
   ],
   "mounts": [
-    "type=bind,source=/mnt/wslg/runtime-dir/wayland-0,target=/tmp/vscode-wayland",
+    "type=bind,source=${localWorkspaceFolder}/.devcontainer/certs/corporate-proxy.crt,target=/etc/ssl/certs/corporate-proxy.crt",
     "type=bind,source=./shared/.docker,target=/home/vscode/.docker"
   ],
   "remoteEnv": {
@@ -31,8 +38,15 @@
   "containerEnv": {
     "GOPATH": "${containerWorkspaceFolder}/.go",
     "GOMODCACHE": "${containerWorkspaceFolder}/.go/pkg/mod",
-    "GOCACHE": "${containerWorkspaceFolder}/.cache/go-build"
+    "GOCACHE": "${containerWorkspaceFolder}/.cache/go-build",
+
+    "HTTP_PROXY": "${localEnv:HTTP_PROXY}",
+    "HTTPS_PROXY": "${localEnv:HTTPS_PROXY}",
+    "NO_PROXY": "${localEnv:NO_PROXY}",
+    "http_proxy": "${localEnv:HTTP_PROXY}",
+    "https_proxy": "${localEnv:HTTPS_PROXY}",
+    "no_proxy": "${localEnv:NO_PROXY}"
   },
-  "postCreateCommand": "go mod tidy",
+  "postCreateCommand": "sudo update-ca-certificates && go mod tidy",
   "remoteUser": "vscode"
 }

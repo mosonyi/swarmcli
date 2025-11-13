@@ -1,21 +1,29 @@
-
 services:
   # ===== Manager (dockerd-in-docker) =====
   manager:
     image: docker:27-dind
     privileged: true
     environment:
-      - DOCKER_TLS_CERTDIR=    # disable TLS for local test-setup
+      - DOCKER_TLS_CERTDIR=              # disable TLS for local test-setup
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
+      - NO_PROXY=${NO_PROXY}
     command:
-      - dockerd
-      - --host=tcp://0.0.0.0:2375   # listen on TCP
-      - --host=unix:///var/run/docker-temp.sock   # temporary unix socket inside container
-      - --tls=false
+      [
+        "sh","-exc",
+        "apk add --no-cache ca-certificates >/dev/null 2>&1 || true; \
+         update-ca-certificates || true; \
+         dockerd \
+           --host=tcp://0.0.0.0:2375 \
+           --host=unix:///var/run/docker-temp.sock \
+           --tls=false"
+      ]
     ports:
-      - "22375:2375"               # expose manager Docker API to host
+      - "22375:2375"                     # expose manager Docker API to host
     volumes:
       - manager-data:/var/lib/docker
       - shared:/shared
+      - ../.devcontainer/certs:/usr/local/share/ca-certificates:ro
     networks:
       swarmnet:
         aliases: [ manager ]
@@ -56,12 +64,22 @@ services:
     privileged: true
     environment:
       - DOCKER_TLS_CERTDIR=
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
+      - NO_PROXY=${NO_PROXY}
     command:
-      - --host=tcp://0.0.0.0:2375
-      - --host=unix:///var/run/docker.sock
+      [
+        "sh","-exc",
+        "apk add --no-cache ca-certificates >/dev/null 2>&1 || true; \
+         update-ca-certificates || true; \
+         dockerd \
+           --host=tcp://0.0.0.0:2375 \
+           --host=unix:///var/run/docker.sock"
+      ]
     volumes:
       - worker1-data:/var/lib/docker
       - shared:/shared
+      - ../.devcontainer/certs:/usr/local/share/ca-certificates:ro
     networks:
       swarmnet:
         aliases: [worker1]
@@ -101,12 +119,22 @@ services:
     privileged: true
     environment:
       - DOCKER_TLS_CERTDIR=
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
+      - NO_PROXY=${NO_PROXY}
     command:
-      - --host=tcp://0.0.0.0:2375
-      - --host=unix:///var/run/docker.sock
+      [
+        "sh","-exc",
+        "apk add --no-cache ca-certificates >/dev/null 2>&1 || true; \
+         update-ca-certificates || true; \
+         dockerd \
+           --host=tcp://0.0.0.0:2375 \
+           --host=unix:///var/run/docker.sock"
+      ]
     volumes:
       - worker2-data:/var/lib/docker
       - shared:/shared
+      - ../.devcontainer/certs:/usr/local/share/ca-certificates:ro
     networks:
       swarmnet:
         aliases: [worker2]

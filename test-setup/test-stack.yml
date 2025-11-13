@@ -8,7 +8,7 @@ configs:
 
 services:
   whoami:
-    image: alpine:3.20
+    image: alpine:latest
     configs:
       - source: whoami_config
         target: /etc/whoami/config
@@ -27,7 +27,7 @@ services:
       - "8081:80"
 
   whoami_single:
-    image: alpine:3.20
+    image: alpine:latest
     configs:
       - source: whoami_single_config
         target: /etc/whoami/config
