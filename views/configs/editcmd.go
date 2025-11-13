@@ -10,7 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// editConfigInEditorCmd launches the editor to edit only the decoded DataParsed content as plain text.
+// editConfigInEditorCmd creates a tmp file and opens the editor to edit the new config.
 func editConfigInEditorCmd(name string) tea.Cmd {
 	l().Infoln("editConfigInEditorCmd: started")
 
