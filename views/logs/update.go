@@ -13,58 +13,50 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case InitStreamMsg:
-		// store stream channels and immediately start reading the first line
 		m.linesChan = msg.Lines
 		m.errChan = msg.Errs
 		m.Visible = true
-		// schedule a cmd that reads one line (blocking until a line is available)
 		return m, m.readOneLineCmd()
 
 	case LineMsg:
-		// append line safely
 		m.mu.Lock()
-		// Trim trailing newline when storing lines slice; keep it when rendering
 		line := msg.Line
 		if strings.HasSuffix(line, "\n") {
 			line = line[:len(line)-1]
 		}
 		m.lines = append(m.lines, line)
-		// if we are searching, check if this new line contains searchTerm and update matches
+
 		if m.searchTerm != "" && strings.Contains(strings.ToLower(line), strings.ToLower(m.searchTerm)) {
 			m.searchMatches = append(m.searchMatches, len(m.lines)-1)
 		}
 		m.mu.Unlock()
 
-		// if ready update viewport content
 		if m.ready {
 			m.viewport.SetContent(m.buildContent())
-			// keep viewport at bottom when new content arrives (typical logs behavior)
-			// only if the user is currently at the bottom
-			// heuristic: if YOffset is near bottom, auto-scroll
+
+			// auto-scroll only if user is at bottom
 			if m.viewport.YOffset+m.viewport.Height >= m.viewport.TotalLineCount()-1 {
 				m.viewport.GotoBottom()
 			}
 		}
 
-		// continue streaming: return command to read the next line
 		return m, m.readOneLineCmd()
 
 	case StreamErrMsg:
-		// show an error line and stop streaming
 		m.mu.Lock()
 		m.lines = append(m.lines, fmt.Sprintf("Error: %v", msg.Err))
 		m.mu.Unlock()
+
 		if m.ready {
 			m.viewport.SetContent(m.buildContent())
 		}
-		// don't continue
 		return m, nil
 
 	case StreamDoneMsg:
-		// stream finished - optionally show a footer
 		m.mu.Lock()
 		m.lines = append(m.lines, "--- stream closed ---")
 		m.mu.Unlock()
+
 		if m.ready {
 			m.viewport.SetContent(m.buildContent())
 		}
@@ -76,17 +68,30 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		if !m.ready {
 			m.ready = true
 		}
-		// on resize, rebuild viewport content
+
 		m.viewport.SetContent(m.buildContent())
 		return m, nil
 
 	case tea.KeyMsg:
-		// delegate to key handler
+
+		// -----------------------------------------
+		// 1) Let viewport handle all scrolling keys
+		// -----------------------------------------
+		switch msg.String() {
+		case "up", "down", "pgup", "pgdown", "home", "end":
+			var cmd tea.Cmd
+			m.viewport, cmd = m.viewport.Update(msg)
+			return m, cmd
+		}
+
+		// -----------------------------------------------------
+		// 2) Other keys → handled by your custom handler
+		// -----------------------------------------------------
 		newModel, cmd := HandleKey(m, msg)
 		return newModel, cmd
 	}
 
-	// default: let viewport handle whatever remaining messages it needs
+	// default: feed remaining msgs to viewport
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
 	return m, cmd
