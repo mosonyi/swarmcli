@@ -134,7 +134,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 					//	content = fmt.Sprintf("Error inspecting service %q: %v", entry.ServiceName, err)
 					//}
 					return view.NavigateToMsg{
-						Payload:  entry.ServiceID,
+						Payload:  entry,
 						ViewName: logsview.ViewName,
 						//Payload: map[string]interface{}{
 						//	"title": fmt.Sprintf("Service: %s", entry.ServiceName),

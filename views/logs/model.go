@@ -3,6 +3,7 @@ package logsview
 import (
 	"fmt"
 	"os/exec"
+	"swarmcli/docker"
 	"swarmcli/views/helpbar"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -55,9 +56,9 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 }
 
 // Log loading command
-func Load(serviceID string) tea.Cmd {
+func Load(service docker.ServiceEntry) tea.Cmd {
 	return func() tea.Msg {
-		out, err := exec.Command("docker", "service", "logs", "--no-trunc", serviceID).CombinedOutput()
+		out, err := exec.Command("docker", "service", "logs", "--no-trunc", service.ServiceID).CombinedOutput()
 		if err != nil {
 			return Msg(fmt.Sprintf("Error: %v\n%s", err, out))
 		}
