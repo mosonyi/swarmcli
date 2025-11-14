@@ -1,10 +1,6 @@
 package logsview
 
 import (
-	"bufio"
-	"io"
-	"os/exec"
-	"swarmcli/docker"
 	"swarmcli/views/helpbar"
 	"sync"
 
@@ -12,44 +8,61 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// Model holds the state for the streaming logs view.
 type Model struct {
 	viewport      viewport.Model
 	Visible       bool
-	mode          string // "normal", "search"
+	mode          string // "normal" or "search"
 	searchTerm    string
 	searchIndex   int
-	searchMatches []int // line indexes of matches
-	lines         []string
+	searchMatches []int
+	lines         []string // bounded: only last maxLines kept
+	maxLines      int
 	ready         bool
 
-	// streaming channels (set when stream is started)
+	// streaming control
+	streamCancel func()     // cancel context for streaming goroutine
+	streamMu     sync.Mutex // protects below
+	streamActive bool       // whether a stream is active
+
+	// read pump channels (internal to tea)
 	linesChan chan string
 	errChan   chan error
 
-	// internal mutex to protect lines slice when appended from goroutine
+	// sync for lines slice
 	mu sync.Mutex
+
+	// follow behavior
+	follow bool
 }
 
-// New creates a new logs view model
-func New(width, height int) Model {
+// New creates a logs model with sensible defaults.
+func New(width, height int, maxLines int) Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
 	return Model{
-		viewport: vp,
-		Visible:  false,
-		mode:     "normal",
-		lines:    make([]string, 0),
+		viewport:  vp,
+		Visible:   false,
+		mode:      "normal",
+		lines:     make([]string, 0, 1024),
+		maxLines:  maxLines,
+		linesChan: nil,
+		errChan:   nil,
+		follow:    true, // auto-follow by default
 	}
 }
 
-func (m Model) Init() tea.Cmd {
-	return nil
+func (m Model) Init() tea.Cmd { return nil }
+
+func (m Model) Name() string { return ViewName }
+
+func (m *Model) setFollow(f bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.follow = f
 }
 
-func (m Model) Name() string {
-	return ViewName
-}
-
+// ShortHelpItems stays compatible with your helpbar interface.
 func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 	if m.mode == "search" {
 		return []helpbar.HelpEntry{
@@ -61,75 +74,7 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "/", Desc: "search"},
 		{Key: "n/N", Desc: "next/prev"},
+		{Key: "f", Desc: "toggle follow"},
 		{Key: "q", Desc: "close"},
-	}
-}
-
-// Load starts streaming logs for the given service. It returns a command that
-// initializes the background streamer and sends back an InitStreamMsg.
-func Load(service docker.ServiceEntry) tea.Cmd {
-	return func() tea.Msg {
-		lines := make(chan string, 128)
-		errs := make(chan error, 1)
-
-		// start the streaming goroutine
-		go func() {
-			// docker service logs --no-trunc <id>
-			cmd := exec.Command("docker", "service", "logs", "--no-trunc", service.ServiceID)
-			stdout, err := cmd.StdoutPipe()
-			if err != nil {
-				errs <- err
-				close(lines)
-				close(errs)
-				return
-			}
-			stderr, err := cmd.StderrPipe()
-			if err != nil {
-				errs <- err
-				close(lines)
-				close(errs)
-				return
-			}
-
-			if err := cmd.Start(); err != nil {
-				errs <- err
-				close(lines)
-				close(errs)
-				return
-			}
-
-			// scan stdout and stderr concurrently, push lines into lines chan
-			var wg sync.WaitGroup
-			pushScanner := func(r io.Reader) {
-				defer wg.Done()
-				sc := bufio.NewScanner(r)
-				for sc.Scan() {
-					// preserve newline
-					lines <- sc.Text() + "\n"
-				}
-				// ignore scan error here; we'll check after Wait
-			}
-
-			wg.Add(2)
-			go pushScanner(stdout)
-			go pushScanner(stderr)
-
-			// wait for scanners
-			wg.Wait()
-
-			// wait for process exit
-			if err := cmd.Wait(); err != nil {
-				// If docker returns non-zero (could be expected), still close lines but report error
-				errs <- err
-			}
-			close(lines)
-			close(errs)
-		}()
-
-		// return init message which carries the channels
-		return InitStreamMsg{
-			Lines: lines,
-			Errs:  errs,
-		}
 	}
 }

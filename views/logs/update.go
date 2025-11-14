@@ -4,51 +4,65 @@ import (
 	"fmt"
 	"strings"
 	"swarmcli/utils"
-	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
+// Update processes Tea messages.
+func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case InitStreamMsg:
+		// store channels and begin the read-once pump
 		m.linesChan = msg.Lines
 		m.errChan = msg.Errs
 		m.Visible = true
+		l().Debugf("[logsview] stream initialized")
 		return m, m.readOneLineCmd()
 
 	case LineMsg:
+		// append line into bounded buffer
 		m.mu.Lock()
-		line := msg.Line
-		if strings.HasSuffix(line, "\n") {
-			line = line[:len(line)-1]
-		}
-		m.lines = append(m.lines, line)
-		l().Debugf("[logsview] LineMsg: appended line, total=%d YOffset=%d Height=%d TotalLines=%d",
-			len(m.lines), m.viewport.YOffset, m.viewport.Height, m.viewport.TotalLineCount())
+		// store line as-is (no newline); rendering will join with '\n'
+		m.lines = append(m.lines, msg.Line)
 
-		if m.searchTerm != "" && strings.Contains(strings.ToLower(line), strings.ToLower(m.searchTerm)) {
+		// trim if over maxLines
+		if m.maxLines > 0 && len(m.lines) > m.maxLines {
+			// drop older lines
+			start := len(m.lines) - m.maxLines
+			newBuf := make([]string, 0, m.maxLines)
+			newBuf = append(newBuf, m.lines[start:]...)
+			m.lines = newBuf
+		}
+
+		// update searchMatches incrementally
+		if m.searchTerm != "" && strings.Contains(strings.ToLower(msg.Line), strings.ToLower(m.searchTerm)) {
 			m.searchMatches = append(m.searchMatches, len(m.lines)-1)
 		}
+		totalLines := len(m.lines)
 		m.mu.Unlock()
 
 		if m.ready {
 			m.viewport.SetContent(m.buildContent())
 
-			// auto-scroll only if user is at bottom
-			if m.viewport.YOffset+m.viewport.Height >= m.viewport.TotalLineCount()-1 {
-				m.viewport.GotoBottom()
+			// auto-follow behavior: only keep bottom when follow=true and user is at bottom
+			if m.follow {
+				// if viewport thinks it's at bottom (or close), goto bottom
+				if m.viewport.YOffset+m.viewport.Height >= m.viewport.TotalLineCount()-1 {
+					m.viewport.GotoBottom()
+				}
 			}
+			l().Debugf("[logsview] appended line; total=%d YOffset=%d Height=%d TotalLineCount=%d",
+				totalLines, m.viewport.YOffset, m.viewport.Height, m.viewport.TotalLineCount())
 		}
-
 		return m, m.readOneLineCmd()
 
 	case StreamErrMsg:
+		// append an error line and stop
 		m.mu.Lock()
 		m.lines = append(m.lines, fmt.Sprintf("Error: %v", msg.Err))
 		m.mu.Unlock()
-
+		l().Errorf("[logsview] stream error: %v", msg.Err)
 		if m.ready {
 			m.viewport.SetContent(m.buildContent())
 		}
@@ -58,7 +72,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		m.mu.Lock()
 		m.lines = append(m.lines, "--- stream closed ---")
 		m.mu.Unlock()
-
+		l().Debugf("[logsview] stream closed")
 		if m.ready {
 			m.viewport.SetContent(m.buildContent())
 		}
@@ -70,57 +84,44 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		if !m.ready {
 			m.ready = true
 		}
-
+		// reset viewport content so the internal content height updates
 		m.viewport.SetContent(m.buildContent())
 		return m, nil
 
 	case tea.KeyMsg:
-
-		// -----------------------------------------
-		// 1) Let viewport handle all scrolling keys
-		// -----------------------------------------
+		// 1) allow viewport to handle scrolling keys
 		switch msg.String() {
-		case "up", "down", "pgup", "pgdown", "home", "end":
+		case "up", "down", "pgup", "pgdown", "home", "end", "k", "j":
 			var cmd tea.Cmd
 			m.viewport, cmd = m.viewport.Update(msg)
 			return m, cmd
 		}
 
-		// -----------------------------------------------------
-		// 2) Other keys → handled by your custom handler
-		// -----------------------------------------------------
+		// 2) other keys -> our handler
 		newModel, cmd := HandleKey(m, msg)
 		return newModel, cmd
 	}
 
-	// default: feed remaining msgs to viewport
+	// default: let viewport handle other messages
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
 	return m, cmd
 }
 
-// readOneLineCmd returns a cmd that blocks until one line is available from linesChan.
-// It returns a LineMsg, or StreamErrMsg/StreamDoneMsg when the stream closes/errors.
+// readOneLineCmd returns a cmd that waits for one line from the line channel.
 func (m Model) readOneLineCmd() tea.Cmd {
-	// if channels are not set, no-op
 	if m.linesChan == nil && m.errChan == nil {
 		return nil
 	}
-
 	return func() tea.Msg {
-		// note: we don't hold any locks here - the producer goroutine writes to these channels
-		// wait for either a line, an error, or closed channel
 		select {
 		case line, ok := <-m.linesChan:
 			if !ok {
-				// no more lines -> done
 				return StreamDoneMsg{}
 			}
 			return LineMsg{Line: line}
 		case err, ok := <-m.errChan:
 			if !ok {
-				// errs channel closed and no error
-				// but we still should check linesChan in next invocation
 				return StreamDoneMsg{}
 			}
 			if err != nil {
@@ -131,11 +132,14 @@ func (m Model) readOneLineCmd() tea.Cmd {
 	}
 }
 
-// SetContent replaces entire content (keeps compatibility with previous API).
-// It resets search state.
 func (m *Model) SetContent(content string) {
 	m.mu.Lock()
 	m.lines = strings.Split(content, "\n")
+	if m.maxLines > 0 && len(m.lines) > m.maxLines {
+		// keep only last maxLines
+		start := len(m.lines) - m.maxLines
+		m.lines = append([]string{}, m.lines[start:]...)
+	}
 	m.searchMatches = nil
 	m.searchTerm = ""
 	m.searchIndex = 0
@@ -148,28 +152,23 @@ func (m *Model) SetContent(content string) {
 	m.viewport.GotoTop()
 	m.viewport.SetContent(m.buildContent())
 	m.viewport.YOffset = 0
-	l().Debugf("[logsview] SetContent: len(lines)=%d contentLen=%d YOffset=%d Height=%d TotalLines=%d",
-		len(m.lines), len(m.buildContent()), m.viewport.YOffset, m.viewport.Height, m.viewport.TotalLineCount())
-
+	l().Debugf("[logsview] SetContent called: total lines=%d", len(m.lines))
 }
 
-// highlightContent recalculates matches and rebuilds visible content.
 func (m *Model) highlightContent() {
 	if m.searchTerm == "" {
 		m.searchMatches = nil
 	} else {
-		// recalc matches across all lines
 		m.searchMatches = []int{}
-		lowerTerm := strings.ToLower(m.searchTerm)
+		lower := strings.ToLower(m.searchTerm)
 		m.mu.Lock()
 		for i, L := range m.lines {
-			if strings.Contains(strings.ToLower(L), lowerTerm) {
+			if strings.Contains(strings.ToLower(L), lower) {
 				m.searchMatches = append(m.searchMatches, i)
 			}
 		}
 		m.mu.Unlock()
 		if len(m.searchMatches) > 0 {
-			// clamp index
 			if m.searchIndex >= len(m.searchMatches) {
 				m.searchIndex = 0
 			}
@@ -182,36 +181,30 @@ func (m *Model) highlightContent() {
 	}
 }
 
+// buildContent returns the full content (required by viewport) — HighlightMatches may return colored output.
 func (m *Model) buildContent() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	full := strings.Join(m.lines, "\n")
-
 	if m.mode == "search" && m.searchTerm != "" {
 		return utils.HighlightMatches(full, m.searchTerm)
 	}
 	return full
 }
 
-// scrollToMatch makes the viewport scroll to the currently selected match.
+// scrollToMatch centers the viewport on the selected match
 func (m *Model) scrollToMatch() {
-	l().Debugf("[logsview] scrollToMatch idx=%d totalMatches=%d", m.searchIndex, len(m.searchMatches))
-
 	if len(m.searchMatches) == 0 || m.mode != "search" {
 		return
 	}
-	// get the line index for current match
 	idx := m.searchMatches[m.searchIndex]
-	// center that line within viewport
 	offset := idx - m.viewport.Height/2
 	if offset < 0 {
 		offset = 0
 	}
 	m.viewport.GotoTop()
 	m.viewport.SetYOffset(offset)
-	l().Debugf("[logsview] scrollToMatch AFTER: YOffset=%d", m.viewport.YOffset)
-
-	// after moving, update visible content
 	m.viewport.SetContent(m.buildContent())
+	l().Debugf("[logsview] scrollToMatch idx=%d newYOffset=%d", idx, offset)
 }

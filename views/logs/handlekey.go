@@ -4,23 +4,18 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// HandleKey handles keys for navigation and search (kept in same file for convenience)
 func HandleKey(m Model, k tea.KeyMsg) (Model, tea.Cmd) {
 	switch k.String() {
 	case "q", "esc":
-		// close view
 		m.Visible = false
-		// stop any streaming? we leave docker process to finish; we just drop UI
 		return m, nil
 	case "/":
-		// enter search mode
 		m.mode = "search"
 		m.searchTerm = ""
 		m.searchIndex = 0
 		return m, nil
 	case "enter":
 		if m.mode == "search" {
-			// commit search -> focus first match
 			m.highlightContent()
 			if len(m.searchMatches) > 0 {
 				m.searchIndex = 0
@@ -30,32 +25,25 @@ func HandleKey(m Model, k tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 	case "n":
-		// next match
 		if len(m.searchMatches) > 0 {
 			m.searchIndex = (m.searchIndex + 1) % len(m.searchMatches)
 			m.scrollToMatch()
 		}
 		return m, nil
 	case "N":
-		// prev match
 		if len(m.searchMatches) > 0 {
 			m.searchIndex = (m.searchIndex - 1 + len(m.searchMatches)) % len(m.searchMatches)
 			m.scrollToMatch()
 		}
 		return m, nil
-	case "up", "down", "pgup", "pgdown", "home", "end":
-		l().Debugf("[logsview] Key=%s BEFORE update: YOffset=%d Height=%d TotalLines=%d",
-			k.String(), m.viewport.YOffset, m.viewport.Height, m.viewport.TotalLineCount())
-
-		var cmd tea.Cmd
-		m.viewport, cmd = m.viewport.Update(k)
-
-		l().Debugf("[logsview] AFTER update: YOffset=%d", m.viewport.YOffset)
-
-		return m, cmd
+	case "f":
+		// toggle follow mode
+		m.setFollow(!m.follow)
+		l().Debugf("[logsview] follow toggled -> %v", m.follow)
+		return m, nil
 	}
 
-	// if in search mode, handle text input and backspace
+	// if in search mode, capture runes/backspace
 	if m.mode == "search" {
 		switch k.Type {
 		case tea.KeyRunes:

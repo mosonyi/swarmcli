@@ -1,8 +1,9 @@
 package logsview
 
 type InitStreamMsg struct {
-	Lines chan string
-	Errs  chan error
+	Lines    chan string
+	Errs     chan error
+	MaxLines int
 }
 
 type LineMsg struct {
