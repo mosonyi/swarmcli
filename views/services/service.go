@@ -65,16 +65,16 @@ func refreshServicesCmd(nodeID, stackName string, filterType FilterType) tea.Cmd
 	}
 }
 
-func LoadServicesForView(filterType FilterType, nodeID, stackName string) (entries []ServiceEntry, title string) {
+func LoadServicesForView(filterType FilterType, nodeID, stackName string) (entries []docker.ServiceEntry, title string) {
 	switch filterType {
 	case NodeFilter:
-		entries = LoadNodeServices(nodeID)
+		entries = docker.LoadNodeServices(nodeID)
 		title = "Services on Node: " + nodeID
 	case StackFilter:
-		entries = LoadStackServices(stackName)
+		entries = docker.LoadStackServices(stackName)
 		title = "Services in Stack: " + stackName
 	default: // All services
-		entries = LoadStackServices("")
+		entries = docker.LoadStackServices("")
 		title = "All Services"
 	}
 	return

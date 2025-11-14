@@ -2,6 +2,7 @@ package servicesview
 
 import (
 	"fmt"
+	"swarmcli/docker"
 	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
@@ -28,7 +29,7 @@ type Model struct {
 	viewport viewport.Model
 	Visible  bool
 
-	entries []ServiceEntry
+	entries []docker.ServiceEntry
 	cursor  int
 	title   string
 	ready   bool
@@ -47,14 +48,6 @@ type Model struct {
 
 	confirmDialog confirmdialog.Model
 	loading       loadingview.Model
-}
-
-type ServiceEntry struct {
-	StackName      string
-	ServiceName    string
-	ServiceID      string
-	ReplicasOnNode int
-	ReplicasTotal  int
 }
 
 // Create new instance
