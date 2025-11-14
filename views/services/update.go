@@ -7,6 +7,7 @@ import (
 	"swarmcli/views/confirmdialog"
 	inspectview "swarmcli/views/inspect"
 	loadingview "swarmcli/views/loading"
+	logsview "swarmcli/views/logs"
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -122,6 +123,25 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 				entry := m.entries[m.cursor]
 				m.confirmDialog.Visible = true
 				m.confirmDialog.Message = fmt.Sprintf("Restart service %q?", entry.ServiceName)
+			}
+			return m, nil
+		case "l":
+			if m.cursor < len(m.entries) {
+				entry := m.entries[m.cursor]
+				return m, func() tea.Msg {
+					//content, err := docker.Inspect(context.Background(), docker.InspectService, entry.ServiceID)
+					//if err != nil {
+					//	content = fmt.Sprintf("Error inspecting service %q: %v", entry.ServiceName, err)
+					//}
+					return view.NavigateToMsg{
+						Payload:  entry.ServiceID,
+						ViewName: logsview.ViewName,
+						//Payload: map[string]interface{}{
+						//	"title": fmt.Sprintf("Service: %s", entry.ServiceName),
+						//	"json":  content,
+						//},
+					}
+				}
 			}
 			return m, nil
 		}

@@ -79,6 +79,7 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "i", Desc: "inspect"},
 		{Key: "k/up", Desc: "up"},
 		{Key: "r", Desc: "restart service"},
+		{Key: "l", Desc: "view logs"},
 		{Key: "j/down", Desc: "down"},
 		{Key: "q", Desc: "close"},
 	}
