@@ -43,22 +43,16 @@ func HandleKey(m Model, k tea.KeyMsg) (Model, tea.Cmd) {
 			m.scrollToMatch()
 		}
 		return m, nil
-	case "up":
-		m.viewport.LineUp(1)
-		m.viewport.SetContent(m.buildContent())
-		return m, nil
-	case "down":
-		m.viewport.LineDown(1)
-		m.viewport.SetContent(m.buildContent())
-		return m, nil
-	case "pgup":
-		m.viewport.LineUp(m.viewport.Height)
-		m.viewport.SetContent(m.buildContent())
-		return m, nil
-	case "pgdown":
-		m.viewport.LineDown(m.viewport.Height)
-		m.viewport.SetContent(m.buildContent())
-		return m, nil
+	case "up", "down", "pgup", "pgdown", "home", "end":
+		l().Debugf("[logsview] Key=%s BEFORE update: YOffset=%d Height=%d TotalLines=%d",
+			k.String(), m.viewport.YOffset, m.viewport.Height, m.viewport.TotalLineCount())
+
+		var cmd tea.Cmd
+		m.viewport, cmd = m.viewport.Update(k)
+
+		l().Debugf("[logsview] AFTER update: YOffset=%d", m.viewport.YOffset)
+
+		return m, cmd
 	}
 
 	// if in search mode, handle text input and backspace

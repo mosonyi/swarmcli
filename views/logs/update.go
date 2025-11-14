@@ -25,6 +25,8 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 			line = line[:len(line)-1]
 		}
 		m.lines = append(m.lines, line)
+		l().Debugf("[logsview] LineMsg: appended line, total=%d YOffset=%d Height=%d TotalLines=%d",
+			len(m.lines), m.viewport.YOffset, m.viewport.Height, m.viewport.TotalLineCount())
 
 		if m.searchTerm != "" && strings.Contains(strings.ToLower(line), strings.ToLower(m.searchTerm)) {
 			m.searchMatches = append(m.searchMatches, len(m.lines)-1)
@@ -146,6 +148,9 @@ func (m *Model) SetContent(content string) {
 	m.viewport.GotoTop()
 	m.viewport.SetContent(m.buildContent())
 	m.viewport.YOffset = 0
+	l().Debugf("[logsview] SetContent: len(lines)=%d contentLen=%d YOffset=%d Height=%d TotalLines=%d",
+		len(m.lines), len(m.buildContent()), m.viewport.YOffset, m.viewport.Height, m.viewport.TotalLineCount())
+
 }
 
 // highlightContent recalculates matches and rebuilds visible content.
@@ -177,31 +182,22 @@ func (m *Model) highlightContent() {
 	}
 }
 
-// buildContent constructs the string shown in the viewport. It only formats the visible slice.
 func (m *Model) buildContent() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// determine visible lines from viewport offset & height
-	start := m.viewport.YOffset
-	if start < 0 {
-		start = 0
-	}
-	end := start + m.viewport.Height
-	if end > len(m.lines) {
-		end = len(m.lines)
-	}
+	full := strings.Join(m.lines, "\n")
 
-	visible := strings.Join(m.lines[start:end], "\n")
-	// if we're in search mode and have a term, highlight matches within visible text
 	if m.mode == "search" && m.searchTerm != "" {
-		return utils.HighlightMatches(visible, m.searchTerm)
+		return utils.HighlightMatches(full, m.searchTerm)
 	}
-	return visible
+	return full
 }
 
 // scrollToMatch makes the viewport scroll to the currently selected match.
 func (m *Model) scrollToMatch() {
+	l().Debugf("[logsview] scrollToMatch idx=%d totalMatches=%d", m.searchIndex, len(m.searchMatches))
+
 	if len(m.searchMatches) == 0 || m.mode != "search" {
 		return
 	}
@@ -214,6 +210,8 @@ func (m *Model) scrollToMatch() {
 	}
 	m.viewport.GotoTop()
 	m.viewport.SetYOffset(offset)
+	l().Debugf("[logsview] scrollToMatch AFTER: YOffset=%d", m.viewport.YOffset)
+
 	// after moving, update visible content
 	m.viewport.SetContent(m.buildContent())
 }
