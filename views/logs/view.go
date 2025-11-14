@@ -16,6 +16,6 @@ func (m Model) View() string {
 	}
 
 	return ui.BorderStyle.Render(
-		fmt.Sprintf("%s\n\n%s[press q or esc to go back, / to search]", header, m.viewport.View()),
+		fmt.Sprintf("%s\n\n%s\n\n[press q or esc to go back, / to search]", header, m.viewport.View()),
 	)
 }
