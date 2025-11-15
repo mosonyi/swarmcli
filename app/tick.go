@@ -14,6 +14,6 @@ func tick() tea.Cmd {
 	})
 }
 
-func (m Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
 	return m, systeminfoview.LoadStatus()
 }
