@@ -2,7 +2,6 @@ package stacksview
 
 import (
 	"fmt"
-	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

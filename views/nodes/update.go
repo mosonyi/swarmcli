@@ -1,8 +1,6 @@
 package nodesview
 
 import (
-	"swarmcli/views/view"
-
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -28,7 +26,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
-	returncmd
+	return cmd
 }
 
 func (m *Model) SetContent(msg Msg) {

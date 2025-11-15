@@ -6,7 +6,6 @@ import (
 	"swarmcli/docker"
 	"swarmcli/views/confirmdialog"
 	inspectview "swarmcli/views/inspect"
-	loadingview "swarmcli/views/loading"
 	logsview "swarmcli/views/logs"
 	"swarmcli/views/view"
 
@@ -71,7 +70,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case tea.KeyMsg:
 		if m.confirmDialog.Visible {
 			var cmd tea.Cmd
-			m.confirmDialog, cmd = m.confirmDialog.Update(msg)
+			cmd = m.confirmDialog.Update(msg)
 			return cmd
 		}
 
@@ -151,9 +150,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// Forward messages to loading view if active
 		if m.loading.Visible() {
 			var cmd tea.Cmd
-			var v view.View
-			v, cmd = m.loading.Update(msg)
-			m.loading = v
+			cmd = m.loading.Update(msg)
 			return cmd
 		}
 	}
