@@ -89,8 +89,8 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 }
 
 func (m *Model) OnEnter() tea.Cmd {
-	// Start streaming with internal context
-	return StartStreamingCmd(m.StreamCtx, m.ServiceEntry, 1000, m.MaxLines)
+	// We start streaming with the factory method
+	return nil
 }
 
 func (m *Model) OnExit() tea.Cmd {

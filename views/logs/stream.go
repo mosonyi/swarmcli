@@ -3,6 +3,7 @@ package logsview
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"swarmcli/docker"
@@ -87,7 +88,13 @@ func StartStreamingCmd(ctx context.Context, service docker.ServiceEntry, tail in
 			scWG.Wait()
 
 			if scErr != nil {
-				l().With("service", service.ServiceID).Warnf("stdcopy finished with error: %v", scErr)
+				level := l().With("service", service.ServiceID)
+				if errors.Is(scErr, context.Canceled) {
+					level.Debug("log stream closed normally (context canceled)")
+				} else {
+					level.Warnf("stdcopy finished with error: %v", scErr)
+				}
+				return
 			}
 
 			// done: channels will be closed by defer above
