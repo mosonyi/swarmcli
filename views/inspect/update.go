@@ -6,23 +6,22 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"swarmcli/views/view"
 )
 
-func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case Msg:
 		m.SetTitle(msg.Title)
 		m.SetContent(msg.Content)
 		m.ready = true
-		return m, nil
+		return nil
 
 	case tea.WindowSizeMsg:
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height
 		m.ready = true
 		m.updateViewport()
-		return m, nil
+		return nil
 
 	case tea.KeyMsg:
 		if m.searchMode {
@@ -33,7 +32,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
-	return m, cmd
+	return cmd
 }
 
 func (m *Model) SetContent(jsonStr string) {

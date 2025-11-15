@@ -16,8 +16,8 @@ type Model struct {
 	state              state
 	err                error
 	pendingAction      string
-	confirmDialog      confirmdialog.Model
-	loadingView        loading.Model
+	confirmDialog      *confirmdialog.Model
+	loadingView        *loading.Model
 	configs            []docker.ConfigWithDecodedData // cache original docker configs
 	configToRotateFrom *docker.ConfigWithDecodedData  // store edited config for rotation
 	configToRotateInto *docker.ConfigWithDecodedData  // store edited config for rotation
@@ -32,8 +32,8 @@ const (
 	stateError
 )
 
-func New(width, height int) Model {
-	m := Model{
+func New(width, height int) *Model {
+	m := &Model{
 		list:          list.New([]list.Item{}, itemDelegate{}, 0, 0),
 		loadingView:   loading.New(width, height, false, "Loading Docker configs..."),
 		state:         stateLoading,
@@ -43,9 +43,9 @@ func New(width, height int) Model {
 	return m
 }
 
-func (m Model) Name() string { return ViewName }
+func (m *Model) Name() string { return ViewName }
 
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	return nil
 }
 
@@ -53,7 +53,7 @@ func LoadConfigs() tea.Cmd {
 	return loadConfigsCmd()
 }
 
-func (m Model) ShortHelpItems() []helpbar.HelpEntry {
+func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "↑/↓", Desc: "Navigate"},
 		{Key: "Enter/k", Desc: "Inspect"},
@@ -63,7 +63,7 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 	}
 }
 
-func (m Model) selectedConfig() string {
+func (m *Model) selectedConfig() string {
 	if item, ok := m.list.SelectedItem().(configItem); ok {
 		return item.Name
 	}
@@ -82,4 +82,12 @@ func (m *Model) findConfigByName(name string) (*docker.ConfigWithDecodedData, er
 func (m *Model) addConfig(cfg docker.ConfigWithDecodedData) {
 	m.list.InsertItem(0, configItemFromSwarm(cfg.Config))
 	m.configs = append(m.configs, cfg)
+}
+
+func (m *Model) OnEnter() tea.Cmd {
+	return nil
+}
+
+func (m *Model) OnExit() tea.Cmd {
+	return nil
 }

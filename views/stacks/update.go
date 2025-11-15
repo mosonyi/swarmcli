@@ -2,26 +2,25 @@ package stacksview
 
 import (
 	"fmt"
-	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Update handles messages for the stacks view.
-func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 
 	// --- Stacks loaded ---
 	case Msg:
 		m.setStacks(msg)
 		m.Visible = true
-		return m, nil
+		return nil
 
 	// --- Refresh error ---
 	case RefreshErrorMsg:
 		m.Visible = true
 		m.viewport.SetContent(fmt.Sprintf("Error refreshing stacks: %v", msg.Err))
-		return m, nil
+		return nil
 
 	// --- Resize event ---
 	case tea.WindowSizeMsg:
@@ -29,7 +28,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		m.viewport.Height = msg.Height
 		m.ready = true
 		m.viewport.SetContent(m.buildContent())
-		return m, nil
+		return nil
 
 	// --- Keyboard input ---
 	case tea.KeyMsg:
@@ -38,7 +37,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
-	return m, cmd
+	return cmd
 }
 
 // setStacks updates the stacks and refreshes viewport content.

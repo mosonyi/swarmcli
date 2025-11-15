@@ -21,8 +21,8 @@ type Model struct {
 
 const defaultMinColWidth = 20
 
-func New(width, height int) Model {
-	return Model{
+func New(width, height int) *Model {
+	return &Model{
 		globalHelp:  []HelpEntry{{Key: "q", Desc: "quit"}, {Key: "?", Desc: "help"}},
 		width:       width,
 		height:      height,
@@ -30,32 +30,32 @@ func New(width, height int) Model {
 	}
 }
 
-func (m Model) WithGlobalHelp(entries []HelpEntry) Model {
+func (m *Model) WithGlobalHelp(entries []HelpEntry) *Model {
 	m.globalHelp = entries
 	return m
 }
 
-func (m Model) WithViewHelp(entries []HelpEntry) Model {
+func (m *Model) WithViewHelp(entries []HelpEntry) *Model {
 	m.viewHelp = entries
 	return m
 }
 
-func (m Model) SetWidth(width int) Model {
+func (m *Model) SetWidth(width int) *Model {
 	m.width = width
 	return m
 }
 
-func (m Model) SetHeight(height int) Model {
+func (m *Model) SetHeight(height int) *Model {
 	m.height = height
 	return m
 }
 
-func (m Model) SetMinColWidth(width int) Model {
+func (m *Model) SetMinColWidth(width int) *Model {
 	m.minColWidth = width
 	return m
 }
 
-func (m Model) View(systemInfo string) string {
+func (m *Model) View(systemInfo string) string {
 	allHelp := append(m.globalHelp, m.viewHelp...)
 	if len(allHelp) == 0 {
 		return systemInfo

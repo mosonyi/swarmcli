@@ -25,24 +25,24 @@ type StackService struct {
 }
 
 // Create a new instance
-func New(width, height int) Model {
+func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
-	return Model{
+	return &Model{
 		viewport: vp,
 		Visible:  false,
 	}
 }
 
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	return nil
 }
 
-func (m Model) Name() string {
+func (m *Model) Name() string {
 	return ViewName
 }
 
-func (m Model) ShortHelpItems() []helpbar.HelpEntry {
+func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "s", Desc: "select"},
 		{Key: "i", Desc: "inspect"},
@@ -75,5 +75,13 @@ func (m *Model) SelectedNode() *swarm.Node {
 			return &n
 		}
 	}
+	return nil
+}
+
+func (m *Model) OnEnter() tea.Cmd {
+	return nil
+}
+
+func (m *Model) OnExit() tea.Cmd {
 	return nil
 }

@@ -5,7 +5,7 @@ import (
 	"swarmcli/ui"
 )
 
-func (m Model) View() string {
+func (m *Model) View() string {
 	if m.Root == nil && !m.ready {
 		return ""
 	}

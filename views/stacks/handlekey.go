@@ -8,16 +8,16 @@ import (
 )
 
 // handleKey handles all key events for the stacks view.
-func handleKey(m Model, msg tea.KeyMsg) (view.View, tea.Cmd) {
+func handleKey(m *Model, msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 
 	case "q", "esc":
 		m.Visible = false
-		return m, nil
+		return nil
 	case "i", "enter":
 		if m.cursor < len(m.entries) {
 			selected := m.entries[m.cursor] // StackEntry
-			return m, func() tea.Msg {
+			return func() tea.Msg {
 				return view.NavigateToMsg{
 					ViewName: servicesview.ViewName,
 					Payload: map[string]interface{}{
@@ -28,7 +28,7 @@ func handleKey(m Model, msg tea.KeyMsg) (view.View, tea.Cmd) {
 		}
 
 	case "r":
-		return m, LoadStacks(m.nodeID)
+		return LoadStacks(m.nodeID)
 
 	case "up", "k":
 		if m.cursor > 0 {
@@ -36,7 +36,7 @@ func handleKey(m Model, msg tea.KeyMsg) (view.View, tea.Cmd) {
 			m.ensureCursorVisible()
 			m.viewport.SetContent(m.buildContent())
 		}
-		return m, nil
+		return nil
 
 	case "down", "j":
 		if m.cursor < len(m.entries)-1 {
@@ -44,7 +44,7 @@ func handleKey(m Model, msg tea.KeyMsg) (view.View, tea.Cmd) {
 			m.ensureCursorVisible()
 			m.viewport.SetContent(m.buildContent())
 		}
-		return m, nil
+		return nil
 
 	case "pgup", "u":
 		page := m.viewport.Height
@@ -55,7 +55,7 @@ func handleKey(m Model, msg tea.KeyMsg) (view.View, tea.Cmd) {
 		}
 		m.ensureCursorVisible()
 		m.viewport.SetContent(m.buildContent())
-		return m, nil
+		return nil
 
 	case "pgdown", "d":
 		page := m.viewport.Height
@@ -66,8 +66,8 @@ func handleKey(m Model, msg tea.KeyMsg) (view.View, tea.Cmd) {
 		}
 		m.ensureCursorVisible()
 		m.viewport.SetContent(m.buildContent())
-		return m, nil
+		return nil
 	}
 
-	return m, nil
+	return nil
 }

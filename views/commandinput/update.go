@@ -6,9 +6,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if !m.active {
-		return m, nil
+		return nil
 	}
 
 	var cmd tea.Cmd
@@ -19,11 +19,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case "enter":
 			val := strings.TrimSpace(m.input.Value())
 			m.Hide()
-			return m, func() tea.Msg { return SubmitMsg{Command: val} }
+			return func() tea.Msg { return SubmitMsg{Command: val} }
 
 		case "esc":
 			m.Hide()
-			return m, nil
+			return nil
 
 		case "up":
 			if len(m.suggestions) > 0 {
@@ -43,10 +43,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			// Update suggestions when typing
 			m.input, cmd = m.input.Update(msg)
 			m.refreshSuggestions()
-			return m, cmd
+			return cmd
 		}
 	}
 
 	m.input, cmd = m.input.Update(msg)
-	return m, cmd
+	return cmd
 }

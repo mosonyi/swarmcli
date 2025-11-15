@@ -1,45 +1,78 @@
 package logsview
 
 import (
-	"fmt"
-	"os/exec"
+	"context"
+	"swarmcli/docker"
 	"swarmcli/views/helpbar"
+	"sync"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// Model holds the state for the streaming logs view.
 type Model struct {
 	viewport      viewport.Model
 	Visible       bool
+	mode          string // "normal" or "search"
 	searchTerm    string
 	searchIndex   int
-	searchMatches []int  // indexes of match positions
-	mode          string // "normal", "search"
-	logLines      string
+	searchMatches []int
+	lines         []string // bounded: only last MaxLines kept
+	MaxLines      int
 	ready         bool
+	userScrolled  bool
+
+	ServiceEntry docker.ServiceEntry
+
+	// streaming control
+	StreamCtx    context.Context
+	StreamCancel context.CancelFunc // cancel context for streaming goroutine
+	streamMu     sync.Mutex         // protects below
+	streamActive bool               // whether a stream is active
+
+	// read pump channels (internal to tea)
+	linesChan chan string
+	errChan   chan error
+
+	// sync for lines slice
+	mu sync.Mutex
+
+	// follow behavior
+	follow bool
 }
 
-// Create a new instance
-func New(width, height int) Model {
+// New creates a logs model with sensible defaults.
+func New(width, height int, maxLines int, service docker.ServiceEntry) *Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
-	return Model{
-		viewport: vp,
-		Visible:  false,
-		mode:     "normal",
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Model{
+		viewport:     vp,
+		Visible:      false,
+		mode:         "normal",
+		lines:        make([]string, 0, 1024),
+		MaxLines:     maxLines,
+		StreamCtx:    ctx,
+		StreamCancel: cancel,
+		linesChan:    nil,
+		errChan:      nil,
+		follow:       true, // auto-follow by default
 	}
 }
 
-func (m Model) Init() tea.Cmd {
-	return nil
+func (m *Model) Init() tea.Cmd { return nil }
+
+func (m *Model) Name() string { return ViewName }
+
+func (m *Model) setFollow(f bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.follow = f
 }
 
-func (m Model) Name() string {
-	return ViewName
-}
-
-func (m Model) ShortHelpItems() []helpbar.HelpEntry {
+// ShortHelpItems stays compatible with your helpbar interface.
+func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	if m.mode == "search" {
 		return []helpbar.HelpEntry{
 			{Key: "enter", Desc: "confirm"},
@@ -50,17 +83,16 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "/", Desc: "search"},
 		{Key: "n/N", Desc: "next/prev"},
+		{Key: "f", Desc: "toggle follow"},
 		{Key: "q", Desc: "close"},
 	}
 }
 
-// Log loading command
-func Load(serviceID string) tea.Cmd {
-	return func() tea.Msg {
-		out, err := exec.Command("docker", "service", "logs", "--no-trunc", serviceID).CombinedOutput()
-		if err != nil {
-			return Msg(fmt.Sprintf("Error: %v\n%s", err, out))
-		}
-		return Msg(out)
-	}
+func (m *Model) OnEnter() tea.Cmd {
+	// We start streaming with the factory method
+	return nil
+}
+
+func (m *Model) OnExit() tea.Cmd {
+	return m.StopStreamingCmd()
 }

@@ -26,19 +26,19 @@ type Model struct {
 	height     int
 }
 
-func New(width, height int) Model {
+func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
-	return Model{
+	return &Model{
 		viewport: vp,
 		width:    width,
 		height:   height,
 	}
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+func (m *Model) Init() tea.Cmd { return nil }
 
-func (m Model) Name() string { return ViewName }
+func (m *Model) Name() string { return ViewName }
 
 func (m *Model) SetTitle(t string) { m.Title = t }
 
@@ -47,7 +47,7 @@ func LoadInspectItem(title, jsonStr string) tea.Cmd {
 	return func() tea.Msg { return Msg{Title: title, Content: jsonStr} }
 }
 
-func (m Model) ShortHelpItems() []helpbar.HelpEntry {
+func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	if m.searchMode {
 		return []helpbar.HelpEntry{
 			{Key: "enter", Desc: "apply"},
@@ -60,4 +60,12 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "n/N", Desc: "next/prev match"},
 		{Key: "q", Desc: "close"},
 	}
+}
+
+func (m *Model) OnEnter() tea.Cmd {
+	return nil
+}
+
+func (m *Model) OnExit() tea.Cmd {
+	return nil
 }

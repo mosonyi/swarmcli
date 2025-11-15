@@ -16,12 +16,12 @@ type Model struct {
 	errorMsg    string
 }
 
-func New() Model {
+func New() *Model {
 	ti := textinput.New()
 	ti.Placeholder = ""
 	ti.Prompt = ": "
 	ti.CharLimit = 256
-	return Model{input: ti}
+	return &Model{input: ti}
 }
 
 func (m *Model) Show() tea.Cmd {
@@ -52,4 +52,4 @@ func (m *Model) refreshSuggestions() {
 	m.selected = 0
 }
 
-func (m Model) Visible() bool { return m.active }
+func (m *Model) Visible() bool { return m.active }

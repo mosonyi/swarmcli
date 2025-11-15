@@ -1,6 +1,7 @@
 package app
 
 import (
+	"swarmcli/docker"
 	"swarmcli/utils/log"
 	configsview "swarmcli/views/configs"
 	helpview "swarmcli/views/help"
@@ -50,7 +51,9 @@ func Init() {
 		return helpview.New(w, h, cmds), nil
 	})
 	registerView(logsview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
-		return logsview.New(w, h), logsview.Load(payload.(string))
+		service := payload.(docker.ServiceEntry)
+		v := logsview.New(w, h, 200, service)
+		return v, logsview.StartStreamingCmd(v.StreamCtx, service, 200, v.MaxLines)
 	})
 
 	registerView(configsview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {

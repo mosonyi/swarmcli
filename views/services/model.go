@@ -2,6 +2,7 @@ package servicesview
 
 import (
 	"fmt"
+	"swarmcli/docker"
 	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
@@ -28,7 +29,7 @@ type Model struct {
 	viewport viewport.Model
 	Visible  bool
 
-	entries []ServiceEntry
+	entries []docker.ServiceEntry
 	cursor  int
 	title   string
 	ready   bool
@@ -45,23 +46,14 @@ type Model struct {
 
 	msgCh chan tea.Msg
 
-	confirmDialog confirmdialog.Model
-	loading       loadingview.Model
+	confirmDialog *confirmdialog.Model
+	loading       *loadingview.Model
 }
 
-type ServiceEntry struct {
-	StackName      string
-	ServiceName    string
-	ServiceID      string
-	ReplicasOnNode int
-	ReplicasTotal  int
-}
-
-// Create new instance
-func New(width, height int) Model {
+func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 	ld := loadingview.New(width, height, false, "Please wait...")
-	return Model{
+	return &Model{
 		viewport:      vp,
 		Visible:       false,
 		confirmDialog: confirmdialog.New(width, height),
@@ -70,15 +62,16 @@ func New(width, height int) Model {
 	}
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+func (m *Model) Init() tea.Cmd { return nil }
 
-func (m Model) Name() string { return ViewName }
+func (m *Model) Name() string { return ViewName }
 
-func (m Model) ShortHelpItems() []helpbar.HelpEntry {
+func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "i", Desc: "inspect"},
 		{Key: "k/up", Desc: "up"},
 		{Key: "r", Desc: "restart service"},
+		{Key: "l", Desc: "view logs"},
 		{Key: "j/down", Desc: "down"},
 		{Key: "q", Desc: "close"},
 	}
@@ -120,7 +113,7 @@ func sendMsg(ch chan tea.Msg, msg tea.Msg) {
 	}
 }
 
-func (m Model) listenForMessages() tea.Cmd {
+func (m *Model) listenForMessages() tea.Cmd {
 	if m.msgCh == nil {
 		l().Debugf("[listenForMessages] no message channel, skipping")
 		return nil
@@ -134,4 +127,12 @@ func (m Model) listenForMessages() tea.Cmd {
 		}
 		return msg
 	}
+}
+
+func (m *Model) OnEnter() tea.Cmd {
+	return nil
+}
+
+func (m *Model) OnExit() tea.Cmd {
+	return nil
 }

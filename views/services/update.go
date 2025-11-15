@@ -6,20 +6,20 @@ import (
 	"swarmcli/docker"
 	"swarmcli/views/confirmdialog"
 	inspectview "swarmcli/views/inspect"
-	loadingview "swarmcli/views/loading"
+	logsview "swarmcli/views/logs"
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 
 	case Msg:
 		m.SetContent(msg)
 		m.Visible = true
 		m.viewport.SetContent(m.renderEntries())
-		return m, nil
+		return nil
 
 	case tea.WindowSizeMsg:
 		m.viewport.Width = msg.Width
@@ -28,7 +28,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 			m.ready = true
 			m.viewport.SetContent(m.renderEntries())
 		}
-		return m, nil
+		return nil
 
 	case confirmdialog.ResultMsg:
 		m.confirmDialog.Visible = false
@@ -42,12 +42,12 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 			// create new channel for this operation
 			m.msgCh = make(chan tea.Msg)
 
-			return m, tea.Batch(
+			return tea.Batch(
 				restartServiceWithProgressCmd(entry.ServiceName, m.msgCh),
 				m.listenForMessages(),
 			)
 		}
-		return m, nil
+		return nil
 
 	case serviceProgressMsg:
 		l().Debugf("[UI] Received progress: %d/%d\n", msg.Progress.Replaced, msg.Progress.Total)
@@ -60,48 +60,47 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 		if msg.Progress.Replaced == msg.Progress.Total && msg.Progress.Total > 0 {
 			l().Debugln("[UI] Restart finished")
 			m.loading.SetVisible(false)
-			return m, tea.Batch(
+			return tea.Batch(
 				refreshServicesCmd(m.nodeID, m.stackName, m.filterType),
 			)
 		}
 
-		return m, m.listenForMessages()
+		return m.listenForMessages()
 
 	case tea.KeyMsg:
 		if m.confirmDialog.Visible {
-			var cmd tea.Cmd
-			m.confirmDialog, cmd = m.confirmDialog.Update(msg)
-			return m, cmd
+			cmd := m.confirmDialog.Update(msg)
+			return cmd
 		}
 
 		// 2. Ignore keys if loading visible ---
 		if m.loading.Visible() {
-			return m, nil
+			return nil
 		}
 
 		switch msg.String() {
 		case "q":
 			m.Visible = false
-			return m, nil
+			return nil
 
 		case "j", "down":
 			if m.cursor < len(m.entries)-1 {
 				m.cursor++
 				m.viewport.SetContent(m.renderEntries())
 			}
-			return m, nil
+			return nil
 
 		case "k", "up":
 			if m.cursor > 0 {
 				m.cursor--
 				m.viewport.SetContent(m.renderEntries())
 			}
-			return m, nil
+			return nil
 
 		case "i":
 			if m.cursor < len(m.entries) {
 				entry := m.entries[m.cursor]
-				return m, func() tea.Msg {
+				return func() tea.Msg {
 					content, err := docker.Inspect(context.Background(), docker.InspectService, entry.ServiceID)
 					if err != nil {
 						content = fmt.Sprintf("Error inspecting service %q: %v", entry.ServiceName, err)
@@ -115,7 +114,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 					}
 				}
 			}
-			return m, nil
+			return nil
 
 		case "r":
 			if m.cursor < len(m.entries) {
@@ -123,22 +122,38 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 				m.confirmDialog.Visible = true
 				m.confirmDialog.Message = fmt.Sprintf("Restart service %q?", entry.ServiceName)
 			}
-			return m, nil
+			return nil
+		case "l":
+			if m.cursor < len(m.entries) {
+				entry := m.entries[m.cursor]
+				return func() tea.Msg {
+					//content, err := docker.Inspect(context.Background(), docker.InspectService, entry.ServiceID)
+					//if err != nil {
+					//	content = fmt.Sprintf("Error inspecting service %q: %v", entry.ServiceName, err)
+					//}
+					return view.NavigateToMsg{
+						Payload:  entry,
+						ViewName: logsview.ViewName,
+						//Payload: map[string]interface{}{
+						//	"title": fmt.Sprintf("Service: %s", entry.ServiceName),
+						//	"json":  content,
+						//},
+					}
+				}
+			}
+			return nil
 		}
 
 	// --- Allow spinner updates while loading ---
 	default:
 		// Forward messages to loading view if active
 		if m.loading.Visible() {
-			var cmd tea.Cmd
-			var v view.View
-			v, cmd = m.loading.Update(msg)
-			m.loading = v.(loadingview.Model)
-			return m, cmd
+			cmd := m.loading.Update(msg)
+			return cmd
 		}
 	}
 
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
-	return m, cmd
+	return cmd
 }

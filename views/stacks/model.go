@@ -19,20 +19,20 @@ type Model struct {
 	ready bool
 }
 
-func New(width, height int) Model {
+func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
-	return Model{
+	return &Model{
 		viewport: vp,
 		Visible:  false,
 	}
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+func (m *Model) Init() tea.Cmd { return nil }
 
-func (m Model) Name() string { return ViewName }
+func (m *Model) Name() string { return ViewName }
 
-func (m Model) ShortHelpItems() []helpbar.HelpEntry {
+func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "i/enter", Desc: "services"},
 		{Key: "k/up", Desc: "scroll up"},
@@ -52,4 +52,12 @@ func LoadStacks(nodeID string) tea.Cmd {
 		stacks := snap.ToStackEntries()
 		return Msg{NodeID: nodeID, Stacks: stacks}
 	}
+}
+
+func (m *Model) OnEnter() tea.Cmd {
+	return nil
+}
+
+func (m *Model) OnExit() tea.Cmd {
+	return nil
 }

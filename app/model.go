@@ -18,15 +18,15 @@ import (
 type Model struct {
 	viewport viewport.Model
 
-	systemInfo systeminfoview.Model
+	systemInfo *systeminfoview.Model
 
 	currentView view.View
 	viewStack   viewstack.Stack
 
-	commandInput commandinput.Model
+	commandInput *commandinput.Model
 }
 
-func InitialModel() Model {
+func InitialModel() *Model {
 	vp := viewport.New(80, 20)
 	vp.YPosition = 5
 
@@ -36,7 +36,7 @@ func InitialModel() Model {
 		"message": "Loading Swarm nodes and stacks...",
 	})
 
-	return Model{
+	return &Model{
 		viewport:     vp,
 		currentView:  loading,
 		systemInfo:   systeminfoview.New(version),
@@ -47,61 +47,73 @@ func InitialModel() Model {
 
 // Init  will be automatically called by Bubble Tea if the model implements the Model interface
 // and is passed into the tea.NewProgram function.
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	// "" loads all stacks on all nodes
 	return tea.Batch(tick(), loadSnapshotAsync(), systeminfoview.LoadStatus())
 }
 
-func (m Model) switchToView(name string, data any) (Model, tea.Cmd) {
+func (m *Model) switchToView(name string, data any) tea.Cmd {
 	factory, ok := viewRegistry[name]
 	if !ok {
-		return m, nil
+		return nil
 	}
 
-	newView, loadCmd := factory(m.viewport.Width, m.viewport.Height, data)
-	newView, resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height)
+	// Exit hook for current view
+	exitCmd := m.currentView.OnExit()
 
+	newView, loadCmd := factory(m.viewport.Width, m.viewport.Height, data)
+	resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height)
+
+	// Push current view onto stack
 	m.viewStack.Push(m.currentView)
 	m.currentView = newView
 
-	return m, tea.Batch(resizeCmd, loadCmd)
+	// Enter hook for new view
+	enterCmd := newView.OnEnter()
+
+	return tea.Batch(exitCmd, resizeCmd, loadCmd, enterCmd)
 }
 
-func (m Model) replaceView(name string, payload any) (Model, tea.Cmd) {
+func (m *Model) replaceView(name string, data any) tea.Cmd {
 	factory, ok := viewRegistry[name]
 	if !ok {
-		return m, nil
+		return nil
 	}
 
-	newView, loadCmd := factory(m.viewport.Width, m.viewport.Height, payload)
-	newView, resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height)
+	// Run exit hook on current view
+	exitCmd := m.currentView.OnExit()
 
-	// Replace current view instead of stacking
+	newView, loadCmd := factory(m.viewport.Width, m.viewport.Height, data)
+	resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height)
+
 	m.currentView = newView
 	m.viewStack.Reset()
 
-	return m, tea.Batch(resizeCmd, loadCmd)
+	// Run enter hook on new view
+	enterCmd := newView.OnEnter()
+
+	return tea.Batch(exitCmd, resizeCmd, loadCmd, enterCmd)
 }
 
-func (m Model) renderStackBar() string {
+func (m *Model) renderStackBar() string {
 	// Combine stack and current view
 	stack := append(m.viewStack.Views(), m.currentView)
 
 	var parts []string
-	for i, view := range stack {
+	for i, v := range stack {
 		if i > 0 {
 			parts = append(parts, lipgloss.NewStyle().Faint(true).Render(" → "))
 
 		}
 		style := ui.Rainbow[i%len(ui.Rainbow)]
-		label := view.Name()
+		label := v.Name()
 		parts = append(parts, style.Render(fmt.Sprintf(" %s ", label)))
 	}
 
 	return lipgloss.JoinHorizontal(lipgloss.Left, parts...)
 }
 
-func cmdBar() commandinput.Model {
+func cmdBar() *commandinput.Model {
 	cmdBar := commandinput.New()
 	return cmdBar
 }

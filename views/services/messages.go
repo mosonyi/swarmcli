@@ -1,8 +1,10 @@
 package servicesview
 
+import "swarmcli/docker"
+
 type Msg struct {
 	Title      string
-	Entries    []ServiceEntry
+	Entries    []docker.ServiceEntry
 	FilterType FilterType
 	NodeID     string
 	Hostname   string

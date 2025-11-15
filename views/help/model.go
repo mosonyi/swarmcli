@@ -19,27 +19,35 @@ type CommandInfo struct {
 	Description string
 }
 
-func New(width, height int, cmds []CommandInfo) Model {
+func New(width, height int, cmds []CommandInfo) *Model {
 	var b strings.Builder
 	for _, c := range cmds {
 		fmt.Fprintf(&b, ":%-15s %s\n", c.Name, c.Description)
 	}
 
-	return Model{
+	return &Model{
 		Visible:  true,
 		content:  b.String(),
 		commands: cmds,
 	}
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+func (m *Model) Init() tea.Cmd { return nil }
 
-func (m Model) Name() string {
+func (m *Model) Name() string {
 	return ViewName
 }
 
-func (m Model) ShortHelpItems() []helpbar.HelpEntry {
+func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "q", Desc: "close"},
 	}
+}
+
+func (m *Model) OnEnter() tea.Cmd {
+	return nil
+}
+
+func (m *Model) OnExit() tea.Cmd {
+	return nil
 }

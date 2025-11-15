@@ -13,15 +13,17 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case snapshotLoadedMsg:
 		if msg.Err != nil {
 			// Replace with error message in the loading view
-			return m.replaceView(loadingview.ViewName, fmt.Sprintf("Error loading snapshot: %v", msg.Err))
+			cmd := m.replaceView(loadingview.ViewName, fmt.Sprintf("Error loading snapshot: %v", msg.Err))
+			return m, cmd
 		}
 		// Replace loading with stacks view
-		return m.replaceView(stacksview.ViewName, nil)
+		cmd := m.replaceView(stacksview.ViewName, nil)
+		return m, cmd
 	case commandinput.SubmitMsg:
 		raw := strings.TrimSpace(msg.Command)
 		if raw == "" {
@@ -39,10 +41,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd.Execute(ctx, parsedArgs)
 
 	case view.NavigateToMsg:
-		return m.switchToView(msg.ViewName, msg.Payload)
+		cmd := m.switchToView(msg.ViewName, msg.Payload)
+		return m, cmd
 
 	case tea.WindowSizeMsg:
-		return m.updateForResize(msg)
+		cmd := m.updateForResize(msg)
+		return m, cmd
 
 	case tea.KeyMsg:
 		if msg.String() == ":" {
@@ -56,8 +60,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// If command input is visible, forward all keys to it exclusively
 		if m.commandInput.Visible() {
-			var cmd tea.Cmd
-			m.commandInput, cmd = m.commandInput.Update(msg)
+			cmd := m.commandInput.Update(msg)
 			return m, cmd
 		}
 
@@ -68,25 +71,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case systeminfoview.Msg:
 		var cmd tea.Cmd
-		m.systemInfo, cmd = m.systemInfo.Update(msg)
+		cmd = m.systemInfo.Update(msg)
 		return m, cmd
 
 	default:
-		return m.delegateToCurrentView(msg)
+		cmd := m.delegateToCurrentView(msg)
+		return m, cmd
 	}
 }
 
-func (m Model) delegateToCurrentView(msg tea.Msg) (Model, tea.Cmd) {
-	var cmd tea.Cmd
-	m.currentView, cmd = m.currentView.Update(msg)
+func (m *Model) delegateToCurrentView(msg tea.Msg) tea.Cmd {
+	cmd := m.currentView.Update(msg)
 
-	var vpCmd tea.Cmd
-	m, vpCmd = m.updateViewports(msg)
+	vpCmd := m.updateViewports(msg)
 
-	return m, tea.Batch(cmd, vpCmd)
+	return tea.Batch(cmd, vpCmd)
 }
 
-func (m Model) updateForResize(msg tea.WindowSizeMsg) (Model, tea.Cmd) {
+func (m *Model) updateForResize(msg tea.WindowSizeMsg) tea.Cmd {
 	var cmd tea.Cmd
 	usableWidth := msg.Width - 4
 	usableHeight := msg.Height - 10
@@ -94,44 +96,57 @@ func (m Model) updateForResize(msg tea.WindowSizeMsg) (Model, tea.Cmd) {
 	m.viewport.Width = usableWidth
 	m.viewport.Height = usableHeight
 
-	m.currentView, cmd = handleViewResize(m.currentView, usableWidth, usableHeight)
-	return m, cmd
+	cmd = handleViewResize(m.currentView, usableWidth, usableHeight)
+	return cmd
 }
 
-func handleViewResize(view view.View, width, height int) (view.View, tea.Cmd) {
+func handleViewResize(view view.View, width, height int) tea.Cmd {
 	var adjustedMsg = tea.WindowSizeMsg{
 		Width:  width,
 		Height: height - systeminfoview.Height,
 	}
 
-	var cmd tea.Cmd
-	view, cmd = view.Update(adjustedMsg)
-	return view, cmd
+	cmd := view.Update(adjustedMsg)
+	return cmd
 }
 
-func (m Model) updateViewports(msg tea.Msg) (Model, tea.Cmd) {
+func (m *Model) updateViewports(msg tea.Msg) tea.Cmd {
 	var cmd1 tea.Cmd
 	m.viewport, cmd1 = m.viewport.Update(msg)
-	return m, cmd1
+	return cmd1
 }
 
-func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Global escape / quit handler
 	if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc || msg.String() == "q" {
-		var cmd tea.Cmd
-		m, cmd = m.goBack()
+		cmd := m.goBack()
 		return m, cmd
 	}
 
-	var cmd tea.Cmd
-	m.currentView, cmd = m.currentView.Update(msg)
+	cmd := m.currentView.Update(msg)
 	return m, cmd
 }
 
-func (m Model) goBack() (Model, tea.Cmd) {
+func (m *Model) goBack() tea.Cmd {
+	// If no parent view exists → quit the app
 	if m.viewStack.Len() == 0 {
-		return m, tea.Quit
+		exitCmd := m.currentView.OnExit()
+		return tea.Batch(exitCmd, tea.Quit)
 	}
+
+	// The view being left
+	oldView := m.currentView
+	exitCmd := oldView.OnExit()
+
+	// Pop the previous view
 	m.currentView = m.viewStack.Pop()
-	return m, nil
+
+	// The view you are returning to
+	enterCmd := m.currentView.OnEnter()
+
+	// Optionally notify the view about terminal size again
+	resizeCmd := handleViewResize(m.currentView, m.viewport.Width, m.viewport.Height)
+
+	// Execute all lifecycle commands
+	return tea.Batch(exitCmd, enterCmd, resizeCmd)
 }
