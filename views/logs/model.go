@@ -1,6 +1,7 @@
 package logsview
 
 import (
+	"context"
 	"swarmcli/views/helpbar"
 	"sync"
 
@@ -16,14 +17,15 @@ type Model struct {
 	searchTerm    string
 	searchIndex   int
 	searchMatches []int
-	lines         []string // bounded: only last maxLines kept
-	maxLines      int
+	lines         []string // bounded: only last MaxLines kept
+	MaxLines      int
 	ready         bool
 
 	// streaming control
-	streamCancel func()     // cancel context for streaming goroutine
-	streamMu     sync.Mutex // protects below
-	streamActive bool       // whether a stream is active
+	StreamCtx    context.Context
+	StreamCancel context.CancelFunc // cancel context for streaming goroutine
+	streamMu     sync.Mutex         // protects below
+	streamActive bool               // whether a stream is active
 
 	// read pump channels (internal to tea)
 	linesChan chan string
@@ -40,15 +42,18 @@ type Model struct {
 func New(width, height int, maxLines int) Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
+	ctx, cancel := context.WithCancel(context.Background())
 	return Model{
-		viewport:  vp,
-		Visible:   false,
-		mode:      "normal",
-		lines:     make([]string, 0, 1024),
-		maxLines:  maxLines,
-		linesChan: nil,
-		errChan:   nil,
-		follow:    true, // auto-follow by default
+		viewport:     vp,
+		Visible:      false,
+		mode:         "normal",
+		lines:        make([]string, 0, 1024),
+		MaxLines:     maxLines,
+		StreamCtx:    ctx,
+		StreamCancel: cancel,
+		linesChan:    nil,
+		errChan:      nil,
+		follow:       true, // auto-follow by default
 	}
 }
 

@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"strings"
 	"swarmcli/utils"
+	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Update processes Tea messages.
-func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case InitStreamMsg:
@@ -26,11 +27,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		// store line as-is (no newline); rendering will join with '\n'
 		m.lines = append(m.lines, msg.Line)
 
-		// trim if over maxLines
-		if m.maxLines > 0 && len(m.lines) > m.maxLines {
+		// trim if over MaxLines
+		if m.MaxLines > 0 && len(m.lines) > m.MaxLines {
 			// drop older lines
-			start := len(m.lines) - m.maxLines
-			newBuf := make([]string, 0, m.maxLines)
+			start := len(m.lines) - m.MaxLines
+			newBuf := make([]string, 0, m.MaxLines)
 			newBuf = append(newBuf, m.lines[start:]...)
 			m.lines = newBuf
 		}
@@ -135,9 +136,9 @@ func (m Model) readOneLineCmd() tea.Cmd {
 func (m *Model) SetContent(content string) {
 	m.mu.Lock()
 	m.lines = strings.Split(content, "\n")
-	if m.maxLines > 0 && len(m.lines) > m.maxLines {
-		// keep only last maxLines
-		start := len(m.lines) - m.maxLines
+	if m.MaxLines > 0 && len(m.lines) > m.MaxLines {
+		// keep only last MaxLines
+		start := len(m.lines) - m.MaxLines
 		m.lines = append([]string{}, m.lines[start:]...)
 	}
 	m.searchMatches = nil

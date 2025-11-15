@@ -10,7 +10,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 )
 
@@ -19,8 +18,10 @@ import (
 // - cli: Docker client
 // - service: your ServiceEntry (we use ServiceID)
 // - tail: number of lines to request as initial history (0 means all)
-// - maxLines: the maximum number of lines to keep in memory (circular buffer behavior)
-func StartStreamingCmd(ctx context.Context, cli *client.Client, service docker.ServiceEntry, tail int, maxLines int) tea.Cmd {
+// - MaxLines: the maximum number of lines to keep in memory (circular buffer behavior)
+func StartStreamingCmd(ctx context.Context, service docker.ServiceEntry, tail int, maxLines int) tea.Cmd {
+	cli, _ := docker.GetClient()
+
 	return func() tea.Msg {
 		lines := make(chan string, 512)
 		errs := make(chan error, 1)
@@ -92,7 +93,7 @@ func StartStreamingCmd(ctx context.Context, cli *client.Client, service docker.S
 			return
 		}()
 
-		// return InitStreamMsg carrying the channels AND the requested maxLines
+		// return InitStreamMsg carrying the channels AND the requested MaxLines
 		return InitStreamMsg{
 			Lines:    lines,
 			Errs:     errs,
@@ -107,10 +108,10 @@ func (m *Model) StopStreamingCmd() tea.Cmd {
 	return func() tea.Msg {
 		m.streamMu.Lock()
 		defer m.streamMu.Unlock()
-		if m.streamCancel != nil {
+		if m.StreamCancel != nil {
 			l().Debugf("[logsview] stop streaming requested")
-			m.streamCancel()
-			m.streamCancel = nil
+			m.StreamCancel()
+			m.StreamCancel = nil
 			m.streamActive = false
 		}
 		return nil
