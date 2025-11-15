@@ -21,6 +21,7 @@ type Model struct {
 	lines         []string // bounded: only last MaxLines kept
 	MaxLines      int
 	ready         bool
+	userScrolled  bool
 
 	ServiceEntry docker.ServiceEntry
 
