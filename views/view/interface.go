@@ -7,7 +7,7 @@ import (
 )
 
 type View interface {
-	Update(msg tea.Msg) (View, tea.Cmd)
+	Update(msg tea.Msg) tea.Cmd
 	View() string
 	Init() tea.Cmd
 	Name() string

@@ -43,3 +43,11 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "q", Desc: "close"},
 	}
 }
+
+func (m *Model) OnEnter() tea.Cmd {
+	return nil
+}
+
+func (m *Model) OnExit() tea.Cmd {
+	return nil
+}

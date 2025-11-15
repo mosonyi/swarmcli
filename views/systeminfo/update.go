@@ -2,18 +2,19 @@ package systeminfoview
 
 import (
 	"fmt"
+
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case Msg:
 		m.SetContent(msg)
-		return m, nil
+		return nil
 	}
 
 	var cmd tea.Cmd
-	return m, cmd
+	return cmd
 }
 
 func (m *Model) buildContent() string {

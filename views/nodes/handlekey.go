@@ -11,11 +11,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func HandleKey(m *Model, msg tea.KeyMsg) (*Model, tea.Cmd) {
+func HandleKey(m *Model, msg tea.KeyMsg) tea.Cmd {
 	return handleNormalModeKey(m, msg)
 }
 
-func handleNormalModeKey(m *Model, msg tea.KeyMsg) (*Model, tea.Cmd) {
+func handleNormalModeKey(m *Model, msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "q":
 		m.Visible = false
@@ -42,7 +42,7 @@ func handleNormalModeKey(m *Model, msg tea.KeyMsg) (*Model, tea.Cmd) {
 		if m.cursor < len(m.entries) {
 			node := m.entries[m.cursor]
 
-			return m, func() tea.Msg {
+			return func() tea.Msg {
 				inspectContent, err := docker.Inspect(context.Background(), docker.InspectNode, node.ID)
 				if err != nil {
 					inspectContent = fmt.Sprintf("Error inspecting node %q: %v", node.ID, err)
@@ -60,7 +60,7 @@ func handleNormalModeKey(m *Model, msg tea.KeyMsg) (*Model, tea.Cmd) {
 	case "i":
 		if m.cursor < len(m.entries) {
 			node := m.entries[m.cursor]
-			return m, func() tea.Msg {
+			return func() tea.Msg {
 				return view.NavigateToMsg{
 					ViewName: servicesview.ViewName,
 					Payload: map[string]interface{}{
@@ -72,5 +72,5 @@ func handleNormalModeKey(m *Model, msg tea.KeyMsg) (*Model, tea.Cmd) {
 		}
 	}
 
-	return m, nil
+	return nil
 }

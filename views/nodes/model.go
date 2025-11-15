@@ -77,3 +77,11 @@ func (m *Model) SelectedNode() *swarm.Node {
 	}
 	return nil
 }
+
+func (m *Model) OnEnter() tea.Cmd {
+	return nil
+}
+
+func (m *Model) OnExit() tea.Cmd {
+	return nil
+}

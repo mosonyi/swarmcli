@@ -6,12 +6,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case Msg:
 		m.SetContent(msg)
 		m.Visible = true
-		return m, nil
+		return nil
 
 	case tea.WindowSizeMsg:
 		m.viewport.Width = msg.Width
@@ -20,7 +20,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.ready = true
 			m.viewport.SetContent(m.renderNodes())
 		}
-		return m, nil
+		return nil
 
 	case tea.KeyMsg:
 		return HandleKey(m, msg)
@@ -28,7 +28,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
-	return m, cmd
+	returncmd
 }
 
 func (m *Model) SetContent(msg Msg) {

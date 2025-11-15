@@ -46,11 +46,10 @@ type Model struct {
 
 	msgCh chan tea.Msg
 
-	confirmDialog confirmdialog.Model
-	loading       loadingview.Model
+	confirmDialog *confirmdialog.Model
+	loading       *loadingview.Model
 }
 
-// Create new instance
 func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 	ld := loadingview.New(width, height, false, "Please wait...")
@@ -128,4 +127,12 @@ func (m *Model) listenForMessages() tea.Cmd {
 		}
 		return msg
 	}
+}
+
+func (m *Model) OnEnter() tea.Cmd {
+	return nil
+}
+
+func (m *Model) OnExit() tea.Cmd {
+	return nil
 }

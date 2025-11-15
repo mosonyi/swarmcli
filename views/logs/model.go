@@ -2,6 +2,7 @@ package logsview
 
 import (
 	"context"
+	"swarmcli/docker"
 	"swarmcli/views/helpbar"
 	"sync"
 
@@ -21,6 +22,8 @@ type Model struct {
 	MaxLines      int
 	ready         bool
 
+	ServiceEntry docker.ServiceEntry
+
 	// streaming control
 	StreamCtx    context.Context
 	StreamCancel context.CancelFunc // cancel context for streaming goroutine
@@ -39,7 +42,7 @@ type Model struct {
 }
 
 // New creates a logs model with sensible defaults.
-func New(width, height int, maxLines int) *Model {
+func New(width, height int, maxLines int, service docker.ServiceEntry) *Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
 	ctx, cancel := context.WithCancel(context.Background())

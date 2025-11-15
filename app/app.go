@@ -43,27 +43,28 @@ func Init() {
 		l.Infoln("-", cmd.Name(), "→", cmd.Description())
 	}
 
-	registerView(loadingview.ViewName, func(w, h int, payload any) (*Model, tea.Cmd) {
+	registerView(loadingview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		return loadingview.New(w, h, true, payload), nil
 	})
-	registerView(helpview.ViewName, func(w, h int, payload any) (*Model, tea.Cmd) {
+	registerView(helpview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		cmds, _ := payload.([]helpview.CommandInfo)
 		return helpview.New(w, h, cmds), nil
 	})
-	registerView(logsview.ViewName, func(w, h int, payload any) (*Model, tea.Cmd) {
-		v := logsview.New(w, h, 1000)
+	registerView(logsview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		service := payload.(docker.ServiceEntry)
+
+		v := logsview.New(w, h, 1000, service)
 
 		// FIRST create the view
 		// THEN start streaming inside its context
 		return v, logsview.StartStreamingCmd(v.StreamCtx, service, 1000, v.MaxLines)
 	})
 
-	registerView(configsview.ViewName, func(w, h int, payload any) (*Model, tea.Cmd) {
+	registerView(configsview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		return configsview.New(w, h), configsview.LoadConfigs()
 	})
 
-	registerView(inspectview.ViewName, func(w, h int, payload any) (*Model, tea.Cmd) {
+	registerView(inspectview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		data, _ := payload.(map[string]interface{})
 		title, _ := data["title"].(string)
 		jsonStr, _ := data["json"].(string)
@@ -72,10 +73,10 @@ func Init() {
 		return v, inspectview.LoadInspectItem(title, jsonStr)
 	})
 
-	registerView(nodesview.ViewName, func(w, h int, payload any) (*Model, tea.Cmd) {
+	registerView(nodesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		return nodesview.New(w, h), nodesview.LoadNodesCmd()
 	})
-	registerView(stacksview.ViewName, func(w, h int, payload any) (*Model, tea.Cmd) {
+	registerView(stacksview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		var nodeID string
 		if payload != nil {
 			nodeID, _ = payload.(string)
@@ -83,7 +84,7 @@ func Init() {
 		return stacksview.New(w, h), stacksview.LoadStacks(nodeID)
 	})
 
-	registerView(servicesview.ViewName, func(w, h int, payload any) (*Model, tea.Cmd) {
+	registerView(servicesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		v := servicesview.New(w, h)
 
 		data, _ := payload.(map[string]interface{})

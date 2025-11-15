@@ -83,3 +83,11 @@ func (m *Model) addConfig(cfg docker.ConfigWithDecodedData) {
 	m.list.InsertItem(0, configItemFromSwarm(cfg.Config))
 	m.configs = append(m.configs, cfg)
 }
+
+func (m *Model) OnEnter() tea.Cmd {
+	return nil
+}
+
+func (m *Model) OnExit() tea.Cmd {
+	return nil
+}

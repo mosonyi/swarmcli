@@ -23,21 +23,21 @@ func New(width, height int) *Model { return &Model{Width: width, Height: height}
 
 func (m *Model) Init() tea.Cmd { return nil }
 
-func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if !m.Visible {
-			return m, nil
+			return nil
 		}
 		switch msg.String() {
 		case "y", "Y":
 			m.Visible = false
-			return m, func() tea.Msg { return ResultMsg{Confirmed: true} }
+			return func() tea.Msg { return ResultMsg{Confirmed: true} }
 		case "n", "N", "esc":
-			return m, func() tea.Msg { return ResultMsg{Confirmed: false} }
+			return func() tea.Msg { return ResultMsg{Confirmed: false} }
 		}
 	}
-	return m, nil
+	return nil
 }
 
 func (m *Model) View() string {

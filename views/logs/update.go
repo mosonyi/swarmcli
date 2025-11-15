@@ -9,7 +9,7 @@ import (
 )
 
 // Update processes Tea messages.
-func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 
 	case InitStreamMsg:
@@ -18,7 +18,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.errChan = msg.Errs
 		m.Visible = true
 		l().Debugf("[logsview] stream initialized")
-		return m, m.readOneLineCmd()
+		return m.readOneLineCmd()
 
 	case LineMsg:
 		// append line into bounded buffer
@@ -55,7 +55,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			l().Debugf("[logsview] appended line; total=%d YOffset=%d Height=%d TotalLineCount=%d",
 				totalLines, m.viewport.YOffset, m.viewport.Height, m.viewport.TotalLineCount())
 		}
-		return m, m.readOneLineCmd()
+		return m.readOneLineCmd()
 
 	case StreamErrMsg:
 		// append an error line and stop
@@ -66,7 +66,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		if m.ready {
 			m.viewport.SetContent(m.buildContent())
 		}
-		return m, nil
+		return nil
 
 	case StreamDoneMsg:
 		m.mu.Lock()
@@ -76,7 +76,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		if m.ready {
 			m.viewport.SetContent(m.buildContent())
 		}
-		return m, nil
+		return nil
 
 	case tea.WindowSizeMsg:
 		m.viewport.Width = msg.Width
@@ -86,7 +86,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		}
 		// reset viewport content so the internal content height updates
 		m.viewport.SetContent(m.buildContent())
-		return m, nil
+		return nil
 
 	case tea.KeyMsg:
 		// 1) allow viewport to handle scrolling keys
@@ -94,18 +94,18 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		case "up", "down", "pgup", "pgdown", "home", "end", "k", "j":
 			var cmd tea.Cmd
 			m.viewport, cmd = m.viewport.Update(msg)
-			return m, cmd
+			return cmd
 		}
 
 		// 2) other keys -> our handler
-		newModel, cmd := HandleKey(m, msg)
-		return newModel, cmd
+		cmd := HandleKey(m, msg)
+		return cmd
 	}
 
 	// default: let viewport handle other messages
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
-	return m, cmd
+	return cmd
 }
 
 // readOneLineCmd returns a cmd that waits for one line from the line channel.

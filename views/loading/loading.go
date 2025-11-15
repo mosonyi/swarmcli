@@ -66,10 +66,10 @@ func (m *Model) SetVisible(v bool) { m.visible = v }
 func (m *Model) Init() tea.Cmd     { return m.spinner.Tick }
 func (m *Model) Name() string      { return ViewName }
 
-func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	m.spinner, cmd = m.spinner.Update(msg)
-	return m, cmd
+	return cmd
 }
 
 func (m *Model) View() string {
@@ -87,4 +87,12 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "q", Desc: "quit"},
 	}
+}
+
+func (m *Model) OnEnter() tea.Cmd {
+	return nil
+}
+
+func (m *Model) OnExit() tea.Cmd {
+	return nil
 }

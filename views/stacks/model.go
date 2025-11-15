@@ -53,3 +53,11 @@ func LoadStacks(nodeID string) tea.Cmd {
 		return Msg{NodeID: nodeID, Stacks: stacks}
 	}
 }
+
+func (m *Model) OnEnter() tea.Cmd {
+	return nil
+}
+
+func (m *Model) OnExit() tea.Cmd {
+	return nil
+}
