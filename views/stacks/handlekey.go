@@ -8,7 +8,7 @@ import (
 )
 
 // handleKey handles all key events for the stacks view.
-func handleKey(m Model, msg tea.KeyMsg) (view.View, tea.Cmd) {
+func handleKey(m *Model, msg tea.KeyMsg) (*Model, tea.Cmd) {
 	switch msg.String() {
 
 	case "q", "esc":

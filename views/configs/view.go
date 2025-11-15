@@ -41,7 +41,7 @@ func configItemFromSwarm(c swarm.Config) configItem {
 	return configItem{Name: c.Spec.Name, ID: c.ID}
 }
 
-func (m Model) View() string {
+func (m *Model) View() string {
 	width := 80
 	height := 24
 

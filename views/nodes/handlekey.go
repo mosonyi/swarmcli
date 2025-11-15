@@ -11,11 +11,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func HandleKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+func HandleKey(m *Model, msg tea.KeyMsg) (*Model, tea.Cmd) {
 	return handleNormalModeKey(m, msg)
 }
 
-func handleNormalModeKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+func handleNormalModeKey(m *Model, msg tea.KeyMsg) (*Model, tea.Cmd) {
 	switch msg.String() {
 	case "q":
 		m.Visible = false

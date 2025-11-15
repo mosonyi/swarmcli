@@ -4,7 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func HandleKey(m Model, k tea.KeyMsg) (Model, tea.Cmd) {
+func HandleKey(m *Model, k tea.KeyMsg) (*Model, tea.Cmd) {
 	switch k.String() {
 	case "q", "esc":
 		m.Visible = false

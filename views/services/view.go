@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func (m Model) View() string {
+func (m *Model) View() string {
 	width := m.viewport.Width
 	height := m.viewport.Height
 	if width <= 0 {

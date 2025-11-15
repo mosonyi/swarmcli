@@ -1,12 +1,10 @@
 package inspectview
 
 import (
-	"swarmcli/views/view"
-
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func handleNormalKey(m Model, k tea.KeyMsg) (view.View, tea.Cmd) {
+func handleNormalKey(m *Model, k tea.KeyMsg) (*Model, tea.Cmd) {
 	switch k.String() {
 	case "q", "esc":
 		return m, nil
@@ -26,7 +24,7 @@ func handleNormalKey(m Model, k tea.KeyMsg) (view.View, tea.Cmd) {
 	return m, nil
 }
 
-func handleSearchKey(m Model, k tea.KeyMsg) (view.View, tea.Cmd) {
+func handleSearchKey(m *Model, k tea.KeyMsg) (*Model, tea.Cmd) {
 	switch k.Type {
 	case tea.KeyRunes:
 		m.SearchTerm += k.String()

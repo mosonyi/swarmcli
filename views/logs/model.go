@@ -39,11 +39,11 @@ type Model struct {
 }
 
 // New creates a logs model with sensible defaults.
-func New(width, height int, maxLines int) Model {
+func New(width, height int, maxLines int) *Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
 	ctx, cancel := context.WithCancel(context.Background())
-	return Model{
+	return &Model{
 		viewport:     vp,
 		Visible:      false,
 		mode:         "normal",
@@ -57,9 +57,9 @@ func New(width, height int, maxLines int) Model {
 	}
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+func (m *Model) Init() tea.Cmd { return nil }
 
-func (m Model) Name() string { return ViewName }
+func (m *Model) Name() string { return ViewName }
 
 func (m *Model) setFollow(f bool) {
 	m.mu.Lock()
@@ -68,7 +68,7 @@ func (m *Model) setFollow(f bool) {
 }
 
 // ShortHelpItems stays compatible with your helpbar interface.
-func (m Model) ShortHelpItems() []helpbar.HelpEntry {
+func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	if m.mode == "search" {
 		return []helpbar.HelpEntry{
 			{Key: "enter", Desc: "confirm"},
@@ -82,4 +82,13 @@ func (m Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "f", Desc: "toggle follow"},
 		{Key: "q", Desc: "close"},
 	}
+}
+
+func (m *Model) OnEnter() tea.Cmd {
+	// Start streaming with internal context
+	return StartStreamingCmd(m.StreamCtx, m.ServiceEntry, 1000, m.MaxLines)
+}
+
+func (m *Model) OnExit() tea.Cmd {
+	return m.StopStreamingCmd()
 }

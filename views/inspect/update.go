@@ -6,10 +6,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"swarmcli/views/view"
 )
 
-func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case Msg:
 		m.SetTitle(msg.Title)

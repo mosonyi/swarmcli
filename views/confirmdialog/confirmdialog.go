@@ -19,11 +19,11 @@ type Model struct {
 	Height  int
 }
 
-func New(width, height int) Model { return Model{Width: width, Height: height} }
+func New(width, height int) *Model { return &Model{Width: width, Height: height} }
 
-func (m Model) Init() tea.Cmd { return nil }
+func (m *Model) Init() tea.Cmd { return nil }
 
-func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if !m.Visible {
@@ -40,7 +40,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) View() string {
+func (m *Model) View() string {
 	if !m.Visible {
 		return ""
 	}
@@ -57,18 +57,18 @@ func (m Model) View() string {
 	return lipgloss.Place(m.Width, m.Height, lipgloss.Center, lipgloss.Center, box)
 }
 
-func (m Model) WithMessage(msg string) Model {
+func (m *Model) WithMessage(msg string) *Model {
 	m.Message = msg
 	return m
 }
 
-func (m Model) Show(msg string) Model {
+func (m *Model) Show(msg string) *Model {
 	m.Visible = true
 	m.Message = msg
 	return m
 }
 
-func (m Model) Hide() Model {
+func (m *Model) Hide() *Model {
 	m.Visible = false
 	return m
 }

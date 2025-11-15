@@ -20,14 +20,14 @@ type Model struct {
 }
 
 // Create a new instance
-func New(version string) Model {
-	return Model{
+func New(version string) *Model {
+	return &Model{
 		content: content("", version, "", "", 0, 0),
 		version: version,
 	}
 }
 
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	return nil
 }
 

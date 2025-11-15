@@ -4,13 +4,12 @@ import (
 	"fmt"
 	"strings"
 	"swarmcli/utils"
-	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Update processes Tea messages.
-func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case InitStreamMsg:
@@ -110,7 +109,7 @@ func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
 }
 
 // readOneLineCmd returns a cmd that waits for one line from the line channel.
-func (m Model) readOneLineCmd() tea.Cmd {
+func (m *Model) readOneLineCmd() tea.Cmd {
 	if m.linesChan == nil && m.errChan == nil {
 		return nil
 	}

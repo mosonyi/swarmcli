@@ -8,7 +8,7 @@ import (
 )
 
 // Update handles messages for the stacks view.
-func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	// --- Stacks loaded ---

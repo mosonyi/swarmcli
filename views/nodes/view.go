@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func (m Model) View() string {
+func (m *Model) View() string {
 	if !m.Visible {
 		return ""
 	}
@@ -64,7 +64,7 @@ func renderHeader(entries []docker.NodeEntry) string {
 }
 
 // renderNodes builds the visible list of nodes with colorized header and cursor highlight.
-func (m Model) renderNodes() string {
+func (m *Model) renderNodes() string {
 	if len(m.entries) == 0 {
 		return "No swarm nodes found."
 	}

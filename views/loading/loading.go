@@ -5,7 +5,6 @@ import (
 	"strings"
 	"swarmcli/ui"
 	"swarmcli/views/helpbar"
-	"swarmcli/views/view"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -23,7 +22,7 @@ type Model struct {
 	visible       bool
 }
 
-func New(width, height int, visible bool, payload any) Model {
+func New(width, height int, visible bool, payload any) *Model {
 	// Defaults
 	title := "Loading"
 	header := ""
@@ -59,21 +58,21 @@ func New(width, height int, visible bool, payload any) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(ui.FrameBorderColor)
-	return Model{width: width, height: height, title: title, header: header, message: message, spinner: s, visible: visible}
+	return &Model{width: width, height: height, title: title, header: header, message: message, spinner: s, visible: visible}
 }
 
-func (m Model) Visible() bool      { return m.visible }
+func (m *Model) Visible() bool     { return m.visible }
 func (m *Model) SetVisible(v bool) { m.visible = v }
-func (m Model) Init() tea.Cmd      { return m.spinner.Tick }
-func (m Model) Name() string       { return ViewName }
+func (m *Model) Init() tea.Cmd     { return m.spinner.Tick }
+func (m *Model) Name() string      { return ViewName }
 
-func (m Model) Update(msg tea.Msg) (view.View, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.spinner, cmd = m.spinner.Update(msg)
 	return m, cmd
 }
 
-func (m Model) View() string {
+func (m *Model) View() string {
 	if !m.visible {
 		return ""
 	}
@@ -84,7 +83,7 @@ func (m Model) View() string {
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }
 
-func (m Model) ShortHelpItems() []helpbar.HelpEntry {
+func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "q", Desc: "quit"},
 	}

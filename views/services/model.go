@@ -51,10 +51,10 @@ type Model struct {
 }
 
 // Create new instance
-func New(width, height int) Model {
+func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 	ld := loadingview.New(width, height, false, "Please wait...")
-	return Model{
+	return &Model{
 		viewport:      vp,
 		Visible:       false,
 		confirmDialog: confirmdialog.New(width, height),
@@ -63,11 +63,11 @@ func New(width, height int) Model {
 	}
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+func (m *Model) Init() tea.Cmd { return nil }
 
-func (m Model) Name() string { return ViewName }
+func (m *Model) Name() string { return ViewName }
 
-func (m Model) ShortHelpItems() []helpbar.HelpEntry {
+func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "i", Desc: "inspect"},
 		{Key: "k/up", Desc: "up"},
@@ -114,7 +114,7 @@ func sendMsg(ch chan tea.Msg, msg tea.Msg) {
 	}
 }
 
-func (m Model) listenForMessages() tea.Cmd {
+func (m *Model) listenForMessages() tea.Cmd {
 	if m.msgCh == nil {
 		l().Debugf("[listenForMessages] no message channel, skipping")
 		return nil
