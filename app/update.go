@@ -60,8 +60,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// If command input is visible, forward all keys to it exclusively
 		if m.commandInput.Visible() {
-			var cmd tea.Cmd
-			cmd = m.commandInput.Update(msg)
+			cmd := m.commandInput.Update(msg)
 			return m, cmd
 		}
 
@@ -82,11 +81,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) delegateToCurrentView(msg tea.Msg) tea.Cmd {
-	var cmd tea.Cmd
-	cmd = m.currentView.Update(msg)
+	cmd := m.currentView.Update(msg)
 
-	var vpCmd tea.Cmd
-	vpCmd = m.updateViewports(msg)
+	vpCmd := m.updateViewports(msg)
 
 	return tea.Batch(cmd, vpCmd)
 }
@@ -109,8 +106,7 @@ func handleViewResize(view view.View, width, height int) tea.Cmd {
 		Height: height - systeminfoview.Height,
 	}
 
-	var cmd tea.Cmd
-	cmd = view.Update(adjustedMsg)
+	cmd := view.Update(adjustedMsg)
 	return cmd
 }
 
@@ -123,13 +119,11 @@ func (m *Model) updateViewports(msg tea.Msg) tea.Cmd {
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Global escape / quit handler
 	if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc || msg.String() == "q" {
-		var cmd tea.Cmd
-		cmd = m.goBack()
+		cmd := m.goBack()
 		return m, cmd
 	}
 
-	var cmd tea.Cmd
-	cmd = m.currentView.Update(msg)
+	cmd := m.currentView.Update(msg)
 	return m, cmd
 }
 
@@ -151,8 +145,7 @@ func (m *Model) goBack() tea.Cmd {
 	enterCmd := m.currentView.OnEnter()
 
 	// Optionally notify the view about terminal size again
-	var resizeCmd tea.Cmd
-	resizeCmd = handleViewResize(m.currentView, m.viewport.Width, m.viewport.Height)
+	resizeCmd := handleViewResize(m.currentView, m.viewport.Width, m.viewport.Height)
 
 	// Execute all lifecycle commands
 	return tea.Batch(exitCmd, enterCmd, resizeCmd)

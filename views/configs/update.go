@@ -115,8 +115,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case tea.KeyMsg:
 		if m.confirmDialog.Visible {
 			l().Debugf("Key input routed to confirm dialog: %q", msg.String())
-			var cmd tea.Cmd
-			cmd = m.confirmDialog.Update(msg)
+			cmd := m.confirmDialog.Update(msg)
 			return cmd
 		}
 

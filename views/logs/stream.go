@@ -96,9 +96,6 @@ func StartStreamingCmd(ctx context.Context, service docker.ServiceEntry, tail in
 				}
 				return
 			}
-
-			// done: channels will be closed by defer above
-			return
 		}()
 
 		// return InitStreamMsg carrying the channels AND the requested MaxLines

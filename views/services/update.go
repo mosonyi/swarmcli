@@ -69,8 +69,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case tea.KeyMsg:
 		if m.confirmDialog.Visible {
-			var cmd tea.Cmd
-			cmd = m.confirmDialog.Update(msg)
+			cmd := m.confirmDialog.Update(msg)
 			return cmd
 		}
 
@@ -149,8 +148,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	default:
 		// Forward messages to loading view if active
 		if m.loading.Visible() {
-			var cmd tea.Cmd
-			cmd = m.loading.Update(msg)
+			cmd := m.loading.Update(msg)
 			return cmd
 		}
 	}
