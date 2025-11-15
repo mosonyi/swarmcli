@@ -43,6 +43,7 @@ func StartStreamingCmd(ctx context.Context, service docker.ServiceEntry, tail in
 			} else {
 				opts.Tail = "all"
 			}
+			l().Debugf("[logsview] requesting service logs with Tail=%s", opts.Tail)
 
 			// call ServiceLogs (streams a multiplexed stream)
 			reader, err := cli.ServiceLogs(ctx, service.ServiceID, opts)

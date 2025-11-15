@@ -52,11 +52,7 @@ func Init() {
 	})
 	registerView(logsview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		service := payload.(docker.ServiceEntry)
-
 		v := logsview.New(w, h, 200, service)
-
-		// FIRST create the view
-		// THEN start streaming inside its context
 		return v, logsview.StartStreamingCmd(v.StreamCtx, service, 200, v.MaxLines)
 	})
 
