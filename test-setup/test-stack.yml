@@ -16,6 +16,7 @@ services:
       replicas: 2
     command: >
       sh -c '
+        apk add --no-cache netcat-openbsd;
         echo "Starting whoami service...";
         while true; do
           echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r" \
@@ -23,6 +24,7 @@ services:
           | nc -l -p 80 -q 1;
         done
       '
+
     ports:
       - "8081:80"
 
@@ -35,6 +37,7 @@ services:
       replicas: 1
     command: >
       sh -c '
+        apk add --no-cache netcat-openbsd;
         echo "Starting whoami_single service...";
         while true; do
           echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r" \
