@@ -46,7 +46,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.viewport.SetContent(m.buildContent())
 
 			// auto-follow behavior: only keep bottom when follow=true and user is at bottom
-			if m.follow && !m.userScrolled {
+			if m.follow {
 				// if viewport thinks it's at bottom (or close), goto bottom
 				if m.viewport.YOffset+m.viewport.Height >= m.viewport.TotalLineCount()-1 {
 					m.viewport.GotoBottom()
@@ -92,7 +92,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// 1) allow viewport to handle scrolling keys
 		switch msg.String() {
 		case "up", "down", "pgup", "pgdown", "home", "end", "k", "j":
-			m.userScrolled = true
 			var cmd tea.Cmd
 			m.viewport, cmd = m.viewport.Update(msg)
 			return cmd
