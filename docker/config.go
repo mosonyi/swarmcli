@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/client"
 )
@@ -92,7 +91,7 @@ func ListConfigs(ctx context.Context) ([]swarm.Config, error) {
 	}
 	defer cli.Close()
 
-	configs, err := cli.ConfigList(ctx, types.ConfigListOptions{})
+	configs, err := cli.ConfigList(ctx, swarm.ConfigListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list configs: %w", err)
 	}
@@ -200,7 +199,7 @@ func RotateConfigInServices(ctx context.Context, oldCfg *swarm.Config, newCfg sw
 			}
 		}
 
-		if _, err := client.ServiceUpdate(ctx, svc.ID, svc.Version, updated, types.ServiceUpdateOptions{}); err != nil {
+		if _, err := client.ServiceUpdate(ctx, svc.ID, svc.Version, updated, swarm.ServiceUpdateOptions{}); err != nil {
 			return fmt.Errorf("failed to rotate config in service %s: %w", svc.Spec.Name, err)
 		}
 
@@ -252,7 +251,7 @@ func nextConfigVersionName(baseName string) string {
 }
 
 func listServicesUsingConfig(ctx context.Context, client *client.Client, configID string) ([]swarm.Service, error) {
-	services, err := client.ServiceList(ctx, types.ServiceListOptions{})
+	services, err := client.ServiceList(ctx, swarm.ServiceListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +268,7 @@ func listServicesUsingConfig(ctx context.Context, client *client.Client, configI
 }
 
 func listServicesUsingConfigName(ctx context.Context, client *client.Client, name string) ([]swarm.Service, error) {
-	services, err := client.ServiceList(ctx, types.ServiceListOptions{})
+	services, err := client.ServiceList(ctx, swarm.ServiceListOptions{})
 	if err != nil {
 		return nil, err
 	}

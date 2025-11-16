@@ -7,7 +7,6 @@ import (
 	swarmlog "swarmcli/utils/log"
 	"testing"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/stretchr/testify/require"
 )
@@ -62,14 +61,14 @@ func TestConfigLifecycle(t *testing.T) {
 			},
 		}
 
-		svcResp, err := e.cli.ServiceCreate(e.ctx, serviceSpec, types.ServiceCreateOptions{})
+		svcResp, err := e.cli.ServiceCreate(e.ctx, serviceSpec, swarm.ServiceCreateOptions{})
 		require.NoError(t, err, "ServiceCreate should succeed")
 		e.registerServiceCleanup(svcResp.ID)
 
 		err = docker.RotateConfigInServices(e.ctx, &orig, newCfg)
 		require.NoError(t, err, "RotateConfigInServices should succeed")
 
-		svcAfter, _, err := e.cli.ServiceInspectWithRaw(e.ctx, svcResp.ID, types.ServiceInspectOptions{})
+		svcAfter, _, err := e.cli.ServiceInspectWithRaw(e.ctx, svcResp.ID, swarm.ServiceInspectOptions{})
 		require.NoError(t, err)
 
 		found := false

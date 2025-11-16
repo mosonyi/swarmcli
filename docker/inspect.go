@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/swarm"
 )
 
@@ -37,7 +36,7 @@ func Inspect(ctx context.Context, t InspectType, id string) (string, error) {
 		obj = node
 
 	case InspectService:
-		svc, _, err := cli.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
+		svc, _, err := cli.ServiceInspectWithRaw(ctx, id, swarm.ServiceInspectOptions{})
 		if err != nil {
 			return "", fmt.Errorf("service inspect: %w", err)
 		}
@@ -52,7 +51,7 @@ func Inspect(ctx context.Context, t InspectType, id string) (string, error) {
 
 	case InspectStack:
 		// Fetch all services and filter by stack label
-		services, err := cli.ServiceList(ctx, types.ServiceListOptions{})
+		services, err := cli.ServiceList(ctx, swarm.ServiceListOptions{})
 		if err != nil {
 			return "", fmt.Errorf("stack inspect: %w", err)
 		}

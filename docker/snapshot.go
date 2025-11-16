@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/swarm"
 )
 
@@ -68,17 +67,17 @@ func RefreshSnapshot() (*SwarmSnapshot, error) {
 
 	ctx := context.Background()
 
-	nodes, err := c.NodeList(ctx, types.NodeListOptions{})
+	nodes, err := c.NodeList(ctx, swarm.NodeListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("listing nodes: %w", err)
 	}
 
-	services, err := c.ServiceList(ctx, types.ServiceListOptions{})
+	services, err := c.ServiceList(ctx, swarm.ServiceListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("listing services: %w", err)
 	}
 
-	tasks, err := c.TaskList(ctx, types.TaskListOptions{})
+	tasks, err := c.TaskList(ctx, swarm.TaskListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("listing tasks: %w", err)
 	}

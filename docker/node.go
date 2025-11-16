@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/swarm"
 )
 
 func GetNodeIDToHostnameMapFromDocker() (map[string]string, error) {
@@ -14,7 +14,7 @@ func GetNodeIDToHostnameMapFromDocker() (map[string]string, error) {
 	}
 	defer c.Close()
 
-	nodes, err := c.NodeList(context.Background(), types.NodeListOptions{})
+	nodes, err := c.NodeList(context.Background(), swarm.NodeListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("listing nodes: %w", err)
 	}
