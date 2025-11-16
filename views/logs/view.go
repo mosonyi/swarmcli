@@ -22,7 +22,7 @@ func (m *Model) View() string {
 	}
 
 	title := fmt.Sprintf(
-		"Logs • %s • follow: %s",
+		"Service: %s • follow: %s",
 		m.ServiceEntry.ServiceName,
 		followStatus,
 	)
