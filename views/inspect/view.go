@@ -6,22 +6,32 @@ import (
 )
 
 func (m *Model) View() string {
-	if m.Root == nil && !m.ready {
-		return ""
+	width := m.viewport.Width
+	if width <= 0 {
+		width = 80
 	}
 
-	// build title
+	// ---- Build dynamic title ----
 	title := m.Title
 	if title == "" {
 		title = "Inspecting"
 	}
 
-	// if in search mode, show the search input
+	// ---- Build header ----
+	header := "Inspecting"
 	if m.searchMode {
-		title = fmt.Sprintf("%s  (search: %s, enter to apply, esc to cancel)", title, m.SearchTerm)
+		header = fmt.Sprintf("%s — Search: %s", header, m.SearchTerm)
 	}
 
-	content := m.viewport.View()
-	out := fmt.Sprintf("%s\n\n%s\n[press q or esc to go back, / to search]", title, content)
-	return ui.BorderStyle.Render(out)
+	headerRendered := ui.FrameHeaderStyle.Render(header)
+
+	// ---- Render framed box ----
+	content := ui.RenderFramedBox(
+		title,
+		headerRendered,
+		m.viewport.View(),
+		width,
+	)
+
+	return content
 }
