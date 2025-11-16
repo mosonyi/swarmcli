@@ -27,7 +27,7 @@ type StackService struct {
 
 // findServiceByName returns a swarm.Service by name, or an error if not found.
 func findServiceByName(ctx context.Context, c *client.Client, name string) (*swarm.Service, error) {
-	services, err := c.ServiceList(ctx, types.ServiceListOptions{})
+	services, err := c.ServiceList(ctx, swarm.ServiceListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("listing services: %w", err)
 	}
@@ -41,7 +41,7 @@ func findServiceByName(ctx context.Context, c *client.Client, name string) (*swa
 
 // updateService applies the given Service.Spec and logs any warnings.
 func updateService(ctx context.Context, c *client.Client, svc *swarm.Service) error {
-	resp, err := c.ServiceUpdate(ctx, svc.ID, svc.Version, svc.Spec, types.ServiceUpdateOptions{
+	resp, err := c.ServiceUpdate(ctx, svc.ID, svc.Version, svc.Spec, swarm.ServiceUpdateOptions{
 		RegistryAuthFrom: types.RegistryAuthFromSpec,
 	})
 	if err != nil {
@@ -94,7 +94,7 @@ func ScaleService(serviceID string, replicas uint64) error {
 
 	ctx := context.Background()
 
-	svc, _, err := c.ServiceInspectWithRaw(ctx, serviceID, types.ServiceInspectOptions{})
+	svc, _, err := c.ServiceInspectWithRaw(ctx, serviceID, swarm.ServiceInspectOptions{})
 	if err != nil {
 		return fmt.Errorf("inspect service %s: %w", serviceID, err)
 	}
@@ -167,7 +167,7 @@ func restartServiceAndWaitInternal(ctx context.Context, serviceName string, prog
 
 	// Snapshot old tasks
 	oldTasks := map[string]swarm.Task{}
-	tasks, err := cli.TaskList(ctx, types.TaskListOptions{})
+	tasks, err := cli.TaskList(ctx, swarm.TaskListOptions{})
 	if err != nil {
 		return fmt.Errorf("listing initial tasks: %w", err)
 	}
@@ -206,7 +206,7 @@ func restartServiceAndWaitInternal(ctx context.Context, serviceName string, prog
 		default:
 		}
 
-		tasks, err := cli.TaskList(ctx, types.TaskListOptions{})
+		tasks, err := cli.TaskList(ctx, swarm.TaskListOptions{})
 		if err != nil {
 			return fmt.Errorf("listing tasks: %w", err)
 		}

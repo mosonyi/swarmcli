@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/swarm"
 )
 
 // ---------- Swarm Node / Service Info ----------
@@ -45,7 +45,7 @@ func GetServiceCount() (int, error) {
 		return 0, err
 	}
 
-	services, err := c.ServiceList(context.Background(), types.ServiceListOptions{})
+	services, err := c.ServiceList(context.Background(), swarm.ServiceListOptions{})
 	if err != nil {
 		return 0, err
 	}
@@ -72,7 +72,7 @@ func GetSwarmCPUUsage() (string, error) {
 		if err != nil {
 			continue
 		}
-		var s container.Stats
+		var s container.StatsResponse
 		if err := json.NewDecoder(stats.Body).Decode(&s); err != nil {
 			stats.Body.Close()
 			continue
@@ -112,7 +112,7 @@ func GetSwarmMemUsage() (string, error) {
 		if err != nil {
 			continue
 		}
-		var s container.Stats
+		var s container.StatsResponse
 		if err := json.NewDecoder(stats.Body).Decode(&s); err != nil {
 			stats.Body.Close()
 			continue
