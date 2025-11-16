@@ -163,7 +163,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			l().Infof("Edit key pressed for config: %s", cfg)
 			return editConfigInEditorCmd(cfg)
 
-		case "enter":
+		case "i":
 			cfg := m.selectedConfig()
 			l().Infof("Inspect key pressed for config: %s", cfg)
 			return inspectConfigCmd(cfg)
