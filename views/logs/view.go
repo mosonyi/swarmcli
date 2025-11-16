@@ -9,10 +9,39 @@ func (m *Model) View() string {
 	if !m.Visible {
 		return ""
 	}
-	header := fmt.Sprintf("Inspecting Logs (%s)", m.mode)
-	if m.mode == "search" {
-		header += fmt.Sprintf(" - Search: %s", m.searchTerm)
+
+	width := m.viewport.Width
+	if width <= 0 {
+		width = 80
 	}
-	footer := "[press q or esc to go back, / to search, f to toggle follow]"
-	return ui.BorderStyle.Render(fmt.Sprintf("%s\n\n%s\n\n%s", header, m.viewport.View(), footer))
+
+	// ---- Build dynamic title bar ----
+	followStatus := "off"
+	if m.follow {
+		followStatus = "on"
+	}
+
+	title := fmt.Sprintf(
+		"Logs • %s • follow: %s",
+		m.ServiceEntry.ServiceName,
+		followStatus,
+	)
+
+	// ---- Build header ----
+	header := "Logs"
+	if m.mode == "search" {
+		header = fmt.Sprintf("Logs — Search: %s", m.searchTerm)
+	}
+
+	headerRendered := ui.FrameHeaderStyle.Render(header)
+
+	// ---- Render framed box ----
+	content := ui.RenderFramedBox(
+		title,
+		headerRendered,
+		m.viewport.View(),
+		width,
+	)
+
+	return content
 }
