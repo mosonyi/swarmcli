@@ -38,7 +38,7 @@ func handleNormalModeKey(m *Model, msg tea.KeyMsg) tea.Cmd {
 	case "pgdown":
 		m.viewport.ScrollDown(m.viewport.Height)
 
-	case "d":
+	case "i":
 		if m.cursor < len(m.entries) {
 			node := m.entries[m.cursor]
 
@@ -57,7 +57,7 @@ func handleNormalModeKey(m *Model, msg tea.KeyMsg) tea.Cmd {
 				}
 			}
 		}
-	case "i":
+	case "p":
 		if m.cursor < len(m.entries) {
 			node := m.entries[m.cursor]
 			return func() tea.Msg {
