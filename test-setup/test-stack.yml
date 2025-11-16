@@ -47,3 +47,18 @@ services:
       '
     ports:
       - "8082:80"
+  log_ticker:
+    image: alpine:latest
+    deploy:
+      replicas: 1
+    command: >
+      sh -c '
+        echo "Starting log_ticker service...";
+        i=0;
+        while true; do
+          echo "log_ticker: tick $i - $$(date)";
+          i=$$((i+1));
+          sleep 1;
+        done
+      '
+
