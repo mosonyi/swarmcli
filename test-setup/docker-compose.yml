@@ -1,13 +1,16 @@
+x-proxy-env: &proxy_env
+  HTTP_PROXY:  ${HTTP_PROXY:-}
+  HTTPS_PROXY: ${HTTPS_PROXY:-}
+  NO_PROXY:    ${NO_PROXY:-}
+
 services:
   # ===== Manager (dockerd-in-docker) =====
   manager:
     image: docker:27-dind
     privileged: true
     environment:
-      - DOCKER_TLS_CERTDIR=              # disable TLS for local test-setup
-      - HTTP_PROXY=${HTTP_PROXY}
-      - HTTPS_PROXY=${HTTPS_PROXY}
-      - NO_PROXY=${NO_PROXY}
+      DOCKER_TLS_CERTDIR:             # disable TLS for local test-setup
+      <<: *proxy_env
     command:
       [
         "sh","-exc",
@@ -63,10 +66,8 @@ services:
     image: docker:27-dind
     privileged: true
     environment:
-      - DOCKER_TLS_CERTDIR=
-      - HTTP_PROXY=${HTTP_PROXY}
-      - HTTPS_PROXY=${HTTPS_PROXY}
-      - NO_PROXY=${NO_PROXY}
+      DOCKER_TLS_CERTDIR:
+      <<: *proxy_env
     command:
       [
         "sh","-exc",
@@ -118,10 +119,8 @@ services:
     image: docker:27-dind
     privileged: true
     environment:
-      - DOCKER_TLS_CERTDIR=
-      - HTTP_PROXY=${HTTP_PROXY}
-      - HTTPS_PROXY=${HTTPS_PROXY}
-      - NO_PROXY=${NO_PROXY}
+      DOCKER_TLS_CERTDIR:
+      <<: *proxy_env
     command:
       [
         "sh","-exc",
