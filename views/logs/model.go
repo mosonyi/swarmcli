@@ -54,6 +54,7 @@ func New(width, height int, maxLines int, service docker.ServiceEntry) *Model {
 		MaxLines:     maxLines,
 		StreamCtx:    ctx,
 		StreamCancel: cancel,
+		ServiceEntry: service,
 		linesChan:    nil,
 		errChan:      nil,
 		follow:       true, // auto-follow by default
