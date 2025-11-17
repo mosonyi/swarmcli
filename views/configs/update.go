@@ -113,6 +113,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case tea.KeyMsg:
+		l().Debugf("Key msg string: %q", msg.String())
+
 		if m.confirmDialog.Visible {
 			l().Debugf("Key input routed to confirm dialog: %q", msg.String())
 			cmd := m.confirmDialog.Update(msg)
@@ -167,6 +169,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			cfg := m.selectedConfig()
 			l().Infof("Inspect key pressed for config: %s", cfg)
 			return inspectConfigCmd(cfg)
+		case "enter":
+			cfg := m.selectedConfig()
+			l().Infof("Inspect key pressed for config: %s", cfg)
+			return inspectRawConfigCmd(cfg)
 		}
 	}
 

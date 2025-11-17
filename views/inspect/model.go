@@ -15,6 +15,13 @@ type Node struct {
 	Parent   *Node
 }
 
+type Format string
+
+const (
+	FormatYAML Format = "yml"
+	FormatRaw  Format = "raw"
+)
+
 type Model struct {
 	viewport   viewport.Model
 	Root       *Node
@@ -25,28 +32,26 @@ type Model struct {
 	width      int
 	height     int
 
-	Format     string // "yml" or "raw"
+	Format     Format // "yml" or "raw"
 	RawContent string
 	ParseError string
 }
 
-func New(width, height int) *Model {
+func New(width, height int, format Format) *Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
 	return &Model{
 		viewport: vp,
 		width:    width,
 		height:   height,
+		Format:   format,
 	}
 }
 
-func (m *Model) SetFormat(format string) {
-	if format != "raw" {
-		format = "yml"
-	}
+func (m *Model) SetFormat(format Format) {
 	m.Format = format
 
-	if m.Format == "raw" {
+	if m.Format == FormatRaw {
 		m.viewport.SetContent(m.RawContent)
 	} else {
 		m.updateViewport()
@@ -85,4 +90,17 @@ func (m *Model) OnEnter() tea.Cmd {
 
 func (m *Model) OnExit() tea.Cmd {
 	return nil
+}
+
+func ParseFormat(v any) Format {
+	switch x := v.(type) {
+	case Format:
+		return x
+	case string:
+		f := Format(x)
+		if f == FormatYAML || f == FormatRaw {
+			return f
+		}
+	}
+	return FormatYAML
 }

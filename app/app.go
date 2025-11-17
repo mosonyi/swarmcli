@@ -64,8 +64,9 @@ func Init() {
 		data, _ := payload.(map[string]interface{})
 		title, _ := data["title"].(string)
 		jsonStr, _ := data["json"].(string)
+		raw := inspectview.ParseFormat(data["format"])
 
-		v := inspectview.New(w, h)
+		v := inspectview.New(w, h, raw)
 		return v, inspectview.LoadInspectItem(title, jsonStr)
 	})
 
