@@ -17,8 +17,20 @@ func (m *Model) View() string {
 		title = "Inspecting"
 	}
 
+	// ---- Format indicator ----
+	formatIndicator := "[YAML]"
+	if m.Format == "raw" {
+		formatIndicator = "[RAW]"
+	}
+
 	// ---- Build header ----
-	header := "Inspecting"
+	errorHint := ""
+	if m.ParseError != "" {
+		errorHint = " — Could not parse JSON, showing raw"
+	}
+
+	header := fmt.Sprintf("Inspecting %s%s", formatIndicator, errorHint)
+
 	if m.searchMode {
 		header = fmt.Sprintf("%s — Search: %s", header, m.SearchTerm)
 	}

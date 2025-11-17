@@ -35,20 +35,34 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-func (m *Model) SetContent(jsonStr string) {
-	root, err := ParseJSON(jsonStr)
-	if err != nil {
-		root = &Node{
-			Key:      "root",
-			ValueStr: jsonStr,
-		}
+func (m *Model) SetContent(content string) {
+	m.RawContent = content
+	if m.Format == "raw" {
+		// raw mode bypasses parsing entirely
+		m.Root = nil
+		m.viewport.SetContent(content)
+		return
 	}
+
+	// yml/json mode (existing behaviour)
+	root, err := ParseJSON(content)
+	if err != nil {
+		// fallback
+		m.ParseError = err.Error()
+		m.SetFormat("raw") // implicit fallback
+		return
+	}
+
 	m.Root = root
 	m.updateViewport()
 }
 
 // updateViewport updates viewport content, preserving scroll if possible
 func (m *Model) updateViewport() {
+	if m.Format == "raw" {
+		// content is directly used, do nothing here
+		return
+	}
 	content := m.renderYAML()
 	m.viewport.SetContent(content)
 }

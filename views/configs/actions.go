@@ -74,6 +74,33 @@ func inspectConfigCmd(name string) tea.Cmd {
 	}
 }
 
+func inspectRawConfigCmd(name string) tea.Cmd {
+	return func() tea.Msg {
+		cfg, err := docker.InspectConfig(context.Background(), name)
+		if err != nil {
+			return view.NavigateToMsg{
+				ViewName: inspectview.ViewName,
+				Payload: map[string]interface{}{
+					"title": fmt.Sprintf("Config: %s", name),
+					"json":  fmt.Sprintf("Error loading config %q: %v", name, err),
+				},
+			}
+		}
+
+		// Use *plain content*, same as editor:
+		raw := string(cfg.Data)
+
+		return view.NavigateToMsg{
+			ViewName: inspectview.ViewName,
+			Payload: map[string]interface{}{
+				"title":  fmt.Sprintf("Config (raw): %s", name),
+				"json":   raw,
+				"format": inspectview.FormatRaw,
+			},
+		}
+	}
+}
+
 func deleteConfigCmd(name string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
