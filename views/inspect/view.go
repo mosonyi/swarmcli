@@ -17,8 +17,15 @@ func (m *Model) View() string {
 		title = "Inspecting"
 	}
 
+	// ---- Format indicator ----
+	formatIndicator := "[YAML]"
+	if m.Format == "raw" {
+		formatIndicator = "[RAW]"
+	}
+
 	// ---- Build header ----
-	header := "Inspecting"
+	header := fmt.Sprintf("Inspecting %s", formatIndicator)
+
 	if m.searchMode {
 		header = fmt.Sprintf("%s — Search: %s", header, m.SearchTerm)
 	}

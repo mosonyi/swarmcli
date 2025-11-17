@@ -16,6 +16,14 @@ func handleNormalKey(m *Model, k tea.KeyMsg) tea.Cmd {
 		m.viewport.ScrollUp(m.viewport.Height)
 	case "pgdown":
 		m.viewport.ScrollDown(m.viewport.Height)
+	case "r":
+		if m.Format == "raw" {
+			m.SetFormat("yml")
+		} else {
+			m.SetFormat("raw")
+		}
+		return nil
+
 	case "/", "shift+/":
 		m.searchMode = true
 		m.SearchTerm = ""

@@ -24,6 +24,9 @@ type Model struct {
 	ready      bool
 	width      int
 	height     int
+
+	Format     string // "yml" or "raw"
+	RawContent string
 }
 
 func New(width, height int) *Model {
@@ -33,6 +36,19 @@ func New(width, height int) *Model {
 		viewport: vp,
 		width:    width,
 		height:   height,
+	}
+}
+
+func (m *Model) SetFormat(format string) {
+	if format != "raw" {
+		format = "yml"
+	}
+	m.Format = format
+
+	if m.Format == "raw" {
+		m.viewport.SetContent(m.RawContent)
+	} else {
+		m.updateViewport()
 	}
 }
 
