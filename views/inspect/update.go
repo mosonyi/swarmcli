@@ -47,11 +47,12 @@ func (m *Model) SetContent(content string) {
 	// yml/json mode (existing behaviour)
 	root, err := ParseJSON(content)
 	if err != nil {
-		root = &Node{
-			Key:      "root",
-			ValueStr: content,
-		}
+		// fallback
+		m.ParseError = err.Error()
+		m.SetFormat("raw") // implicit fallback
+		return
 	}
+
 	m.Root = root
 	m.updateViewport()
 }

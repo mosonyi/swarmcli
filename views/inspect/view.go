@@ -24,7 +24,12 @@ func (m *Model) View() string {
 	}
 
 	// ---- Build header ----
-	header := fmt.Sprintf("Inspecting %s", formatIndicator)
+	errorHint := ""
+	if m.ParseError != "" {
+		errorHint = " — Could not parse JSON, showing raw"
+	}
+
+	header := fmt.Sprintf("Inspecting %s%s", formatIndicator, errorHint)
 
 	if m.searchMode {
 		header = fmt.Sprintf("%s — Search: %s", header, m.SearchTerm)

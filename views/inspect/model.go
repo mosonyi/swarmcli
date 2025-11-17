@@ -27,6 +27,7 @@ type Model struct {
 
 	Format     string // "yml" or "raw"
 	RawContent string
+	ParseError string
 }
 
 func New(width, height int) *Model {
