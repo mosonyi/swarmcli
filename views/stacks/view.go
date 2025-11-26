@@ -52,13 +52,12 @@ func (m *Model) View() string {
 // --- Internal Rendering ---
 
 func (m *Model) buildContent() string {
-	if len(m.entries) == 0 {
-		return "No stacks found for this node."
-	}
-
 	entries := m.filtered
 	if len(entries) == 0 {
-		return fmt.Sprintf("No stacks match: %q", m.searchQuery)
+		if m.mode == ModeSearching && m.searchQuery != "" {
+			return fmt.Sprintf("No stacks match: %q", m.searchQuery)
+		}
+		return "No stacks found for this node."
 	}
 
 	width := m.viewport.Width

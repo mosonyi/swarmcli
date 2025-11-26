@@ -46,8 +46,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 func (m *Model) setStacks(msg Msg) {
 	m.nodeID = msg.NodeID
 	m.entries = msg.Stacks
-	m.filtered = msg.Stacks
-	m.cursor = 0
+
+	// Reapply the filter if currently searching, otherwise reset filtered -> entries
+	if m.mode == ModeSearching && m.searchQuery != "" {
+		m.applyFilter()
+	} else {
+		m.filtered = m.entries
+		m.cursor = 0
+	}
 
 	if !m.ready {
 		return
@@ -59,9 +65,17 @@ func (m *Model) setStacks(msg Msg) {
 }
 
 func (m *Model) applyFilter() {
+	// if no query -> restore full list
 	if m.searchQuery == "" {
 		m.filtered = m.entries
-		m.cursor = 0
+		// keep cursor valid
+		if len(m.filtered) == 0 {
+			m.cursor = 0
+		} else if m.cursor >= len(m.filtered) {
+			m.cursor = 0
+		}
+		// ensure viewport shows top of filtered list when clearing search
+		m.viewport.GotoTop()
 		return
 	}
 
@@ -75,8 +89,16 @@ func (m *Model) applyFilter() {
 	}
 
 	m.filtered = result
-	if m.cursor >= len(result) {
-		m.cursor = len(result) - 1
+
+	// clamp cursor safely for the filtered results
+	if len(m.filtered) == 0 {
+		m.cursor = 0
+		// show an empty result quickly
+		m.viewport.GotoTop()
+		return
+	}
+	if m.cursor >= len(m.filtered) {
+		m.cursor = len(m.filtered) - 1
 	}
 	if m.cursor < 0 {
 		m.cursor = 0

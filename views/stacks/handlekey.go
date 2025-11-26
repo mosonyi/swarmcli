@@ -10,6 +10,7 @@ import (
 // handleKey handles all key events for the stacks view.
 func handleKey(m *Model, msg tea.KeyMsg) tea.Cmd {
 
+	// --- searching mode first ---
 	if m.mode == ModeSearching {
 		switch msg.Type {
 		case tea.KeyRunes:
@@ -31,19 +32,22 @@ func handleKey(m *Model, msg tea.KeyMsg) tea.Cmd {
 			m.searchQuery = ""
 			m.filtered = m.entries
 			m.cursor = 0
+			m.viewport.GotoTop()
 			m.viewport.SetContent(m.buildContent())
 			return nil
 		}
 	}
 
+	// --- normal mode navigation ---
 	switch msg.String() {
 
 	case "q", "esc":
 		m.Visible = false
 		return nil
+
 	case "i", "enter":
-		if m.cursor < len(m.entries) {
-			selected := m.entries[m.cursor] // StackEntry
+		if m.cursor < len(m.filtered) {
+			selected := m.filtered[m.cursor] // StackEntry from filtered list
 			return func() tea.Msg {
 				return view.NavigateToMsg{
 					ViewName: servicesview.ViewName,
@@ -66,7 +70,7 @@ func handleKey(m *Model, msg tea.KeyMsg) tea.Cmd {
 		return nil
 
 	case "down", "j":
-		if m.cursor < len(m.entries)-1 {
+		if m.cursor < len(m.filtered)-1 {
 			m.cursor++
 			m.ensureCursorVisible()
 			m.viewport.SetContent(m.buildContent())
@@ -86,19 +90,25 @@ func handleKey(m *Model, msg tea.KeyMsg) tea.Cmd {
 
 	case "pgdown", "d":
 		page := m.viewport.Height
-		if m.cursor+page < len(m.entries) {
+		if m.cursor+page < len(m.filtered) {
 			m.cursor += page
 		} else {
-			m.cursor = len(m.entries) - 1
+			if len(m.filtered) > 0 {
+				m.cursor = len(m.filtered) - 1
+			} else {
+				m.cursor = 0
+			}
 		}
 		m.ensureCursorVisible()
 		m.viewport.SetContent(m.buildContent())
 		return nil
+
 	case "/":
 		m.mode = ModeSearching
 		m.searchQuery = ""
-		m.cursor = 0
 		m.filtered = m.entries
+		m.cursor = 0
+		m.viewport.GotoTop()
 		m.viewport.SetContent(m.buildContent())
 		return nil
 	}
