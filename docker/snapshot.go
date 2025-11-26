@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -119,6 +120,12 @@ func (s SwarmSnapshot) ToNodeEntries() []NodeEntry {
 			Addr:     n.Status.Addr,
 		}
 	}
+
+	// 🔠 Sort alphabetically by hostname
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].Hostname < nodes[j].Hostname
+	})
+
 	return nodes
 }
 
@@ -164,6 +171,11 @@ func (s SwarmSnapshot) ToStackEntries() []StackEntry {
 	for _, e := range stackMap {
 		stacks = append(stacks, *e)
 	}
+
+	// ---- 🔠 Sort alphabetically by stack name ----
+	sort.Slice(stacks, func(i, j int) bool {
+		return stacks[i].Name < stacks[j].Name
+	})
 
 	return stacks
 }
