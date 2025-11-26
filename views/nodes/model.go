@@ -1,36 +1,39 @@
 package nodesview
 
 import (
+	"strings"
 	"swarmcli/docker"
+	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/helpbar"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/docker/docker/api/types/swarm"
 )
 
 type Model struct {
-	viewport viewport.Model
-	Visible  bool
-
-	entries []docker.NodeEntry
-	cursor  int
-
-	ready bool
+	List    filterlist.FilterableList[docker.NodeEntry]
+	Visible bool
+	ready   bool
+	width   int
+	height  int
 }
 
-type StackService struct {
-	StackName   string
-	ServiceName string
-}
-
-// Create a new instance
 func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
+
+	list := filterlist.FilterableList[docker.NodeEntry]{
+		Viewport: vp,
+		Match: func(n docker.NodeEntry, query string) bool {
+			return strings.Contains(strings.ToLower(n.Hostname), strings.ToLower(query))
+		},
+	}
+
 	return &Model{
-		viewport: vp,
-		Visible:  false,
+		List:    list,
+		Visible: false,
+		width:   width,
+		height:  height,
 	}
 }
 
@@ -62,20 +65,6 @@ func LoadNodesCmd() tea.Cmd {
 		entries := LoadNodes()
 		return Msg{Entries: entries}
 	}
-}
-
-func (m *Model) SelectedNode() *swarm.Node {
-	snap := docker.GetSnapshot()
-	if len(m.entries) == 0 {
-		return nil
-	}
-	selected := m.entries[m.cursor]
-	for _, n := range snap.Nodes {
-		if n.ID == selected.ID {
-			return &n
-		}
-	}
-	return nil
 }
 
 func (m *Model) OnEnter() tea.Cmd {

@@ -2,7 +2,6 @@ package nodesview
 
 import (
 	"fmt"
-	"strings"
 	"swarmcli/docker"
 	"swarmcli/ui"
 
@@ -14,27 +13,20 @@ func (m *Model) View() string {
 		return ""
 	}
 
-	total := len(m.entries)
+	total := len(m.List.Items)
 	managers := 0
-	for _, n := range m.entries {
+	for _, n := range m.List.Items {
 		if n.Manager {
 			managers++
 		}
 	}
 
 	title := fmt.Sprintf("Nodes (%d total, %d manager%s)", total, managers, plural(managers))
-	content := m.renderNodes()
-	width := m.viewport.Width
-	if width <= 0 {
-		width = 80
-	}
+	header := renderHeader(m.List.Items)
+	content := m.List.View()
 
-	// Blueish styled header
-	header := renderHeader(m.entries)
-
-	return ui.RenderFramedBox(title, header, content, "", width)
+	return ui.RenderFramedBox(title, header, content, "", m.List.Viewport.Width)
 }
-
 func plural(n int) string {
 	if n == 1 {
 		return ""
@@ -61,43 +53,6 @@ func renderHeader(entries []docker.NodeEntry) string {
 		colWidths["Manager"], "MANAGER",
 		colWidths["Addr"], "ADDRESS",
 	))
-}
-
-// renderNodes builds the visible list of nodes with colorized header and cursor highlight.
-func (m *Model) renderNodes() string {
-	if len(m.entries) == 0 {
-		return "No swarm nodes found."
-	}
-
-	colWidths := calcColumnWidths(m.entries)
-	var lines []string
-
-	for i, n := range m.entries {
-		manager := "no"
-		if n.Manager {
-			manager = "yes"
-		}
-
-		line := fmt.Sprintf(
-			"%-*s  %-*s  %-*s  %-*s  %-*s",
-			colWidths["Hostname"], n.Hostname,
-			colWidths["Role"], n.Role,
-			colWidths["State"], n.State,
-			colWidths["Manager"], manager,
-			colWidths["Addr"], n.Addr,
-		)
-
-		if i == m.cursor {
-			line = ui.CursorStyle.Render(line)
-		}
-
-		lines = append(lines, line)
-	}
-
-	status := fmt.Sprintf(" Node %d of %d ", m.cursor+1, len(m.entries))
-	lines = append(lines, "", ui.StatusBarStyle.Render(status))
-
-	return strings.Join(lines, "\n")
 }
 
 // calcColumnWidths determines the best width per column based on the longest cell.
