@@ -40,6 +40,7 @@ func (m *Model) View() string {
 		title,
 		headerRendered,
 		m.viewport.View(),
+		"",
 		width,
 	)
 

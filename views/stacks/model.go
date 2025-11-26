@@ -1,30 +1,42 @@
 package stacksview
 
 import (
+	"strings"
 	"swarmcli/docker"
 	"swarmcli/views/helpbar"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"swarmcli/ui/components/filterable/list"
 )
 
 type Model struct {
-	viewport viewport.Model
-	Visible  bool
-
+	List    filterlist.FilterableList[docker.StackEntry]
+	Visible bool
 	nodeID  string
-	cursor  int
-	entries []docker.StackEntry
-
-	ready bool
+	ready   bool
+	width   int
+	height  int
 }
 
 func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
+
+	list := filterlist.FilterableList[docker.StackEntry]{
+		Viewport: vp,
+		// Render item will be initialized later after the column with is set
+		Match: func(s docker.StackEntry, query string) bool {
+			return strings.Contains(strings.ToLower(s.Name), strings.ToLower(query))
+		},
+	}
+
 	return &Model{
-		viewport: vp,
-		Visible:  false,
+		List:    list,
+		Visible: false,
+		width:   width,
+		height:  height,
 	}
 }
 
@@ -39,6 +51,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "j/down", Desc: "scroll down"},
 		{Key: "pgup", Desc: "page up"},
 		{Key: "pgdown", Desc: "page down"},
+		{Key: "/", Desc: "filter"},
 		{Key: "q", Desc: "close"},
 	}
 }
@@ -54,10 +67,5 @@ func LoadStacks(nodeID string) tea.Cmd {
 	}
 }
 
-func (m *Model) OnEnter() tea.Cmd {
-	return nil
-}
-
-func (m *Model) OnExit() tea.Cmd {
-	return nil
-}
+func (m *Model) OnEnter() tea.Cmd { return nil }
+func (m *Model) OnExit() tea.Cmd  { return nil }

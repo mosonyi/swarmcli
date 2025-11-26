@@ -2,8 +2,8 @@ package stacksview
 
 import (
 	"fmt"
-	"strings"
 	"swarmcli/ui"
+	filterlist "swarmcli/ui/components/filterable/list"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -13,83 +13,30 @@ func (m *Model) View() string {
 		return ""
 	}
 
-	total := len(m.entries)
-	title := fmt.Sprintf("Stacks on Node (Total: %d)", total)
+	title := fmt.Sprintf("Stacks on Node (Total: %d)", len(m.List.Items))
 
-	width := m.viewport.Width
-	if width <= 0 {
-		width = 80
-	}
-
-	// --- Header Style ---
 	headerStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("12")) // light blue
+		Foreground(lipgloss.Color("12"))
 
-	stackColWidth := m.computeStackColWidth(width)
-	serviceColWidth := 10 // “Services” column is narrow and fixed
-	header := headerStyle.Render(fmt.Sprintf(
-		"%-*s %*s",
-		stackColWidth, "STACK",
-		serviceColWidth, "SERVICES",
-	))
+	header := headerStyle.Render(fmt.Sprintf("%-20s %s", "STACK", "SERVICES"))
 
-	content := m.viewport.View()
+	// Footer: cursor + optional search query
+	status := fmt.Sprintf("Stack %d of %d", m.List.Cursor+1, len(m.List.Filtered))
+	statusBar := ui.StatusBarStyle.Render(status)
 
-	return ui.RenderFramedBox(title, header, content, width)
-}
-
-// --- Internal Rendering ---
-
-func (m *Model) buildContent() string {
-	if len(m.entries) == 0 {
-		return "No stacks found for this node."
+	var footer string
+	if m.List.Mode == filterlist.ModeSearching {
+		footer = ui.StatusBarStyle.Render("Filter: " + m.List.Query)
 	}
 
-	width := m.viewport.Width
-	if width <= 0 {
-		width = 80
+	if footer != "" {
+		footer = statusBar + "\n" + footer
+	} else {
+		footer = statusBar
 	}
 
-	stackColWidth := m.computeStackColWidth(width)
-	serviceColWidth := 10
+	content := m.List.View()
 
-	var lines []string
-	for i, s := range m.entries {
-		line := fmt.Sprintf("%-*s %*d", stackColWidth, s.Name, serviceColWidth, s.ServiceCount)
-		if i == m.cursor {
-			line = ui.CursorStyle.Render(line)
-		}
-		lines = append(lines, line)
-	}
-
-	status := fmt.Sprintf(" Stack %d of %d ", m.cursor+1, len(m.entries))
-	lines = append(lines, "", ui.StatusBarStyle.Render(status))
-
-	return strings.Join(lines, "\n")
-}
-
-// computeStackColWidth dynamically adjusts the column width based on viewport width and data.
-func (m *Model) computeStackColWidth(totalWidth int) int {
-	const minWidth = 15
-	const gap = 2
-	serviceCol := 10
-
-	available := totalWidth - serviceCol - gap
-	if available < minWidth {
-		return minWidth
-	}
-
-	maxName := minWidth
-	for _, s := range m.entries {
-		if l := len(s.Name); l > maxName {
-			maxName = l
-		}
-	}
-
-	if maxName+gap < available {
-		return maxName + gap
-	}
-
-	return available
+	return ui.RenderFramedBox(title, header, content, footer, m.List.Viewport.Width)
 }

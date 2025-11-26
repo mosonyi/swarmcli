@@ -52,7 +52,7 @@ func (m *Model) View() string {
 	}
 
 	content := strings.Join(lines, "\n")
-	box := ui.RenderFramedBox("Confirm", "", content, 0) // width=0 → minimal width
+	box := ui.RenderFramedBox("Confirm", "", content, "", 0) // width=0 → minimal width
 
 	return lipgloss.Place(m.Width, m.Height, lipgloss.Center, lipgloss.Center, box)
 }

@@ -2,70 +2,83 @@ package stacksview
 
 import (
 	"fmt"
+	"swarmcli/docker"
+	"swarmcli/ui"
+	servicesview "swarmcli/views/services"
+	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Update handles messages for the stacks view.
+// Update handles all messages for the stacks view.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 
-	// --- Stacks loaded ---
 	case Msg:
-		m.setStacks(msg)
+		m.nodeID = msg.NodeID
+		m.setStacks(msg.Stacks)
 		m.Visible = true
 		return nil
 
-	// --- Refresh error ---
 	case RefreshErrorMsg:
 		m.Visible = true
-		m.viewport.SetContent(fmt.Sprintf("Error refreshing stacks: %v", msg.Err))
+		m.List.Viewport.SetContent(fmt.Sprintf("Error refreshing stacks: %v", msg.Err))
 		return nil
 
-	// --- Resize event ---
 	case tea.WindowSizeMsg:
-		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height
+		m.List.Viewport.Width = msg.Width
+		m.List.Viewport.Height = msg.Height
 		m.ready = true
-		m.viewport.SetContent(m.buildContent())
+		m.List.Viewport.SetContent(m.List.View())
 		return nil
 
-	// --- Keyboard input ---
 	case tea.KeyMsg:
-		return handleKey(m, msg)
+		m.List.HandleKey(msg)
+		// Enter triggers navigation
+		if msg.String() == "i" || msg.String() == "enter" {
+			if m.List.Cursor < len(m.List.Filtered) {
+				selected := m.List.Filtered[m.List.Cursor]
+				return func() tea.Msg {
+					return view.NavigateToMsg{
+						ViewName: servicesview.ViewName,
+						Payload:  map[string]interface{}{"stackName": selected.Name},
+					}
+				}
+			}
+		}
+		return nil
 	}
 
 	var cmd tea.Cmd
-	m.viewport, cmd = m.viewport.Update(msg)
+	m.List.Viewport, cmd = m.List.Viewport.Update(msg)
 	return cmd
 }
 
-// setStacks updates the stacks and refreshes viewport content.
-func (m *Model) setStacks(msg Msg) {
-	m.nodeID = msg.NodeID
-	m.entries = msg.Stacks
-	m.cursor = 0
+func (m *Model) setStacks(stacks []docker.StackEntry) {
+	m.List.Items = stacks
+	m.List.Filtered = stacks
+	m.List.Cursor = 0
 
-	if !m.ready {
-		return
+	m.setRenderItem()
+
+	if m.ready {
+		m.List.Viewport.SetContent(m.List.View())
 	}
-
-	m.viewport.GotoTop()
-	m.viewport.YOffset = 0
-	m.viewport.SetContent(m.buildContent())
-	m.ensureCursorVisible()
 }
 
-// ensureCursorVisible keeps the cursor in the visible viewport range.
-func (m *Model) ensureCursorVisible() {
-	h := m.viewport.Height
-	if h < 1 {
-		h = 1
-	}
+// After loading stacks, set RenderItem dynamically with correct column width
+func (m *Model) setRenderItem() {
+	// Compute column width automatically
+	m.List.ComputeAndSetColWidth(func(s docker.StackEntry) string {
+		return s.Name
+	}, 15)
 
-	if m.cursor < m.viewport.YOffset {
-		m.viewport.YOffset = m.cursor
-	} else if m.cursor >= m.viewport.YOffset+h {
-		m.viewport.YOffset = m.cursor - h + 1
+	// Update RenderItem to use computed colWidth
+	m.List.RenderItem = func(s docker.StackEntry, selected bool, colWidth int) string {
+		line := fmt.Sprintf("%-*s %3d", colWidth, s.Name, s.ServiceCount)
+		if selected {
+			return ui.CursorStyle.Render(line)
+		}
+		return line
 	}
 }

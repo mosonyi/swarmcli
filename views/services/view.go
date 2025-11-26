@@ -22,7 +22,7 @@ func (m *Model) View() string {
 		m.stackColWidth, "STACK",
 		m.replicaColWidth, "REPLICAS",
 	))
-	content := ui.RenderFramedBox(m.title, header, m.viewport.View(), width)
+	content := ui.RenderFramedBox(m.title, header, m.viewport.View(), "", width)
 
 	// --- Overlay confirm dialog if visible ---
 	if m.confirmDialog.Visible {
