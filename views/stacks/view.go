@@ -36,7 +36,11 @@ func (m *Model) View() string {
 
 	content := m.viewport.View()
 
-	return ui.RenderFramedBox(title, header, content, width)
+	status := fmt.Sprintf("Stack %d of %d ", m.cursor+1, len(m.filtered))
+	statusBar := ui.StatusBarStyle.Render(status)
+	queryStatus := ui.StatusBarStyle.Render("Filter: " + m.searchQuery)
+
+	return ui.RenderFramedBox(title, header, content+"\n"+statusBar+"\n"+queryStatus, width)
 }
 
 // --- Internal Rendering ---
@@ -66,14 +70,6 @@ func (m *Model) buildContent() string {
 			line = ui.CursorStyle.Render(line)
 		}
 		lines = append(lines, line)
-	}
-
-	status := fmt.Sprintf(" Stack %d of %d ", m.cursor+1, len(m.entries))
-	lines = append(lines, "", ui.StatusBarStyle.Render(status))
-
-	if m.mode == ModeSearching {
-		lines = append(lines, "")
-		lines = append(lines, ui.StatusBarStyle.Render(" /"+m.searchQuery))
 	}
 
 	return strings.Join(lines, "\n")
