@@ -15,6 +15,9 @@ type FilterableList[T any] struct {
 
 	// Function to render a single item
 	RenderItem func(item T, selected bool) string
+
+	// Match function for filtering
+	Match func(item T, query string) bool
 }
 
 type ModeType int

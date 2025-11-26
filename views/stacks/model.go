@@ -2,6 +2,7 @@ package stacksview
 
 import (
 	"fmt"
+	"strings"
 	"swarmcli/docker"
 	"swarmcli/ui"
 
@@ -34,6 +35,9 @@ func New(width, height int) *Model {
 				return ui.CursorStyle.Render(line)
 			}
 			return line
+		},
+		Match: func(s docker.StackEntry, query string) bool {
+			return strings.Contains(strings.ToLower(s.Name), strings.ToLower(query))
 		},
 	}
 

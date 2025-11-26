@@ -16,15 +16,15 @@ func (l *FilterableList[T]) View() string {
 	return l.Viewport.View()       // returns clipped viewport
 }
 
-func (f *FilterableList[T]) ensureCursorVisible() {
-	h := f.Viewport.Height
+func (l *FilterableList[T]) ensureCursorVisible() {
+	h := l.Viewport.Height
 	if h < 1 {
 		h = 1
 	}
 
-	if f.Cursor < f.Viewport.YOffset {
-		f.Viewport.YOffset = f.Cursor
-	} else if f.Cursor >= f.Viewport.YOffset+h {
-		f.Viewport.YOffset = f.Cursor - h + 1
+	if l.Cursor < l.Viewport.YOffset {
+		l.Viewport.YOffset = l.Cursor
+	} else if l.Cursor >= l.Viewport.YOffset+h {
+		l.Viewport.YOffset = l.Cursor - h + 1
 	}
 }

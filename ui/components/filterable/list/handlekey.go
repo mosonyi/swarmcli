@@ -8,12 +8,12 @@ func (f *FilterableList[T]) HandleKey(msg tea.KeyMsg) {
 		switch msg.Type {
 		case tea.KeyRunes:
 			f.Query += string(msg.Runes)
-			f.ApplyFilter(nil) // pass your own matchFunc if needed
+			f.ApplyFilter() // pass your own matchFunc if needed
 		case tea.KeyBackspace:
 			if len(f.Query) > 0 {
 				f.Query = f.Query[:len(f.Query)-1]
 			}
-			f.ApplyFilter(nil)
+			f.ApplyFilter()
 		case tea.KeyEsc:
 			f.Mode = ModeNormal
 			f.Query = ""
