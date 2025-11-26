@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"swarmcli/docker"
+	"swarmcli/ui"
 	"swarmcli/views/confirmdialog"
 	inspectview "swarmcli/views/inspect"
 	logsview "swarmcli/views/logs"
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
@@ -18,23 +20,20 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case Msg:
 		m.SetContent(msg)
 		m.Visible = true
-		m.viewport.SetContent(m.renderEntries())
+		m.List.Viewport.SetContent(m.List.View())
 		return nil
 
 	case tea.WindowSizeMsg:
-		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height
-		if !m.ready {
-			m.ready = true
-			m.viewport.SetContent(m.renderEntries())
-		}
+		m.List.Viewport.Width = msg.Width
+		m.List.Viewport.Height = msg.Height
+		m.ready = true
+		m.List.Viewport.SetContent(m.List.View())
 		return nil
-
 	case confirmdialog.ResultMsg:
 		m.confirmDialog.Visible = false
 
-		if msg.Confirmed && m.cursor < len(m.entries) {
-			entry := m.entries[m.cursor]
+		if msg.Confirmed && m.List.Cursor < len(m.List.Filtered) {
+			entry := m.List.Filtered[m.List.Cursor]
 			m.loading.SetVisible(true)
 			m.loadingViewMessage(entry.ServiceName)
 			l().Debugln("Starting restartServiceWithProgressCmd for", entry.ServiceName)
@@ -69,37 +68,19 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case tea.KeyMsg:
 		if m.confirmDialog.Visible {
-			cmd := m.confirmDialog.Update(msg)
-			return cmd
+			return m.confirmDialog.Update(msg)
 		}
 
-		// 2. Ignore keys if loading visible ---
 		if m.loading.Visible() {
 			return nil
 		}
 
+		m.List.HandleKey(msg)
+
 		switch msg.String() {
-		case "q":
-			m.Visible = false
-			return nil
-
-		case "j", "down":
-			if m.cursor < len(m.entries)-1 {
-				m.cursor++
-				m.viewport.SetContent(m.renderEntries())
-			}
-			return nil
-
-		case "k", "up":
-			if m.cursor > 0 {
-				m.cursor--
-				m.viewport.SetContent(m.renderEntries())
-			}
-			return nil
-
 		case "i":
-			if m.cursor < len(m.entries) {
-				entry := m.entries[m.cursor]
+			if m.List.Cursor < len(m.List.Filtered) {
+				entry := m.List.Filtered[m.List.Cursor]
 				return func() tea.Msg {
 					content, err := docker.Inspect(context.Background(), docker.InspectService, entry.ServiceID)
 					if err != nil {
@@ -114,46 +95,130 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					}
 				}
 			}
-			return nil
-
 		case "r":
-			if m.cursor < len(m.entries) {
-				entry := m.entries[m.cursor]
+			if m.List.Cursor < len(m.List.Filtered) {
+				entry := m.List.Filtered[m.List.Cursor]
 				m.confirmDialog.Visible = true
 				m.confirmDialog.Message = fmt.Sprintf("Restart service %q?", entry.ServiceName)
 			}
-			return nil
 		case "l":
-			if m.cursor < len(m.entries) {
-				entry := m.entries[m.cursor]
+			if m.List.Cursor < len(m.List.Filtered) {
+				entry := m.List.Filtered[m.List.Cursor]
 				return func() tea.Msg {
-					//content, err := docker.Inspect(context.Background(), docker.InspectService, entry.ServiceID)
-					//if err != nil {
-					//	content = fmt.Sprintf("Error inspecting service %q: %v", entry.ServiceName, err)
-					//}
 					return view.NavigateToMsg{
 						Payload:  entry,
 						ViewName: logsview.ViewName,
-						//Payload: map[string]interface{}{
-						//	"title": fmt.Sprintf("Service: %s", entry.ServiceName),
-						//	"json":  content,
-						//},
 					}
 				}
 			}
-			return nil
+		case "q":
+			m.Visible = false
 		}
 
-	// --- Allow spinner updates while loading ---
-	default:
-		// Forward messages to loading view if active
-		if m.loading.Visible() {
-			cmd := m.loading.Update(msg)
-			return cmd
-		}
+		m.List.Viewport.SetContent(m.List.View())
+		return nil
 	}
 
 	var cmd tea.Cmd
-	m.viewport, cmd = m.viewport.Update(msg)
+	m.List.Viewport, cmd = m.List.Viewport.Update(msg)
 	return cmd
+}
+
+func (m *Model) SetContent(msg Msg) {
+	m.title = msg.Title
+	m.List.Items = msg.Entries
+	m.List.ApplyFilter()
+	m.List.Cursor = 0
+
+	m.filterType = msg.FilterType
+	m.nodeID = msg.NodeID
+	m.stackName = msg.StackName
+
+	m.setRenderItem()
+
+	if m.ready {
+		m.List.Viewport.SetContent(m.List.View())
+		m.List.Viewport.GotoTop()
+	}
+}
+
+func (m *Model) setRenderItem() {
+	const replicaWidth = 10
+	const gap = 2
+
+	width := m.List.Viewport.Width
+	if width <= 0 {
+		width = 80
+	}
+
+	// Compute the longest service and stack names in the filtered list
+	maxService := len("SERVICE")
+	maxStack := len("STACK")
+	for _, e := range m.List.Filtered {
+		if len(e.ServiceName) > maxService {
+			maxService = len(e.ServiceName)
+		}
+		if len(e.StackName) > maxStack {
+			maxStack = len(e.StackName)
+		}
+	}
+
+	// Ensure total width fits viewport
+	total := maxService + maxStack + replicaWidth + 2*gap
+	if total > width {
+		overflow := total - width
+		if maxStack > maxService {
+			maxStack -= overflow
+			if maxStack < 5 {
+				maxStack = 5
+			}
+		} else {
+			maxService -= overflow
+			if maxService < 5 {
+				maxService = 5
+			}
+		}
+	}
+
+	m.List.RenderItem = func(e docker.ServiceEntry, selected bool, _ int) string {
+		replicas := fmt.Sprintf("%d/%d", e.ReplicasOnNode, e.ReplicasTotal)
+		switch {
+		case e.ReplicasTotal == 0:
+			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("—")
+		case e.ReplicasOnNode == 0:
+			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(replicas)
+		case e.ReplicasOnNode < e.ReplicasTotal:
+			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render(replicas)
+		default:
+			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(replicas)
+		}
+
+		serviceName := truncateWithEllipsis(e.ServiceName, maxService)
+		stackName := truncateWithEllipsis(e.StackName, maxStack)
+
+		line := fmt.Sprintf(
+			"%-*s  %-*s  %*s",
+			maxService, serviceName,
+			maxStack, stackName,
+			replicaWidth, replicas,
+		)
+
+		if selected {
+			line = ui.CursorStyle.Render(line)
+		}
+		return line
+	}
+}
+
+func truncateWithEllipsis(s string, maxWidth int) string {
+	if len(s) <= maxWidth {
+		return s
+	}
+	if maxWidth <= 1 {
+		return "…"
+	}
+	if maxWidth == 2 {
+		return s[:1] + "…"
+	}
+	return s[:maxWidth-1] + "…"
 }

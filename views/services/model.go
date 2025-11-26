@@ -2,7 +2,9 @@ package servicesview
 
 import (
 	"fmt"
+	"strings"
 	"swarmcli/docker"
+	filterlist "swarmcli/ui/components/filterable/list"
 	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
@@ -26,22 +28,16 @@ func l() *swarmlog.SwarmLogger {
 }
 
 type Model struct {
-	viewport viewport.Model
-	Visible  bool
-
-	entries []docker.ServiceEntry
-	cursor  int
+	List    filterlist.FilterableList[docker.ServiceEntry]
+	Visible bool
 	title   string
 	ready   bool
-
-	serviceColWidth int
-	stackColWidth   int
-	replicaColWidth int
+	width   int
+	height  int
 
 	// Filter
 	filterType FilterType
 	nodeID     string
-	hostname   string
 	stackName  string
 
 	msgCh chan tea.Msg
@@ -53,9 +49,19 @@ type Model struct {
 func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 	ld := loadingview.New(width, height, false, "Please wait...")
+
+	list := filterlist.FilterableList[docker.ServiceEntry]{
+		Viewport: vp,
+		Match: func(s docker.ServiceEntry, query string) bool {
+			return strings.Contains(strings.ToLower(s.ServiceName), strings.ToLower(query))
+		},
+	}
+
 	return &Model{
-		viewport:      vp,
+		List:          list,
 		Visible:       false,
+		width:         width,
+		height:        height,
 		confirmDialog: confirmdialog.New(width, height),
 		loading:       ld,
 		msgCh:         make(chan tea.Msg),
@@ -77,25 +83,10 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	}
 }
 
-func (m *Model) SetContent(msg Msg) {
-	m.title = msg.Title
-	m.entries = msg.Entries
-	m.cursor = 0
-	m.filterType = msg.FilterType
-	m.nodeID = msg.NodeID
-	m.hostname = msg.Hostname
-	m.stackName = msg.StackName
-
-	if m.ready {
-		m.viewport.GotoTop()
-		m.viewport.SetContent(m.renderEntries())
-	}
-}
-
 func (m *Model) loadingViewMessage(serviceName string) {
 	m.loading = loadingview.New(
-		m.viewport.Width,
-		m.viewport.Height,
+		m.List.Viewport.Width,
+		m.List.Viewport.Height,
 		true,
 		map[string]string{
 			"title":   "Restarting service",
