@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"swarmcli/docker"
 	"swarmcli/ui"
+	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	inspectview "swarmcli/views/inspect"
 	logsview "swarmcli/views/logs"
@@ -75,7 +76,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 
-		m.List.HandleKey(msg)
+		// --- if in search mode, handle all keys via FilterableList ---
+		if m.List.Mode == filterlist.ModeSearching {
+			m.List.HandleKey(msg)
+			return nil
+		}
+
+		// --- normal mode ---
+		m.List.HandleKey(msg) // still handle up/down/pgup/pgdown
 
 		switch msg.String() {
 		case "i":
