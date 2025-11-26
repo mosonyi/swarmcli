@@ -2,6 +2,8 @@ package stacksview
 
 import (
 	"fmt"
+	"swarmcli/docker"
+	"swarmcli/ui"
 	servicesview "swarmcli/views/services"
 	"swarmcli/views/view"
 
@@ -14,15 +16,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case Msg:
 		m.nodeID = msg.NodeID
-		m.List.Items = msg.Stacks
-		m.List.Filtered = msg.Stacks
-		m.List.Cursor = 0
+		m.setStacks(msg.Stacks)
 		m.Visible = true
-
-		if !m.ready {
-			return nil
-		}
-		m.List.Viewport.SetContent(m.List.View())
 		return nil
 
 	case RefreshErrorMsg:
@@ -58,4 +53,27 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	m.List.Viewport, cmd = m.List.Viewport.Update(msg)
 	return cmd
+}
+
+func (m *Model) setStacks(stacks []docker.StackEntry) {
+	m.List.Items = stacks
+	m.List.Filtered = stacks
+	m.List.Cursor = 0
+
+	// Compute column width dynamically based on all stacks
+	stackColWidth := m.List.ComputeColWidth(func(s docker.StackEntry) string {
+		return s.Name
+	}, 15)
+
+	m.List.RenderItem = func(s docker.StackEntry, selected bool) string {
+		line := fmt.Sprintf("%-*s %3d", stackColWidth, s.Name, s.ServiceCount)
+		if selected {
+			return ui.CursorStyle.Render(line)
+		}
+		return line
+	}
+
+	if m.ready {
+		m.List.Viewport.SetContent(m.List.View())
+	}
 }

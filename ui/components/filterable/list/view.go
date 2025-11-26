@@ -2,6 +2,8 @@ package filterlist
 
 import (
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (l *FilterableList[T]) View() string {
@@ -27,4 +29,29 @@ func (l *FilterableList[T]) ensureCursorVisible() {
 	} else if l.Cursor >= l.Viewport.YOffset+h {
 		l.Viewport.YOffset = l.Cursor - h + 1
 	}
+}
+
+func (l *FilterableList[T]) ComputeColWidth(render func(item T) string, minWidth int) int {
+	if len(l.Items) == 0 {
+		return minWidth
+	}
+
+	// Find maximum width of all items (not just filtered)
+	maxName := minWidth
+	for _, item := range l.Items {
+		w := lipgloss.Width(render(item))
+		if w > maxName {
+			maxName = w
+		}
+	}
+
+	// Ensure it fits within viewport
+	available := l.Viewport.Width - 2 // leave room for padding/borders
+	if available < minWidth {
+		return minWidth
+	}
+	if maxName > available {
+		return available
+	}
+	return maxName
 }
