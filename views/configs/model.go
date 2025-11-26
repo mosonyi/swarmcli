@@ -2,26 +2,29 @@ package configsview
 
 import (
 	"fmt"
+	"strings"
 	"swarmcli/docker"
+	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	loading "swarmcli/views/loading"
 
-	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 type Model struct {
-	list               list.Model
-	state              state
-	err                error
+	configsList filterlist.FilterableList[configItem]
+	state       state
+	err         error
+
 	pendingAction      string
 	confirmDialog      *confirmdialog.Model
 	loadingView        *loading.Model
-	configs            []docker.ConfigWithDecodedData // cache original docker configs
-	configToRotateFrom *docker.ConfigWithDecodedData  // store edited config for rotation
-	configToRotateInto *docker.ConfigWithDecodedData  // store edited config for rotation
-	configToDelete     *docker.ConfigWithDecodedData  // 👈 add this
+	configs            []docker.ConfigWithDecodedData
+	configToRotateFrom *docker.ConfigWithDecodedData
+	configToRotateInto *docker.ConfigWithDecodedData
+	configToDelete     *docker.ConfigWithDecodedData
 }
 
 type state int
@@ -33,14 +36,35 @@ const (
 )
 
 func New(width, height int) *Model {
-	m := &Model{
-		list:          list.New([]list.Item{}, itemDelegate{}, 0, 0),
-		loadingView:   loading.New(width, height, false, "Loading Docker configs..."),
+	fl := filterlist.FilterableList[configItem]{
+		Viewport: viewport.Model{
+			Width:  width,
+			Height: height,
+		},
+		RenderItem: func(item configItem, selected bool, colWidth int) string {
+			nameCol := fmt.Sprintf("%-*s", colWidth, item.Name) // left-align name
+			line := fmt.Sprintf("%s  ID: %s", nameCol, item.ID)
+			if selected {
+				return "> " + line
+			}
+			return "  " + line
+		},
+		Match: func(item configItem, query string) bool {
+			// match by name or ID
+			q := strings.ToLower(query)
+			return strings.Contains(strings.ToLower(item.Name), q) ||
+				strings.Contains(strings.ToLower(item.ID), q)
+		},
+	}
+
+	fl.ComputeAndSetColWidth(func(item configItem) string { return item.Name }, 10)
+
+	return &Model{
+		configsList:   fl,
 		state:         stateLoading,
 		confirmDialog: confirmdialog.New(0, 0),
+		loadingView:   loading.New(width, height, false, "Loading Docker configs..."),
 	}
-	m.list.Title = "Docker Configs"
-	return m
 }
 
 func (m *Model) Name() string { return ViewName }
@@ -65,24 +89,25 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 }
 
 func (m *Model) selectedConfig() string {
-	if item, ok := m.list.SelectedItem().(configItem); ok {
-		return item.Name
+	if len(m.configsList.Filtered) == 0 {
+		return ""
 	}
-	return ""
+	return m.configsList.Filtered[m.configsList.Cursor].Name
 }
 
 func (m *Model) findConfigByName(name string) (*docker.ConfigWithDecodedData, error) {
-	for _, item := range m.configs { // or wherever you keep your configsLoadedMsg data
-		if item.Config.Spec.Name == name {
-			return &item, nil
+	for i := range m.configs {
+		if m.configs[i].Config.Spec.Name == name {
+			return &m.configs[i], nil
 		}
 	}
 	return nil, fmt.Errorf("config %q not found", name)
 }
 
 func (m *Model) addConfig(cfg docker.ConfigWithDecodedData) {
-	m.list.InsertItem(0, configItemFromSwarm(cfg.Config))
 	m.configs = append(m.configs, cfg)
+	m.configsList.Items = append(m.configsList.Items, configItemFromSwarm(cfg.Config))
+	m.configsList.ApplyFilter()
 }
 
 func (m *Model) OnEnter() tea.Cmd {

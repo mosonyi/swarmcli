@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"swarmcli/views/confirmdialog"
 
-	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -12,18 +11,18 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:
-		l().Debugf("Window resized: width=%d, height=%d", msg.Width, msg.Height)
-		m.list.SetSize(msg.Width, msg.Height-3)
+		m.configsList.Viewport.Width = msg.Width
+		m.configsList.Viewport.Height = msg.Height - 3
 		return nil
 
 	case configsLoadedMsg:
-		l().Infof("Loaded %d configs", len(msg))
-		items := make([]list.Item, len(msg))
+		m.configs = msg
+		items := make([]configItem, len(msg))
 		for i, cfg := range msg {
 			items[i] = configItemFromSwarm(cfg.Config)
 		}
-		m.configs = msg
-		m.list.SetItems(items)
+		m.configsList.Items = items
+		m.configsList.ApplyFilter()
 		m.state = stateReady
 		return nil
 
@@ -42,12 +41,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case editConfigDoneMsg:
 		oldName := msg.OldConfig.Config.Spec.Name
-
 		if !msg.Changed {
 			l().Debugf("Edit finished: no changes detected for %s", oldName)
 			return tea.Printf("No changes made to config: %s", oldName)
 		}
-
 		newName := msg.NewConfig.Config.Spec.Name
 
 		l().Infof("Edit finished: config changed, inserting new version %s", newName)
@@ -56,11 +53,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.pendingAction = "rotate"
 		m.configToRotateFrom = &msg.OldConfig
 		m.configToRotateInto = &msg.NewConfig
-
 		m.confirmDialog = m.confirmDialog.Show(
 			fmt.Sprintf("Rotate from %s → %s now?", oldName, newName),
 		)
-
 		return tea.Printf("Config %s edited and queued for rotation", newName)
 
 	case editConfigErrorMsg:
@@ -84,7 +79,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.configToRotateInto = nil
 			m.configToDelete = nil
 		}()
-
 		if !msg.Confirmed {
 			l().Info("Action cancelled by user")
 			m.confirmDialog.Visible = false
@@ -99,7 +93,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			l().Infof("Confirmed rotation for %s", m.configToRotateInto.Config.Spec.Name)
 			return rotateConfigCmd(m.configToRotateFrom, m.configToRotateInto)
-
 		case "delete":
 			if m.configToDelete == nil {
 				l().Warnln("Confirmed delete but configToDelete is nil")
@@ -109,16 +102,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			l().Infof("Confirmed deletion for config %s", name)
 			return deleteConfigCmd(name)
 		}
-
 		return nil
 
 	case tea.KeyMsg:
-		l().Debugf("Key msg string: %q", msg.String())
-
 		if m.confirmDialog.Visible {
 			l().Debugf("Key input routed to confirm dialog: %q", msg.String())
-			cmd := m.confirmDialog.Update(msg)
-			return cmd
+			return m.confirmDialog.Update(msg)
 		}
 
 		switch msg.String() {
@@ -128,7 +117,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				l().Warn("Rotate key pressed but no config selected")
 				return nil
 			}
-
 			cfg, err := m.findConfigByName(cfgName)
 			if err != nil {
 				l().Errorf("Failed to find config %q for rotation: %v", cfgName, err)
@@ -140,52 +128,42 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.pendingAction = "rotate"
 			m.configToRotateInto = cfg
 			m.confirmDialog = m.confirmDialog.Show(fmt.Sprintf("Rotate config %s?", cfgName))
-
 			return nil
 
 		case "d":
-			if len(m.list.Items()) == 0 {
+			if len(m.configsList.Filtered) == 0 {
 				return nil
 			}
-			selected, ok := m.list.SelectedItem().(configItem)
-			if !ok {
-				return nil
-			}
-
+			cfgName := m.selectedConfig()
+			cfg, _ := m.findConfigByName(cfgName)
 			m.pendingAction = "delete"
-			m.confirmDialog.Visible = true
-			m.confirmDialog.Message = fmt.Sprintf("Delete config %s?", selected.Name)
-			m.configToRotateInto = nil // just to be explicit
-			m.configToDelete, _ = m.findConfigByName(selected.Name)
-
+			m.configToDelete = cfg
+			m.confirmDialog = m.confirmDialog.Show(fmt.Sprintf("Delete config %s?", cfgName))
 			return nil
 
 		case "e":
 			cfg := m.selectedConfig()
 			l().Infof("Edit key pressed for config: %s", cfg)
-			return editConfigInEditorCmd(cfg)
-
+			return editConfigInEditorCmd(m.selectedConfig())
 		case "i":
 			cfg := m.selectedConfig()
 			l().Infof("Inspect key pressed for config: %s", cfg)
-			return inspectConfigCmd(cfg)
+			return inspectConfigCmd(m.selectedConfig())
 		case "enter":
 			cfg := m.selectedConfig()
 			l().Infof("Inspect key pressed for config: %s", cfg)
-			return inspectRawConfigCmd(cfg)
+			return inspectRawConfigCmd(m.selectedConfig())
+		default:
+			m.configsList.HandleKey(msg)
+			return nil
 		}
 	}
 
+	// --- State-based Update ---
 	switch m.state {
-	case stateLoading:
-		var cmd tea.Cmd
-		return cmd
-
 	case stateReady:
-		var cmd tea.Cmd
-		m.list, cmd = m.list.Update(msg)
-		return cmd
-
+		// nothing extra for now; viewport already handled
+		return nil
 	default:
 		return nil
 	}
