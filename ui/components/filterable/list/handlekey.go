@@ -21,6 +21,8 @@ func (f *FilterableList[T]) HandleKey(msg tea.KeyMsg) {
 				f.Viewport.GotoTop()
 			}
 			f.ApplyFilter()
+		case tea.KeyEnter:
+			f.Mode = ModeNormal
 		case tea.KeyEsc:
 			f.Mode = ModeNormal
 			f.Query = ""

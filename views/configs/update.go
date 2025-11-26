@@ -3,6 +3,7 @@ package configsview
 import (
 	"fmt"
 	"swarmcli/ui"
+	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -113,6 +114,15 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return m.confirmDialog.Update(msg)
 		}
 
+		// --- if in search mode, handle all keys via FilterableList ---
+		if m.configsList.Mode == filterlist.ModeSearching {
+			m.configsList.HandleKey(msg)
+			return nil
+		}
+
+		// --- normal mode ---
+		m.configsList.HandleKey(msg) // still handle up/down/pgup/pgdown
+
 		switch msg.String() {
 		case "r":
 			cfgName := m.selectedConfig()
@@ -156,9 +166,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			cfg := m.selectedConfig()
 			l().Infof("Inspect key pressed for config: %s", cfg)
 			return inspectRawConfigCmd(m.selectedConfig())
-		default:
-			m.configsList.HandleKey(msg)
-			return nil
 		}
 	}
 
