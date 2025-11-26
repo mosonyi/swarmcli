@@ -46,6 +46,11 @@ func (m *Model) buildContent() string {
 		return "No stacks found for this node."
 	}
 
+	entries := m.filtered
+	if len(entries) == 0 {
+		return fmt.Sprintf("No stacks match: %q", m.searchQuery)
+	}
+
 	width := m.viewport.Width
 	if width <= 0 {
 		width = 80
@@ -55,7 +60,7 @@ func (m *Model) buildContent() string {
 	serviceColWidth := 10
 
 	var lines []string
-	for i, s := range m.entries {
+	for i, s := range entries {
 		line := fmt.Sprintf("%-*s %*d", stackColWidth, s.Name, serviceColWidth, s.ServiceCount)
 		if i == m.cursor {
 			line = ui.CursorStyle.Render(line)
@@ -65,6 +70,11 @@ func (m *Model) buildContent() string {
 
 	status := fmt.Sprintf(" Stack %d of %d ", m.cursor+1, len(m.entries))
 	lines = append(lines, "", ui.StatusBarStyle.Render(status))
+
+	if m.mode == ModeSearching {
+		lines = append(lines, "")
+		lines = append(lines, ui.StatusBarStyle.Render(" /"+m.searchQuery))
+	}
 
 	return strings.Join(lines, "\n")
 }

@@ -9,6 +9,33 @@ import (
 
 // handleKey handles all key events for the stacks view.
 func handleKey(m *Model, msg tea.KeyMsg) tea.Cmd {
+
+	if m.mode == ModeSearching {
+		switch msg.Type {
+		case tea.KeyRunes:
+			m.searchQuery += string(msg.Runes)
+			m.applyFilter()
+			m.viewport.SetContent(m.buildContent())
+			return nil
+
+		case tea.KeyBackspace:
+			if len(m.searchQuery) > 0 {
+				m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+			}
+			m.applyFilter()
+			m.viewport.SetContent(m.buildContent())
+			return nil
+
+		case tea.KeyEsc:
+			m.mode = ModeNormal
+			m.searchQuery = ""
+			m.filtered = m.entries
+			m.cursor = 0
+			m.viewport.SetContent(m.buildContent())
+			return nil
+		}
+	}
+
 	switch msg.String() {
 
 	case "q", "esc":
@@ -65,6 +92,13 @@ func handleKey(m *Model, msg tea.KeyMsg) tea.Cmd {
 			m.cursor = len(m.entries) - 1
 		}
 		m.ensureCursorVisible()
+		m.viewport.SetContent(m.buildContent())
+		return nil
+	case "/":
+		m.mode = ModeSearching
+		m.searchQuery = ""
+		m.cursor = 0
+		m.filtered = m.entries
 		m.viewport.SetContent(m.buildContent())
 		return nil
 	}

@@ -8,6 +8,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+type Mode int
+
+const (
+	ModeNormal Mode = iota
+	ModeSearching
+)
+
 type Model struct {
 	viewport viewport.Model
 	Visible  bool
@@ -15,6 +22,10 @@ type Model struct {
 	nodeID  string
 	cursor  int
 	entries []docker.StackEntry
+
+	mode        Mode
+	searchQuery string
+	filtered    []docker.StackEntry
 
 	ready bool
 }

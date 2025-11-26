@@ -2,6 +2,8 @@ package stacksview
 
 import (
 	"fmt"
+	"strings"
+	"swarmcli/docker"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -44,6 +46,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 func (m *Model) setStacks(msg Msg) {
 	m.nodeID = msg.NodeID
 	m.entries = msg.Stacks
+	m.filtered = msg.Stacks
 	m.cursor = 0
 
 	if !m.ready {
@@ -51,9 +54,33 @@ func (m *Model) setStacks(msg Msg) {
 	}
 
 	m.viewport.GotoTop()
-	m.viewport.YOffset = 0
 	m.viewport.SetContent(m.buildContent())
 	m.ensureCursorVisible()
+}
+
+func (m *Model) applyFilter() {
+	if m.searchQuery == "" {
+		m.filtered = m.entries
+		m.cursor = 0
+		return
+	}
+
+	q := strings.ToLower(m.searchQuery)
+	var result []docker.StackEntry
+
+	for _, s := range m.entries {
+		if strings.Contains(strings.ToLower(s.Name), q) {
+			result = append(result, s)
+		}
+	}
+
+	m.filtered = result
+	if m.cursor >= len(result) {
+		m.cursor = len(result) - 1
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
 }
 
 // ensureCursorVisible keeps the cursor in the visible viewport range.
