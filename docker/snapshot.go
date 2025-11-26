@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -164,6 +165,11 @@ func (s SwarmSnapshot) ToStackEntries() []StackEntry {
 	for _, e := range stackMap {
 		stacks = append(stacks, *e)
 	}
+
+	// ---- 🔠 Sort alphabetically by stack name ----
+	sort.Slice(stacks, func(i, j int) bool {
+		return stacks[i].Name < stacks[j].Name
+	})
 
 	return stacks
 }
