@@ -77,7 +77,9 @@ func (m *Model) renderConfigsFooter() string {
 	statusBar := ui.StatusBarStyle.Render(status)
 
 	var footer string
-	if m.configsList.Mode == filterlist.ModeSearching || m.configsList.Query != "" {
+	if m.configsList.Mode == filterlist.ModeSearching {
+		footer = ui.StatusBarStyle.Render("Filter (type then Enter): " + m.configsList.Query)
+	} else if m.configsList.Query != "" {
 		footer = ui.StatusBarStyle.Render("Filter: " + m.configsList.Query)
 	}
 

@@ -30,7 +30,9 @@ func (m *Model) View() string {
 	statusBar := ui.StatusBarStyle.Render(status)
 
 	var footer string
-	if m.List.Mode == filterlist.ModeSearching || m.List.Query != "" {
+	if m.List.Mode == filterlist.ModeSearching {
+		footer = ui.StatusBarStyle.Render("Filter (type then Enter): " + m.List.Query)
+	} else if m.List.Query != "" {
 		footer = ui.StatusBarStyle.Render("Filter: " + m.List.Query)
 	}
 
