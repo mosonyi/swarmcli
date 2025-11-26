@@ -22,7 +22,7 @@ func (m *Model) View() string {
 	header := headerStyle.Render(fmt.Sprintf("%-20s %s", "STACK", "SERVICES"))
 
 	// Footer: cursor + optional search query
-	status := fmt.Sprintf("Stack %d of %d", m.List.Cursor+1, len(m.List.Filtered))
+	status := fmt.Sprintf("Stack %d of %d", m.List.Cursor+1, len(m.List.Items))
 	statusBar := ui.StatusBarStyle.Render(status)
 
 	var footer string
