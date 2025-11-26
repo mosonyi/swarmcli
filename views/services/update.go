@@ -143,9 +143,6 @@ func (m *Model) SetContent(msg Msg) {
 }
 
 func (m *Model) setRenderItem() {
-	// Compute column widths
-	const minService = 15
-	const minStack = 10
 	const replicaWidth = 10
 	const gap = 2
 
@@ -154,14 +151,33 @@ func (m *Model) setRenderItem() {
 		width = 80
 	}
 
-	available := width - replicaWidth - 2*gap
-	serviceCol := available / 2
-	stackCol := available - serviceCol
-	if serviceCol < minService {
-		serviceCol = minService
+	// Compute the longest service and stack names in the filtered list
+	maxService := len("SERVICE")
+	maxStack := len("STACK")
+	for _, e := range m.List.Filtered {
+		if len(e.ServiceName) > maxService {
+			maxService = len(e.ServiceName)
+		}
+		if len(e.StackName) > maxStack {
+			maxStack = len(e.StackName)
+		}
 	}
-	if stackCol < minStack {
-		stackCol = minStack
+
+	// Ensure total width fits viewport
+	total := maxService + maxStack + replicaWidth + 2*gap
+	if total > width {
+		overflow := total - width
+		if maxStack > maxService {
+			maxStack -= overflow
+			if maxStack < 5 {
+				maxStack = 5
+			}
+		} else {
+			maxService -= overflow
+			if maxService < 5 {
+				maxService = 5
+			}
+		}
 	}
 
 	m.List.RenderItem = func(e docker.ServiceEntry, selected bool, _ int) string {
@@ -177,13 +193,13 @@ func (m *Model) setRenderItem() {
 			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(replicas)
 		}
 
-		svcName := truncateWithEllipsis(e.ServiceName, serviceCol)
-		stackName := truncateWithEllipsis(e.StackName, stackCol)
+		serviceName := truncateWithEllipsis(e.ServiceName, maxService)
+		stackName := truncateWithEllipsis(e.StackName, maxStack)
 
 		line := fmt.Sprintf(
 			"%-*s  %-*s  %*s",
-			serviceCol, svcName,
-			stackCol, stackName,
+			maxService, serviceName,
+			maxStack, stackName,
 			replicaWidth, replicas,
 		)
 

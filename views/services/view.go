@@ -11,12 +11,41 @@ func (m *Model) View() string {
 		width = 80
 	}
 
+	// Compute dynamic column widths (same as in setRenderItem)
+	replicaWidth := 10
+	maxService := len("SERVICE")
+	maxStack := len("STACK")
+	for _, e := range m.List.Filtered {
+		if len(e.ServiceName) > maxService {
+			maxService = len(e.ServiceName)
+		}
+		if len(e.StackName) > maxStack {
+			maxStack = len(e.StackName)
+		}
+	}
+	total := maxService + maxStack + replicaWidth + 4
+	if total > width {
+		overflow := total - width
+		if maxStack > maxService {
+			maxStack -= overflow
+			if maxStack < 5 {
+				maxStack = 5
+			}
+		} else {
+			maxService -= overflow
+			if maxService < 5 {
+				maxService = 5
+			}
+		}
+	}
+
 	header := ui.FrameHeaderStyle.Render(fmt.Sprintf(
 		"%-*s  %-*s  %-*s",
-		15, "SERVICE",
-		10, "STACK",
-		10, "REPLICAS",
+		maxService, "SERVICE",
+		maxStack, "STACK",
+		replicaWidth, "REPLICAS",
 	))
+
 	content := ui.RenderFramedBox(m.title, header, m.List.View(), "", width)
 
 	if m.confirmDialog.Visible {
