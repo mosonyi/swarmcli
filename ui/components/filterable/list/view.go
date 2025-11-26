@@ -19,7 +19,10 @@ func (l *FilterableList[T]) View() string {
 	for i, item := range l.Filtered {
 		lines = append(lines, l.RenderItem(item, i == l.Cursor, l.colWidth))
 	}
-	return strings.Join(lines, "\n")
+
+	content := strings.Join(lines, "\n")
+	l.Viewport.SetContent(content) // update viewport content
+	return l.Viewport.View()
 }
 
 func (l *FilterableList[T]) ensureCursorVisible() {
