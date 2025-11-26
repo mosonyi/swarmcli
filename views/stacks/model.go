@@ -51,6 +51,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "j/down", Desc: "scroll down"},
 		{Key: "pgup", Desc: "page up"},
 		{Key: "pgdown", Desc: "page down"},
+		{Key: "/", Desc: "filter"},
 		{Key: "q", Desc: "close"},
 	}
 }
