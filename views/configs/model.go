@@ -15,8 +15,11 @@ import (
 
 type Model struct {
 	configsList filterlist.FilterableList[configItem]
-	state       state
-	err         error
+	width       int
+	height      int
+
+	state state
+	err   error
 
 	pendingAction      string
 	confirmDialog      *confirmdialog.Model
@@ -36,31 +39,22 @@ const (
 )
 
 func New(width, height int) *Model {
-	fl := filterlist.FilterableList[configItem]{
-		Viewport: viewport.Model{
-			Width:  width,
-			Height: height,
-		},
-		RenderItem: func(item configItem, selected bool, colWidth int) string {
-			nameCol := fmt.Sprintf("%-*s", colWidth, item.Name) // left-align name
-			line := fmt.Sprintf("%s  ID: %s", nameCol, item.ID)
-			if selected {
-				return "> " + line
-			}
-			return "  " + line
-		},
-		Match: func(item configItem, query string) bool {
-			// match by name or ID
+	vp := viewport.New(width, height)
+	vp.SetContent("")
+
+	list := filterlist.FilterableList[configItem]{
+		Viewport: vp,
+		Match: func(c configItem, query string) bool {
 			q := strings.ToLower(query)
-			return strings.Contains(strings.ToLower(item.Name), q) ||
-				strings.Contains(strings.ToLower(item.ID), q)
+			return strings.Contains(strings.ToLower(c.Name), q) ||
+				strings.Contains(strings.ToLower(c.ID), q)
 		},
 	}
 
-	fl.ComputeAndSetColWidth(func(item configItem) string { return item.Name }, 10)
-
 	return &Model{
-		configsList:   fl,
+		configsList:   list,
+		width:         width,
+		height:        height,
 		state:         stateLoading,
 		confirmDialog: confirmdialog.New(0, 0),
 		loadingView:   loading.New(width, height, false, "Loading Docker configs..."),

@@ -2,6 +2,7 @@ package configsview
 
 import (
 	"fmt"
+	"swarmcli/ui"
 	"swarmcli/views/confirmdialog"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -22,6 +23,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			items[i] = configItemFromSwarm(cfg.Config)
 		}
 		m.configsList.Items = items
+		m.setRenderItem()
 		m.configsList.ApplyFilter()
 		m.state = stateReady
 		return nil
@@ -50,6 +52,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		l().Infof("Edit finished: config changed, inserting new version %s", newName)
 
 		m.addConfig(msg.NewConfig)
+		m.setRenderItem()
 		m.pendingAction = "rotate"
 		m.configToRotateFrom = &msg.OldConfig
 		m.configToRotateInto = &msg.NewConfig
@@ -166,5 +169,28 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 	default:
 		return nil
+	}
+}
+
+func (m *Model) setRenderItem() {
+	// Compute max width per column
+	nameCol := 0
+	idCol := 0
+	for _, cfg := range m.configsList.Items {
+		if len(cfg.Name) > nameCol {
+			nameCol = len(cfg.Name)
+		}
+		if len(cfg.ID) > idCol {
+			idCol = len(cfg.ID)
+		}
+	}
+
+	// Assign to the list
+	m.configsList.RenderItem = func(cfg configItem, selected bool, _ int) string {
+		line := fmt.Sprintf("%-*s  %-*s", nameCol, cfg.Name, idCol, cfg.ID)
+		if selected {
+			return ui.CursorStyle.Render(line)
+		}
+		return line
 	}
 }

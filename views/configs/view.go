@@ -75,31 +75,23 @@ func renderConfigsHeader(items []configItem) string {
 		return "NAME       ID"
 	}
 
-	// compute column widths
-	colWidths := map[string]int{
-		"Name": len("NAME"),
-		"ID":   len("ID"),
-	}
-
+	// Compute max widths
+	nameCol := len("NAME")
+	idCol := len("ID")
 	for _, cfg := range items {
-		if len(cfg.Name) > colWidths["Name"] {
-			colWidths["Name"] = len(cfg.Name)
+		if len(cfg.Name) > nameCol {
+			nameCol = len(cfg.Name)
 		}
-		if len(cfg.ID) > colWidths["ID"] {
-			colWidths["ID"] = len(cfg.ID)
+		if len(cfg.ID) > idCol {
+			idCol = len(cfg.ID)
 		}
 	}
 
 	headerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("75")).Bold(true)
-
-	return headerStyle.Render(fmt.Sprintf(
-		"%-*s  %-*s",
-		colWidths["Name"], "NAME",
-		colWidths["ID"], "ID",
-	))
+		Foreground(lipgloss.Color("75")). // blueish tone
+		Bold(true)
+	return headerStyle.Render(fmt.Sprintf("%-*s  %-*s", nameCol, "NAME", idCol, "ID"))
 }
-
 func (m *Model) renderConfigsFooter() string {
 	status := fmt.Sprintf("Config %d of %d", m.configsList.Cursor+1, len(m.configsList.Filtered))
 	statusBar := ui.StatusBarStyle.Render(status)
