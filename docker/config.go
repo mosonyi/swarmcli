@@ -96,6 +96,11 @@ func ListConfigs(ctx context.Context) ([]swarm.Config, error) {
 		return nil, fmt.Errorf("failed to list configs: %w", err)
 	}
 
+	// 🔠 Sort configs alphabetically by name
+	sort.Slice(configs, func(i, j int) bool {
+		return configs[i].Spec.Name < configs[j].Spec.Name
+	})
+
 	l().Infof("[ListConfigs] Found %d configs", len(configs))
 	return configs, nil
 }
