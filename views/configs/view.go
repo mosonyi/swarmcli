@@ -70,7 +70,7 @@ func (m *Model) View() string {
 	}
 
 	// --- Wrap content in a framed box ---
-	view := ui.RenderFramedBox("Configs", header, content, width)
+	view := ui.RenderFramedBox("Configs", header, content, "", width)
 
 	// --- Overlay confirm dialog if visible ---
 	if m.confirmDialog.Visible {

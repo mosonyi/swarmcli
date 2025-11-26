@@ -10,12 +10,12 @@ import (
 // Styles (you can override these per-view if desired)
 var (
 	FrameTitleStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("81")).
-		Bold(true)
+			Foreground(lipgloss.Color("81")).
+			Bold(true)
 
 	FrameHeaderStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("75")).
-		Bold(true)
+				Foreground(lipgloss.Color("75")).
+				Bold(true)
 
 	FrameBorderColor = lipgloss.Color("240")
 )
@@ -23,12 +23,16 @@ var (
 // RenderFramedBox draws a bordered frame with title, optional header, and content.
 // If width <= 0, defaults to content width + padding.
 // ANSI sequences in content are preserved.
-func RenderFramedBox(title, header, content string, width int) string {
+func RenderFramedBox(title, header, content, footer string, width int) string {
 	lines := strings.Split(content, "\n")
+	footerLines := []string{}
+	if footer != "" {
+		footerLines = strings.Split(footer, "\n")
+	}
 
 	// Compute content width
 	contentWidth := 0
-	for _, l := range lines {
+	for _, l := range append(lines, footerLines...) {
 		if w := lipgloss.Width(l); w > contentWidth {
 			contentWidth = w
 		}
@@ -59,15 +63,22 @@ func RenderFramedBox(title, header, content string, width int) string {
 		strings.Repeat("─", rightPad),
 	)
 
-	// Header line
+	// Box lines start with top border
 	boxLines := []string{topLine}
+
+	// Optional header
 	if header != "" {
 		boxLines = append(boxLines, fmt.Sprintf("│%s│", padLine(headerStyled, borderWidth)))
 	}
 
-	// Content lines
+	// Content
 	for _, l := range lines {
 		boxLines = append(boxLines, fmt.Sprintf("│%s│", padLine(l, borderWidth)))
+	}
+
+	// Optional footer (above bottom border)
+	for _, fl := range footerLines {
+		boxLines = append(boxLines, fmt.Sprintf("│%s│", padLine(fl, borderWidth)))
 	}
 
 	// Bottom border
