@@ -2,12 +2,10 @@ package configsview
 
 import (
 	"fmt"
-	"io"
-	"strings"
 	"swarmcli/ui"
+	filterlist "swarmcli/ui/components/filterable/list"
 
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/docker/docker/api/types/swarm"
 )
 
@@ -20,23 +18,6 @@ func (i configItem) FilterValue() string { return i.Name }
 func (i configItem) Title() string       { return i.Name }
 func (i configItem) Description() string { return fmt.Sprintf("ID: %s", i.ID) }
 
-type itemDelegate struct{}
-
-func (d itemDelegate) Height() int  { return 1 }
-func (d itemDelegate) Spacing() int { return 0 }
-
-func (d itemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd { return nil }
-
-func (d itemDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
-	cfg := item.(configItem)
-	selected := index == m.Index()
-	if selected {
-		fmt.Fprintf(w, "> %s", cfg.Name)
-	} else {
-		fmt.Fprintf(w, "  %s", cfg.Name)
-	}
-}
-
 func configItemFromSwarm(c swarm.Config) configItem {
 	return configItem{Name: c.Spec.Name, ID: c.ID}
 }
@@ -44,40 +25,24 @@ func configItemFromSwarm(c swarm.Config) configItem {
 func (m *Model) View() string {
 	width := 80
 	height := 24
-
-	if m.list.Width() > 0 {
-		width = m.list.Width()
+	if m.configsList.Viewport.Width > 0 {
+		width = m.configsList.Viewport.Width
 	}
-	if m.list.Height() > 0 {
-		height = m.list.Height()
-	}
-
-	// --- Header for the configs list ---
-	header := ui.FrameHeaderStyle.Render("DOCKER CONFIGS")
-
-	// --- Main content ---
-	var content string
-	switch m.state {
-	case stateLoading:
-		// Blank content, overlay will show loading
-		content = strings.Repeat("\n", height-1)
-	case stateError:
-		content = fmt.Sprintf("Error loading configs:\n\n%s\n\nPress q to go back.", m.err)
-	case stateReady:
-		content = m.renderConfigs()
-	default:
-		content = ""
+	if m.configsList.Viewport.Height > 0 {
+		height = m.configsList.Viewport.Height
 	}
 
-	// --- Wrap content in a framed box ---
-	view := ui.RenderFramedBox("Configs", header, content, "", width)
+	header := renderConfigsHeader(m.configsList.Items)
+	content := m.configsList.View()
+	footer := m.renderConfigsFooter()
 
-	// --- Overlay confirm dialog if visible ---
+	title := fmt.Sprintf("Docker Configs (%d)", len(m.configsList.Filtered))
+	view := ui.RenderFramedBox(title, header, content, footer, width)
+
 	if m.confirmDialog.Visible {
 		view = ui.OverlayCentered(view, m.confirmDialog.View(), width, height)
 	}
 
-	// --- Overlay loading view if visible ---
 	if m.state == stateLoading || m.loadingView.Visible() {
 		view = ui.OverlayCentered(view, m.loadingView.View(), width, height)
 	}
@@ -85,24 +50,41 @@ func (m *Model) View() string {
 	return view
 }
 
-func (m *Model) renderConfigs() string {
-	if len(m.list.Items()) == 0 {
-		return "No configs found."
+func renderConfigsHeader(items []configItem) string {
+	if len(items) == 0 {
+		return "NAME       ID"
 	}
 
-	var lines []string
-	delegate := itemDelegate{}
-
-	items := m.list.Items() // returns []list.Item
-	for i, item := range items {
-		var sb strings.Builder
-		delegate.Render(&sb, m.list, i, item)
-		lines = append(lines, sb.String())
+	// Compute max widths
+	nameCol := len("NAME")
+	idCol := len("ID")
+	for _, cfg := range items {
+		if len(cfg.Name) > nameCol {
+			nameCol = len(cfg.Name)
+		}
+		if len(cfg.ID) > idCol {
+			idCol = len(cfg.ID)
+		}
 	}
 
-	// Status bar
-	status := fmt.Sprintf(" Config %d of %d ", m.list.Index()+1, len(m.list.Items()))
-	lines = append(lines, "", ui.StatusBarStyle.Render(status))
+	headerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("75")). // blueish tone
+		Bold(true)
+	return headerStyle.Render(fmt.Sprintf("%-*s  %-*s", nameCol, "NAME", idCol, "ID"))
+}
+func (m *Model) renderConfigsFooter() string {
+	status := fmt.Sprintf("Config %d of %d", m.configsList.Cursor+1, len(m.configsList.Filtered))
+	statusBar := ui.StatusBarStyle.Render(status)
 
-	return strings.Join(lines, "\n")
+	var footer string
+	if m.configsList.Mode == filterlist.ModeSearching {
+		footer = ui.StatusBarStyle.Render("Filter (type then Enter): " + m.configsList.Query)
+	} else if m.configsList.Query != "" {
+		footer = ui.StatusBarStyle.Render("Filter: " + m.configsList.Query)
+	}
+
+	if footer != "" {
+		return statusBar + "\n" + footer
+	}
+	return statusBar
 }
