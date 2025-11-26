@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"swarmcli/docker"
 	"swarmcli/ui"
+	filterlist "swarmcli/ui/components/filterable/list"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -23,10 +24,27 @@ func (m *Model) View() string {
 
 	title := fmt.Sprintf("Nodes (%d total, %d manager%s)", total, managers, plural(managers))
 	header := renderHeader(m.List.Items)
+
+	// Footer: cursor + optional search query
+	status := fmt.Sprintf("Node %d of %d", m.List.Cursor+1, len(m.List.Filtered))
+	statusBar := ui.StatusBarStyle.Render(status)
+
+	var footer string
+	if m.List.Mode == filterlist.ModeSearching {
+		footer = ui.StatusBarStyle.Render("Filter: " + m.List.Query)
+	}
+
+	if footer != "" {
+		footer = statusBar + "\n" + footer
+	} else {
+		footer = statusBar
+	}
+
 	content := m.List.View()
 
-	return ui.RenderFramedBox(title, header, content, "", m.List.Viewport.Width)
+	return ui.RenderFramedBox(title, header, content, footer, m.List.Viewport.Width)
 }
+
 func plural(n int) string {
 	if n == 1 {
 		return ""
