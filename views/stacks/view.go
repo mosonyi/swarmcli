@@ -13,7 +13,7 @@ func (m *Model) View() string {
 		return ""
 	}
 
-	title := fmt.Sprintf("Stacks on Node (Total: %d)", len(m.List.Filtered))
+	title := fmt.Sprintf("Stacks on Node (Total: %d)", len(m.List.Items))
 
 	headerStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -22,7 +22,7 @@ func (m *Model) View() string {
 	header := headerStyle.Render(fmt.Sprintf("%-20s %s", "STACK", "SERVICES"))
 
 	// Footer: cursor + optional search query
-	status := fmt.Sprintf("Stack %d of %d", m.List.Cursor+1, len(m.List.Items))
+	status := fmt.Sprintf("Stack %d of %d", m.List.Cursor+1, len(m.List.Filtered))
 	statusBar := ui.StatusBarStyle.Render(status)
 
 	var footer string
