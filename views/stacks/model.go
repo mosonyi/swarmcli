@@ -1,41 +1,47 @@
 package stacksview
 
 import (
+	"fmt"
 	"swarmcli/docker"
+	"swarmcli/ui"
+
 	"swarmcli/views/helpbar"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-)
 
-type Mode int
-
-const (
-	ModeNormal Mode = iota
-	ModeSearching
+	"swarmcli/ui/components/filterable/list"
 )
 
 type Model struct {
-	viewport viewport.Model
-	Visible  bool
-
+	List    filterlist.FilterableList[docker.StackEntry]
+	Visible bool
 	nodeID  string
-	cursor  int
-	entries []docker.StackEntry
-
-	mode        Mode
-	searchQuery string
-	filtered    []docker.StackEntry
-
-	ready bool
+	ready   bool
+	width   int
+	height  int
 }
 
 func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
+
+	list := filterlist.FilterableList[docker.StackEntry]{
+		Viewport: vp,
+		RenderItem: func(s docker.StackEntry, selected bool) string {
+			line := fmt.Sprintf("%-20s %3d", s.Name, s.ServiceCount)
+			if selected {
+				return ui.CursorStyle.Render(line)
+			}
+			return line
+		},
+	}
+
 	return &Model{
-		viewport: vp,
-		Visible:  false,
+		List:    list,
+		Visible: false,
+		width:   width,
+		height:  height,
 	}
 }
 
@@ -65,10 +71,5 @@ func LoadStacks(nodeID string) tea.Cmd {
 	}
 }
 
-func (m *Model) OnEnter() tea.Cmd {
-	return nil
-}
-
-func (m *Model) OnExit() tea.Cmd {
-	return nil
-}
+func (m *Model) OnEnter() tea.Cmd { return nil }
+func (m *Model) OnExit() tea.Cmd  { return nil }
