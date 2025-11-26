@@ -1,23 +1,19 @@
 package filterlist
 
 import (
-	"fmt"
 	"strings"
 )
 
-func (f *FilterableList[T]) View() string {
-	if len(f.Filtered) == 0 {
-		if f.Mode == ModeSearching && f.Query != "" {
-			return fmt.Sprintf("No items match: %q", f.Query)
-		}
-		return "No items found."
+func (l *FilterableList[T]) View() string {
+	var lines []string
+	for i, item := range l.Filtered {
+		line := l.RenderItem(item, i == l.Cursor)
+		lines = append(lines, line)
 	}
 
-	var lines []string
-	for i, item := range f.Filtered {
-		lines = append(lines, f.RenderItem(item, i == f.Cursor))
-	}
-	return strings.Join(lines, "\n")
+	content := strings.Join(lines, "\n")
+	l.Viewport.SetContent(content) // update viewport content
+	return l.Viewport.View()       // returns clipped viewport
 }
 
 func (f *FilterableList[T]) ensureCursorVisible() {
