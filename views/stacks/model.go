@@ -1,7 +1,10 @@
 package stacksview
 
 import (
+	"fmt"
+	"strings"
 	"swarmcli/docker"
+	"swarmcli/ui"
 	"swarmcli/views/helpbar"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -25,6 +28,16 @@ func New(width, height int) *Model {
 
 	list := filterlist.FilterableList[docker.StackEntry]{
 		Viewport: vp,
+		RenderItem: func(s docker.StackEntry, selected bool, colWidth int) string {
+			line := fmt.Sprintf("%-*s %3d", colWidth, s.Name, s.ServiceCount)
+			if selected {
+				return ui.CursorStyle.Render(line)
+			}
+			return line
+		},
+		Match: func(s docker.StackEntry, query string) bool {
+			return strings.Contains(strings.ToLower(s.Name), strings.ToLower(query))
+		},
 	}
 
 	return &Model{
