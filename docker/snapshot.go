@@ -120,6 +120,12 @@ func (s SwarmSnapshot) ToNodeEntries() []NodeEntry {
 			Addr:     n.Status.Addr,
 		}
 	}
+
+	// 🔠 Sort alphabetically by hostname
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].Hostname < nodes[j].Hostname
+	})
+
 	return nodes
 }
 
