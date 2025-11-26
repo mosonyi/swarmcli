@@ -13,6 +13,12 @@ func (f *FilterableList[T]) HandleKey(msg tea.KeyMsg) {
 		case tea.KeyBackspace:
 			if len(f.Query) > 0 {
 				f.Query = f.Query[:len(f.Query)-1]
+			} else if len(f.Query) == 0 {
+				f.Mode = ModeNormal
+				f.Query = ""
+				f.ApplyFilter()
+				f.Cursor = 0
+				f.Viewport.GotoTop()
 			}
 			f.ApplyFilter()
 		case tea.KeyEsc:
