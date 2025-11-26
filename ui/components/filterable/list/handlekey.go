@@ -2,13 +2,14 @@ package filterlist
 
 import tea "github.com/charmbracelet/bubbletea"
 
+// HandleKey updates cursor and filter state, automatically keeping the cursor visible
 func (f *FilterableList[T]) HandleKey(msg tea.KeyMsg) {
-	// --- Searching mode ---
+	// Searching mode
 	if f.Mode == ModeSearching {
 		switch msg.Type {
 		case tea.KeyRunes:
 			f.Query += string(msg.Runes)
-			f.ApplyFilter() // pass your own matchFunc if needed
+			f.ApplyFilter()
 		case tea.KeyBackspace:
 			if len(f.Query) > 0 {
 				f.Query = f.Query[:len(f.Query)-1]
@@ -17,14 +18,13 @@ func (f *FilterableList[T]) HandleKey(msg tea.KeyMsg) {
 		case tea.KeyEsc:
 			f.Mode = ModeNormal
 			f.Query = ""
-			f.Filtered = f.Items
+			f.ApplyFilter()
 			f.Cursor = 0
 			f.Viewport.GotoTop()
 		}
-		return
 	}
 
-	// --- Normal mode ---
+	// Normal mode
 	switch msg.String() {
 	case "up", "k":
 		if f.Cursor > 0 {
@@ -37,30 +37,26 @@ func (f *FilterableList[T]) HandleKey(msg tea.KeyMsg) {
 			f.ensureCursorVisible()
 		}
 	case "pgup", "u":
-		page := f.Viewport.Height
-		if f.Cursor > page {
-			f.Cursor -= page
+		h := f.Viewport.Height
+		if f.Cursor > h {
+			f.Cursor -= h
 		} else {
 			f.Cursor = 0
 		}
 		f.ensureCursorVisible()
 	case "pgdown", "d":
-		page := f.Viewport.Height
-		if f.Cursor+page < len(f.Filtered) {
-			f.Cursor += page
-		} else {
-			if len(f.Filtered) > 0 {
-				f.Cursor = len(f.Filtered) - 1
-			} else {
-				f.Cursor = 0
-			}
+		h := f.Viewport.Height
+		if f.Cursor+h < len(f.Filtered) {
+			f.Cursor += h
+		} else if len(f.Filtered) > 0 {
+			f.Cursor = len(f.Filtered) - 1
 		}
 		f.ensureCursorVisible()
 	case "/":
 		f.Mode = ModeSearching
 		f.Query = ""
 		f.Cursor = 0
-		f.Filtered = f.Items
+		f.ApplyFilter()
 		f.Viewport.GotoTop()
 	}
 }

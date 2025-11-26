@@ -13,13 +13,12 @@ type FilterableList[T any] struct {
 	Query    string
 	Mode     ModeType
 
-	// Function to render a single item
+	// Function to render a single item (pass in computed colWidth)
 	RenderItem func(item T, selected bool, colWidth int) string
 
 	// Match function for filtering
 	Match func(item T, query string) bool
 
-	// Computed column width
 	colWidth int
 }
 

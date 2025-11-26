@@ -1,25 +1,25 @@
 package filterlist
 
-func (l *FilterableList[T]) ApplyFilter() {
-	if l.Query == "" {
-		l.Filtered = l.Items
+func (f *FilterableList[T]) ApplyFilter() {
+	if f.Query == "" {
+		f.Filtered = f.Items
 	} else {
 		var result []T
-		for _, item := range l.Items {
-			if l.Match(item, l.Query) {
+		for _, item := range f.Items {
+			if f.Match(item, f.Query) {
 				result = append(result, item)
 			}
 		}
-		l.Filtered = result
+		f.Filtered = result
 	}
 
-	// Ensure cursor stays in bounds
-	if l.Cursor >= len(l.Filtered) {
-		l.Cursor = len(l.Filtered) - 1
+	// Keep cursor in bounds
+	if f.Cursor >= len(f.Filtered) {
+		f.Cursor = len(f.Filtered) - 1
 	}
-	if l.Cursor < 0 {
-		l.Cursor = 0
+	if f.Cursor < 0 {
+		f.Cursor = 0
 	}
 
-	l.ensureCursorVisible()
+	f.ensureCursorVisible()
 }

@@ -34,7 +34,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case tea.KeyMsg:
 		m.List.HandleKey(msg)
-		m.List.Viewport.SetContent(m.List.View())
 		// Enter triggers navigation
 		if msg.String() == "i" || msg.String() == "enter" {
 			if m.List.Cursor < len(m.List.Filtered) {

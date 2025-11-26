@@ -7,56 +7,58 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func (l *FilterableList[T]) View() string {
-	if len(l.Filtered) == 0 {
-		if l.Mode == ModeSearching && l.Query != "" {
-			return fmt.Sprintf("No items match: %q", l.Query)
+func (f *FilterableList[T]) View() string {
+	if len(f.Filtered) == 0 {
+		if f.Mode == ModeSearching && f.Query != "" {
+			return fmt.Sprintf("No items match: %q", f.Query)
 		}
 		return "No items found."
 	}
 
-	var lines []string
-	for i, item := range l.Filtered {
-		lines = append(lines, l.RenderItem(item, i == l.Cursor, l.colWidth))
+	lines := make([]string, len(f.Filtered))
+	for i, item := range f.Filtered {
+		lines[i] = f.RenderItem(item, i == f.Cursor, f.colWidth)
 	}
 
 	content := strings.Join(lines, "\n")
-	l.Viewport.SetContent(content) // update viewport content
-	return l.Viewport.View()
+	// Only update viewport content here
+	f.Viewport.SetContent(content)
+	return f.Viewport.View()
 }
 
-func (l *FilterableList[T]) ensureCursorVisible() {
-	h := l.Viewport.Height
+// ensureCursorVisible keeps the cursor in the visible viewport range
+func (f *FilterableList[T]) ensureCursorVisible() {
+	h := f.Viewport.Height
 	if h < 1 {
 		h = 1
 	}
-
-	if l.Cursor < l.Viewport.YOffset {
-		l.Viewport.YOffset = l.Cursor
-	} else if l.Cursor >= l.Viewport.YOffset+h {
-		l.Viewport.YOffset = l.Cursor - h + 1
+	if f.Cursor < f.Viewport.YOffset {
+		f.Viewport.YOffset = f.Cursor
+	} else if f.Cursor >= f.Viewport.YOffset+h {
+		f.Viewport.YOffset = f.Cursor - h + 1
 	}
 }
 
-func (l *FilterableList[T]) ComputeAndSetColWidth(renderName func(item T) string, minWidth int) {
-	if len(l.Items) == 0 {
-		l.colWidth = minWidth
+func (f *FilterableList[T]) ComputeAndSetColWidth(renderName func(item T) string, minWidth int) {
+	if len(f.Items) == 0 {
+		f.colWidth = minWidth
 		return
 	}
 
 	maxName := minWidth
-	for _, item := range l.Items {
+	for _, item := range f.Items {
 		if w := lipgloss.Width(renderName(item)); w > maxName {
 			maxName = w
 		}
 	}
 
-	available := l.Viewport.Width - 2 // leave room for borders
-	if available < minWidth {
-		l.colWidth = minWidth
-	} else if maxName > available {
-		l.colWidth = available
-	} else {
-		l.colWidth = maxName
+	available := f.Viewport.Width - 2
+	switch {
+	case available < minWidth:
+		f.colWidth = minWidth
+	case maxName > available:
+		f.colWidth = available
+	default:
+		f.colWidth = maxName
 	}
 }
