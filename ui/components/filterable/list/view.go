@@ -1,21 +1,25 @@
 package filterlist
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 )
 
 func (l *FilterableList[T]) View() string {
-	var lines []string
-	for i, item := range l.Filtered {
-		line := l.RenderItem(item, i == l.Cursor)
-		lines = append(lines, line)
+	if len(l.Filtered) == 0 {
+		if l.Mode == ModeSearching && l.Query != "" {
+			return fmt.Sprintf("No items match: %q", l.Query)
+		}
+		return "No items found."
 	}
 
-	content := strings.Join(lines, "\n")
-	l.Viewport.SetContent(content) // update viewport content
-	return l.Viewport.View()       // returns clipped viewport
+	var lines []string
+	for i, item := range l.Filtered {
+		lines = append(lines, l.RenderItem(item, i == l.Cursor, l.colWidth))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (l *FilterableList[T]) ensureCursorVisible() {
@@ -31,27 +35,25 @@ func (l *FilterableList[T]) ensureCursorVisible() {
 	}
 }
 
-func (l *FilterableList[T]) ComputeColWidth(render func(item T) string, minWidth int) int {
+func (l *FilterableList[T]) ComputeAndSetColWidth(renderName func(item T) string, minWidth int) {
 	if len(l.Items) == 0 {
-		return minWidth
+		l.colWidth = minWidth
+		return
 	}
 
-	// Find maximum width of all items (not just filtered)
 	maxName := minWidth
 	for _, item := range l.Items {
-		w := lipgloss.Width(render(item))
-		if w > maxName {
+		if w := lipgloss.Width(renderName(item)); w > maxName {
 			maxName = w
 		}
 	}
 
-	// Ensure it fits within viewport
-	available := l.Viewport.Width - 2 // leave room for padding/borders
+	available := l.Viewport.Width - 2 // leave room for borders
 	if available < minWidth {
-		return minWidth
+		l.colWidth = minWidth
+	} else if maxName > available {
+		l.colWidth = available
+	} else {
+		l.colWidth = maxName
 	}
-	if maxName > available {
-		return available
-	}
-	return maxName
 }

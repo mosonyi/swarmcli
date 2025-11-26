@@ -60,13 +60,14 @@ func (m *Model) setStacks(stacks []docker.StackEntry) {
 	m.List.Filtered = stacks
 	m.List.Cursor = 0
 
-	// Compute column width dynamically based on all stacks
-	stackColWidth := m.List.ComputeColWidth(func(s docker.StackEntry) string {
+	// Compute column width automatically
+	m.List.ComputeAndSetColWidth(func(s docker.StackEntry) string {
 		return s.Name
 	}, 15)
 
-	m.List.RenderItem = func(s docker.StackEntry, selected bool) string {
-		line := fmt.Sprintf("%-*s %3d", stackColWidth, s.Name, s.ServiceCount)
+	// Update RenderItem to use computed colWidth
+	m.List.RenderItem = func(s docker.StackEntry, selected bool, colWidth int) string {
+		line := fmt.Sprintf("%-*s %3d", colWidth, s.Name, s.ServiceCount)
 		if selected {
 			return ui.CursorStyle.Render(line)
 		}
