@@ -60,6 +60,15 @@ func (m *Model) setStacks(stacks []docker.StackEntry) {
 	m.List.Filtered = stacks
 	m.List.Cursor = 0
 
+	m.setRenderItem()
+
+	if m.ready {
+		m.List.Viewport.SetContent(m.List.View())
+	}
+}
+
+// After loading stacks, set RenderItem dynamically with correct column width
+func (m *Model) setRenderItem() {
 	// Compute column width automatically
 	m.List.ComputeAndSetColWidth(func(s docker.StackEntry) string {
 		return s.Name
@@ -72,9 +81,5 @@ func (m *Model) setStacks(stacks []docker.StackEntry) {
 			return ui.CursorStyle.Render(line)
 		}
 		return line
-	}
-
-	if m.ready {
-		m.List.Viewport.SetContent(m.List.View())
 	}
 }
