@@ -1,6 +1,7 @@
 package nodesview
 
 import (
+	"context"
 	"fmt"
 	"swarmcli/docker"
 	"swarmcli/ui"
@@ -34,7 +35,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			if m.List.Cursor < len(m.List.Filtered) {
 				node := m.List.Filtered[m.List.Cursor]
 				return func() tea.Msg {
-					inspectContent, err := docker.Inspect(nil, docker.InspectNode, node.ID)
+					inspectContent, err := docker.Inspect(context.Background(), docker.InspectNode, node.ID)
 					if err != nil {
 						inspectContent = "Error inspecting node: " + err.Error()
 					}
