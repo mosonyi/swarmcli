@@ -73,8 +73,9 @@ func (m *Model) buildContent() string {
 	} else if m.cpuBlinkCount > 0 && m.cpuBlinkCount%2 == 1 {
 		// Hide arrow during odd blink counts (creates pulse effect)
 		var cpuVal float64
-		fmt.Sscanf(m.cpuUsage, "%f%%", &cpuVal)
-		cpu = fmt.Sprintf("%.1f%%", cpuVal)
+		if _, err := fmt.Sscanf(m.cpuUsage, "%f%%", &cpuVal); err == nil {
+			cpu = fmt.Sprintf("%.1f%%", cpuVal)
+		}
 	}
 	
 	mem := m.memUsage
@@ -83,8 +84,9 @@ func (m *Model) buildContent() string {
 	} else if m.memBlinkCount > 0 && m.memBlinkCount%2 == 1 {
 		// Hide arrow during odd blink counts (creates pulse effect)
 		var memVal float64
-		fmt.Sscanf(m.memUsage, "%f%%", &memVal)
-		mem = fmt.Sprintf("%.1f%%", memVal)
+		if _, err := fmt.Sscanf(m.memUsage, "%f%%", &memVal); err == nil {
+			mem = fmt.Sprintf("%.1f%%", memVal)
+		}
 	}
 	
 	return content(
@@ -144,8 +146,8 @@ func (m *Model) SetContent(msg Msg) {
 func (m *Model) updateCPUMem(msg SlowStatusMsg) {
 	// Parse current CPU/MEM values and add trend arrows
 	var currentCPU, currentMem float64
-	fmt.Sscanf(msg.cpu, "%f%%", &currentCPU)
-	fmt.Sscanf(msg.mem, "%f%%", &currentMem)
+	_, _ = fmt.Sscanf(msg.cpu, "%f%%", &currentCPU)
+	_, _ = fmt.Sscanf(msg.mem, "%f%%", &currentMem)
 	
 	// Clear loading flags and firstLoad
 	m.loadingCPU = false
