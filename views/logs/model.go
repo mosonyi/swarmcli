@@ -43,6 +43,8 @@ type Model struct {
 	wrap bool
 	// horizontal scroll offset when wrap is off
 	horizontalOffset int
+	// fullscreen mode
+	fullscreen bool
 }
 
 // New creates a logs model with sensible defaults.
@@ -61,9 +63,10 @@ func New(width, height int, maxLines int, service docker.ServiceEntry) *Model {
 		ServiceEntry: service,
 		linesChan:    nil,
 		errChan:      nil,
-		follow:       true, // auto-follow by default
-		wrap:         true, // wrap lines by default
+		follow:           true, // auto-follow by default
+		wrap:             true, // wrap lines by default
 		horizontalOffset: 0,
+		fullscreen:       false,
 	}
 }
 
@@ -95,6 +98,30 @@ func (m *Model) getWrap() bool {
 	return m.wrap
 }
 
+func (m *Model) setFullscreen(f bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.fullscreen = f
+}
+
+func (m *Model) getFullscreen() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.fullscreen
+}
+
+// GetFullscreen is exported for app to check fullscreen status
+func (m *Model) GetFullscreen() bool {
+	return m.getFullscreen()
+}
+
+// GetSearchMode is exported for app to check search mode status
+func (m *Model) GetSearchMode() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.mode == "search"
+}
+
 // ShortHelpItems stays compatible with your helpbar interface.
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	if m.mode == "search" {
@@ -108,8 +135,9 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	entries := []helpbar.HelpEntry{
 		{Key: "/", Desc: "search"},
 		{Key: "n/N", Desc: "next/prev"},
-		{Key: "f", Desc: "toggle follow"},
+		{Key: "s", Desc: "Toggle AutoScroll"},
 		{Key: "w", Desc: "toggle wrap"},
+		{Key: "f", Desc: "fullscreen"},
 	}
 	
 	// Show left/right help only when wrap is off

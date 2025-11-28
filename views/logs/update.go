@@ -133,6 +133,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		return nil
 
+	case FullscreenToggledMsg:
+		// Fullscreen mode is handled in the View() method
+		// Just trigger a re-render
+		return nil
+
 	case tea.WindowSizeMsg:
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height

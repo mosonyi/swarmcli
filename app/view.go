@@ -8,6 +8,12 @@ import (
 )
 
 func (m *Model) View() string {
+	// Check if current view has fullscreen mode enabled
+	if logsView, ok := m.currentView.(interface{ GetFullscreen() bool }); ok && logsView.GetFullscreen() {
+		// Fullscreen mode: show only the current view (no helpbar, no stackbar)
+		return m.currentView.View()
+	}
+
 	systemInfo := m.systemInfo.View()
 
 	help := helpbar.New(m.viewport.Width, systeminfoview.Height).

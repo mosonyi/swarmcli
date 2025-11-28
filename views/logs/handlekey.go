@@ -6,7 +6,24 @@ import (
 
 func HandleKey(m *Model, k tea.KeyMsg) tea.Cmd {
 	switch k.String() {
-	case "q", "esc":
+	case "q":
+		m.Visible = false
+		return nil
+	case "esc":
+		// If in search mode, exit search mode
+		if m.mode == "search" {
+			m.mode = "normal"
+			return nil
+		}
+		// If in fullscreen, exit fullscreen instead of closing view
+		if m.getFullscreen() {
+			m.setFullscreen(false)
+			l().Infof("[logsview] 'esc' key pressed: exiting fullscreen")
+			return func() tea.Msg {
+				return FullscreenToggledMsg{}
+			}
+		}
+		// Otherwise, close the view
 		m.Visible = false
 		return nil
 	case "/":
@@ -36,13 +53,22 @@ func HandleKey(m *Model, k tea.KeyMsg) tea.Cmd {
 			m.scrollToMatch()
 		}
 		return nil
-	case "f":
+	case "s":
 		// toggle follow mode
 		oldFollow := m.getFollow()
 		newFollow := !oldFollow
 		m.setFollow(newFollow)
-		l().Infof("[logsview] 'f' key pressed: follow %v -> %v", oldFollow, newFollow)
+		l().Infof("[logsview] 's' key pressed: follow %v -> %v", oldFollow, newFollow)
 		return nil
+	case "f":
+		// toggle fullscreen mode
+		oldFullscreen := m.getFullscreen()
+		newFullscreen := !oldFullscreen
+		m.setFullscreen(newFullscreen)
+		l().Infof("[logsview] 'f' key pressed: fullscreen %v -> %v", oldFullscreen, newFullscreen)
+		return func() tea.Msg {
+			return FullscreenToggledMsg{}
+		}
 	case "w":
 		// toggle wrap mode
 		oldWrap := m.getWrap()
