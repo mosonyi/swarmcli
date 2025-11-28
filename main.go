@@ -15,7 +15,10 @@ var (
 )
 
 func init() {
+	app.SetVersion(version)
 	app.Init()
+	// Log version info for debugging
+	swarmlog.L().Infof("swarmcli version=%s commit=%s date=%s", version, commit, date)
 }
 
 func main() {

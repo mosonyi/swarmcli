@@ -82,6 +82,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		cmd = m.systemInfo.Update(msg)
 		return m, cmd
+	
+	case systeminfoview.SlowStatusMsg:
+		var cmd tea.Cmd
+		cmd = m.systemInfo.Update(msg)
+		return m, cmd
+	
+	case systeminfoview.TickMsg:
+		var cmd tea.Cmd
+		cmd = m.systemInfo.Update(msg)
+		return m, cmd
+	
+	case systeminfoview.SpinnerTickMsg:
+		var cmd tea.Cmd
+		cmd = m.systemInfo.Update(msg)
+		return m, cmd
 
 	default:
 		cmd := m.delegateToCurrentView(msg)

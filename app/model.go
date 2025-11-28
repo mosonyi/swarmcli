@@ -55,7 +55,12 @@ func InitialModel() *Model {
 // and is passed into the tea.NewProgram function.
 func (m *Model) Init() tea.Cmd {
 	// "" loads all stacks on all nodes
-	return tea.Batch(tick(), loadSnapshotAsync(), systeminfoview.LoadStatus())
+	return tea.Batch(
+		tick(), 
+		loadSnapshotAsync(), 
+		systeminfoview.LoadStatus(),
+		m.systemInfo.Init(), // Initialize systeminfo's tick commands
+	)
 }
 
 func (m *Model) switchToView(name string, data any) tea.Cmd {
