@@ -1,9 +1,10 @@
 package helpbar
 
 import (
-	"github.com/charmbracelet/lipgloss"
 	"strings"
 	"swarmcli/ui"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 type HelpEntry struct {
@@ -63,8 +64,10 @@ func (m *Model) View(systemInfo string) string {
 
 	itemStyle := ui.HelpStyle.Padding(0).Margin(0)
 
+	// Reserve space for logo
+	logoWidth := 32 // Increased to give more room for the logo
 	infoWidth := lipgloss.Width(systemInfo)
-	availableWidth := m.width - infoWidth
+	availableWidth := m.width - infoWidth - logoWidth
 	if availableWidth < m.minColWidth {
 		// Not enough space to render help, just return systemInfo
 		return systemInfo
@@ -125,5 +128,19 @@ func (m *Model) View(systemInfo string) string {
 		Align(lipgloss.Left).
 		Render(helpBlock)
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, systemInfo, helpAligned)
+	// Add SWC logo on the right side
+	logo := `   ___________      ___________  
+ /   _____/  \    /  \_   ___ \ 
+ \_____  \\   \/\/   /    \  \/ 
+ /        \\        /\     \____
+/_______  / \__/\  /  \______  /
+        \/       \/          \/`
+
+	logoStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("220")).
+		Bold(true)
+
+	swcLogo := logoStyle.Render(logo)
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, systemInfo, helpAligned, "  ", swcLogo)
 }
