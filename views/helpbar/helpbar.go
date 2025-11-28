@@ -2,7 +2,6 @@ package helpbar
 
 import (
 	"strings"
-	"swarmcli/ui"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -62,8 +61,6 @@ func (m *Model) View(systemInfo string) string {
 		return systemInfo
 	}
 
-	itemStyle := ui.HelpStyle.Padding(0).Margin(0)
-
 	// Reserve space for logo
 	logoWidth := 32 // Increased to give more room for the logo
 	infoWidth := lipgloss.Width(systemInfo)
@@ -73,51 +70,70 @@ func (m *Model) View(systemInfo string) string {
 		return systemInfo
 	}
 
-	// Calculate max columns we can fit horizontally
+	// Fixed: 5 rows per column
+	rowsPerColumn := 5
+	
+	// Calculate how many columns we need
+	numCols := (len(allHelp) + rowsPerColumn - 1) / rowsPerColumn
+	
+	// Check if we have space for all columns
 	maxCols := availableWidth / m.minColWidth
 	if maxCols < 1 {
 		maxCols = 1
 	}
-	if maxCols > len(allHelp) {
-		maxCols = len(allHelp)
+	if numCols > maxCols {
+		numCols = maxCols
 	}
 
-	// Calculate rows needed (max rows is limited by height)
-	maxRows := m.height
-	if maxRows < 1 {
-		maxRows = 1
-	}
-
-	// Use min of rows needed and maxRows
-	requiredRows := (len(allHelp) + maxCols - 1) / maxCols
-	numRows := requiredRows
-	if numRows > maxRows {
-		numRows = maxRows
-	}
-
-	// Prepare columns filled top-to-bottom first
-	columns := make([][]HelpEntry, maxCols)
+	// Prepare columns filled top-to-bottom
+	columns := make([][]HelpEntry, numCols)
 
 	for i, entry := range allHelp {
-		col := i / numRows // Fill columns top to bottom
-		if col >= maxCols {
+		col := i / rowsPerColumn
+		if col >= numCols {
 			// Skip items that don't fit
 			break
 		}
 		columns[col] = append(columns[col], entry)
 	}
 
-	// Render columns
+	// Render columns with table formatting
+	keyStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("39")).
+		Bold(true)
+	
 	var renderedCols []string
-	for _, col := range columns {
+	for colIdx, col := range columns {
+		// Find max key length in this column for alignment (visible length)
+		maxKeyLen := 0
+		for _, entry := range col {
+			keyText := "<" + entry.Key + ">"
+			keyLen := lipgloss.Width(keyText)
+			if keyLen > maxKeyLen {
+				maxKeyLen = keyLen
+			}
+		}
+		
 		var lines []string
 		for _, entry := range col {
-			line := itemStyle.Render(entry.Key) + "    " + entry.Desc
+			styledKey := keyStyle.Render("<" + entry.Key + ">")
+			// Calculate visible padding needed using lipgloss.Width for proper Unicode handling
+			keyText := "<" + entry.Key + ">"
+			visibleKeyLen := lipgloss.Width(keyText)
+			padding := maxKeyLen - visibleKeyLen
+			line := styledKey + strings.Repeat(" ", padding+2) + entry.Desc
 			lines = append(lines, line)
 		}
+		
+		colContent := strings.Join(lines, "\n")
+		
+		// Add spacing between columns (3 spaces)
+		if colIdx > 0 {
+			renderedCols = append(renderedCols, "   ")
+		}
+		
 		colBlock := lipgloss.NewStyle().
-			Width(m.minColWidth).
-			Render(strings.Join(lines, "\n"))
+			Render(colContent)
 		renderedCols = append(renderedCols, colBlock)
 	}
 
@@ -137,7 +153,7 @@ func (m *Model) View(systemInfo string) string {
         \/       \/          \/`
 
 	logoStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("220")).
+		Foreground(lipgloss.Color("214")).
 		Bold(true)
 
 	swcLogo := logoStyle.Render(logo)

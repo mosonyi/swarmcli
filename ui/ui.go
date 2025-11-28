@@ -17,7 +17,7 @@ var (
 				Foreground(lipgloss.Color("75")).
 				Bold(true)
 
-	FrameBorderColor = lipgloss.Color("240")
+	FrameBorderColor = lipgloss.Color("117")
 )
 
 // RenderFramedBox draws a bordered frame with title, optional header, and content.
@@ -46,6 +46,9 @@ func RenderFramedBox(title, header, content, footer string, width int) string {
 
 	borderWidth := width - 2 // left/right borders
 
+	// Border style
+	borderStyle := lipgloss.NewStyle().Foreground(FrameBorderColor)
+
 	// Top border with centered title
 	leftPad := (borderWidth - lipgloss.Width(titleStyled)) / 2
 	if leftPad < 0 {
@@ -57,10 +60,12 @@ func RenderFramedBox(title, header, content, footer string, width int) string {
 	}
 
 	topLine := fmt.Sprintf(
-		"╭%s%s%s╮",
-		strings.Repeat("─", leftPad),
+		"%s%s%s%s%s",
+		borderStyle.Render("╭"),
+		borderStyle.Render(strings.Repeat("─", leftPad)),
 		titleStyled,
-		strings.Repeat("─", rightPad),
+		borderStyle.Render(strings.Repeat("─", rightPad)),
+		borderStyle.Render("╮"),
 	)
 
 	// Box lines start with top border
@@ -68,21 +73,33 @@ func RenderFramedBox(title, header, content, footer string, width int) string {
 
 	// Optional header
 	if header != "" {
-		boxLines = append(boxLines, fmt.Sprintf("│%s│", padLine(headerStyled, borderWidth)))
+		boxLines = append(boxLines, fmt.Sprintf("%s%s%s", 
+			borderStyle.Render("│"), 
+			padLine(headerStyled, borderWidth), 
+			borderStyle.Render("│")))
 	}
 
 	// Content
 	for _, l := range lines {
-		boxLines = append(boxLines, fmt.Sprintf("│%s│", padLine(l, borderWidth)))
+		boxLines = append(boxLines, fmt.Sprintf("%s%s%s", 
+			borderStyle.Render("│"), 
+			padLine(l, borderWidth), 
+			borderStyle.Render("│")))
 	}
 
 	// Optional footer (above bottom border)
 	for _, fl := range footerLines {
-		boxLines = append(boxLines, fmt.Sprintf("│%s│", padLine(fl, borderWidth)))
+		boxLines = append(boxLines, fmt.Sprintf("%s%s%s", 
+			borderStyle.Render("│"), 
+			padLine(fl, borderWidth), 
+			borderStyle.Render("│")))
 	}
 
 	// Bottom border
-	bottomLine := fmt.Sprintf("╰%s╯", strings.Repeat("─", borderWidth))
+	bottomLine := fmt.Sprintf("%s%s%s", 
+		borderStyle.Render("╰"), 
+		borderStyle.Render(strings.Repeat("─", borderWidth)), 
+		borderStyle.Render("╯"))
 	boxLines = append(boxLines, bottomLine)
 
 	return strings.Join(boxLines, "\n")

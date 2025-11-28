@@ -77,7 +77,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "i", Desc: "Inspect"},
 		{Key: "Enter", Desc: "Check"},
 		{Key: "e", Desc: "Edit"},
-		{Key: "r", Desc: "rotate"},
+		{Key: "r", Desc: "Rotate"},
 		{Key: "q", Desc: "Back"},
 	}
 }

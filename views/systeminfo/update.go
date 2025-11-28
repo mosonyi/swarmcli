@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
@@ -24,9 +25,19 @@ func (m *Model) buildContent() string {
 }
 
 func content(host, version, cpu, mem string, containers, services int) string {
+	labelStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("214")).
+		Bold(true)
+	
+	// Pad labels to align values
 	return fmt.Sprintf(
-		"Host: %s\nVersion: %s\nCPU: %s\nMEM: %s\nContainers: %d\nServices: %d",
-		host, version, cpu, mem, containers, services,
+		"%s %s\n%s %s\n%s %s\n%s %s\n%s %d\n%s %d",
+		labelStyle.Render("Host:      "), host,
+		labelStyle.Render("Version:   "), version,
+		labelStyle.Render("CPU:       "), cpu,
+		labelStyle.Render("MEM:       "), mem,
+		labelStyle.Render("Containers:"), containers,
+		labelStyle.Render("Services:  "), services,
 	)
 }
 

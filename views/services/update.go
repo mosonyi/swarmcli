@@ -205,7 +205,7 @@ func (m *Model) setRenderItem() {
 		stackName := truncateWithEllipsis(e.StackName, maxStack)
 
 		line := fmt.Sprintf(
-			"%-*s  %-*s  %*s",
+			"%-*s        %-*s        %*s",
 			maxService, serviceName,
 			maxStack, stackName,
 			replicaWidth, replicas,
@@ -213,6 +213,12 @@ func (m *Model) setRenderItem() {
 
 		if selected {
 			line = ui.CursorStyle.Render(line)
+		} else {
+			// Apply light blue color to the entire line (preserving replica colors)
+			// Since replicas already has color styling, we need to keep it separate
+			itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
+			serviceAndStack := fmt.Sprintf("%-*s        %-*s        ", maxService, serviceName, maxStack, stackName)
+			line = itemStyle.Render(serviceAndStack) + replicas
 		}
 		return line
 	}

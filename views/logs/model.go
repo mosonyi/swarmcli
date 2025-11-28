@@ -126,26 +126,26 @@ func (m *Model) GetSearchMode() bool {
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	if m.mode == "search" {
 		return []helpbar.HelpEntry{
-			{Key: "enter", Desc: "confirm"},
-			{Key: "esc", Desc: "cancel"},
-			{Key: "n/N", Desc: "next/prev"},
+			{Key: "enter", Desc: "Confirm"},
+			{Key: "esc", Desc: "Cancel"},
+			{Key: "n/N", Desc: "Next/prev"},
 		}
 	}
 	
 	entries := []helpbar.HelpEntry{
-		{Key: "/", Desc: "search"},
-		{Key: "n/N", Desc: "next/prev"},
+		{Key: "/", Desc: "Search"},
+		{Key: "n/N", Desc: "Next/prev"},
 		{Key: "s", Desc: "Toggle AutoScroll"},
-		{Key: "w", Desc: "toggle wrap"},
-		{Key: "f", Desc: "fullscreen"},
+		{Key: "w", Desc: "Toggle wrap"},
+		{Key: "f", Desc: "Fullscreen"},
 	}
 	
 	// Show left/right help only when wrap is off
 	if !m.getWrap() {
-		entries = append(entries, helpbar.HelpEntry{Key: "←/→", Desc: "scroll"})
+		entries = append(entries, helpbar.HelpEntry{Key: "←/→", Desc: "Scroll"})
 	}
 	
-	entries = append(entries, helpbar.HelpEntry{Key: "q", Desc: "close"})
+	entries = append(entries, helpbar.HelpEntry{Key: "q", Desc: "Close"})
 	return entries
 }
 

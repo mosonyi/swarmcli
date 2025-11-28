@@ -10,7 +10,7 @@ import (
 var (
 	BorderStyle = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("#874BFD")).
+			BorderForeground(lipgloss.Color("117")).
 			Padding(0, 1)
 
 	StatusStyle = lipgloss.NewStyle().
@@ -19,7 +19,7 @@ var (
 
 	ListStyle = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("#FFD700")).
+			BorderForeground(lipgloss.Color("117")).
 			Margin(1, 0).
 			Padding(1)
 

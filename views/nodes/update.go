@@ -10,6 +10,7 @@ import (
 	servicesview "swarmcli/views/services"
 	"swarmcli/views/view"
 
+	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -87,6 +88,8 @@ func (m *Model) SetContent(msg Msg) {
 	m.List.ApplyFilter()
 	m.List.Cursor = 0
 
+	// Calculate column widths for all columns
+	m.colWidths = calcColumnWidths(msg.Entries)
 	m.setRenderItem()
 
 	if m.ready {
@@ -96,27 +99,30 @@ func (m *Model) SetContent(msg Msg) {
 }
 
 func (m *Model) setRenderItem() {
-	// Compute column widths based on all entries
+	// Still need to call this for filterable list internals
 	m.List.ComputeAndSetColWidth(func(n docker.NodeEntry) string {
 		return n.Hostname
 	}, 15)
 
+	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
+	
 	m.List.RenderItem = func(n docker.NodeEntry, selected bool, colWidth int) string {
 		manager := "no"
 		if n.Manager {
 			manager = "yes"
 		}
+		// Use the pre-calculated column widths instead of the single colWidth
 		line := fmt.Sprintf(
-			"%-*s  %-*s  %-*s  %-*s  %-*s",
-			colWidth, n.Hostname,
-			colWidth, n.Role,
-			colWidth, n.State,
-			colWidth, manager,
-			colWidth, n.Addr,
+			"%-*s        %-*s        %-*s        %-*s        %-*s",
+			m.colWidths["Hostname"], n.Hostname,
+			m.colWidths["Role"], n.Role,
+			m.colWidths["State"], n.State,
+			m.colWidths["Manager"], manager,
+			m.colWidths["Addr"], n.Addr,
 		)
 		if selected {
 			return ui.CursorStyle.Render(line)
 		}
-		return line
+		return itemStyle.Render(line)
 	}
 }

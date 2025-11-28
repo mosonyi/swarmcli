@@ -40,7 +40,7 @@ func (m *Model) Name() string {
 
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
-		{Key: "q", Desc: "close"},
+		{Key: "q", Desc: "Close"},
 	}
 }
 

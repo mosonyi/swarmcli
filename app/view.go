@@ -17,7 +17,7 @@ func (m *Model) View() string {
 	systemInfo := m.systemInfo.View()
 
 	help := helpbar.New(m.viewport.Width, systeminfoview.Height).
-		WithGlobalHelp([]helpbar.HelpEntry{{Key: "q", Desc: "quit"}, {Key: "?", Desc: "help"}}).
+		WithGlobalHelp([]helpbar.HelpEntry{{Key: "q", Desc: "Quit"}, {Key: "?", Desc: "Help"}}).
 		WithViewHelp(m.currentView.ShortHelpItems()).
 		View(systemInfo)
 

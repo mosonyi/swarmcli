@@ -11,11 +11,12 @@ import (
 )
 
 type Model struct {
-	List    filterlist.FilterableList[docker.NodeEntry]
-	Visible bool
-	ready   bool
-	width   int
-	height  int
+	List       filterlist.FilterableList[docker.NodeEntry]
+	Visible    bool
+	ready      bool
+	width      int
+	height     int
+	colWidths  map[string]int
 }
 
 func New(width, height int) *Model {
@@ -47,11 +48,10 @@ func (m *Model) Name() string {
 
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
-		{Key: "i", Desc: "inspect"},
+		{Key: "i", Desc: "Inspect"},
 		{Key: "p", Desc: "ps"},
-		{Key: "k/up", Desc: "scr up"},
-		{Key: "j/down", Desc: "scr down"},
-		{Key: "q", Desc: "close"},
+		{Key: "↑/↓", Desc: "Navigate"},
+		{Key: "q", Desc: "Close"},
 	}
 }
 

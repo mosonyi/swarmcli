@@ -8,6 +8,7 @@ import (
 	servicesview "swarmcli/views/services"
 	"swarmcli/views/view"
 
+	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -83,11 +84,13 @@ func (m *Model) setRenderItem() {
 	}, 15)
 
 	// Update RenderItem to use computed colWidth
+	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
+	
 	m.List.RenderItem = func(s docker.StackEntry, selected bool, colWidth int) string {
-		line := fmt.Sprintf("%-*s %3d", colWidth, s.Name, s.ServiceCount)
+		line := fmt.Sprintf("%-*s        %-d", colWidth, s.Name, s.ServiceCount)
 		if selected {
 			return ui.CursorStyle.Render(line)
 		}
-		return line
+		return itemStyle.Render(line)
 	}
 }

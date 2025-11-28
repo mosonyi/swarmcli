@@ -62,3 +62,8 @@ func (f *FilterableList[T]) ComputeAndSetColWidth(renderName func(item T) string
 		f.colWidth = maxName
 	}
 }
+
+// GetColWidth returns the computed column width
+func (f *FilterableList[T]) GetColWidth() int {
+	return f.colWidth
+}
