@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
+
 	swarmlog "swarmcli/utils/log"
 
 	"github.com/docker/docker/client"
@@ -28,11 +30,28 @@ type dockerContext struct {
 	} `json:"Storage"`
 }
 
-// GetClient returns a Docker SDK client configured based on the current Docker context.
+// --- Singleton vars ---
+
+var (
+	initOnce sync.Once
+	cli      *client.Client
+	initErr  error
+)
+
+// GetClient returns a cached Docker client (singleton).
+// On first call it initializes the client; afterwards it returns the cached one.
 func GetClient() (*client.Client, error) {
+	initOnce.Do(func() {
+		initErr = initClient()
+	})
+	return cli, initErr
+}
+
+// initClient performs your real initialization logic
+func initClient() error {
 	ctxNameBytes, err := exec.Command("docker", "context", "show").Output()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get docker context: %w", err)
+		return fmt.Errorf("failed to get docker context: %w", err)
 	}
 	ctxName := string(ctxNameBytes)
 	if len(ctxName) > 0 && ctxName[len(ctxName)-1] == '\n' {
@@ -41,15 +60,15 @@ func GetClient() (*client.Client, error) {
 
 	inspectOut, err := exec.Command("docker", "context", "inspect", ctxName).Output()
 	if err != nil {
-		return nil, fmt.Errorf("failed to inspect context: %w", err)
+		return fmt.Errorf("failed to inspect context: %w", err)
 	}
 
 	var contexts []dockerContext
 	if err := json.Unmarshal(inspectOut, &contexts); err != nil {
-		return nil, fmt.Errorf("failed to parse context JSON: %w", err)
+		return fmt.Errorf("failed to parse context JSON: %w", err)
 	}
 	if len(contexts) == 0 {
-		return nil, fmt.Errorf("no context info found for %s", ctxName)
+		return fmt.Errorf("no context info found for %s", ctxName)
 	}
 	ctx := contexts[0]
 
@@ -57,7 +76,6 @@ func GetClient() (*client.Client, error) {
 	skipVerify := ctx.Endpoints.Docker.SkipTLSVerify
 	tlsPath := ctx.Storage.TLSPath
 
-	// If certs are in a subfolder named "docker", prefer that
 	dockerTLSPath := filepath.Join(tlsPath, "docker")
 	if stat, err := os.Stat(dockerTLSPath); err == nil && stat.IsDir() {
 		tlsPath = dockerTLSPath
@@ -76,24 +94,22 @@ func GetClient() (*client.Client, error) {
 		client.WithAPIVersionNegotiation(),
 	}
 
-	// Configure TLS if certs exist
 	if fileExists(ca) && fileExists(cert) && fileExists(key) {
 		opts = append(opts, client.WithTLSClientConfig(ca, cert, key))
 	} else if skipVerify {
 		l().Infof("[GetClient] skipVerify=true but no certs found")
 	}
 
-	cli, err := client.NewClientWithOpts(opts...)
+	cli, err = client.NewClientWithOpts(opts...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create docker client: %w", err)
+		return fmt.Errorf("failed to create docker client: %w", err)
 	}
 
-	// Verify connection
 	if _, err := cli.Ping(context.Background()); err != nil {
-		return nil, fmt.Errorf("ping failed: %w", err)
+		return fmt.Errorf("ping failed: %w", err)
 	}
 
-	return cli, nil
+	return nil
 }
 
 func fileExists(path string) bool {
