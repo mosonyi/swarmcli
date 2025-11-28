@@ -39,6 +39,10 @@ type Model struct {
 
 	// follow behavior
 	follow bool
+	// wrap behavior
+	wrap bool
+	// horizontal scroll offset when wrap is off
+	horizontalOffset int
 }
 
 // New creates a logs model with sensible defaults.
@@ -58,6 +62,8 @@ func New(width, height int, maxLines int, service docker.ServiceEntry) *Model {
 		linesChan:    nil,
 		errChan:      nil,
 		follow:       true, // auto-follow by default
+		wrap:         true, // wrap lines by default
+		horizontalOffset: 0,
 	}
 }
 
@@ -71,6 +77,24 @@ func (m *Model) setFollow(f bool) {
 	m.follow = f
 }
 
+func (m *Model) getFollow() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.follow
+}
+
+func (m *Model) setWrap(w bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.wrap = w
+}
+
+func (m *Model) getWrap() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.wrap
+}
+
 // ShortHelpItems stays compatible with your helpbar interface.
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	if m.mode == "search" {
@@ -80,12 +104,21 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 			{Key: "n/N", Desc: "next/prev"},
 		}
 	}
-	return []helpbar.HelpEntry{
+	
+	entries := []helpbar.HelpEntry{
 		{Key: "/", Desc: "search"},
 		{Key: "n/N", Desc: "next/prev"},
 		{Key: "f", Desc: "toggle follow"},
-		{Key: "q", Desc: "close"},
+		{Key: "w", Desc: "toggle wrap"},
 	}
+	
+	// Show left/right help only when wrap is off
+	if !m.getWrap() {
+		entries = append(entries, helpbar.HelpEntry{Key: "←/→", Desc: "scroll"})
+	}
+	
+	entries = append(entries, helpbar.HelpEntry{Key: "q", Desc: "close"})
+	return entries
 }
 
 func (m *Model) OnEnter() tea.Cmd {

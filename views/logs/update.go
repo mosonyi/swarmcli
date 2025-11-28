@@ -6,6 +6,7 @@ import (
 	"swarmcli/utils"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/muesli/reflow/wordwrap"
 )
 
 // Update processes Tea messages.
@@ -26,10 +27,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// store line as-is (no newline); rendering will join with '\n'
 		m.lines = append(m.lines, msg.Line)
 
+		// track how many lines we're dropping from the top
+		linesDropped := 0
+		
 		// trim if over MaxLines
 		if m.MaxLines > 0 && len(m.lines) > m.MaxLines {
 			// drop older lines
 			start := len(m.lines) - m.MaxLines
+			linesDropped = start
 			newBuf := make([]string, 0, m.MaxLines)
 			newBuf = append(newBuf, m.lines[start:]...)
 			m.lines = newBuf
@@ -40,20 +45,43 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.searchMatches = append(m.searchMatches, len(m.lines)-1)
 		}
 		totalLines := len(m.lines)
+		shouldFollow := m.follow
 		m.mu.Unlock()
 
 		if m.ready {
-			m.viewport.SetContent(m.buildContent())
-
-			// auto-follow behavior: only keep bottom when follow=true and user is at bottom
-			if m.follow {
-				// if viewport thinks it's at bottom (or close), goto bottom
-				if m.viewport.YOffset+m.viewport.Height >= m.viewport.TotalLineCount()-1 {
-					m.viewport.GotoBottom()
+			// auto-follow behavior: only scroll to bottom when follow is enabled
+			if shouldFollow {
+				m.viewport.SetContent(m.buildContent())
+				m.viewport.GotoBottom()
+				l().Debugf("[logsview] auto-scrolled to bottom (follow=true)")
+			} else {
+				// Save current offset before updating content
+				savedOffset := m.viewport.YOffset
+				m.viewport.SetContent(m.buildContent())
+				
+				// Adjust offset if we dropped lines from the top
+				newOffset := savedOffset
+				if linesDropped > 0 {
+					newOffset = savedOffset - linesDropped
+					if newOffset < 0 {
+						newOffset = 0
+					}
 				}
+				
+				// Ensure offset is within bounds (important when wrapping changes line count)
+				maxOffset := m.viewport.TotalLineCount() - m.viewport.Height
+				if maxOffset < 0 {
+					maxOffset = 0
+				}
+				if newOffset > maxOffset {
+					newOffset = maxOffset
+				}
+				
+				m.viewport.YOffset = newOffset
+				l().Debugf("[logsview] NOT scrolling (follow=false), YOffset=%d->%d (dropped %d lines)", savedOffset, newOffset, linesDropped)
 			}
-			l().Debugf("[logsview] appended line; total=%d YOffset=%d Height=%d TotalLineCount=%d",
-				totalLines, m.viewport.YOffset, m.viewport.Height, m.viewport.TotalLineCount())
+			l().Debugf("[logsview] appended line; total=%d YOffset=%d Height=%d TotalLineCount=%d follow=%v",
+				totalLines, m.viewport.YOffset, m.viewport.Height, m.viewport.TotalLineCount(), shouldFollow)
 		}
 		return m.readOneLineCmd()
 
@@ -75,6 +103,33 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		l().Debugf("[logsview] stream closed")
 		if m.ready {
 			m.viewport.SetContent(m.buildContent())
+		}
+		return nil
+
+	case WrapToggledMsg:
+		// Refresh viewport content with new wrap setting
+		if m.ready {
+			// Reset to a safe position when toggling wrap
+			// because line count changes dramatically with wrapping
+			savedOffset := m.viewport.YOffset
+			m.viewport.SetContent(m.buildContent())
+			
+			// Ensure YOffset is within bounds
+			maxOffset := m.viewport.TotalLineCount() - m.viewport.Height
+			if maxOffset < 0 {
+				maxOffset = 0
+			}
+			
+			// If we were following, go to bottom
+			shouldFollow := m.getFollow()
+			if shouldFollow {
+				m.viewport.GotoBottom()
+			} else if savedOffset > maxOffset {
+				// Adjust offset to stay within bounds
+				m.viewport.YOffset = maxOffset
+			} else {
+				m.viewport.YOffset = savedOffset
+			}
 		}
 		return nil
 
@@ -186,7 +241,41 @@ func (m *Model) buildContent() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// Join lines first
 	full := strings.Join(m.lines, "\n")
+	
+	// Apply wrapping based on wrap setting
+	if m.wrap && m.viewport.Width > 0 {
+		// Wrap the entire content to viewport width
+		full = wordwrap.String(full, m.viewport.Width)
+	} else if !m.wrap && m.viewport.Width > 0 {
+		// When wrap is off, apply horizontal scrolling
+		lines := m.lines
+		processedLines := make([]string, len(lines))
+		
+		for i, line := range lines {
+			if len(line) <= m.horizontalOffset {
+				// Line is shorter than offset, show empty
+				processedLines[i] = ""
+			} else {
+				// Apply horizontal offset
+				visiblePart := line[m.horizontalOffset:]
+				
+				if len(visiblePart) > m.viewport.Width {
+					// Truncate and add > indicator
+					if m.viewport.Width > 1 {
+						processedLines[i] = visiblePart[:m.viewport.Width-1] + ">"
+					} else {
+						processedLines[i] = ">"
+					}
+				} else {
+					processedLines[i] = visiblePart
+				}
+			}
+		}
+		full = strings.Join(processedLines, "\n")
+	}
+
 	if m.mode == "search" && m.searchTerm != "" {
 		return utils.HighlightMatches(full, m.searchTerm)
 	}

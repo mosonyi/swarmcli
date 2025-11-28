@@ -17,14 +17,19 @@ func (m *Model) View() string {
 
 	// ---- Build dynamic title bar ----
 	followStatus := "off"
-	if m.follow {
+	if m.getFollow() {
 		followStatus = "on"
+	}
+	wrapStatus := "off"
+	if m.getWrap() {
+		wrapStatus = "on"
 	}
 
 	title := fmt.Sprintf(
-		"Service: %s • follow: %s",
+		"Service: %s • follow: %s • wrap: %s",
 		m.ServiceEntry.ServiceName,
 		followStatus,
+		wrapStatus,
 	)
 
 	// ---- Build header ----

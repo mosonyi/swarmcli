@@ -97,6 +97,10 @@ func (m *Model) View(systemInfo string) string {
 
 	for i, entry := range allHelp {
 		col := i / numRows // Fill columns top to bottom
+		if col >= maxCols {
+			// Skip items that don't fit
+			break
+		}
 		columns[col] = append(columns[col], entry)
 	}
 
