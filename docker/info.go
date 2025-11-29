@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/swarm"
@@ -55,7 +55,49 @@ func GetServiceCount() (int, error) {
 
 // ---------- Swarm Resource Usage ----------
 
-// GetSwarmCPUUsage returns actual CPU usage across running containers with sampling.
+// GetSwarmCPUCapacity returns total CPU cores across all nodes (fast).
+func GetSwarmCPUCapacity() (float64, error) {
+	c, err := GetClient()
+	if err != nil {
+		return 0, err
+	}
+
+	nodes, err := c.NodeList(context.Background(), swarm.NodeListOptions{})
+	if err != nil {
+		return 0, err
+	}
+
+	var totalCPUs float64
+	for _, node := range nodes {
+		if node.Status.State == swarm.NodeStateReady {
+			totalCPUs += float64(node.Description.Resources.NanoCPUs) / 1e9
+		}
+	}
+	return totalCPUs, nil
+}
+
+// GetSwarmMemCapacity returns total memory across all nodes (fast).
+func GetSwarmMemCapacity() (int64, error) {
+	c, err := GetClient()
+	if err != nil {
+		return 0, err
+	}
+
+	nodes, err := c.NodeList(context.Background(), swarm.NodeListOptions{})
+	if err != nil {
+		return 0, err
+	}
+
+	var totalMem int64
+	for _, node := range nodes {
+		if node.Status.State == swarm.NodeStateReady {
+			totalMem += node.Description.Resources.MemoryBytes
+		}
+	}
+	return totalMem, nil
+}
+
+// GetSwarmCPUUsage returns actual CPU usage across running containers.
 func GetSwarmCPUUsage() (string, error) {
 	c, err := GetClient()
 	if err != nil {
@@ -63,72 +105,90 @@ func GetSwarmCPUUsage() (string, error) {
 		return "N/A", err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	// Get running containers
+	ctx := context.Background()
 	containers, err := c.ContainerList(ctx, container.ListOptions{})
 	if err != nil {
 		l().Infof("GetSwarmCPUUsage: ContainerList error: %v", err)
 		return "N/A", err
 	}
 
-	l().Infof("GetSwarmCPUUsage: Found %d containers", len(containers))
-
 	if len(containers) == 0 {
 		return "0.0%", nil
 	}
 
-	// Calculate total CPU usage from containers (sample up to 3)
-	var totalCPUPercent float64
-	statsCount := 0
-	maxContainers := len(containers)
-	if maxContainers > 3 {
-		maxContainers = 3
-	}
-	
-	for i := 0; i < maxContainers; i++ {
-		cont := containers[i]
-		
-		stats, err := c.ContainerStats(context.Background(), cont.ID, false)
-		if err != nil {
-			l().Infof("GetSwarmCPUUsage: ContainerStats error for %s: %v", cont.ID[:12], err)
-			continue
-		}
-		
-		var s container.StatsResponse
-		decodeErr := json.NewDecoder(stats.Body).Decode(&s)
-		stats.Body.Close()
-		
-		if decodeErr != nil {
-			l().Infof("GetSwarmCPUUsage: Decode error for %s: %v", cont.ID[:12], decodeErr)
-			continue
-		}
+	l().Infof("GetSwarmCPUUsage: Collecting stats from %d containers in parallel", len(containers))
 
-		// Calculate CPU percentage for this container
-		cpuDelta := float64(s.CPUStats.CPUUsage.TotalUsage - s.PreCPUStats.CPUUsage.TotalUsage)
-		systemDelta := float64(s.CPUStats.SystemUsage - s.PreCPUStats.SystemUsage)
-		onlineCPUs := float64(s.CPUStats.OnlineCPUs)
-		
-		if onlineCPUs == 0 {
-			onlineCPUs = float64(len(s.CPUStats.CPUUsage.PercpuUsage))
-		}
-		
-		if systemDelta > 0 && onlineCPUs > 0 {
-			cpuPercent := (cpuDelta / systemDelta) * onlineCPUs * 100.0
-			totalCPUPercent += cpuPercent
-			statsCount++
-			l().Infof("GetSwarmCPUUsage: Container %s CPU: %.1f%%", cont.ID[:12], cpuPercent)
-		}
+	// Use goroutines to collect stats in parallel
+	type cpuResult struct {
+		percent float64
+		err     error
 	}
 
-	// Scale up if we sampled
-	if statsCount > 0 && len(containers) > maxContainers {
-		totalCPUPercent = totalCPUPercent * float64(len(containers)) / float64(maxContainers)
+	results := make(chan cpuResult, len(containers))
+	var wg sync.WaitGroup
+
+	for _, cont := range containers {
+		wg.Add(1)
+		go func(containerID string) {
+			defer wg.Done()
+
+			stats, err := c.ContainerStats(context.Background(), containerID, false)
+			if err != nil {
+				l().Infof("GetSwarmCPUUsage: ContainerStats error for %s: %v", containerID[:12], err)
+				results <- cpuResult{err: err}
+				return
+			}
+
+			var s container.StatsResponse
+			decodeErr := json.NewDecoder(stats.Body).Decode(&s)
+			stats.Body.Close()
+
+			if decodeErr != nil {
+				l().Infof("GetSwarmCPUUsage: Decode error for %s: %v", containerID[:12], decodeErr)
+				results <- cpuResult{err: decodeErr}
+				return
+			}
+
+			// Calculate CPU percentage
+			cpuDelta := float64(s.CPUStats.CPUUsage.TotalUsage - s.PreCPUStats.CPUUsage.TotalUsage)
+			systemDelta := float64(s.CPUStats.SystemUsage - s.PreCPUStats.SystemUsage)
+			onlineCPUs := float64(s.CPUStats.OnlineCPUs)
+
+			if onlineCPUs == 0 {
+				onlineCPUs = float64(len(s.CPUStats.CPUUsage.PercpuUsage))
+			}
+
+			var cpuPercent float64
+			if systemDelta > 0 && onlineCPUs > 0 {
+				cpuPercent = (cpuDelta / systemDelta) * onlineCPUs * 100.0
+			}
+
+			results <- cpuResult{percent: cpuPercent}
+		}(cont.ID)
 	}
 
-	result := fmt.Sprintf("%.1f%%", totalCPUPercent)
-	l().Infof("GetSwarmCPUUsage: Final result: %s (from %d containers)", result, statsCount)
+	// Close results channel after all goroutines complete
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results
+	var totalCPU float64
+	successCount := 0
+	for res := range results {
+		if res.err == nil {
+			totalCPU += res.percent
+			successCount++
+		}
+	}
+
+	if successCount == 0 {
+		return "0.0%", nil
+	}
+
+	result := fmt.Sprintf("%.1f%%", totalCPU)
+	l().Infof("GetSwarmCPUUsage: Final result: %s (from %d/%d containers)", result, successCount, len(containers))
 	return result, nil
 }
 
@@ -140,83 +200,87 @@ func GetSwarmMemUsage() (string, error) {
 		return "N/A", err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	// Get total memory from nodes
-	nodes, err := c.NodeList(ctx, swarm.NodeListOptions{})
-	if err != nil {
-		l().Infof("GetSwarmMemUsage: NodeList error: %v", err)
+	// Get total memory capacity from nodes
+	totalCapacity, err := GetSwarmMemCapacity()
+	if err != nil || totalCapacity == 0 {
+		l().Infof("GetSwarmMemUsage: failed to get capacity: %v", err)
 		return "N/A", err
 	}
 
-	var totalMemBytes int64
-	for _, node := range nodes {
-		totalMemBytes += node.Description.Resources.MemoryBytes
-	}
-
-	l().Infof("GetSwarmMemUsage: Total memory: %d bytes", totalMemBytes)
-
-	if totalMemBytes == 0 {
-		return "N/A", nil
-	}
-
-	// Get memory usage from containers (sample up to 10)
+	ctx := context.Background()
 	containers, err := c.ContainerList(ctx, container.ListOptions{})
 	if err != nil {
 		l().Infof("GetSwarmMemUsage: ContainerList error: %v", err)
 		return "N/A", err
 	}
 
-	l().Infof("GetSwarmMemUsage: Found %d containers", len(containers))
-
 	if len(containers) == 0 {
 		return "0.0%", nil
 	}
 
-	var usedMemBytes int64
-	statsCount := 0
-	maxContainers := len(containers)
-	if maxContainers > 3 {
-		maxContainers = 3
+	l().Infof("GetSwarmMemUsage: Collecting stats from %d containers in parallel", len(containers))
+
+	// Use goroutines to collect stats in parallel
+	type memResult struct {
+		usage int64
+		err   error
 	}
-	
-	for i := 0; i < maxContainers; i++ {
-		cont := containers[i]
-		
-		stats, err := c.ContainerStats(context.Background(), cont.ID, false)
-		if err != nil {
-			l().Infof("GetSwarmMemUsage: ContainerStats error for %s: %v", cont.ID[:12], err)
-			continue
+
+	results := make(chan memResult, len(containers))
+	var wg sync.WaitGroup
+
+	for _, cont := range containers {
+		wg.Add(1)
+		go func(containerID string) {
+			defer wg.Done()
+
+			stats, err := c.ContainerStats(context.Background(), containerID, false)
+			if err != nil {
+				l().Infof("GetSwarmMemUsage: ContainerStats error for %s: %v", containerID[:12], err)
+				results <- memResult{err: err}
+				return
+			}
+
+			var s container.StatsResponse
+			decodeErr := json.NewDecoder(stats.Body).Decode(&s)
+			stats.Body.Close()
+
+			if decodeErr != nil {
+				l().Infof("GetSwarmMemUsage: Decode error for %s: %v", containerID[:12], decodeErr)
+				results <- memResult{err: decodeErr}
+				return
+			}
+
+			results <- memResult{usage: int64(s.MemoryStats.Usage)}
+		}(cont.ID)
+	}
+
+	// Close results channel after all goroutines complete
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results
+	var totalUsedBytes int64
+	successCount := 0
+	for res := range results {
+		if res.err == nil {
+			totalUsedBytes += res.usage
+			successCount++
 		}
-		
-		var s container.StatsResponse
-		decodeErr := json.NewDecoder(stats.Body).Decode(&s)
-		stats.Body.Close()
-		
-		if decodeErr != nil {
-			l().Infof("GetSwarmMemUsage: Decode error for %s: %v", cont.ID[:12], decodeErr)
-			continue
-		}
-
-		usedMemBytes += int64(s.MemoryStats.Usage)
-		statsCount++
-		l().Infof("GetSwarmMemUsage: Container %s Mem: %d bytes", cont.ID[:12], s.MemoryStats.Usage)
 	}
 
-	// Scale up if we sampled
-	if statsCount > 0 && len(containers) > maxContainers {
-		usedMemBytes = usedMemBytes * int64(len(containers)) / int64(maxContainers)
-	}
-
-	if statsCount == 0 {
-		l().Infof("GetSwarmMemUsage: No stats collected")
+	if successCount == 0 {
 		return "0.0%", nil
 	}
 
-	memPercent := float64(usedMemBytes) / float64(totalMemBytes) * 100.0
+	// Calculate percentage
+	memPercent := (float64(totalUsedBytes) / float64(totalCapacity)) * 100.0
+
 	result := fmt.Sprintf("%.1f%%", memPercent)
-	l().Infof("GetSwarmMemUsage: Final result: %s (from %d containers)", result, statsCount)
+	l().Infof("GetSwarmMemUsage: Final result: %s (%.1f GB used of %.1f GB total, from %d/%d containers)",
+		result, float64(totalUsedBytes)/(1024*1024*1024), float64(totalCapacity)/(1024*1024*1024), successCount, len(containers))
 	return result, nil
 }
 

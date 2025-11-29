@@ -3,11 +3,13 @@ package systeminfoview
 import "time"
 
 type Msg struct {
-	context    string
-	cpu        string
-	mem        string
-	containers int
-	services   int
+	context     string
+	cpu         string
+	mem         string
+	cpuCapacity string
+	memCapacity string
+	containers  int
+	services    int
 }
 
 type SlowStatusMsg struct {

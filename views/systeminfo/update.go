@@ -17,7 +17,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	
 	case SlowStatusMsg:
 		m.updateCPUMem(msg)
-		return nil
+		// Schedule next tick 8 seconds after collection completes
+		return m.tickCmd()
 	
 	case TickMsg:
 		// Only show spinner on first load, keep previous values during refresh
@@ -26,8 +27,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.loadingMem = true
 			m.content = m.buildContent()
 		}
-		// Trigger slow status reload and schedule next tick
-		return tea.Batch(LoadSlowStatus(), m.tickCmd())
+		// Trigger slow status reload (will schedule next tick after completion)
+		return LoadSlowStatus()
 	
 	case SpinnerTickMsg:
 		// Fast animation tick - always keep running
@@ -97,22 +98,31 @@ func (m *Model) buildContent() string {
 func content(context, version, cpu, mem string, containers, services int) string {
 	labelStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("214")).
-		Bold(true)
+		Bold(true).
+		Width(15)
 	
-	// Pad labels to align values
+	// Use lipgloss Width to handle styled text properly
 	return fmt.Sprintf(
 		"%s %s\n%s %s\n%s %s\n%s %s\n%s %d\n%s %d",
-		labelStyle.Render("Context:   "), context,
-		labelStyle.Render("Version:   "), version,
-		labelStyle.Render("CPU:       "), cpu,
-		labelStyle.Render("MEM:       "), mem,
+		labelStyle.Render("Context:"), context,
+		labelStyle.Render("Version:"), version,
+		labelStyle.Render("CPU:"), cpu,
+		labelStyle.Render("MEM:"), mem,
 		labelStyle.Render("Containers:"), containers,
-		labelStyle.Render("Services:  "), services,
+		labelStyle.Render("Services:"), services,
 	)
 }
 
 func (m *Model) SetContent(msg Msg) {
 	m.context = msg.context
+	
+	// Update capacity if provided
+	if msg.cpuCapacity != "" {
+		m.cpuCapacity = msg.cpuCapacity
+	}
+	if msg.memCapacity != "" {
+		m.memCapacity = msg.memCapacity
+	}
 	
 	spinnerMarker := spinner.CharSets[14][0]
 	
