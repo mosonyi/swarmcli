@@ -1,6 +1,9 @@
 package servicesview
 
-import "swarmcli/docker"
+import (
+	"swarmcli/docker"
+	"time"
+)
 
 type Msg struct {
 	Title      string
@@ -10,3 +13,7 @@ type Msg struct {
 	Hostname   string
 	StackName  string
 }
+
+type TickMsg time.Time
+
+const PollInterval = 5 * time.Second

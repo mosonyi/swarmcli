@@ -3,6 +3,8 @@ package servicesview
 import (
 	"context"
 	"swarmcli/docker"
+	"swarmcli/utils/log"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -78,4 +80,42 @@ func LoadServicesForView(filterType FilterType, nodeID, stackName string) (entri
 		title = "All Services"
 	}
 	return
+}
+
+// CheckServicesCmd checks if services have changed and returns update message if so
+func CheckServicesCmd(lastHash string, filterType FilterType, nodeID, stackName string) tea.Cmd {
+	return func() tea.Msg {
+		logger := swarmlog.L()
+		logger.Info("CheckServicesCmd: Polling for service changes")
+		
+		_, err := docker.RefreshSnapshot()
+		if err != nil {
+			logger.Errorf("CheckServicesCmd: RefreshSnapshot failed: %v", err)
+			// Continue with cached snapshot
+		}
+		
+		entries, title := LoadServicesForView(filterType, nodeID, stackName)
+		newHash := computeServicesHash(entries)
+		
+		logger.Infof("CheckServicesCmd: lastHash=%s, newHash=%s, serviceCount=%d", 
+			lastHash[:8], newHash[:8], len(entries))
+		
+		// Only return update message if something changed
+		if newHash != lastHash {
+			logger.Info("CheckServicesCmd: Change detected! Refreshing service list")
+			return Msg{
+				Title:      title,
+				Entries:    entries,
+				FilterType: filterType,
+				NodeID:     nodeID,
+				StackName:  stackName,
+			}
+		}
+		
+		logger.Info("CheckServicesCmd: No changes detected, scheduling next poll")
+		// Schedule next poll in 5 seconds
+		return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
+			return TickMsg(t)
+		})()
+	}
 }

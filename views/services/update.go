@@ -6,6 +6,7 @@ import (
 	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
+	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/confirmdialog"
 	inspectview "swarmcli/views/inspect"
 	logsview "swarmcli/views/logs"
@@ -16,13 +17,28 @@ import (
 )
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
+	logger := swarmlog.L()
+	
 	switch msg := msg.(type) {
 
 	case Msg:
+		logger.Infof("ServicesView: Received Msg with %d entries", len(msg.Entries))
+		// Update the hash with new data
+		m.lastSnapshot = computeServicesHash(msg.Entries)
 		m.SetContent(msg)
 		m.Visible = true
 		m.List.Viewport.SetContent(m.List.View())
-		return nil
+		// Continue polling
+		return m.tickCmd()
+	
+	case TickMsg:
+		logger.Infof("ServicesView: Received TickMsg, visible=%v", m.Visible)
+		// Check for changes (this will return either a Msg or the next TickMsg)
+		if m.Visible {
+			return CheckServicesCmd(m.lastSnapshot, m.filterType, m.nodeID, m.stackName)
+		}
+		// Continue polling even if not visible
+		return m.tickCmd()
 
 	case tea.WindowSizeMsg:
 		m.List.Viewport.Width = msg.Width
@@ -133,10 +149,25 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) SetContent(msg Msg) {
+	logger := swarmlog.L()
+	logger.Infof("ServicesView.SetContent: Updating display with %d services", len(msg.Entries))
+	
 	m.title = msg.Title
+	
+	// Preserve current cursor position
+	oldCursor := m.List.Cursor
+	
 	m.List.Items = msg.Entries
 	m.List.ApplyFilter()
-	m.List.Cursor = 0
+	
+	// Restore cursor position, but ensure it's within bounds
+	if oldCursor < len(m.List.Filtered) {
+		m.List.Cursor = oldCursor
+	} else if len(m.List.Filtered) > 0 {
+		m.List.Cursor = len(m.List.Filtered) - 1
+	} else {
+		m.List.Cursor = 0
+	}
 
 	m.filterType = msg.FilterType
 	m.nodeID = msg.NodeID
