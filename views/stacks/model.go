@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"strings"
 	"swarmcli/docker"
-	"swarmcli/utils/log"
+	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/helpbar"
 	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"swarmcli/ui/components/filterable/list"
+	filterlist "swarmcli/ui/components/filterable/list"
 )
 
 type Model struct {
@@ -63,7 +63,7 @@ func computeStacksHash(entries []docker.StackEntry) string {
 		ServiceCount int
 		NodeCount    int
 	}
-	
+
 	states := make([]stackState, len(entries))
 	for i, e := range entries {
 		states[i] = stackState{
@@ -72,7 +72,7 @@ func computeStacksHash(entries []docker.StackEntry) string {
 			NodeCount:    e.NodeCount,
 		}
 	}
-	
+
 	data, _ := json.Marshal(states)
 	hash := sha256.Sum256(data)
 	return fmt.Sprintf("%x", hash)
@@ -115,19 +115,19 @@ func CheckStacksCmd(lastHash string, nodeID string) tea.Cmd {
 	return func() tea.Msg {
 		logger := swarmlog.L()
 		logger.Info("CheckStacksCmd: Polling for stack changes")
-		
+
 		stacks := LoadStacks(nodeID)
 		newHash := computeStacksHash(stacks)
-		
-		logger.Infof("CheckStacksCmd: lastHash=%s, newHash=%s, stackCount=%d", 
+
+		logger.Infof("CheckStacksCmd: lastHash=%s, newHash=%s, stackCount=%d",
 			lastHash[:8], newHash[:8], len(stacks))
-		
+
 		// Only return update message if something changed
 		if newHash != lastHash {
 			logger.Info("CheckStacksCmd: Change detected! Refreshing stack list")
 			return Msg{NodeID: nodeID, Stacks: stacks}
 		}
-		
+
 		logger.Info("CheckStacksCmd: No changes detected, scheduling next poll")
 		// Schedule next poll in 5 seconds
 		return tea.Tick(PollInterval, func(t time.Time) tea.Msg {

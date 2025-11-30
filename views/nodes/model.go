@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
 	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/helpbar"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -66,7 +66,7 @@ func computeNodesHash(entries []docker.NodeEntry) string {
 		Addr     string
 		Labels   map[string]string
 	}
-	
+
 	states := make([]nodeState, len(entries))
 	for i, e := range entries {
 		states[i] = nodeState{
@@ -79,7 +79,7 @@ func computeNodesHash(entries []docker.NodeEntry) string {
 			Labels:   e.Labels,
 		}
 	}
-	
+
 	data, _ := json.Marshal(states)
 	hash := sha256.Sum256(data)
 	return fmt.Sprintf("%x", hash)
@@ -122,19 +122,19 @@ func CheckNodesCmd(lastHash string) tea.Cmd {
 	return func() tea.Msg {
 		logger := swarmlog.L()
 		logger.Info("CheckNodesCmd: Polling for node changes")
-		
+
 		entries := LoadNodes()
 		newHash := computeNodesHash(entries)
-		
-		logger.Infof("CheckNodesCmd: lastHash=%s, newHash=%s, nodeCount=%d", 
+
+		logger.Infof("CheckNodesCmd: lastHash=%s, newHash=%s, nodeCount=%d",
 			lastHash[:8], newHash[:8], len(entries))
-		
+
 		// Only return update message if something changed
 		if newHash != lastHash {
 			logger.Info("CheckNodesCmd: Change detected! Refreshing node list")
 			return Msg{Entries: entries}
 		}
-		
+
 		logger.Info("CheckNodesCmd: No changes detected, scheduling next poll")
 		// Schedule next poll in 5 seconds
 		return tea.Tick(PollInterval, func(t time.Time) tea.Msg {

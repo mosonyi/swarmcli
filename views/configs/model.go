@@ -17,10 +17,10 @@ import (
 )
 
 type Model struct {
-	configsList        filterlist.FilterableList[configItem]
-	width              int
-	height             int
-	lastSnapshot       string // hash of last snapshot for change detection
+	configsList  filterlist.FilterableList[configItem]
+	width        int
+	height       int
+	lastSnapshot string // hash of last snapshot for change detection
 
 	state state
 	err   error
@@ -84,7 +84,7 @@ func computeConfigsHash(configs []docker.ConfigWithDecodedData) string {
 		Name    string
 		Version uint64
 	}
-	
+
 	states := make([]configState, len(configs))
 	for i, c := range configs {
 		states[i] = configState{
@@ -93,7 +93,7 @@ func computeConfigsHash(configs []docker.ConfigWithDecodedData) string {
 			Version: c.Config.Version.Index,
 		}
 	}
-	
+
 	data, _ := json.Marshal(states)
 	hash := sha256.Sum256(data)
 	return fmt.Sprintf("%x", hash)

@@ -3,7 +3,7 @@ package servicesview
 import (
 	"context"
 	"swarmcli/docker"
-	"swarmcli/utils/log"
+	swarmlog "swarmcli/utils/log"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -87,19 +87,19 @@ func CheckServicesCmd(lastHash string, filterType FilterType, nodeID, stackName 
 	return func() tea.Msg {
 		logger := swarmlog.L()
 		logger.Info("CheckServicesCmd: Polling for service changes")
-		
+
 		_, err := docker.RefreshSnapshot()
 		if err != nil {
 			logger.Errorf("CheckServicesCmd: RefreshSnapshot failed: %v", err)
 			// Continue with cached snapshot
 		}
-		
+
 		entries, title := LoadServicesForView(filterType, nodeID, stackName)
 		newHash := computeServicesHash(entries)
-		
-		logger.Infof("CheckServicesCmd: lastHash=%s, newHash=%s, serviceCount=%d", 
+
+		logger.Infof("CheckServicesCmd: lastHash=%s, newHash=%s, serviceCount=%d",
 			lastHash[:8], newHash[:8], len(entries))
-		
+
 		// Only return update message if something changed
 		if newHash != lastHash {
 			logger.Info("CheckServicesCmd: Change detected! Refreshing service list")
@@ -111,7 +111,7 @@ func CheckServicesCmd(lastHash string, filterType FilterType, nodeID, stackName 
 				StackName:  stackName,
 			}
 		}
-		
+
 		logger.Info("CheckServicesCmd: No changes detected, scheduling next poll")
 		// Schedule next poll in 5 seconds
 		return tea.Tick(PollInterval, func(t time.Time) tea.Msg {

@@ -11,13 +11,13 @@ import (
 	servicesview "swarmcli/views/services"
 	"swarmcli/views/view"
 
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	logger := swarmlog.L()
-	
+
 	switch msg := msg.(type) {
 	case Msg:
 		logger.Infof("NodesView: Received Msg with %d entries", len(msg.Entries))
@@ -27,7 +27,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.Visible = true
 		// Continue polling
 		return m.tickCmd()
-	
+
 	case TickMsg:
 		logger.Infof("NodesView: Received TickMsg, visible=%v", m.Visible)
 		// Check for changes (this will return either a Msg or the next TickMsg)
@@ -102,13 +102,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 func (m *Model) SetContent(msg Msg) {
 	logger := swarmlog.L()
 	logger.Infof("NodesView.SetContent: Updating display with %d entries", len(msg.Entries))
-	
+
 	// Preserve current cursor position
 	oldCursor := m.List.Cursor
-	
+
 	m.List.Items = msg.Entries
 	m.List.ApplyFilter()
-	
+
 	// Restore cursor position, but ensure it's within bounds
 	if oldCursor < len(m.List.Filtered) {
 		m.List.Cursor = oldCursor
@@ -137,7 +137,7 @@ func (m *Model) setRenderItem() {
 	}, 15)
 
 	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
-	
+
 	m.List.RenderItem = func(n docker.NodeEntry, selected bool, colWidth int) string {
 		manager := "no"
 		if n.Manager {

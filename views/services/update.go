@@ -18,7 +18,7 @@ import (
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	logger := swarmlog.L()
-	
+
 	switch msg := msg.(type) {
 
 	case Msg:
@@ -30,7 +30,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.List.Viewport.SetContent(m.List.View())
 		// Continue polling
 		return m.tickCmd()
-	
+
 	case TickMsg:
 		logger.Infof("ServicesView: Received TickMsg, visible=%v", m.Visible)
 		// Check for changes (this will return either a Msg or the next TickMsg)
@@ -151,15 +151,15 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 func (m *Model) SetContent(msg Msg) {
 	logger := swarmlog.L()
 	logger.Infof("ServicesView.SetContent: Updating display with %d services", len(msg.Entries))
-	
+
 	m.title = msg.Title
-	
+
 	// Preserve current cursor position
 	oldCursor := m.List.Cursor
-	
+
 	m.List.Items = msg.Entries
 	m.List.ApplyFilter()
-	
+
 	// Restore cursor position, but ensure it's within bounds
 	if oldCursor < len(m.List.Filtered) {
 		m.List.Cursor = oldCursor

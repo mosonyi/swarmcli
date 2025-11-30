@@ -4,16 +4,16 @@ import (
 	"fmt"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
-	"swarmcli/utils/log"
+	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/confirmdialog"
 
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	logger := swarmlog.L()
-	
+
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:
@@ -25,10 +25,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		logger.Infof("ConfigsView: Received configsLoadedMsg with %d configs", len(msg))
 		// Update the hash with new data
 		m.lastSnapshot = computeConfigsHash(msg)
-		
+
 		// Preserve current cursor position
 		oldCursor := m.configsList.Cursor
-		
+
 		m.configs = msg
 		items := make([]configItem, len(msg))
 		for i, cfg := range msg {
@@ -37,7 +37,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.configsList.Items = items
 		m.setRenderItem()
 		m.configsList.ApplyFilter()
-		
+
 		// Restore cursor position, but ensure it's within bounds
 		if oldCursor < len(m.configsList.Filtered) {
 			m.configsList.Cursor = oldCursor
@@ -46,12 +46,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		} else {
 			m.configsList.Cursor = 0
 		}
-		
+
 		m.state = stateReady
 		logger.Info("ConfigsView: Config list updated")
 		// Continue polling
 		return m.tickCmd()
-	
+
 	case TickMsg:
 		logger.Infof("ConfigsView: Received TickMsg, state=%v", m.state)
 		// Check for changes (this will return either configsLoadedMsg or the next TickMsg)

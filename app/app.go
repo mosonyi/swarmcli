@@ -2,7 +2,7 @@ package app
 
 import (
 	"swarmcli/docker"
-	"swarmcli/utils/log"
+	swarmlog "swarmcli/utils/log"
 	configsview "swarmcli/views/configs"
 	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"

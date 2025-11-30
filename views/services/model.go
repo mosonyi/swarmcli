@@ -90,7 +90,7 @@ func computeServicesHash(entries []docker.ServiceEntry) string {
 		ReplicasOnNode int
 		ReplicasTotal  int
 	}
-	
+
 	states := make([]serviceState, len(entries))
 	for i, e := range entries {
 		states[i] = serviceState{
@@ -101,7 +101,7 @@ func computeServicesHash(entries []docker.ServiceEntry) string {
 			ReplicasTotal:  e.ReplicasTotal,
 		}
 	}
-	
+
 	data, _ := json.Marshal(states)
 	hash := sha256.Sum256(data)
 	return fmt.Sprintf("%x", hash)
