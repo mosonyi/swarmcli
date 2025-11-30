@@ -46,13 +46,12 @@ func (m *Model) Name() string { return ViewName }
 
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
-		{Key: "i/enter", Desc: "services"},
-		{Key: "k/up", Desc: "scroll up"},
-		{Key: "j/down", Desc: "scroll down"},
-		{Key: "pgup", Desc: "page up"},
-		{Key: "pgdown", Desc: "page down"},
-		{Key: "/", Desc: "filter"},
-		{Key: "q", Desc: "close"},
+		{Key: "i/enter", Desc: "Services"},
+		{Key: "↑/↓", Desc: "Navigate"},
+		{Key: "pgup", Desc: "Page up"},
+		{Key: "pgdown", Desc: "Page down"},
+		{Key: "/", Desc: "Filter"},
+		{Key: "q", Desc: "Close"},
 	}
 }
 

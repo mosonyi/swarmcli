@@ -100,3 +100,16 @@ func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
+
+// GetCurrentContext returns the name of the active Docker context.
+func GetCurrentContext() (string, error) {
+	ctxNameBytes, err := exec.Command("docker", "context", "show").Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get docker context: %w", err)
+	}
+	ctxName := string(ctxNameBytes)
+	if len(ctxName) > 0 && ctxName[len(ctxName)-1] == '\n' {
+		ctxName = ctxName[:len(ctxName)-1]
+	}
+	return ctxName, nil
+}

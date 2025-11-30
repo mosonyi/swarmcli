@@ -20,14 +20,22 @@ import (
 )
 
 const (
-	version string = "dev"
 	appName string = "swarmcli"
+)
+
+var (
+	version string = "dev"
 )
 
 var viewRegistry = map[string]view.Factory{}
 
 func registerView(name string, factory view.Factory) {
 	viewRegistry[name] = factory
+}
+
+// SetVersion sets the application version (called from main)
+func SetVersion(v string) {
+	version = v
 }
 
 // Init should be called once at the start of the application to register all views.

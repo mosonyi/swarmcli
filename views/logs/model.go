@@ -39,6 +39,12 @@ type Model struct {
 
 	// follow behavior
 	follow bool
+	// wrap behavior
+	wrap bool
+	// horizontal scroll offset when wrap is off
+	horizontalOffset int
+	// fullscreen mode
+	fullscreen bool
 }
 
 // New creates a logs model with sensible defaults.
@@ -57,7 +63,10 @@ func New(width, height int, maxLines int, service docker.ServiceEntry) *Model {
 		ServiceEntry: service,
 		linesChan:    nil,
 		errChan:      nil,
-		follow:       true, // auto-follow by default
+		follow:           true, // auto-follow by default
+		wrap:             true, // wrap lines by default
+		horizontalOffset: 0,
+		fullscreen:       false,
 	}
 }
 
@@ -71,21 +80,73 @@ func (m *Model) setFollow(f bool) {
 	m.follow = f
 }
 
+func (m *Model) getFollow() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.follow
+}
+
+func (m *Model) setWrap(w bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.wrap = w
+}
+
+func (m *Model) getWrap() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.wrap
+}
+
+func (m *Model) setFullscreen(f bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.fullscreen = f
+}
+
+func (m *Model) getFullscreen() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.fullscreen
+}
+
+// GetFullscreen is exported for app to check fullscreen status
+func (m *Model) GetFullscreen() bool {
+	return m.getFullscreen()
+}
+
+// GetSearchMode is exported for app to check search mode status
+func (m *Model) GetSearchMode() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.mode == "search"
+}
+
 // ShortHelpItems stays compatible with your helpbar interface.
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	if m.mode == "search" {
 		return []helpbar.HelpEntry{
-			{Key: "enter", Desc: "confirm"},
-			{Key: "esc", Desc: "cancel"},
-			{Key: "n/N", Desc: "next/prev"},
+			{Key: "enter", Desc: "Confirm"},
+			{Key: "esc", Desc: "Cancel"},
+			{Key: "n/N", Desc: "Next/prev"},
 		}
 	}
-	return []helpbar.HelpEntry{
-		{Key: "/", Desc: "search"},
-		{Key: "n/N", Desc: "next/prev"},
-		{Key: "f", Desc: "toggle follow"},
-		{Key: "q", Desc: "close"},
+	
+	entries := []helpbar.HelpEntry{
+		{Key: "/", Desc: "Search"},
+		{Key: "n/N", Desc: "Next/prev"},
+		{Key: "s", Desc: "Toggle AutoScroll"},
+		{Key: "w", Desc: "Toggle wrap"},
+		{Key: "f", Desc: "Fullscreen"},
 	}
+	
+	// Show left/right help only when wrap is off
+	if !m.getWrap() {
+		entries = append(entries, helpbar.HelpEntry{Key: "←/→", Desc: "Scroll"})
+	}
+	
+	entries = append(entries, helpbar.HelpEntry{Key: "q", Desc: "Close"})
+	return entries
 }
 
 func (m *Model) OnEnter() tea.Cmd {

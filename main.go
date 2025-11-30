@@ -7,8 +7,18 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// Version information, set by GoReleaser at build time
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func init() {
+	app.SetVersion(version)
 	app.Init()
+	// Log version info for debugging
+	swarmlog.L().Infof("swarmcli version=%s commit=%s date=%s", version, commit, date)
 }
 
 func main() {

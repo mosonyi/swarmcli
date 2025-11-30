@@ -17,9 +17,16 @@ func (m *Model) View() string {
 
 	headerStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("12"))
+		Foreground(lipgloss.Color("15"))
 
-	header := headerStyle.Render(fmt.Sprintf("%-20s %s", "STACK", "SERVICES"))
+	// Use the same column width as computed for items
+	colWidth := m.List.GetColWidth()
+	if colWidth < 15 {
+		colWidth = 15
+	}
+	
+	// Format: %-*s (stack name) + 8 spaces + left-aligned SERVICES
+	header := headerStyle.Render(fmt.Sprintf("%-*s        %-s", colWidth, "STACK", "SERVICES"))
 
 	// Footer: cursor + optional search query
 	status := fmt.Sprintf("Stack %d of %d", m.List.Cursor+1, len(m.List.Filtered))

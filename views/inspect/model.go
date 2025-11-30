@@ -72,15 +72,15 @@ func LoadInspectItem(title, jsonStr string) tea.Cmd {
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	if m.searchMode {
 		return []helpbar.HelpEntry{
-			{Key: "enter", Desc: "apply"},
-			{Key: "esc", Desc: "cancel"},
+			{Key: "enter", Desc: "Apply"},
+			{Key: "esc", Desc: "Cancel"},
 		}
 	}
 	return []helpbar.HelpEntry{
-		{Key: "/", Desc: "search"},
-		{Key: "j/k", Desc: "down/up"},
-		{Key: "r", Desc: "toggle raw"},
-		{Key: "q", Desc: "close"},
+		{Key: "/", Desc: "Search"},
+		{Key: "j/k", Desc: "Down/up"},
+		{Key: "r", Desc: "Toggle raw"},
+		{Key: "q", Desc: "Close"},
 	}
 }
 

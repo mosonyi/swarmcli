@@ -68,9 +68,9 @@ func renderConfigsHeader(items []configItem) string {
 	}
 
 	headerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("75")). // blueish tone
+		Foreground(lipgloss.Color("15")). // white
 		Bold(true)
-	return headerStyle.Render(fmt.Sprintf("%-*s  %-*s", nameCol, "NAME", idCol, "ID"))
+	return headerStyle.Render(fmt.Sprintf("%-*s        %-*s", nameCol, "NAME", idCol, "ID"))
 }
 func (m *Model) renderConfigsFooter() string {
 	status := fmt.Sprintf("Config %d of %d", m.configsList.Cursor+1, len(m.configsList.Filtered))

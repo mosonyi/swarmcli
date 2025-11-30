@@ -6,6 +6,7 @@ import (
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 
+	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -193,11 +194,12 @@ func (m *Model) setRenderItem() {
 	}
 
 	// Assign to the list
+	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
 	m.configsList.RenderItem = func(cfg configItem, selected bool, _ int) string {
-		line := fmt.Sprintf("%-*s  %-*s", nameCol, cfg.Name, idCol, cfg.ID)
+		line := fmt.Sprintf("%-*s        %-*s", nameCol, cfg.Name, idCol, cfg.ID)
 		if selected {
 			return ui.CursorStyle.Render(line)
 		}
-		return line
+		return itemStyle.Render(line)
 	}
 }

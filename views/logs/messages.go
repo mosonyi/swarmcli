@@ -15,3 +15,7 @@ type StreamErrMsg struct {
 }
 
 type StreamDoneMsg struct{}
+
+type WrapToggledMsg struct{}
+
+type FullscreenToggledMsg struct{}

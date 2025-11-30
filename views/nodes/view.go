@@ -23,7 +23,7 @@ func (m *Model) View() string {
 	}
 
 	title := fmt.Sprintf("Nodes (%d total, %d manager%s)", total, managers, plural(managers))
-	header := renderHeader(m.List.Items)
+	header := renderHeader(m.colWidths)
 
 	// Footer: cursor + optional search query
 	status := fmt.Sprintf("Node %d of %d", m.List.Cursor+1, len(m.List.Filtered))
@@ -54,19 +54,18 @@ func plural(n int) string {
 	return "s"
 }
 
-// renderHeader calculates column widths based on longest visible values.
-func renderHeader(entries []docker.NodeEntry) string {
-	if len(entries) == 0 {
+// renderHeader uses pre-calculated column widths.
+func renderHeader(colWidths map[string]int) string {
+	if len(colWidths) == 0 {
 		return "HOSTNAME  ROLE  STATE  MANAGER  ADDRESS"
 	}
 
-	colWidths := calcColumnWidths(entries)
 	headerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("75")). // blueish tone
+		Foreground(lipgloss.Color("15")). // white
 		Bold(true)
 
 	return headerStyle.Render(fmt.Sprintf(
-		"%-*s  %-*s  %-*s  %-*s  %-*s",
+		"%-*s        %-*s        %-*s        %-*s        %-*s",
 		colWidths["Hostname"], "HOSTNAME",
 		colWidths["Role"], "ROLE",
 		colWidths["State"], "STATE",

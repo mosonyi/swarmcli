@@ -24,6 +24,10 @@ type Model struct {
 	viewStack   viewstack.Stack
 
 	commandInput *commandinput.Model
+	
+	// Terminal dimensions
+	terminalWidth  int
+	terminalHeight int
 }
 
 func InitialModel() *Model {
@@ -37,11 +41,13 @@ func InitialModel() *Model {
 	})
 
 	return &Model{
-		viewport:     vp,
-		currentView:  loading,
-		systemInfo:   systeminfoview.New(version),
-		viewStack:    viewstack.Stack{},
-		commandInput: cmdBar(),
+		viewport:       vp,
+		currentView:    loading,
+		systemInfo:     systeminfoview.New(version),
+		viewStack:      viewstack.Stack{},
+		commandInput:   cmdBar(),
+		terminalWidth:  80,
+		terminalHeight: 20,
 	}
 }
 
@@ -49,7 +55,12 @@ func InitialModel() *Model {
 // and is passed into the tea.NewProgram function.
 func (m *Model) Init() tea.Cmd {
 	// "" loads all stacks on all nodes
-	return tea.Batch(tick(), loadSnapshotAsync(), systeminfoview.LoadStatus())
+	return tea.Batch(
+		tick(), 
+		loadSnapshotAsync(), 
+		systeminfoview.LoadStatus(),
+		m.systemInfo.Init(), // Initialize systeminfo's tick commands
+	)
 }
 
 func (m *Model) switchToView(name string, data any) tea.Cmd {
@@ -62,7 +73,7 @@ func (m *Model) switchToView(name string, data any) tea.Cmd {
 	exitCmd := m.currentView.OnExit()
 
 	newView, loadCmd := factory(m.viewport.Width, m.viewport.Height, data)
-	resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height)
+	resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height, false)
 
 	// Push current view onto stack
 	m.viewStack.Push(m.currentView)
@@ -84,7 +95,7 @@ func (m *Model) replaceView(name string, data any) tea.Cmd {
 	exitCmd := m.currentView.OnExit()
 
 	newView, loadCmd := factory(m.viewport.Width, m.viewport.Height, data)
-	resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height)
+	resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height, false)
 
 	m.currentView = newView
 	m.viewStack.Reset()
