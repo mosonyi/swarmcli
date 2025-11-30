@@ -104,8 +104,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case nodesview.Msg:
 		// Forward to current view if it's nodes view
 		if nodesView, ok := m.currentView.(*nodesview.Model); ok {
-			var cmd tea.Cmd
-			cmd = nodesView.Update(msg)
+			cmd := nodesView.Update(msg)
 			return m, cmd
 		}
 		return m, nil
@@ -113,8 +112,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case nodesview.TickMsg:
 		// Forward to current view if it's nodes view
 		if nodesView, ok := m.currentView.(*nodesview.Model); ok {
-			var cmd tea.Cmd
-			cmd = nodesView.Update(msg)
+			cmd := nodesView.Update(msg)
 			return m, cmd
 		}
 		return m, nil
@@ -122,8 +120,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stacksview.Msg:
 		// Forward to current view if it's stacks view
 		if stacksView, ok := m.currentView.(*stacksview.Model); ok {
-			var cmd tea.Cmd
-			cmd = stacksView.Update(msg)
+			cmd := stacksView.Update(msg)
 			return m, cmd
 		}
 		return m, nil
@@ -131,8 +128,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stacksview.TickMsg:
 		// Forward to current view if it's stacks view
 		if stacksView, ok := m.currentView.(*stacksview.Model); ok {
-			var cmd tea.Cmd
-			cmd = stacksView.Update(msg)
+			cmd := stacksView.Update(msg)
 			return m, cmd
 		}
 		return m, nil
@@ -140,8 +136,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case servicesview.Msg:
 		// Forward to current view if it's services view
 		if servicesView, ok := m.currentView.(*servicesview.Model); ok {
-			var cmd tea.Cmd
-			cmd = servicesView.Update(msg)
+			cmd := servicesView.Update(msg)
 			return m, cmd
 		}
 		return m, nil
@@ -149,8 +144,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case servicesview.TickMsg:
 		// Forward to current view if it's services view
 		if servicesView, ok := m.currentView.(*servicesview.Model); ok {
-			var cmd tea.Cmd
-			cmd = servicesView.Update(msg)
+			cmd := servicesView.Update(msg)
 			return m, cmd
 		}
 		return m, nil
@@ -158,8 +152,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case configsview.TickMsg:
 		// Forward to current view if it's configs view
 		if configsView, ok := m.currentView.(*configsview.Model); ok {
-			var cmd tea.Cmd
-			cmd = configsView.Update(msg)
+			cmd := configsView.Update(msg)
 			return m, cmd
 		}
 		return m, nil
