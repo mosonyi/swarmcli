@@ -10,7 +10,8 @@
 .devcontainer/devcontainer.local.json
 .devcontainer/certs/*.pem
 .devcontainer/certs/*.crt
-shared/*
+.devcontainer/certs/corporate-proxy.crt
+.devcontainer/shared/*
 
 debug.log
 swarmcli

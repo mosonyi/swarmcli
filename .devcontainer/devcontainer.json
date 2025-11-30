@@ -9,13 +9,10 @@
       "NO_PROXY": "${localEnv:NO_PROXY}"
     }
   },
-  "runArgs": [
-    "--group-add=1001",
-    "--volume=/var/run/docker.sock:/var/run/docker.sock"
-  ],
   "mounts": [
+    "type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock",
     "type=bind,source=${localWorkspaceFolder}/.devcontainer/certs/corporate-proxy.crt,target=/etc/ssl/certs/corporate-proxy.crt",
-    "type=bind,source=./shared/.docker,target=/home/vscode/.docker"
+    "type=bind,source=${localWorkspaceFolder}/.devcontainer/shared/.docker,target=/home/vscode/.docker"
   ],
   "remoteEnv": {
     "DISPLAY": "",
@@ -39,7 +36,6 @@
     "GOPATH": "${containerWorkspaceFolder}/.go",
     "GOMODCACHE": "${containerWorkspaceFolder}/.go/pkg/mod",
     "GOCACHE": "${containerWorkspaceFolder}/.cache/go-build",
-
     "HTTP_PROXY": "${localEnv:HTTP_PROXY}",
     "HTTPS_PROXY": "${localEnv:HTTPS_PROXY}",
     "NO_PROXY": "${localEnv:NO_PROXY}",
@@ -47,6 +43,6 @@
     "https_proxy": "${localEnv:HTTPS_PROXY}",
     "no_proxy": "${localEnv:NO_PROXY}"
   },
-  "postCreateCommand": "sudo update-ca-certificates && go mod tidy",
+  "postCreateCommand": "sudo update-ca-certificates && go mod tidy && sudo usermod -aG $(stat -c '%g' /var/run/docker.sock) vscode",
   "remoteUser": "vscode"
 }
