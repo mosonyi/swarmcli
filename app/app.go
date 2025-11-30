@@ -2,7 +2,7 @@ package app
 
 import (
 	"swarmcli/docker"
-	"swarmcli/utils/log"
+	swarmlog "swarmcli/utils/log"
 	configsview "swarmcli/views/configs"
 	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"
@@ -86,7 +86,7 @@ func Init() {
 		if payload != nil {
 			nodeID, _ = payload.(string)
 		}
-		return stacksview.New(w, h), stacksview.LoadStacks(nodeID)
+		return stacksview.New(w, h), stacksview.LoadStacksCmd(nodeID)
 	})
 
 	registerView(servicesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {

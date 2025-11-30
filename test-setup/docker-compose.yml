@@ -13,10 +13,10 @@ services:
       <<: *proxy_env
     command:
       [
-        "sh","-exc",
+        "sh","-c",
         "apk add --no-cache ca-certificates >/dev/null 2>&1 || true; \
          update-ca-certificates || true; \
-         dockerd \
+         exec dockerd \
            --host=tcp://0.0.0.0:2375 \
            --host=unix:///var/run/docker-temp.sock \
            --tls=false"
@@ -70,10 +70,10 @@ services:
       <<: *proxy_env
     command:
       [
-        "sh","-exc",
+        "sh","-c",
         "apk add --no-cache ca-certificates >/dev/null 2>&1 || true; \
          update-ca-certificates || true; \
-         dockerd \
+         exec dockerd \
            --host=tcp://0.0.0.0:2375 \
            --host=unix:///var/run/docker.sock"
       ]
@@ -123,10 +123,10 @@ services:
       <<: *proxy_env
     command:
       [
-        "sh","-exc",
+        "sh","-c",
         "apk add --no-cache ca-certificates >/dev/null 2>&1 || true; \
          update-ca-certificates || true; \
-         dockerd \
+         exec dockerd \
            --host=tcp://0.0.0.0:2375 \
            --host=unix:///var/run/docker.sock"
       ]

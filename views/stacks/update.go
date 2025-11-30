@@ -5,22 +5,38 @@ import (
 	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
+	swarmlog "swarmcli/utils/log"
 	servicesview "swarmcli/views/services"
 	"swarmcli/views/view"
 
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // Update handles all messages for the stacks view.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
+	logger := swarmlog.L()
+
 	switch msg := msg.(type) {
 
 	case Msg:
+		logger.Infof("StacksView: Received Msg with %d entries", len(msg.Stacks))
+		// Update the hash with new data
+		m.lastSnapshot = computeStacksHash(msg.Stacks)
 		m.nodeID = msg.NodeID
 		m.setStacks(msg.Stacks)
 		m.Visible = true
-		return nil
+		// Continue polling
+		return m.tickCmd()
+
+	case TickMsg:
+		logger.Infof("StacksView: Received TickMsg, visible=%v", m.Visible)
+		// Check for changes (this will return either a Msg or the next TickMsg)
+		if m.Visible {
+			return CheckStacksCmd(m.lastSnapshot, m.nodeID)
+		}
+		// Continue polling even if not visible
+		return m.tickCmd()
 
 	case RefreshErrorMsg:
 		m.Visible = true
@@ -65,14 +81,31 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) setStacks(stacks []docker.StackEntry) {
+	logger := swarmlog.L()
+	logger.Infof("StacksView.setStacks: Updating display with %d stacks", len(stacks))
+
+	// Preserve current cursor position
+	oldCursor := m.List.Cursor
+
 	m.List.Items = stacks
 	m.List.Filtered = stacks
-	m.List.Cursor = 0
+
+	// Restore cursor position, but ensure it's within bounds
+	if oldCursor < len(m.List.Filtered) {
+		m.List.Cursor = oldCursor
+	} else if len(m.List.Filtered) > 0 {
+		m.List.Cursor = len(m.List.Filtered) - 1
+	} else {
+		m.List.Cursor = 0
+	}
 
 	m.setRenderItem()
 
 	if m.ready {
 		m.List.Viewport.SetContent(m.List.View())
+		logger.Info("StacksView.setStacks: Viewport content updated")
+	} else {
+		logger.Warn("StacksView.setStacks: View not ready yet, skipping viewport update")
 	}
 }
 
@@ -85,7 +118,7 @@ func (m *Model) setRenderItem() {
 
 	// Update RenderItem to use computed colWidth
 	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
-	
+
 	m.List.RenderItem = func(s docker.StackEntry, selected bool, colWidth int) string {
 		line := fmt.Sprintf("%-*s        %-d", colWidth, s.Name, s.ServiceCount)
 		if selected {
