@@ -2,6 +2,8 @@ package nodesview
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
@@ -65,12 +67,13 @@ func renderHeader(colWidths map[string]int) string {
 		Bold(true)
 
 	return headerStyle.Render(fmt.Sprintf(
-		"%-*s        %-*s        %-*s        %-*s        %-*s",
+		"%-*s        %-*s        %-*s        %-*s        %-*s        %-*s",
 		colWidths["Hostname"], "HOSTNAME",
 		colWidths["Role"], "ROLE",
 		colWidths["State"], "STATE",
 		colWidths["Manager"], "MANAGER",
 		colWidths["Addr"], "ADDRESS",
+		colWidths["Labels"], "LABELS",
 	))
 }
 
@@ -82,6 +85,7 @@ func calcColumnWidths(entries []docker.NodeEntry) map[string]int {
 		"State":    len("STATE"),
 		"Manager":  len("MANAGER"),
 		"Addr":     len("ADDRESS"),
+		"Labels":   len("LABELS"),
 	}
 
 	for _, e := range entries {
@@ -104,7 +108,27 @@ func calcColumnWidths(entries []docker.NodeEntry) map[string]int {
 		if len(e.Addr) > widths["Addr"] {
 			widths["Addr"] = len(e.Addr)
 		}
+		// Format labels as key=value pairs
+		labelsStr := formatLabels(e.Labels)
+		if len(labelsStr) > widths["Labels"] {
+			widths["Labels"] = len(labelsStr)
+		}
 	}
 
 	return widths
+}
+
+// formatLabels converts label map to comma-separated key=value string
+func formatLabels(labels map[string]string) string {
+	if len(labels) == 0 {
+		return "-"
+	}
+	
+	var parts []string
+	for k, v := range labels {
+		parts = append(parts, fmt.Sprintf("%s=%s", k, v))
+	}
+	// Sort for consistent display
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
 }

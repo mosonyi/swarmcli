@@ -93,6 +93,12 @@ docker --context swarmcli stack deploy -c test-setup/test-stack.yml demo
 docker compose down -v
 ```
 
+> 💡 **Tip**: If you encounter "process with PID 1 is still running" errors when starting, clean up completely and rebuild:
+> ```bash
+> docker compose down -v  # Remove containers and volumes
+> docker compose up --build
+> ```
+
 ### If port 22375 still appears to be listening
 
 Very rarely the DinD dockerd inside the manager can linger. If `ss` shows the port still open:

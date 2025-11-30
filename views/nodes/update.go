@@ -6,6 +6,7 @@ import (
 	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
+	swarmlog "swarmcli/utils/log"
 	inspectview "swarmcli/views/inspect"
 	servicesview "swarmcli/views/services"
 	"swarmcli/views/view"
@@ -15,11 +16,26 @@ import (
 )
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
+	logger := swarmlog.L()
+	
 	switch msg := msg.(type) {
 	case Msg:
+		logger.Infof("NodesView: Received Msg with %d entries", len(msg.Entries))
+		// Update the hash with new data
+		m.lastSnapshot = computeNodesHash(msg.Entries)
 		m.SetContent(msg)
 		m.Visible = true
-		return nil
+		// Continue polling
+		return m.tickCmd()
+	
+	case TickMsg:
+		logger.Infof("NodesView: Received TickMsg, visible=%v", m.Visible)
+		// Check for changes (this will return either a Msg or the next TickMsg)
+		if m.Visible {
+			return CheckNodesCmd(m.lastSnapshot)
+		}
+		// Continue polling even if not visible
+		return m.tickCmd()
 
 	case tea.WindowSizeMsg:
 		m.List.Viewport.Width = msg.Width
@@ -84,9 +100,23 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) SetContent(msg Msg) {
+	logger := swarmlog.L()
+	logger.Infof("NodesView.SetContent: Updating display with %d entries", len(msg.Entries))
+	
+	// Preserve current cursor position
+	oldCursor := m.List.Cursor
+	
 	m.List.Items = msg.Entries
 	m.List.ApplyFilter()
-	m.List.Cursor = 0
+	
+	// Restore cursor position, but ensure it's within bounds
+	if oldCursor < len(m.List.Filtered) {
+		m.List.Cursor = oldCursor
+	} else if len(m.List.Filtered) > 0 {
+		m.List.Cursor = len(m.List.Filtered) - 1
+	} else {
+		m.List.Cursor = 0
+	}
 
 	// Calculate column widths for all columns
 	m.colWidths = calcColumnWidths(msg.Entries)
@@ -94,7 +124,9 @@ func (m *Model) SetContent(msg Msg) {
 
 	if m.ready {
 		m.List.Viewport.SetContent(m.List.View())
-		m.List.Viewport.GotoTop()
+		logger.Info("NodesView.SetContent: Viewport content updated")
+	} else {
+		logger.Warn("NodesView.SetContent: View not ready yet, skipping viewport update")
 	}
 }
 
@@ -111,14 +143,16 @@ func (m *Model) setRenderItem() {
 		if n.Manager {
 			manager = "yes"
 		}
+		labelsStr := formatLabels(n.Labels)
 		// Use the pre-calculated column widths instead of the single colWidth
 		line := fmt.Sprintf(
-			"%-*s        %-*s        %-*s        %-*s        %-*s",
+			"%-*s        %-*s        %-*s        %-*s        %-*s        %-*s",
 			m.colWidths["Hostname"], n.Hostname,
 			m.colWidths["Role"], n.Role,
 			m.colWidths["State"], n.State,
 			m.colWidths["Manager"], manager,
 			m.colWidths["Addr"], n.Addr,
+			m.colWidths["Labels"], labelsStr,
 		)
 		if selected {
 			return ui.CursorStyle.Render(line)

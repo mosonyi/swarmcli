@@ -7,6 +7,7 @@ import (
 	"swarmcli/views/commandinput"
 	loadingview "swarmcli/views/loading"
 	logsview "swarmcli/views/logs"
+	nodesview "swarmcli/views/nodes"
 	stacksview "swarmcli/views/stacks"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
@@ -97,6 +98,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		cmd = m.systemInfo.Update(msg)
 		return m, cmd
+	
+	case nodesview.Msg:
+		// Forward to current view if it's nodes view
+		if nodesView, ok := m.currentView.(*nodesview.Model); ok {
+			var cmd tea.Cmd
+			cmd = nodesView.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+	
+	case nodesview.TickMsg:
+		// Forward to current view if it's nodes view
+		if nodesView, ok := m.currentView.(*nodesview.Model); ok {
+			var cmd tea.Cmd
+			cmd = nodesView.Update(msg)
+			return m, cmd
+		}
+		return m, nil
 
 	default:
 		cmd := m.delegateToCurrentView(msg)
