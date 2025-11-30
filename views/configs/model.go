@@ -1,6 +1,8 @@
 package configsview
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"swarmcli/docker"
@@ -8,15 +10,17 @@ import (
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	loading "swarmcli/views/loading"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 type Model struct {
-	configsList filterlist.FilterableList[configItem]
-	width       int
-	height      int
+	configsList        filterlist.FilterableList[configItem]
+	width              int
+	height             int
+	lastSnapshot       string // hash of last snapshot for change detection
 
 	state state
 	err   error
@@ -64,7 +68,35 @@ func New(width, height int) *Model {
 func (m *Model) Name() string { return ViewName }
 
 func (m *Model) Init() tea.Cmd {
-	return nil
+	return m.tickCmd()
+}
+
+func (m *Model) tickCmd() tea.Cmd {
+	return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
+		return TickMsg(t)
+	})
+}
+
+// computeConfigsHash creates a hash of config states for change detection
+func computeConfigsHash(configs []docker.ConfigWithDecodedData) string {
+	type configState struct {
+		ID      string
+		Name    string
+		Version uint64
+	}
+	
+	states := make([]configState, len(configs))
+	for i, c := range configs {
+		states[i] = configState{
+			ID:      c.Config.ID,
+			Name:    c.Config.Spec.Name,
+			Version: c.Config.Version.Index,
+		}
+	}
+	
+	data, _ := json.Marshal(states)
+	hash := sha256.Sum256(data)
+	return fmt.Sprintf("%x", hash)
 }
 
 func LoadConfigs() tea.Cmd {

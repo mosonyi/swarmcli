@@ -10,6 +10,7 @@ import (
 	nodesview "swarmcli/views/nodes"
 	servicesview "swarmcli/views/services"
 	stacksview "swarmcli/views/stacks"
+	configsview "swarmcli/views/configs"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
 
@@ -150,6 +151,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if servicesView, ok := m.currentView.(*servicesview.Model); ok {
 			var cmd tea.Cmd
 			cmd = servicesView.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+	
+	case configsview.TickMsg:
+		// Forward to current view if it's configs view
+		if configsView, ok := m.currentView.(*configsview.Model); ok {
+			var cmd tea.Cmd
+			cmd = configsView.Update(msg)
 			return m, cmd
 		}
 		return m, nil

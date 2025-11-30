@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"swarmcli/docker"
+	"swarmcli/utils/log"
 	inspectview "swarmcli/views/inspect"
 	"swarmcli/views/view"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -25,6 +27,46 @@ func loadConfigsCmd() tea.Cmd {
 			wrapped[i] = docker.ConfigWithDecodedData{Config: c, Data: c.Spec.Data}
 		}
 		return configsLoadedMsg(wrapped)
+	}
+}
+
+// CheckConfigsCmd checks if configs have changed and returns update message if so
+func CheckConfigsCmd(lastHash string) tea.Cmd {
+	return func() tea.Msg {
+		logger := swarmlog.L()
+		logger.Info("CheckConfigsCmd: Polling for config changes")
+		
+		ctx := context.Background()
+		cfgs, err := docker.ListConfigs(ctx)
+		if err != nil {
+			logger.Errorf("CheckConfigsCmd: ListConfigs failed: %v", err)
+			// Schedule next poll even on error
+			return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
+				return TickMsg(t)
+			})()
+		}
+		
+		wrapped := make([]docker.ConfigWithDecodedData, len(cfgs))
+		for i, c := range cfgs {
+			wrapped[i] = docker.ConfigWithDecodedData{Config: c, Data: c.Spec.Data}
+		}
+		
+		newHash := computeConfigsHash(wrapped)
+		
+		logger.Infof("CheckConfigsCmd: lastHash=%s, newHash=%s, configCount=%d", 
+			lastHash[:8], newHash[:8], len(wrapped))
+		
+		// Only return update message if something changed
+		if newHash != lastHash {
+			logger.Info("CheckConfigsCmd: Change detected! Refreshing config list")
+			return configsLoadedMsg(wrapped)
+		}
+		
+		logger.Info("CheckConfigsCmd: No changes detected, scheduling next poll")
+		// Schedule next poll in 5 seconds
+		return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
+			return TickMsg(t)
+		})()
 	}
 }
 
