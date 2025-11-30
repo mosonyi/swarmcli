@@ -86,7 +86,7 @@ func Init() {
 		if payload != nil {
 			nodeID, _ = payload.(string)
 		}
-		return stacksview.New(w, h), stacksview.LoadStacks(nodeID)
+		return stacksview.New(w, h), stacksview.LoadStacksCmd(nodeID)
 	})
 
 	registerView(servicesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {

@@ -116,6 +116,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		return m, nil
+	
+	case stacksview.Msg:
+		// Forward to current view if it's stacks view
+		if stacksView, ok := m.currentView.(*stacksview.Model); ok {
+			var cmd tea.Cmd
+			cmd = stacksView.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+	
+	case stacksview.TickMsg:
+		// Forward to current view if it's stacks view
+		if stacksView, ok := m.currentView.(*stacksview.Model); ok {
+			var cmd tea.Cmd
+			cmd = stacksView.Update(msg)
+			return m, cmd
+		}
+		return m, nil
 
 	default:
 		cmd := m.delegateToCurrentView(msg)
