@@ -2,14 +2,15 @@ package stacksview
 
 import (
 	"fmt"
+	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	servicesview "swarmcli/views/services"
 	"swarmcli/views/view"
 
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // Update handles all messages for the stacks view.
@@ -17,10 +18,27 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 
 	case Msg:
+		l().Infof("[update]: Received Msg with %d entries", len(msg.Stacks))
+		// Update the hash with new data
+		var err error
+		m.lastSnapshot, err = hash.Compute(msg.Stacks)
+		if err != nil {
+			l().Errorf("[update] Error computing hash: %v", err)
+			return nil
+		}
 		m.nodeID = msg.NodeID
 		m.setStacks(msg.Stacks)
 		m.Visible = true
-		return nil
+		return tickCmd()
+
+	case TickMsg:
+		l().Infof("StacksView: Received TickMsg, visible=%v", m.Visible)
+		// Check for changes (this will return either a Msg or the next TickMsg)
+		if m.Visible {
+			return CheckStacksCmd(m.lastSnapshot, m.nodeID)
+		}
+		// Continue polling even if not visible
+		return tickCmd()
 
 	case RefreshErrorMsg:
 		m.Visible = true
@@ -65,14 +83,18 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) setStacks(stacks []docker.StackEntry) {
+	l().Infof("StacksView.setStacks: Updating display with %d stacks", len(stacks))
+
 	m.List.Items = stacks
 	m.List.Filtered = stacks
-	m.List.Cursor = 0
 
 	m.setRenderItem()
 
 	if m.ready {
 		m.List.Viewport.SetContent(m.List.View())
+		l().Info("StacksView.setStacks: Viewport content updated")
+	} else {
+		l().Warn("StacksView.setStacks: View not ready yet, skipping viewport update")
 	}
 }
 
@@ -85,7 +107,7 @@ func (m *Model) setRenderItem() {
 
 	// Update RenderItem to use computed colWidth
 	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
-	
+
 	m.List.RenderItem = func(s docker.StackEntry, selected bool, colWidth int) string {
 		line := fmt.Sprintf("%-*s        %-d", colWidth, s.Name, s.ServiceCount)
 		if selected {

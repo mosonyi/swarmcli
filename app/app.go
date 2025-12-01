@@ -2,7 +2,7 @@ package app
 
 import (
 	"swarmcli/docker"
-	"swarmcli/utils/log"
+	swarmlog "swarmcli/utils/log"
 	configsview "swarmcli/views/configs"
 	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"
@@ -65,7 +65,8 @@ func Init() {
 	})
 
 	registerView(configsview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
-		return configsview.New(w, h), configsview.LoadConfigs()
+		model := configsview.New(w, h)
+		return model, model.Init()
 	})
 
 	registerView(inspectview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
@@ -79,14 +80,16 @@ func Init() {
 	})
 
 	registerView(nodesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
-		return nodesview.New(w, h), nodesview.LoadNodesCmd()
+		model := nodesview.New(w, h)
+		return model, tea.Batch(model.Init(), nodesview.LoadNodesCmd())
 	})
 	registerView(stacksview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		var nodeID string
 		if payload != nil {
 			nodeID, _ = payload.(string)
 		}
-		return stacksview.New(w, h), stacksview.LoadStacks(nodeID)
+		model := stacksview.New(w, h)
+		return model, tea.Batch(model.Init(), stacksview.LoadStacksCmd(nodeID))
 	})
 
 	registerView(servicesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {

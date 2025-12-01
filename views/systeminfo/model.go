@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	"swarmcli/docker"
+
 	"github.com/briandowns/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"swarmcli/docker"
-	swarmlog "swarmcli/utils/log"
 )
 
 type Model struct {
@@ -25,20 +25,20 @@ type Model struct {
 	serviceCount   int
 
 	// For tracking trends
-	prevCPU      float64
-	prevMem      float64
-	lastUpdate   time.Time
+	prevCPU        float64
+	prevMem        float64
+	lastUpdate     time.Time
 	updateInterval time.Duration
-	
+
 	// Loading state
 	loadingCPU bool
 	loadingMem bool
 	spinner    int
 	firstLoad  bool
-	
+
 	// Trend arrow state
-	prevCPUTrend string // "up", "down", or ""
-	prevMemTrend string
+	prevCPUTrend  string // "up", "down", or ""
+	prevMemTrend  string
 	cpuBlinkCount int
 	memBlinkCount int
 }
@@ -81,25 +81,25 @@ func LoadStatus() tea.Cmd {
 		context, _ := docker.GetCurrentContext()
 		containers, _ := docker.GetContainerCount()
 		services, _ := docker.GetServiceCount()
-		
+
 		// Get capacity (fast) - show immediately
 		cpuCapacity, _ := docker.GetSwarmCPUCapacity()
 		memCapacity, _ := docker.GetSwarmMemCapacity()
-		
+
 		cpuCapStr := ""
 		if cpuCapacity > 0 {
 			cpuCapStr = fmt.Sprintf("%.0f cores", cpuCapacity)
 		} else {
 			cpuCapStr = "-- cores"
 		}
-		
+
 		memCapStr := ""
 		if memCapacity > 0 {
 			memCapStr = fmt.Sprintf("%.0f GB", float64(memCapacity)/1024/1024/1024)
 		} else {
 			memCapStr = "--- GB"
 		}
-		
+
 		// Return immediately with fast values, spinner marker for CPU/MEM usage
 		// Using first frame of spinner charset 14 as marker
 		spinnerMarker := spinner.CharSets[14][0]
@@ -117,30 +117,29 @@ func LoadStatus() tea.Cmd {
 
 func LoadSlowStatus() tea.Cmd {
 	return func() tea.Msg {
-		logger := swarmlog.L()
-		logger.Info("LoadSlowStatus: Starting background stats collection")
-		
+		l().Info("LoadSlowStatus: Starting background stats collection")
+
 		// Get CPU/MEM - these are slow
 		cpu, err := docker.GetSwarmCPUUsage()
 		if err != nil {
-			logger.Error("LoadSlowStatus: GetSwarmCPUUsage failed: %v", err)
+			l().Error("LoadSlowStatus: GetSwarmCPUUsage failed: %v", err)
 			cpu = "N/A"
 		}
 		if cpu == "" {
 			cpu = "0.0%"
 		}
-		logger.Info("LoadSlowStatus: CPU usage collected: %s", cpu)
-		
+		l().Info("LoadSlowStatus: CPU usage collected: %s", cpu)
+
 		mem, err := docker.GetSwarmMemUsage()
 		if err != nil {
-			logger.Error("LoadSlowStatus: GetSwarmMemUsage failed: %v", err)
+			l().Error("LoadSlowStatus: GetSwarmMemUsage failed: %v", err)
 			mem = "N/A"
 		}
 		if mem == "" {
 			mem = "0.0%"
 		}
-		logger.Info("LoadSlowStatus: Memory usage collected: %s", mem)
-		
+		l().Info("LoadSlowStatus: Memory usage collected: %s", mem)
+
 		// Return only CPU/MEM update
 		return SlowStatusMsg{
 			cpu: cpu,

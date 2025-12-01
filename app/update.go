@@ -82,17 +82,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		cmd = m.systemInfo.Update(msg)
 		return m, cmd
-	
+
 	case systeminfoview.SlowStatusMsg:
 		var cmd tea.Cmd
 		cmd = m.systemInfo.Update(msg)
 		return m, cmd
-	
+
 	case systeminfoview.TickMsg:
 		var cmd tea.Cmd
 		cmd = m.systemInfo.Update(msg)
 		return m, cmd
-	
+
 	case systeminfoview.SpinnerTickMsg:
 		var cmd tea.Cmd
 		cmd = m.systemInfo.Update(msg)
@@ -114,17 +114,17 @@ func (m *Model) delegateToCurrentView(msg tea.Msg) tea.Cmd {
 
 func (m *Model) updateForResize(msg tea.WindowSizeMsg) tea.Cmd {
 	var cmd tea.Cmd
-	
+
 	// Store terminal dimensions
 	m.terminalWidth = msg.Width
 	m.terminalHeight = msg.Height
-	
+
 	// Check if current view is in fullscreen mode
 	isFullscreen := false
 	if logsView, ok := m.currentView.(interface{ GetFullscreen() bool }); ok {
 		isFullscreen = logsView.GetFullscreen()
 	}
-	
+
 	var usableWidth, usableHeight int
 	if isFullscreen {
 		// In fullscreen, use almost all space (just leave room for borders)
@@ -152,7 +152,7 @@ func handleViewResize(view view.View, width, height int, isFullscreen bool) tea.
 		// Normal mode: subtract systeminfo height
 		adjustedHeight = height - systeminfoview.Height
 	}
-	
+
 	var adjustedMsg = tea.WindowSizeMsg{
 		Width:  width,
 		Height: adjustedHeight,
@@ -172,7 +172,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Check if current view is in fullscreen or search mode before handling global esc
 	if msg.Type == tea.KeyEsc || msg.String() == "esc" {
 		// Check if logs view is in fullscreen or search mode
-		if logsView, ok := m.currentView.(interface{ 
+		if logsView, ok := m.currentView.(interface {
 			GetFullscreen() bool
 			GetSearchMode() bool
 		}); ok {
@@ -186,7 +186,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		cmd := m.goBack()
 		return m, cmd
 	}
-	
+
 	// Global quit handler
 	if msg.Type == tea.KeyCtrlC || msg.String() == "q" {
 		cmd := m.goBack()

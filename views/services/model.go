@@ -5,7 +5,6 @@ import (
 	"strings"
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
-	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	loadingview "swarmcli/views/loading"
@@ -23,17 +22,14 @@ const (
 	AllFilter
 )
 
-func l() *swarmlog.SwarmLogger {
-	return swarmlog.L().With("docker", "client")
-}
-
 type Model struct {
-	List    filterlist.FilterableList[docker.ServiceEntry]
-	Visible bool
-	title   string
-	ready   bool
-	width   int
-	height  int
+	List         filterlist.FilterableList[docker.ServiceEntry]
+	Visible      bool
+	title        string
+	ready        bool
+	width        int
+	height       int
+	lastSnapshot uint64 // hash of last snapshot for change detection
 
 	// Filter
 	filterType FilterType
@@ -68,7 +64,15 @@ func New(width, height int) *Model {
 	}
 }
 
-func (m *Model) Init() tea.Cmd { return nil }
+func (m *Model) Init() tea.Cmd {
+	return tickCmd()
+}
+
+func tickCmd() tea.Cmd {
+	return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
+		return TickMsg(t)
+	})
+}
 
 func (m *Model) Name() string { return ViewName }
 

@@ -3,6 +3,7 @@ package configsview
 import (
 	"context"
 	"fmt"
+	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	inspectview "swarmcli/views/inspect"
 	"swarmcli/views/view"
@@ -25,6 +26,45 @@ func loadConfigsCmd() tea.Cmd {
 			wrapped[i] = docker.ConfigWithDecodedData{Config: c, Data: c.Spec.Data}
 		}
 		return configsLoadedMsg(wrapped)
+	}
+}
+
+// CheckConfigsCmd checks if configs have changed and returns update message if so
+func CheckConfigsCmd(lastHash uint64) tea.Cmd {
+	return func() tea.Msg {
+		l().Info("CheckConfigsCmd: Polling for config changes")
+
+		ctx := context.Background()
+		cfgs, err := docker.ListConfigs(ctx)
+		if err != nil {
+			l().Errorf("CheckConfigsCmd: ListConfigs failed: %v", err)
+			return tickCmd()
+		}
+
+		wrapped := make([]docker.ConfigWithDecodedData, len(cfgs))
+		for i, c := range cfgs {
+			wrapped[i] = docker.ConfigWithDecodedData{Config: c, Data: c.Spec.Data}
+		}
+
+		newHash, err := hash.Compute(wrapped)
+		if err != nil {
+			l().Errorf("CheckConfigsCmd: Error computing hash: %v", err)
+			// Schedule next poll even on error
+			return tickCmd()
+		}
+
+		l().Infof("CheckConfigsCmd: lastHash=%s, newHash=%s, configCount=%d",
+			hash.Fmt(lastHash), hash.Fmt(newHash), len(wrapped))
+
+		// Only return update message if something changed
+		if newHash != lastHash {
+			l().Info("CheckConfigsCmd: Change detected! Refreshing config list")
+			return configsLoadedMsg(wrapped)
+		}
+
+		l().Info("CheckConfigsCmd: No changes detected, scheduling next poll")
+		// Schedule next poll in 5 seconds
+		return tickCmd()
 	}
 }
 

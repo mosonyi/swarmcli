@@ -63,7 +63,6 @@ func (f *FilterableList[T]) HandleKey(msg tea.KeyMsg) {
 	case "/":
 		f.Mode = ModeSearching
 		f.Query = ""
-		f.Cursor = 0
 		f.ApplyFilter()
 		f.Viewport.GotoTop()
 	}

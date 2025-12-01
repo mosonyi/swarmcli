@@ -5,5 +5,5 @@ import swarmlog "swarmcli/utils/log"
 const ViewName = "configs"
 
 func l() *swarmlog.SwarmLogger {
-	return swarmlog.L().With("views", "client")
+	return swarmlog.L().With("views", "configs")
 }

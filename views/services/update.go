@@ -3,6 +3,7 @@ package servicesview
 import (
 	"context"
 	"fmt"
+	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
@@ -19,10 +20,28 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 
 	case Msg:
+		l().Infof("ServicesView: Received Msg with %d entries", len(msg.Entries))
+		// Update the hash with new data
+		var err error
+		m.lastSnapshot, err = hash.Compute(msg.Entries)
+		if err != nil {
+			l().Errorf("ServicesView: Error computing hash: %v", err)
+			return nil
+		}
 		m.SetContent(msg)
 		m.Visible = true
 		m.List.Viewport.SetContent(m.List.View())
-		return nil
+		// Continue polling
+		return tickCmd()
+
+	case TickMsg:
+		l().Infof("ServicesView: Received TickMsg, visible=%v", m.Visible)
+		// Check for changes (this will return either a Msg or the next TickMsg)
+		if m.Visible {
+			return CheckServicesCmd(m.lastSnapshot, m.filterType, m.nodeID, m.stackName)
+		}
+		// Continue polling even if not visible
+		return tickCmd()
 
 	case tea.WindowSizeMsg:
 		m.List.Viewport.Width = msg.Width
@@ -133,10 +152,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) SetContent(msg Msg) {
+	l().Infof("ServicesView.SetContent: Updating display with %d services", len(msg.Entries))
+
 	m.title = msg.Title
+
 	m.List.Items = msg.Entries
 	m.List.ApplyFilter()
-	m.List.Cursor = 0
 
 	m.filterType = msg.FilterType
 	m.nodeID = msg.NodeID

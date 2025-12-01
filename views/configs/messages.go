@@ -1,6 +1,9 @@
 package configsview
 
-import "swarmcli/docker"
+import (
+	"swarmcli/docker"
+	"time"
+)
 
 // Messages for async ops
 type (
@@ -27,3 +30,7 @@ type (
 	}
 	errorMsg error
 )
+
+type TickMsg time.Time
+
+const PollInterval = 5 * time.Second

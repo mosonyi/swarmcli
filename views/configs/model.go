@@ -8,15 +8,17 @@ import (
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	loading "swarmcli/views/loading"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 type Model struct {
-	configsList filterlist.FilterableList[configItem]
-	width       int
-	height      int
+	configsList  filterlist.FilterableList[configItem]
+	width        int
+	height       int
+	lastSnapshot uint64 // hash of last snapshot for change detection
 
 	state state
 	err   error
@@ -64,7 +66,13 @@ func New(width, height int) *Model {
 func (m *Model) Name() string { return ViewName }
 
 func (m *Model) Init() tea.Cmd {
-	return nil
+	return tea.Batch(tickCmd(), LoadConfigs())
+}
+
+func tickCmd() tea.Cmd {
+	return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
+		return TickMsg(t)
+	})
 }
 
 func LoadConfigs() tea.Cmd {

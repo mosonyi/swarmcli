@@ -2,12 +2,13 @@ package configsview
 
 import (
 	"fmt"
+	"swarmcli/core/primitives/hash"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
@@ -19,6 +20,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case configsLoadedMsg:
+		l().Infof("ConfigsView: Received configsLoadedMsg with %d configs", len(msg))
+		// Update the hash with new data
+		var err error
+		m.lastSnapshot, err = hash.Compute(msg)
+		if err != nil {
+			l().Errorf("ConfigsView: Error computing hash: %v", err)
+		}
+
 		m.configs = msg
 		items := make([]configItem, len(msg))
 		for i, cfg := range msg {
@@ -27,8 +36,19 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.configsList.Items = items
 		m.setRenderItem()
 		m.configsList.ApplyFilter()
+
 		m.state = stateReady
+		l().Info("ConfigsView: Config list updated")
 		return nil
+
+	case TickMsg:
+		l().Infof("ConfigsView: Received TickMsg, state=%v", m.state)
+		// Check for changes (this will return either configsLoadedMsg or the next TickMsg)
+		if m.state == stateReady {
+			return CheckConfigsCmd(m.lastSnapshot)
+		}
+		// Continue polling even if not ready
+		return tickCmd()
 
 	case configRotatedMsg:
 		l().Infof("Config rotated: %s → %s", msg.Old.Config.Spec.Name, msg.New.Config.Spec.Name)

@@ -1,6 +1,9 @@
 package stacksview
 
-import "swarmcli/docker"
+import (
+	"swarmcli/docker"
+	"time"
+)
 
 type Msg struct {
 	NodeID string
@@ -11,3 +14,7 @@ type Msg struct {
 type RefreshErrorMsg struct {
 	Err error
 }
+
+type TickMsg time.Time
+
+const PollInterval = 5 * time.Second

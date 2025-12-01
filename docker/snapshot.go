@@ -17,6 +17,7 @@ type NodeEntry struct {
 	State    string
 	Manager  bool
 	Addr     string
+	Labels   map[string]string
 }
 
 // StackEntry is a lightweight representation of a Docker stack,
@@ -118,6 +119,7 @@ func (s SwarmSnapshot) ToNodeEntries() []NodeEntry {
 			State:    string(n.Status.State),
 			Manager:  n.ManagerStatus != nil,
 			Addr:     n.Status.Addr,
+			Labels:   n.Spec.Labels,
 		}
 	}
 
