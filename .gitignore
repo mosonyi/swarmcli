@@ -13,5 +13,7 @@
 .devcontainer/certs/corporate-proxy.crt
 .devcontainer/shared/*
 
+dist/
+
 debug.log
 swarmcli

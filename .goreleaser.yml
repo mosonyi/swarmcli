@@ -89,18 +89,24 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
-    format_overrides:
-      - goos: windows
-        format: zip
+    formats:
+      - tar.gz
+      - zip
     files:
       - README.md
       - LICENSE*
+
+universal_binaries:
+  - id: darwin
+    ids:
+      - darwin
+    replace: false
 
 checksum:
   name_template: 'checksums.txt'
 
 snapshot:
-  name_template: "{{ incpatch .Version }}-next"
+  version_template: "{{ incpatch .Version }}-next"
 
 changelog:
   sort: asc
