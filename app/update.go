@@ -5,11 +5,8 @@ import (
 	"strings"
 	"swarmcli/commands/api"
 	"swarmcli/views/commandinput"
-	configsview "swarmcli/views/configs"
 	loadingview "swarmcli/views/loading"
 	logsview "swarmcli/views/logs"
-	nodesview "swarmcli/views/nodes"
-	servicesview "swarmcli/views/services"
 	stacksview "swarmcli/views/stacks"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
@@ -100,62 +97,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		cmd = m.systemInfo.Update(msg)
 		return m, cmd
-
-	case nodesview.Msg:
-		// Forward to current view if it's nodes view
-		if nodesView, ok := m.currentView.(*nodesview.Model); ok {
-			cmd := nodesView.Update(msg)
-			return m, cmd
-		}
-		return m, nil
-
-	case nodesview.TickMsg:
-		// Forward to current view if it's nodes view
-		if nodesView, ok := m.currentView.(*nodesview.Model); ok {
-			cmd := nodesView.Update(msg)
-			return m, cmd
-		}
-		return m, nil
-
-	case stacksview.Msg:
-		// Forward to current view if it's stacks view
-		if stacksView, ok := m.currentView.(*stacksview.Model); ok {
-			cmd := stacksView.Update(msg)
-			return m, cmd
-		}
-		return m, nil
-
-	case stacksview.TickMsg:
-		// Forward to current view if it's stacks view
-		if stacksView, ok := m.currentView.(*stacksview.Model); ok {
-			cmd := stacksView.Update(msg)
-			return m, cmd
-		}
-		return m, nil
-
-	case servicesview.Msg:
-		// Forward to current view if it's services view
-		if servicesView, ok := m.currentView.(*servicesview.Model); ok {
-			cmd := servicesView.Update(msg)
-			return m, cmd
-		}
-		return m, nil
-
-	case servicesview.TickMsg:
-		// Forward to current view if it's services view
-		if servicesView, ok := m.currentView.(*servicesview.Model); ok {
-			cmd := servicesView.Update(msg)
-			return m, cmd
-		}
-		return m, nil
-
-	case configsview.TickMsg:
-		// Forward to current view if it's configs view
-		if configsView, ok := m.currentView.(*configsview.Model); ok {
-			cmd := configsView.Update(msg)
-			return m, cmd
-		}
-		return m, nil
 
 	default:
 		cmd := m.delegateToCurrentView(msg)
