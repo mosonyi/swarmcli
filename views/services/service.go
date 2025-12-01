@@ -2,6 +2,7 @@ package servicesview
 
 import (
 	"context"
+	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	"time"
 
@@ -82,7 +83,7 @@ func LoadServicesForView(filterType FilterType, nodeID, stackName string) (entri
 }
 
 // CheckServicesCmd checks if services have changed and returns update message if so
-func CheckServicesCmd(lastHash string, filterType FilterType, nodeID, stackName string) tea.Cmd {
+func CheckServicesCmd(lastHash uint64, filterType FilterType, nodeID, stackName string) tea.Cmd {
 	return func() tea.Msg {
 		l().Info("CheckServicesCmd: Polling for service changes")
 
@@ -93,10 +94,14 @@ func CheckServicesCmd(lastHash string, filterType FilterType, nodeID, stackName 
 		}
 
 		entries, title := LoadServicesForView(filterType, nodeID, stackName)
-		newHash := computeServicesHash(entries)
+		newHash, err := hash.Compute(entries)
+		if err != nil {
+			l().Errorf("CheckServicesCmd: Hash computation failed: %v", err)
+			return tickCmd()
+		}
 
 		l().Infof("CheckServicesCmd: lastHash=%s, newHash=%s, serviceCount=%d",
-			lastHash[:8], newHash[:8], len(entries))
+			hash.Fmt(lastHash), hash.Fmt(newHash), len(entries))
 
 		// Only return update message if something changed
 		if newHash != lastHash {

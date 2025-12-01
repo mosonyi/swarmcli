@@ -3,6 +3,7 @@ package servicesview
 import (
 	"context"
 	"fmt"
+	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
@@ -21,12 +22,17 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case Msg:
 		l().Infof("ServicesView: Received Msg with %d entries", len(msg.Entries))
 		// Update the hash with new data
-		m.lastSnapshot = computeServicesHash(msg.Entries)
+		var err error
+		m.lastSnapshot, err = hash.Compute(msg.Entries)
+		if err != nil {
+			l().Errorf("ServicesView: Error computing hash: %v", err)
+			return nil
+		}
 		m.SetContent(msg)
 		m.Visible = true
 		m.List.Viewport.SetContent(m.List.View())
 		// Continue polling
-		return m.tickCmd()
+		return tickCmd()
 
 	case TickMsg:
 		l().Infof("ServicesView: Received TickMsg, visible=%v", m.Visible)
@@ -35,7 +41,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return CheckServicesCmd(m.lastSnapshot, m.filterType, m.nodeID, m.stackName)
 		}
 		// Continue polling even if not visible
-		return m.tickCmd()
+		return tickCmd()
 
 	case tea.WindowSizeMsg:
 		m.List.Viewport.Width = msg.Width

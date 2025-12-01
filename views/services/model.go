@@ -1,8 +1,6 @@
 package servicesview
 
 import (
-	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"swarmcli/docker"
@@ -31,7 +29,7 @@ type Model struct {
 	ready        bool
 	width        int
 	height       int
-	lastSnapshot string // hash of last snapshot for change detection
+	lastSnapshot uint64 // hash of last snapshot for change detection
 
 	// Filter
 	filterType FilterType
@@ -67,39 +65,13 @@ func New(width, height int) *Model {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return m.tickCmd()
+	return tickCmd()
 }
 
-func (m *Model) tickCmd() tea.Cmd {
+func tickCmd() tea.Cmd {
 	return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
 		return TickMsg(t)
 	})
-}
-
-// computeServicesHash creates a hash of service states for change detection
-func computeServicesHash(entries []docker.ServiceEntry) string {
-	type serviceState struct {
-		StackName      string
-		ServiceName    string
-		ServiceID      string
-		ReplicasOnNode int
-		ReplicasTotal  int
-	}
-
-	states := make([]serviceState, len(entries))
-	for i, e := range entries {
-		states[i] = serviceState{
-			StackName:      e.StackName,
-			ServiceName:    e.ServiceName,
-			ServiceID:      e.ServiceID,
-			ReplicasOnNode: e.ReplicasOnNode,
-			ReplicasTotal:  e.ReplicasTotal,
-		}
-	}
-
-	data, _ := json.Marshal(states)
-	hash := sha256.Sum256(data)
-	return fmt.Sprintf("%x", hash)
 }
 
 func (m *Model) Name() string { return ViewName }
