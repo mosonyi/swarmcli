@@ -60,7 +60,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return CheckConfigsCmd(m.lastSnapshot)
 		}
 		// Continue polling even if not ready
-		return m.tickCmd()
+		return tickCmd()
 
 	case configRotatedMsg:
 		l().Infof("Config rotated: %s → %s", msg.Old.Config.Spec.Name, msg.New.Config.Spec.Name)

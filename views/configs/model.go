@@ -66,10 +66,10 @@ func New(width, height int) *Model {
 func (m *Model) Name() string { return ViewName }
 
 func (m *Model) Init() tea.Cmd {
-	return tea.Batch(m.tickCmd(), LoadConfigs())
+	return tea.Batch(tickCmd(), LoadConfigs())
 }
 
-func (m *Model) tickCmd() tea.Cmd {
+func tickCmd() tea.Cmd {
 	return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
 		return TickMsg(t)
 	})

@@ -7,7 +7,6 @@ import (
 	"swarmcli/docker"
 	inspectview "swarmcli/views/inspect"
 	"swarmcli/views/view"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -39,10 +38,7 @@ func CheckConfigsCmd(lastHash uint64) tea.Cmd {
 		cfgs, err := docker.ListConfigs(ctx)
 		if err != nil {
 			l().Errorf("CheckConfigsCmd: ListConfigs failed: %v", err)
-			// Schedule next poll even on error
-			return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
-				return TickMsg(t)
-			})()
+			return tickCmd()
 		}
 
 		wrapped := make([]docker.ConfigWithDecodedData, len(cfgs))
@@ -54,9 +50,7 @@ func CheckConfigsCmd(lastHash uint64) tea.Cmd {
 		if err != nil {
 			l().Errorf("CheckConfigsCmd: Error computing hash: %v", err)
 			// Schedule next poll even on error
-			return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
-				return TickMsg(t)
-			})()
+			return tickCmd()
 		}
 
 		l().Infof("CheckConfigsCmd: lastHash=%s, newHash=%s, configCount=%d",
@@ -70,9 +64,7 @@ func CheckConfigsCmd(lastHash uint64) tea.Cmd {
 
 		l().Info("CheckConfigsCmd: No changes detected, scheduling next poll")
 		// Schedule next poll in 5 seconds
-		return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
-			return TickMsg(t)
-		})()
+		return tickCmd()
 	}
 }
 
