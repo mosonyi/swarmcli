@@ -80,14 +80,16 @@ func Init() {
 	})
 
 	registerView(nodesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
-		return nodesview.New(w, h), nodesview.LoadNodesCmd()
+		model := nodesview.New(w, h)
+		return model, tea.Batch(model.Init(), nodesview.LoadNodesCmd())
 	})
 	registerView(stacksview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		var nodeID string
 		if payload != nil {
 			nodeID, _ = payload.(string)
 		}
-		return stacksview.New(w, h), stacksview.LoadStacksCmd(nodeID)
+		model := stacksview.New(w, h)
+		return model, tea.Batch(model.Init(), stacksview.LoadStacksCmd(nodeID))
 	})
 
 	registerView(servicesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {

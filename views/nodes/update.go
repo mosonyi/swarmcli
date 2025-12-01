@@ -3,6 +3,7 @@ package nodesview
 import (
 	"context"
 	"fmt"
+	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
@@ -19,11 +20,15 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case Msg:
 		l().Infof("NodesView: Received Msg with %d entries", len(msg.Entries))
 		// Update the hash with new data
-		m.lastSnapshot = computeNodesHash(msg.Entries)
+		var err error
+		m.lastSnapshot, err = hash.Compute(msg.Entries)
+		if err != nil {
+			l().Errorf("NodesView: Error computing hash: %v", err)
+			return nil
+		}
 		m.SetContent(msg)
 		m.Visible = true
-		// Continue polling
-		return m.tickCmd()
+		return nil
 
 	case TickMsg:
 		l().Infof("NodesView: Received TickMsg, visible=%v", m.Visible)
@@ -32,7 +37,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return CheckNodesCmd(m.lastSnapshot)
 		}
 		// Continue polling even if not visible
-		return m.tickCmd()
+		return tickCmd()
 
 	case tea.WindowSizeMsg:
 		m.List.Viewport.Width = msg.Width

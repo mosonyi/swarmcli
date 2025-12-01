@@ -29,7 +29,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.nodeID = msg.NodeID
 		m.setStacks(msg.Stacks)
 		m.Visible = true
-		return nil
+		return tickCmd()
 
 	case TickMsg:
 		l().Infof("StacksView: Received TickMsg, visible=%v", m.Visible)

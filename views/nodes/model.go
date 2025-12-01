@@ -1,10 +1,8 @@
 package nodesview
 
 import (
-	"crypto/sha256"
-	"encoding/json"
-	"fmt"
 	"strings"
+	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/helpbar"
@@ -21,7 +19,7 @@ type Model struct {
 	width        int
 	height       int
 	colWidths    map[string]int
-	lastSnapshot string // Hash of last node state for change detection
+	lastSnapshot uint64 // Hash of last node state for change detection
 }
 
 func New(width, height int) *Model {
@@ -44,44 +42,13 @@ func New(width, height int) *Model {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return m.tickCmd()
+	return tickCmd()
 }
 
-func (m *Model) tickCmd() tea.Cmd {
+func tickCmd() tea.Cmd {
 	return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
 		return TickMsg(t)
 	})
-}
-
-// computeNodesHash creates a hash of node states for change detection
-func computeNodesHash(entries []docker.NodeEntry) string {
-	// Create a minimal representation focusing on key fields that indicate changes
-	type nodeState struct {
-		ID       string
-		Hostname string
-		Role     string
-		State    string
-		Manager  bool
-		Addr     string
-		Labels   map[string]string
-	}
-
-	states := make([]nodeState, len(entries))
-	for i, e := range entries {
-		states[i] = nodeState{
-			ID:       e.ID,
-			Hostname: e.Hostname,
-			Role:     e.Role,
-			State:    e.State,
-			Manager:  e.Manager,
-			Addr:     e.Addr,
-			Labels:   e.Labels,
-		}
-	}
-
-	data, _ := json.Marshal(states)
-	hash := sha256.Sum256(data)
-	return fmt.Sprintf("%x", hash)
 }
 
 func (m *Model) Name() string {
@@ -116,15 +83,19 @@ func LoadNodesCmd() tea.Cmd {
 }
 
 // CheckNodesCmd checks if nodes have changed and returns update message if so
-func CheckNodesCmd(lastHash string) tea.Cmd {
+func CheckNodesCmd(lastHash uint64) tea.Cmd {
 	return func() tea.Msg {
 		l().Info("CheckNodesCmd: Polling for node changes")
 
 		entries := LoadNodes()
-		newHash := computeNodesHash(entries)
+		newHash, err := hash.Compute(entries)
+		if err != nil {
+			l().Errorf("CheckNodesCmd: Compute hash failed: %v", err)
+			return tickCmd()
+		}
 
 		l().Infof("CheckNodesCmd: lastHash=%s, newHash=%s, nodeCount=%d",
-			lastHash[:8], newHash[:8], len(entries))
+			hash.Fmt(lastHash), hash.Fmt(newHash), len(entries))
 
 		// Only return update message if something changed
 		if newHash != lastHash {
@@ -133,10 +104,7 @@ func CheckNodesCmd(lastHash string) tea.Cmd {
 		}
 
 		l().Info("CheckNodesCmd: No changes detected, scheduling next poll")
-		// Schedule next poll in 5 seconds
-		return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
-			return TickMsg(t)
-		})()
+		return tickCmd()
 	}
 }
 
