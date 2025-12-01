@@ -28,9 +28,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			l().Errorf("ConfigsView: Error computing hash: %v", err)
 		}
 
-		// Preserve current cursor position
-		oldCursor := m.configsList.Cursor
-
 		m.configs = msg
 		items := make([]configItem, len(msg))
 		for i, cfg := range msg {
@@ -39,15 +36,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.configsList.Items = items
 		m.setRenderItem()
 		m.configsList.ApplyFilter()
-
-		// Restore cursor position, but ensure it's within bounds
-		if oldCursor < len(m.configsList.Filtered) {
-			m.configsList.Cursor = oldCursor
-		} else if len(m.configsList.Filtered) > 0 {
-			m.configsList.Cursor = len(m.configsList.Filtered) - 1
-		} else {
-			m.configsList.Cursor = 0
-		}
 
 		m.state = stateReady
 		l().Info("ConfigsView: Config list updated")
