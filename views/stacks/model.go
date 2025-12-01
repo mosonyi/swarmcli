@@ -1,10 +1,8 @@
 package stacksview
 
 import (
-	"crypto/sha256"
-	"encoding/json"
-	"fmt"
 	"strings"
+	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	"swarmcli/views/helpbar"
 	"time"
@@ -22,7 +20,7 @@ type Model struct {
 	ready        bool
 	width        int
 	height       int
-	lastSnapshot string // hash of last snapshot for change detection
+	lastSnapshot uint64 // hash of last snapshot for change detection
 }
 
 func New(width, height int) *Model {
@@ -46,35 +44,13 @@ func New(width, height int) *Model {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return m.tickCmd()
+	return tickCmd()
 }
 
-func (m *Model) tickCmd() tea.Cmd {
+func tickCmd() tea.Cmd {
 	return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
 		return TickMsg(t)
 	})
-}
-
-// computeStacksHash creates a hash of stack states for change detection
-func computeStacksHash(entries []docker.StackEntry) string {
-	type stackState struct {
-		Name         string
-		ServiceCount int
-		NodeCount    int
-	}
-
-	states := make([]stackState, len(entries))
-	for i, e := range entries {
-		states[i] = stackState{
-			Name:         e.Name,
-			ServiceCount: e.ServiceCount,
-			NodeCount:    e.NodeCount,
-		}
-	}
-
-	data, _ := json.Marshal(states)
-	hash := sha256.Sum256(data)
-	return fmt.Sprintf("%x", hash)
 }
 
 func (m *Model) Name() string { return ViewName }
@@ -109,15 +85,20 @@ func LoadStacksCmd(nodeID string) tea.Cmd {
 }
 
 // CheckStacksCmd checks if stacks have changed and returns update message if so
-func CheckStacksCmd(lastHash string, nodeID string) tea.Cmd {
+func CheckStacksCmd(lastHash uint64, nodeID string) tea.Cmd {
 	return func() tea.Msg {
 		l().Info("CheckStacksCmd: Polling for stack changes")
 
 		stacks := LoadStacks(nodeID)
-		newHash := computeStacksHash(stacks)
+		var err error
+		newHash, err := hash.Compute(stacks)
+		if err != nil {
+			l().Errorf("CheckStacksCmd: Error computing hash: %v", err)
+			return nil
+		}
 
 		l().Infof("CheckStacksCmd: lastHash=%s, newHash=%s, stackCount=%d",
-			lastHash[:8], newHash[:8], len(stacks))
+			hash.Fmt(lastHash), hash.Fmt(newHash), len(stacks))
 
 		// Only return update message if something changed
 		if newHash != lastHash {
@@ -126,21 +107,7 @@ func CheckStacksCmd(lastHash string, nodeID string) tea.Cmd {
 		}
 
 		l().Info("CheckStacksCmd: No changes detected, scheduling next poll")
-		// Schedule next poll in 5 seconds
-		return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
-			return TickMsg(t)
-		})()
-	}
-}
-
-func LoadStacksOld(nodeID string) tea.Cmd {
-	return func() tea.Msg {
-		snap, err := docker.GetOrRefreshSnapshot()
-		if err != nil {
-			return Msg{NodeID: nodeID, Stacks: nil}
-		}
-		stacks := snap.ToStackEntries()
-		return Msg{NodeID: nodeID, Stacks: stacks}
+		return tickCmd()
 	}
 }
 

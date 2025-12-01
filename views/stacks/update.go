@@ -2,6 +2,7 @@ package stacksview
 
 import (
 	"fmt"
+	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
@@ -17,14 +18,18 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 
 	case Msg:
-		l().Infof("StacksView: Received Msg with %d entries", len(msg.Stacks))
+		l().Infof("[update]: Received Msg with %d entries", len(msg.Stacks))
 		// Update the hash with new data
-		m.lastSnapshot = computeStacksHash(msg.Stacks)
+		var err error
+		m.lastSnapshot, err = hash.Compute(msg.Stacks)
+		if err != nil {
+			l().Errorf("[update] Error computing hash: %v", err)
+			return nil
+		}
 		m.nodeID = msg.NodeID
 		m.setStacks(msg.Stacks)
 		m.Visible = true
-		// Continue polling
-		return m.tickCmd()
+		return nil
 
 	case TickMsg:
 		l().Infof("StacksView: Received TickMsg, visible=%v", m.Visible)
@@ -33,7 +38,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return CheckStacksCmd(m.lastSnapshot, m.nodeID)
 		}
 		// Continue polling even if not visible
-		return m.tickCmd()
+		return tickCmd()
 
 	case RefreshErrorMsg:
 		m.Visible = true
