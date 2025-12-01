@@ -156,20 +156,8 @@ func (m *Model) SetContent(msg Msg) {
 
 	m.title = msg.Title
 
-	// Preserve current cursor position
-	oldCursor := m.List.Cursor
-
 	m.List.Items = msg.Entries
 	m.List.ApplyFilter()
-
-	// Restore cursor position, but ensure it's within bounds
-	if oldCursor < len(m.List.Filtered) {
-		m.List.Cursor = oldCursor
-	} else if len(m.List.Filtered) > 0 {
-		m.List.Cursor = len(m.List.Filtered) - 1
-	} else {
-		m.List.Cursor = 0
-	}
 
 	m.filterType = msg.FilterType
 	m.nodeID = msg.NodeID

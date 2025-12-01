@@ -104,20 +104,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 func (m *Model) SetContent(msg Msg) {
 	l().Infof("NodesView.SetContent: Updating display with %d entries", len(msg.Entries))
 
-	// Preserve current cursor position
-	oldCursor := m.List.Cursor
-
 	m.List.Items = msg.Entries
 	m.List.ApplyFilter()
-
-	// Restore cursor position, but ensure it's within bounds
-	if oldCursor < len(m.List.Filtered) {
-		m.List.Cursor = oldCursor
-	} else if len(m.List.Filtered) > 0 {
-		m.List.Cursor = len(m.List.Filtered) - 1
-	} else {
-		m.List.Cursor = 0
-	}
 
 	// Calculate column widths for all columns
 	m.colWidths = calcColumnWidths(msg.Entries)

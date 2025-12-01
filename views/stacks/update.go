@@ -85,20 +85,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 func (m *Model) setStacks(stacks []docker.StackEntry) {
 	l().Infof("StacksView.setStacks: Updating display with %d stacks", len(stacks))
 
-	// Preserve current cursor position
-	oldCursor := m.List.Cursor
-
 	m.List.Items = stacks
 	m.List.Filtered = stacks
-
-	// Restore cursor position, but ensure it's within bounds
-	if oldCursor < len(m.List.Filtered) {
-		m.List.Cursor = oldCursor
-	} else if len(m.List.Filtered) > 0 {
-		m.List.Cursor = len(m.List.Filtered) - 1
-	} else {
-		m.List.Cursor = 0
-	}
 
 	m.setRenderItem()
 
