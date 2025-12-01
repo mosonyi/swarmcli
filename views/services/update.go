@@ -6,7 +6,6 @@ import (
 	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
-	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/confirmdialog"
 	inspectview "swarmcli/views/inspect"
 	logsview "swarmcli/views/logs"
@@ -17,12 +16,10 @@ import (
 )
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
-	logger := swarmlog.L()
-
 	switch msg := msg.(type) {
 
 	case Msg:
-		logger.Infof("ServicesView: Received Msg with %d entries", len(msg.Entries))
+		l().Infof("ServicesView: Received Msg with %d entries", len(msg.Entries))
 		// Update the hash with new data
 		m.lastSnapshot = computeServicesHash(msg.Entries)
 		m.SetContent(msg)
@@ -32,7 +29,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.tickCmd()
 
 	case TickMsg:
-		logger.Infof("ServicesView: Received TickMsg, visible=%v", m.Visible)
+		l().Infof("ServicesView: Received TickMsg, visible=%v", m.Visible)
 		// Check for changes (this will return either a Msg or the next TickMsg)
 		if m.Visible {
 			return CheckServicesCmd(m.lastSnapshot, m.filterType, m.nodeID, m.stackName)
@@ -149,8 +146,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) SetContent(msg Msg) {
-	logger := swarmlog.L()
-	logger.Infof("ServicesView.SetContent: Updating display with %d services", len(msg.Entries))
+	l().Infof("ServicesView.SetContent: Updating display with %d services", len(msg.Entries))
 
 	m.title = msg.Title
 

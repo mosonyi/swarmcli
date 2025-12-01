@@ -6,7 +6,6 @@ import (
 	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
-	swarmlog "swarmcli/utils/log"
 	inspectview "swarmcli/views/inspect"
 	servicesview "swarmcli/views/services"
 	"swarmcli/views/view"
@@ -16,11 +15,9 @@ import (
 )
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
-	logger := swarmlog.L()
-
 	switch msg := msg.(type) {
 	case Msg:
-		logger.Infof("NodesView: Received Msg with %d entries", len(msg.Entries))
+		l().Infof("NodesView: Received Msg with %d entries", len(msg.Entries))
 		// Update the hash with new data
 		m.lastSnapshot = computeNodesHash(msg.Entries)
 		m.SetContent(msg)
@@ -29,7 +26,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.tickCmd()
 
 	case TickMsg:
-		logger.Infof("NodesView: Received TickMsg, visible=%v", m.Visible)
+		l().Infof("NodesView: Received TickMsg, visible=%v", m.Visible)
 		// Check for changes (this will return either a Msg or the next TickMsg)
 		if m.Visible {
 			return CheckNodesCmd(m.lastSnapshot)
@@ -100,8 +97,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) SetContent(msg Msg) {
-	logger := swarmlog.L()
-	logger.Infof("NodesView.SetContent: Updating display with %d entries", len(msg.Entries))
+	l().Infof("NodesView.SetContent: Updating display with %d entries", len(msg.Entries))
 
 	// Preserve current cursor position
 	oldCursor := m.List.Cursor
@@ -124,9 +120,9 @@ func (m *Model) SetContent(msg Msg) {
 
 	if m.ready {
 		m.List.Viewport.SetContent(m.List.View())
-		logger.Info("NodesView.SetContent: Viewport content updated")
+		l().Info("NodesView.SetContent: Viewport content updated")
 	} else {
-		logger.Warn("NodesView.SetContent: View not ready yet, skipping viewport update")
+		l().Warn("NodesView.SetContent: View not ready yet, skipping viewport update")
 	}
 }
 

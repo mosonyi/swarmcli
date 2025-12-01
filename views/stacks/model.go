@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"swarmcli/docker"
-	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/helpbar"
 	"time"
 
@@ -95,8 +94,7 @@ func LoadStacks(nodeID string) []docker.StackEntry {
 	// Refresh the snapshot to get latest data
 	snap, err := docker.RefreshSnapshot()
 	if err != nil {
-		logger := swarmlog.L()
-		logger.Errorf("LoadStacks: RefreshSnapshot failed: %v", err)
+		l().Errorf("LoadStacks: RefreshSnapshot failed: %v", err)
 		// Fall back to cached snapshot
 		snap = docker.GetSnapshot()
 	}
@@ -113,22 +111,21 @@ func LoadStacksCmd(nodeID string) tea.Cmd {
 // CheckStacksCmd checks if stacks have changed and returns update message if so
 func CheckStacksCmd(lastHash string, nodeID string) tea.Cmd {
 	return func() tea.Msg {
-		logger := swarmlog.L()
-		logger.Info("CheckStacksCmd: Polling for stack changes")
+		l().Info("CheckStacksCmd: Polling for stack changes")
 
 		stacks := LoadStacks(nodeID)
 		newHash := computeStacksHash(stacks)
 
-		logger.Infof("CheckStacksCmd: lastHash=%s, newHash=%s, stackCount=%d",
+		l().Infof("CheckStacksCmd: lastHash=%s, newHash=%s, stackCount=%d",
 			lastHash[:8], newHash[:8], len(stacks))
 
 		// Only return update message if something changed
 		if newHash != lastHash {
-			logger.Info("CheckStacksCmd: Change detected! Refreshing stack list")
+			l().Info("CheckStacksCmd: Change detected! Refreshing stack list")
 			return Msg{NodeID: nodeID, Stacks: stacks}
 		}
 
-		logger.Info("CheckStacksCmd: No changes detected, scheduling next poll")
+		l().Info("CheckStacksCmd: No changes detected, scheduling next poll")
 		// Schedule next poll in 5 seconds
 		return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
 			return TickMsg(t)

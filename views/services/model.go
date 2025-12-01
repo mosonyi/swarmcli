@@ -7,7 +7,6 @@ import (
 	"strings"
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
-	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	loadingview "swarmcli/views/loading"
@@ -24,10 +23,6 @@ const (
 	StackFilter
 	AllFilter
 )
-
-func l() *swarmlog.SwarmLogger {
-	return swarmlog.L().With("docker", "client")
-}
 
 type Model struct {
 	List         filterlist.FilterableList[docker.ServiceEntry]

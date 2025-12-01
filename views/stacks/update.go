@@ -5,7 +5,6 @@ import (
 	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
-	swarmlog "swarmcli/utils/log"
 	servicesview "swarmcli/views/services"
 	"swarmcli/views/view"
 
@@ -15,12 +14,10 @@ import (
 
 // Update handles all messages for the stacks view.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
-	logger := swarmlog.L()
-
 	switch msg := msg.(type) {
 
 	case Msg:
-		logger.Infof("StacksView: Received Msg with %d entries", len(msg.Stacks))
+		l().Infof("StacksView: Received Msg with %d entries", len(msg.Stacks))
 		// Update the hash with new data
 		m.lastSnapshot = computeStacksHash(msg.Stacks)
 		m.nodeID = msg.NodeID
@@ -30,7 +27,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.tickCmd()
 
 	case TickMsg:
-		logger.Infof("StacksView: Received TickMsg, visible=%v", m.Visible)
+		l().Infof("StacksView: Received TickMsg, visible=%v", m.Visible)
 		// Check for changes (this will return either a Msg or the next TickMsg)
 		if m.Visible {
 			return CheckStacksCmd(m.lastSnapshot, m.nodeID)
@@ -81,8 +78,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) setStacks(stacks []docker.StackEntry) {
-	logger := swarmlog.L()
-	logger.Infof("StacksView.setStacks: Updating display with %d stacks", len(stacks))
+	l().Infof("StacksView.setStacks: Updating display with %d stacks", len(stacks))
 
 	// Preserve current cursor position
 	oldCursor := m.List.Cursor
@@ -103,9 +99,9 @@ func (m *Model) setStacks(stacks []docker.StackEntry) {
 
 	if m.ready {
 		m.List.Viewport.SetContent(m.List.View())
-		logger.Info("StacksView.setStacks: Viewport content updated")
+		l().Info("StacksView.setStacks: Viewport content updated")
 	} else {
-		logger.Warn("StacksView.setStacks: View not ready yet, skipping viewport update")
+		l().Warn("StacksView.setStacks: View not ready yet, skipping viewport update")
 	}
 }
 

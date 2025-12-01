@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
-	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/confirmdialog"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,8 +11,6 @@ import (
 )
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
-	logger := swarmlog.L()
-
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:
@@ -22,7 +19,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case configsLoadedMsg:
-		logger.Infof("ConfigsView: Received configsLoadedMsg with %d configs", len(msg))
+		l().Infof("ConfigsView: Received configsLoadedMsg with %d configs", len(msg))
 		// Update the hash with new data
 		m.lastSnapshot = computeConfigsHash(msg)
 
@@ -48,12 +45,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 
 		m.state = stateReady
-		logger.Info("ConfigsView: Config list updated")
+		l().Info("ConfigsView: Config list updated")
 		// Continue polling
 		return m.tickCmd()
 
 	case TickMsg:
-		logger.Infof("ConfigsView: Received TickMsg, state=%v", m.state)
+		l().Infof("ConfigsView: Received TickMsg, state=%v", m.state)
 		// Check for changes (this will return either configsLoadedMsg or the next TickMsg)
 		if m.state == stateReady {
 			return CheckConfigsCmd(m.lastSnapshot)

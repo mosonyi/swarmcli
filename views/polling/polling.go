@@ -11,6 +11,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+func l() *swarmlog.SwarmLogger {
+	return swarmlog.L().With("polling")
+}
+
 // TickMsg represents a polling tick event
 type TickMsg time.Time
 
@@ -56,12 +60,11 @@ func (p *Poller[T]) TickCmd() tea.Cmd {
 // Otherwise returns a TickMsg to schedule the next poll
 func (p *Poller[T]) CheckCmd() tea.Cmd {
 	return func() tea.Msg {
-		logger := swarmlog.L()
-		logger.Info("Poller: Polling for changes")
+		l().Info("Poller: Polling for changes")
 
 		data, err := p.loadFunc()
 		if err != nil {
-			logger.Errorf("Poller: Load failed: %v", err)
+			l().Errorf("Poller: Load failed: %v", err)
 			// Schedule next poll even on error
 			return p.TickCmd()()
 		}
@@ -70,22 +73,22 @@ func (p *Poller[T]) CheckCmd() tea.Cmd {
 
 		if p.lastSnapshot == "" {
 			// First load, no comparison
-			logger.Infof("Poller: Initial load with %d entries", len(data))
+			l().Infof("Poller: Initial load with %d entries", len(data))
 			p.lastSnapshot = newHash
 			return p.msgBuilder(data)
 		}
 
-		logger.Infof("Poller: lastHash=%s, newHash=%s, count=%d",
+		l().Infof("Poller: lastHash=%s, newHash=%s, count=%d",
 			p.lastSnapshot[:8], newHash[:8], len(data))
 
 		// Only return update message if something changed
 		if newHash != p.lastSnapshot {
-			logger.Info("Poller: Change detected! Refreshing data")
+			l().Info("Poller: Change detected! Refreshing data")
 			p.lastSnapshot = newHash
 			return p.msgBuilder(data)
 		}
 
-		logger.Info("Poller: No changes detected, scheduling next poll")
+		l().Info("Poller: No changes detected, scheduling next poll")
 		// Schedule next poll
 		return p.TickCmd()()
 	}
