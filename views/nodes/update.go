@@ -28,7 +28,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		m.SetContent(msg)
 		m.Visible = true
-		return nil
+		return tickCmd()
 
 	case TickMsg:
 		l().Infof("NodesView: Received TickMsg, visible=%v", m.Visible)
