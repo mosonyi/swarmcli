@@ -31,7 +31,12 @@ func editConfigInEditorCmd(name string) tea.Cmd {
 		l().Infoln("CreateTemp error:", err)
 		return func() tea.Msg { return editConfigErrorMsg{fmt.Errorf("failed to create temp file: %w", err)} }
 	}
-	defer tmp.Close()
+	defer func(tmp *os.File) {
+		err := tmp.Close()
+		if err != nil {
+			l().Errorln("Failed to close temp file:", tmp.Name(), "error:", err)
+		}
+	}(tmp)
 
 	if _, err := tmp.Write(content); err != nil {
 		l().Infoln("Write temp error:", err)
@@ -52,7 +57,12 @@ func editConfigInEditorCmd(name string) tea.Cmd {
 	l().Infoln("Prepared command:", cmd.String())
 
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
-		defer os.Remove(tmp.Name())
+		defer func(name string) {
+			err := os.Remove(name)
+			if err != nil {
+				l().Errorln("Failed to remove temp file:", name, "error:", err)
+			}
+		}(tmp.Name())
 
 		l().Infoln("In ExecProcess callback")
 		if err != nil {

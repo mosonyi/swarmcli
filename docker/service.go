@@ -152,7 +152,7 @@ func restartServiceAndWaitInternal(ctx context.Context, serviceName string, prog
 	if err != nil {
 		return fmt.Errorf("docker client: %w", err)
 	}
-	defer cli.Close()
+	defer closeCli(cli)
 
 	svc, err := findServiceByName(ctx, cli, serviceName)
 	if err != nil {

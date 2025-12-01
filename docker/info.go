@@ -242,7 +242,6 @@ func GetSwarmMemUsage() (string, error) {
 
 			var s container.StatsResponse
 			decodeErr := json.NewDecoder(stats.Body).Decode(&s)
-			stats.Body.Close()
 
 			if decodeErr != nil {
 				l().Infof("GetSwarmMemUsage: Decode error for %s: %v", containerID[:12], decodeErr)
