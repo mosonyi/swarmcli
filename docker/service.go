@@ -90,7 +90,7 @@ func ScaleService(serviceID string, replicas uint64) error {
 	if err != nil {
 		return fmt.Errorf("docker client: %w", err)
 	}
-	defer c.Close()
+	defer closeCli(c)
 
 	ctx := context.Background()
 
@@ -107,7 +107,7 @@ func ScaleServiceByName(serviceName string, replicas uint64) error {
 	if err != nil {
 		return fmt.Errorf("docker client: %w", err)
 	}
-	defer c.Close()
+	defer closeCli(c)
 
 	ctx := context.Background()
 	svc, err := findServiceByName(ctx, c, serviceName)
@@ -123,7 +123,7 @@ func RestartService(serviceName string) error {
 	if err != nil {
 		return fmt.Errorf("docker client: %w", err)
 	}
-	defer c.Close()
+	defer closeCli(c)
 
 	ctx := context.Background()
 	svc, err := findServiceByName(ctx, c, serviceName)
@@ -152,7 +152,7 @@ func restartServiceAndWaitInternal(ctx context.Context, serviceName string, prog
 	if err != nil {
 		return fmt.Errorf("docker client: %w", err)
 	}
-	defer cli.Close()
+	defer closeCli(cli)
 
 	svc, err := findServiceByName(ctx, cli, serviceName)
 	if err != nil {

@@ -89,7 +89,7 @@ func ListConfigs(ctx context.Context) ([]swarm.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer cli.Close()
+	defer closeCli(cli)
 
 	configs, err := cli.ConfigList(ctx, swarm.ConfigListOptions{})
 	if err != nil {
@@ -105,6 +105,13 @@ func ListConfigs(ctx context.Context) ([]swarm.Config, error) {
 	return configs, nil
 }
 
+func closeCli(cli *client.Client) {
+	err := cli.Close()
+	if err != nil {
+		l().Errorf("failed to close client: %v", err)
+	}
+}
+
 // InspectConfig fetches and returns the config data.
 func InspectConfig(ctx context.Context, nameOrID string) (*ConfigWithDecodedData, error) {
 	l().Debugf("[InspectConfig] Inspecting config: %s", nameOrID)
@@ -113,7 +120,7 @@ func InspectConfig(ctx context.Context, nameOrID string) (*ConfigWithDecodedData
 	if err != nil {
 		return nil, err
 	}
-	defer cli.Close()
+	defer closeCli(cli)
 
 	cfg, _, err := cli.ConfigInspectWithRaw(ctx, nameOrID)
 	if err != nil {
@@ -134,7 +141,7 @@ func CreateConfigVersion(ctx context.Context, baseConfig swarm.Config, newData [
 	if err != nil {
 		return swarm.Config{}, err
 	}
-	defer cli.Close()
+	defer closeCli(cli)
 
 	spec := swarm.ConfigSpec{
 		Annotations: swarm.Annotations{
@@ -174,7 +181,7 @@ func RotateConfigInServices(ctx context.Context, oldCfg *swarm.Config, newCfg sw
 	if err != nil {
 		return fmt.Errorf("failed to get docker client: %w", err)
 	}
-	defer client.Close()
+	defer closeCli(client)
 
 	// --- 1. Find affected services
 	var services []swarm.Service
@@ -225,7 +232,7 @@ func DeleteConfig(ctx context.Context, nameOrID string) error {
 	if err != nil {
 		return err
 	}
-	defer cli.Close()
+	defer closeCli(cli)
 
 	svcs, err := listServicesUsingConfig(ctx, cli, cfg.Config.ID)
 	if err != nil {

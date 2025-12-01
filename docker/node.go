@@ -12,7 +12,7 @@ func GetNodeIDToHostnameMapFromDocker() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer c.Close()
+	defer closeCli(c)
 
 	nodes, err := c.NodeList(context.Background(), swarm.NodeListOptions{})
 	if err != nil {
