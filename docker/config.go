@@ -181,7 +181,7 @@ func RotateConfigInServices(ctx context.Context, oldCfg *swarm.Config, newCfg sw
 	if err != nil {
 		return fmt.Errorf("failed to get docker client: %w", err)
 	}
-	defer client.Close()
+	defer closeCli(client)
 
 	// --- 1. Find affected services
 	var services []swarm.Service

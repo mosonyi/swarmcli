@@ -65,7 +65,7 @@ func RefreshSnapshot() (*SwarmSnapshot, error) {
 	if err != nil {
 		return nil, fmt.Errorf("docker client: %w", err)
 	}
-	defer c.Close()
+	defer closeCli(c)
 
 	ctx := context.Background()
 
