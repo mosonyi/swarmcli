@@ -2,6 +2,7 @@ package configsview
 
 import (
 	"fmt"
+	"swarmcli/core/primitives/hash"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
@@ -21,7 +22,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case configsLoadedMsg:
 		l().Infof("ConfigsView: Received configsLoadedMsg with %d configs", len(msg))
 		// Update the hash with new data
-		m.lastSnapshot = computeConfigsHash(msg)
+		var err error
+		m.lastSnapshot, err = hash.Compute(msg)
+		if err != nil {
+			l().Errorf("ConfigsView: Error computing hash: %v", err)
+		}
 
 		// Preserve current cursor position
 		oldCursor := m.configsList.Cursor
@@ -46,8 +51,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 		m.state = stateReady
 		l().Info("ConfigsView: Config list updated")
-		// Continue polling
-		return m.tickCmd()
+		return nil
 
 	case TickMsg:
 		l().Infof("ConfigsView: Received TickMsg, state=%v", m.state)

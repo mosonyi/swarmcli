@@ -3,6 +3,7 @@ package configsview
 import (
 	"context"
 	"fmt"
+	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	inspectview "swarmcli/views/inspect"
 	"swarmcli/views/view"
@@ -30,7 +31,7 @@ func loadConfigsCmd() tea.Cmd {
 }
 
 // CheckConfigsCmd checks if configs have changed and returns update message if so
-func CheckConfigsCmd(lastHash string) tea.Cmd {
+func CheckConfigsCmd(lastHash uint64) tea.Cmd {
 	return func() tea.Msg {
 		l().Info("CheckConfigsCmd: Polling for config changes")
 
@@ -49,10 +50,17 @@ func CheckConfigsCmd(lastHash string) tea.Cmd {
 			wrapped[i] = docker.ConfigWithDecodedData{Config: c, Data: c.Spec.Data}
 		}
 
-		newHash := computeConfigsHash(wrapped)
+		newHash, err := hash.Compute(wrapped)
+		if err != nil {
+			l().Errorf("CheckConfigsCmd: Error computing hash: %v", err)
+			// Schedule next poll even on error
+			return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
+				return TickMsg(t)
+			})()
+		}
 
 		l().Infof("CheckConfigsCmd: lastHash=%s, newHash=%s, configCount=%d",
-			lastHash[:8], newHash[:8], len(wrapped))
+			hash.Fmt(lastHash), hash.Fmt(newHash), len(wrapped))
 
 		// Only return update message if something changed
 		if newHash != lastHash {

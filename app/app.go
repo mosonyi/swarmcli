@@ -65,7 +65,8 @@ func Init() {
 	})
 
 	registerView(configsview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
-		return configsview.New(w, h), configsview.LoadConfigs()
+		model := configsview.New(w, h)
+		return model, model.Init()
 	})
 
 	registerView(inspectview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {

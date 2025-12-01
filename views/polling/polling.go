@@ -1,9 +1,7 @@
 package polling
 
 import (
-	"crypto/sha256"
-	"encoding/json"
-	"fmt"
+	"swarmcli/core/primitives/hash"
 	"time"
 
 	swarmlog "swarmcli/utils/log"
@@ -23,7 +21,7 @@ const PollInterval = 5 * time.Second
 
 // Poller provides generic polling functionality for any view
 type Poller[T any] struct {
-	lastSnapshot string
+	lastSnapshot uint64
 	interval     time.Duration
 	loadFunc     func() ([]T, error)
 	msgBuilder   func([]T) tea.Msg
@@ -69,9 +67,14 @@ func (p *Poller[T]) CheckCmd() tea.Cmd {
 			return p.TickCmd()()
 		}
 
-		newHash := computeHash(data)
+		newHash, err := hash.Compute(data)
+		if err != nil {
+			l().Errorf("Poller: Load failed: %v", err)
+			// Schedule next poll even on error
+			return p.TickCmd()()
+		}
 
-		if p.lastSnapshot == "" {
+		if p.lastSnapshot == 0 {
 			// First load, no comparison
 			l().Infof("Poller: Initial load with %d entries", len(data))
 			p.lastSnapshot = newHash
@@ -79,7 +82,7 @@ func (p *Poller[T]) CheckCmd() tea.Cmd {
 		}
 
 		l().Infof("Poller: lastHash=%s, newHash=%s, count=%d",
-			p.lastSnapshot[:8], newHash[:8], len(data))
+			hash.Fmt(p.lastSnapshot), hash.Fmt(newHash), len(data))
 
 		// Only return update message if something changed
 		if newHash != p.lastSnapshot {
@@ -97,21 +100,10 @@ func (p *Poller[T]) CheckCmd() tea.Cmd {
 // UpdateHash updates the stored hash with new data
 // Call this when you receive fresh data from other sources
 func (p *Poller[T]) UpdateHash(data []T) {
-	p.lastSnapshot = computeHash(data)
+	p.lastSnapshot, _ = hash.Compute(data)
 }
 
 // GetLastHash returns the last computed hash
-func (p *Poller[T]) GetLastHash() string {
+func (p *Poller[T]) GetLastHash() uint64 {
 	return p.lastSnapshot
-}
-
-// computeHash creates a SHA256 hash of the data for change detection
-func computeHash[T any](data []T) string {
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		// Fallback to simple string conversion
-		return fmt.Sprintf("%v", data)
-	}
-	hash := sha256.Sum256(jsonData)
-	return fmt.Sprintf("%x", hash)
 }
