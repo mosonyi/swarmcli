@@ -171,6 +171,16 @@ func (m *Model) updateViewports(msg tea.Msg) tea.Cmd {
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Check if current view is in fullscreen or search mode before handling global esc
 	if msg.Type == tea.KeyEsc || msg.String() == "esc" {
+		// Check if logs view has dialog open
+		if logsView, ok := m.currentView.(interface {
+			GetNodeSelectVisible() bool
+		}); ok {
+			if logsView.GetNodeSelectVisible() {
+				// Let the view handle esc to close the dialog
+				cmd := m.currentView.Update(msg)
+				return m, cmd
+			}
+		}
 		// Check if logs view is in fullscreen or search mode
 		if logsView, ok := m.currentView.(interface {
 			GetFullscreen() bool

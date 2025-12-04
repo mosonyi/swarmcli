@@ -11,6 +11,7 @@ import (
 	inspectview "swarmcli/views/inspect"
 	logsview "swarmcli/views/logs"
 	"swarmcli/views/view"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -173,6 +174,9 @@ func (m *Model) SetContent(msg Msg) {
 
 func (m *Model) setRenderItem() {
 	const replicaWidth = 10
+	const statusWidth = 12
+	const createdWidth = 10
+	const updatedWidth = 10
 	const gap = 2
 
 	width := m.List.Viewport.Width
@@ -193,7 +197,7 @@ func (m *Model) setRenderItem() {
 	}
 
 	// Ensure total width fits viewport
-	total := maxService + maxStack + replicaWidth + 2*gap
+	total := maxService + maxStack + replicaWidth + statusWidth + createdWidth + updatedWidth + 5*gap
 	if total > width {
 		overflow := total - width
 		if maxStack > maxService {
@@ -210,36 +214,59 @@ func (m *Model) setRenderItem() {
 	}
 
 	m.List.RenderItem = func(e docker.ServiceEntry, selected bool, _ int) string {
-		replicas := fmt.Sprintf("%d/%d", e.ReplicasOnNode, e.ReplicasTotal)
-		switch {
-		case e.ReplicasTotal == 0:
-			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("—")
-		case e.ReplicasOnNode == 0:
-			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(replicas)
-		case e.ReplicasOnNode < e.ReplicasTotal:
-			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render(replicas)
-		default:
-			replicas = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(replicas)
+		// Format plain text first for proper alignment
+		replicasText := fmt.Sprintf("%d/%d", e.ReplicasOnNode, e.ReplicasTotal)
+		if e.ReplicasTotal == 0 {
+			replicasText = "—"
 		}
 
 		serviceName := truncateWithEllipsis(e.ServiceName, maxService)
 		stackName := truncateWithEllipsis(e.StackName, maxStack)
+		statusText := e.Status
+		created := formatRelativeTime(e.CreatedAt)
+		updated := formatRelativeTime(e.UpdatedAt)
 
+		// Build the line with proper spacing
 		line := fmt.Sprintf(
-			"%-*s        %-*s        %*s",
+			"%-*s        %-*s        %-*s        %-*s        %-*s        %-*s",
 			maxService, serviceName,
 			maxStack, stackName,
-			replicaWidth, replicas,
+			replicaWidth, replicasText,
+			statusWidth, statusText,
+			createdWidth, created,
+			updatedWidth, updated,
 		)
 
 		if selected {
 			line = ui.CursorStyle.Render(line)
 		} else {
-			// Apply light blue color to the entire line (preserving replica colors)
-			// Since replicas already has color styling, we need to keep it separate
+			// Apply colors using lipgloss styles on individual columns
 			itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
-			serviceAndStack := fmt.Sprintf("%-*s        %-*s        ", maxService, serviceName, maxStack, stackName)
-			line = itemStyle.Render(serviceAndStack) + replicas
+
+			// Color replicas based on status
+			var replicasColor lipgloss.Color
+			switch {
+			case e.ReplicasTotal == 0:
+				replicasColor = lipgloss.Color("8") // gray
+			case e.ReplicasOnNode == 0:
+				replicasColor = lipgloss.Color("9") // red
+			case e.ReplicasOnNode < e.ReplicasTotal:
+				replicasColor = lipgloss.Color("11") // yellow
+			default:
+				replicasColor = lipgloss.Color("10") // green
+			}
+			replicasStyle := lipgloss.NewStyle().Foreground(replicasColor)
+
+			// Color status
+			statusColor := getStatusColor(e.Status)
+			statusStyle := lipgloss.NewStyle().Foreground(statusColor)
+
+			// Build colored line maintaining exact spacing
+			line = itemStyle.Render(fmt.Sprintf("%-*s        %-*s        ", maxService, serviceName, maxStack, stackName)) +
+				replicasStyle.Render(fmt.Sprintf("%-*s", replicaWidth, replicasText)) +
+				itemStyle.Render("        ") +
+				statusStyle.Render(fmt.Sprintf("%-*s", statusWidth, statusText)) +
+				itemStyle.Render(fmt.Sprintf("        %-*s        %-*s", createdWidth, created, updatedWidth, updated))
 		}
 		return line
 	}
@@ -256,4 +283,50 @@ func truncateWithEllipsis(s string, maxWidth int) string {
 		return s[:1] + "…"
 	}
 	return s[:maxWidth-1] + "…"
+}
+
+// formatRelativeTime formats a time as a relative duration (e.g., "2h ago", "3d ago")
+func formatRelativeTime(t time.Time) string {
+	if t.IsZero() {
+		return "-"
+	}
+
+	d := time.Since(t)
+	if d < time.Minute {
+		return "just now"
+	} else if d < time.Hour {
+		mins := int(d.Minutes())
+		return fmt.Sprintf("%dm ago", mins)
+	} else if d < 24*time.Hour {
+		hours := int(d.Hours())
+		return fmt.Sprintf("%dh ago", hours)
+	} else if d < 7*24*time.Hour {
+		days := int(d.Hours() / 24)
+		return fmt.Sprintf("%dd ago", days)
+	} else if d < 30*24*time.Hour {
+		weeks := int(d.Hours() / 24 / 7)
+		return fmt.Sprintf("%dw ago", weeks)
+	} else if d < 365*24*time.Hour {
+		months := int(d.Hours() / 24 / 30)
+		return fmt.Sprintf("%dmo ago", months)
+	} else {
+		years := int(d.Hours() / 24 / 365)
+		return fmt.Sprintf("%dy ago", years)
+	}
+}
+
+// getStatusColor returns the appropriate color for a service status
+func getStatusColor(status string) lipgloss.Color {
+	switch status {
+	case "updating", "rolling back":
+		return lipgloss.Color("11") // yellow
+	case "updated", "active":
+		return lipgloss.Color("10") // green
+	case "paused", "rollback paused":
+		return lipgloss.Color("8") // gray
+	case "rolled back":
+		return lipgloss.Color("9") // red
+	default:
+		return lipgloss.Color("15") // white
+	}
 }

@@ -22,26 +22,41 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.readOneLineCmd()
 
 	case LineMsg:
-		// append line into bounded buffer
+		// Parse node name from the line (format: "nodename\x00actual_line")
+		parts := strings.SplitN(msg.Line, "\x00", 2)
+		var nodeName, actualLine string
+		if len(parts) == 2 {
+			nodeName = parts[0]
+			actualLine = parts[1]
+		} else {
+			actualLine = msg.Line
+		}
+
+		// append line into bounded buffer (store both line and node)
 		m.mu.Lock()
 		// store line as-is (no newline); rendering will join with '\n'
-		m.lines = append(m.lines, msg.Line)
+		m.lines = append(m.lines, actualLine)
+		m.lineNodes = append(m.lineNodes, nodeName)
 
 		// track how many lines we're dropping from the top
 		linesDropped := 0
-		
+
 		// trim if over MaxLines
 		if m.MaxLines > 0 && len(m.lines) > m.MaxLines {
-			// drop older lines
+			// drop older lines from both slices
 			start := len(m.lines) - m.MaxLines
 			linesDropped = start
 			newBuf := make([]string, 0, m.MaxLines)
 			newBuf = append(newBuf, m.lines[start:]...)
 			m.lines = newBuf
+
+			newNodeBuf := make([]string, 0, m.MaxLines)
+			newNodeBuf = append(newNodeBuf, m.lineNodes[start:]...)
+			m.lineNodes = newNodeBuf
 		}
 
 		// update searchMatches incrementally
-		if m.searchTerm != "" && strings.Contains(strings.ToLower(msg.Line), strings.ToLower(m.searchTerm)) {
+		if m.searchTerm != "" && strings.Contains(strings.ToLower(actualLine), strings.ToLower(m.searchTerm)) {
 			m.searchMatches = append(m.searchMatches, len(m.lines)-1)
 		}
 		totalLines := len(m.lines)
@@ -58,7 +73,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				// Save current offset before updating content
 				savedOffset := m.viewport.YOffset
 				m.viewport.SetContent(m.buildContent())
-				
+
 				// Adjust offset if we dropped lines from the top
 				newOffset := savedOffset
 				if linesDropped > 0 {
@@ -67,7 +82,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 						newOffset = 0
 					}
 				}
-				
+
 				// Ensure offset is within bounds (important when wrapping changes line count)
 				maxOffset := m.viewport.TotalLineCount() - m.viewport.Height
 				if maxOffset < 0 {
@@ -76,7 +91,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				if newOffset > maxOffset {
 					newOffset = maxOffset
 				}
-				
+
 				m.viewport.YOffset = newOffset
 				l().Debugf("[logsview] NOT scrolling (follow=false), YOffset=%d->%d (dropped %d lines)", savedOffset, newOffset, linesDropped)
 			}
@@ -113,13 +128,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			// because line count changes dramatically with wrapping
 			savedOffset := m.viewport.YOffset
 			m.viewport.SetContent(m.buildContent())
-			
+
 			// Ensure YOffset is within bounds
 			maxOffset := m.viewport.TotalLineCount() - m.viewport.Height
 			if maxOffset < 0 {
 				maxOffset = 0
 			}
-			
+
 			// If we were following, go to bottom
 			shouldFollow := m.getFollow()
 			if shouldFollow {
@@ -138,6 +153,17 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// Just trigger a re-render
 		return nil
 
+	case NodeFilterToggledMsg:
+		// When node filter changes, we need to rebuild the content
+		// because existing lines need to be filtered/unfiltered
+		if m.ready {
+			m.viewport.SetContent(m.buildContent())
+			if m.getFollow() {
+				m.viewport.GotoBottom()
+			}
+		}
+		return nil
+
 	case tea.WindowSizeMsg:
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height
@@ -149,6 +175,19 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case tea.KeyMsg:
+		// Check if node select dialog is visible first
+		if m.getNodeSelectVisible() {
+			// When dialog is visible, handle ALL keys through HandleKey
+			// to prevent any keys from falling through to the viewport
+			cmd := HandleKey(m, msg)
+			// Force a return here to prevent any further processing
+			if cmd != nil {
+				return cmd
+			}
+			// Even if cmd is nil, don't process the key further
+			return nil
+		}
+
 		// 1) allow viewport to handle scrolling keys
 		switch msg.String() {
 		case "up", "down", "pgup", "pgdown", "home", "end", "k", "j":
@@ -246,26 +285,41 @@ func (m *Model) buildContent() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// Apply node filter
+	nodeFilter := m.nodeFilter
+	var filteredLines []string
+	if nodeFilter != "" {
+		// Filter lines by node
+		for i, line := range m.lines {
+			if i < len(m.lineNodes) && m.lineNodes[i] == nodeFilter {
+				filteredLines = append(filteredLines, line)
+			}
+		}
+	} else {
+		// No filter, use all lines
+		filteredLines = m.lines
+	}
+
 	// Join lines first
-	full := strings.Join(m.lines, "\n")
-	
+	full := strings.Join(filteredLines, "\n")
+
 	// Apply wrapping based on wrap setting
-	if m.wrap && m.viewport.Width > 0 {
+	// BUT: skip wrapping if node selection dialog is visible to avoid overlay issues
+	if m.wrap && m.viewport.Width > 0 && !m.nodeSelectVisible {
 		// Wrap the entire content to viewport width
 		full = wordwrap.String(full, m.viewport.Width)
-	} else if !m.wrap && m.viewport.Width > 0 {
+	} else if (!m.wrap || m.nodeSelectVisible) && m.viewport.Width > 0 {
 		// When wrap is off, apply horizontal scrolling
-		lines := m.lines
-		processedLines := make([]string, len(lines))
-		
-		for i, line := range lines {
+		processedLines := make([]string, len(filteredLines))
+
+		for i, line := range filteredLines {
 			if len(line) <= m.horizontalOffset {
 				// Line is shorter than offset, show empty
 				processedLines[i] = ""
 			} else {
 				// Apply horizontal offset
 				visiblePart := line[m.horizontalOffset:]
-				
+
 				if len(visiblePart) > m.viewport.Width {
 					// Truncate and add > indicator
 					if m.viewport.Width > 1 {

@@ -5,6 +5,69 @@ import (
 )
 
 func HandleKey(m *Model, k tea.KeyMsg) tea.Cmd {
+	// Handle node selection dialog first if visible
+	if m.getNodeSelectVisible() {
+		switch k.String() {
+		case "esc":
+			m.setNodeSelectVisible(false)
+			return nil
+		case "up", "k":
+			m.mu.Lock()
+			if m.nodeSelectCursor > 0 {
+				m.nodeSelectCursor--
+			}
+			m.mu.Unlock()
+			return nil
+		case "down", "j":
+			m.mu.Lock()
+			if m.nodeSelectCursor < len(m.nodeSelectNodes)-1 {
+				m.nodeSelectCursor++
+			}
+			m.mu.Unlock()
+			return nil
+		case "pgup":
+			// Jump up by 5 items
+			m.mu.Lock()
+			m.nodeSelectCursor -= 5
+			if m.nodeSelectCursor < 0 {
+				m.nodeSelectCursor = 0
+			}
+			m.mu.Unlock()
+			return nil
+		case "pgdown":
+			// Jump down by 5 items
+			m.mu.Lock()
+			m.nodeSelectCursor += 5
+			if m.nodeSelectCursor >= len(m.nodeSelectNodes) {
+				m.nodeSelectCursor = len(m.nodeSelectNodes) - 1
+			}
+			m.mu.Unlock()
+			return nil
+		case "enter":
+			m.mu.Lock()
+			// Safety check: ensure cursor is within bounds
+			if m.nodeSelectCursor < 0 || m.nodeSelectCursor >= len(m.nodeSelectNodes) || len(m.nodeSelectNodes) == 0 {
+				m.mu.Unlock()
+				m.setNodeSelectVisible(false)
+				return nil
+			}
+			selectedNode := m.nodeSelectNodes[m.nodeSelectCursor]
+			m.mu.Unlock()
+
+			if selectedNode == "All nodes" {
+				m.setNodeFilter("")
+			} else {
+				m.setNodeFilter(selectedNode)
+			}
+			m.setNodeSelectVisible(false)
+			l().Infof("[logsview] Selected node filter: %q", m.getNodeFilter())
+			return func() tea.Msg {
+				return NodeFilterToggledMsg{}
+			}
+		}
+		return nil
+	}
+
 	switch k.String() {
 	case "q":
 		m.Visible = false
@@ -109,13 +172,13 @@ func HandleKey(m *Model, k tea.KeyMsg) tea.Cmd {
 				}
 			}
 			m.mu.Unlock()
-			
+
 			// Calculate max scroll: stop when the end of the longest line is at screen center
 			maxScroll := maxLen - (m.viewport.Width / 2)
 			if maxScroll < 0 {
 				maxScroll = 0
 			}
-			
+
 			// Only scroll if we haven't reached the limit
 			if m.horizontalOffset < maxScroll {
 				m.horizontalOffset += 10 // Scroll by 10 characters
@@ -127,6 +190,36 @@ func HandleKey(m *Model, k tea.KeyMsg) tea.Cmd {
 					return WrapToggledMsg{} // Reuse to refresh content
 				}
 			}
+		}
+		return nil
+	case "o":
+		// Only handle 'o' as a command in normal mode
+		// In search mode, let it fall through to be captured as a rune
+		if m.mode != "normal" {
+			break
+		}
+		// Show node selection dialog
+		nodes := m.extractUniqueNodes()
+		if len(nodes) > 1 { // More than just "All nodes"
+			m.mu.Lock()
+			m.nodeSelectVisible = true
+			m.nodeSelectNodes = nodes
+			m.nodeSelectCursor = 0
+			// Set cursor to current filter if exists
+			currentFilter := m.nodeFilter
+			m.mu.Unlock()
+
+			if currentFilter != "" {
+				m.mu.Lock()
+				for i, node := range nodes {
+					if node == currentFilter {
+						m.nodeSelectCursor = i
+						break
+					}
+				}
+				m.mu.Unlock()
+			}
+			l().Infof("[logsview] 'o' key pressed: showing node selection dialog with %d nodes", len(nodes))
 		}
 		return nil
 	}

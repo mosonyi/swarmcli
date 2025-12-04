@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
-	
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -16,6 +16,9 @@ func (m *Model) View() string {
 
 	// Compute dynamic column widths (same as in setRenderItem)
 	replicaWidth := 10
+	statusWidth := 12
+	createdWidth := 10
+	updatedWidth := 10
 	maxService := len("SERVICE")
 	maxStack := len("STACK")
 	for _, e := range m.List.Filtered {
@@ -26,7 +29,7 @@ func (m *Model) View() string {
 			maxStack = len(e.StackName)
 		}
 	}
-	total := maxService + maxStack + replicaWidth + 16 // 8 spaces between each column
+	total := maxService + maxStack + replicaWidth + statusWidth + createdWidth + updatedWidth + 40 // spacing between columns
 	if total > width {
 		overflow := total - width
 		if maxStack > maxService {
@@ -45,12 +48,15 @@ func (m *Model) View() string {
 	headerStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("15"))
-	
+
 	header := headerStyle.Render(fmt.Sprintf(
-		"%-*s        %-*s        %-*s",
+		"%-*s        %-*s        %-*s        %-*s        %-*s        %-*s",
 		maxService, "SERVICE",
 		maxStack, "STACK",
 		replicaWidth, "REPLICAS",
+		statusWidth, "STATUS",
+		createdWidth, "CREATED",
+		updatedWidth, "UPDATED",
 	))
 
 	// Footer: cursor + optional search query
