@@ -122,16 +122,6 @@ func (m *Model) GetNodeSelectVisible() bool {
 	return m.getNodeSelectVisible()
 }
 
-func (m *Model) toggleNodeFilter(nodeName string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.nodeFilter == nodeName {
-		m.nodeFilter = "" // Clear filter if same node
-	} else {
-		m.nodeFilter = nodeName // Set filter to this node
-	}
-}
-
 func (m *Model) getFollow() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
