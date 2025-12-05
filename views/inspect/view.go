@@ -37,13 +37,16 @@ func (m *Model) View() string {
 
 	headerRendered := ui.FrameHeaderStyle.Render(header)
 
+	// Add 4 to make frame full terminal width (app reduces viewport by 4 in normal mode)
+	frameWidth := width + 4
+
 	// ---- Render framed box ----
 	content := ui.RenderFramedBox(
 		title,
 		headerRendered,
 		m.viewport.View(),
 		"",
-		width,
+		frameWidth,
 	)
 
 	return content

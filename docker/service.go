@@ -293,6 +293,9 @@ type ServiceEntry struct {
 	ServiceID      string
 	ReplicasOnNode int
 	ReplicasTotal  int
+	Status         string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 func LoadNodeServices(nodeID string) []ServiceEntry {
@@ -321,6 +324,9 @@ func LoadNodeServices(nodeID string) []ServiceEntry {
 			ServiceID:      svc.ID,
 			ReplicasOnNode: onNode,
 			ReplicasTotal:  desired,
+			Status:         getServiceStatus(svc),
+			CreatedAt:      svc.CreatedAt,
+			UpdatedAt:      svc.UpdatedAt,
 		})
 	}
 
@@ -352,6 +358,9 @@ func LoadStackServices(stackName string) []ServiceEntry {
 			ServiceID:      svc.ID,
 			ReplicasOnNode: onNode,
 			ReplicasTotal:  desired,
+			Status:         getServiceStatus(svc),
+			CreatedAt:      svc.CreatedAt,
+			UpdatedAt:      svc.UpdatedAt,
 		})
 	}
 
@@ -405,4 +414,27 @@ func sortEntries(entries []ServiceEntry) {
 		}
 		return entries[i].StackName < entries[j].StackName
 	})
+}
+
+// getServiceStatus returns a human-readable status string for a service
+func getServiceStatus(svc swarm.Service) string {
+	if svc.UpdateStatus != nil {
+		switch svc.UpdateStatus.State {
+		case swarm.UpdateStateUpdating:
+			return "updating"
+		case swarm.UpdateStatePaused:
+			return "paused"
+		case swarm.UpdateStateCompleted:
+			return "updated"
+		case swarm.UpdateStateRollbackStarted:
+			return "rolling back"
+		case swarm.UpdateStateRollbackPaused:
+			return "rollback paused"
+		case swarm.UpdateStateRollbackCompleted:
+			return "rolled back"
+		default:
+			return string(svc.UpdateStatus.State)
+		}
+	}
+	return "active"
 }

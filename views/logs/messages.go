@@ -19,3 +19,5 @@ type StreamDoneMsg struct{}
 type WrapToggledMsg struct{}
 
 type FullscreenToggledMsg struct{}
+
+type NodeFilterToggledMsg struct{}

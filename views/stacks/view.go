@@ -24,7 +24,7 @@ func (m *Model) View() string {
 	if colWidth < 15 {
 		colWidth = 15
 	}
-	
+
 	// Format: %-*s (stack name) + 8 spaces + left-aligned SERVICES
 	header := headerStyle.Render(fmt.Sprintf("%-*s        %-s", colWidth, "STACK", "SERVICES"))
 
@@ -47,5 +47,7 @@ func (m *Model) View() string {
 
 	content := m.List.View()
 
-	return ui.RenderFramedBox(title, header, content, footer, m.List.Viewport.Width)
+	// Add 4 to make frame full terminal width (app reduces viewport by 4 in normal mode)
+	frameWidth := m.List.Viewport.Width + 4
+	return ui.RenderFramedBox(title, header, content, footer, frameWidth)
 }

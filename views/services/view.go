@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
-	
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -14,8 +14,14 @@ func (m *Model) View() string {
 		width = 80
 	}
 
+	// Add 4 to make frame full terminal width (app reduces viewport by 4 in normal mode)
+	frameWidth := width + 4
+
 	// Compute dynamic column widths (same as in setRenderItem)
 	replicaWidth := 10
+	statusWidth := 12
+	createdWidth := 10
+	updatedWidth := 10
 	maxService := len("SERVICE")
 	maxStack := len("STACK")
 	for _, e := range m.List.Filtered {
@@ -26,7 +32,7 @@ func (m *Model) View() string {
 			maxStack = len(e.StackName)
 		}
 	}
-	total := maxService + maxStack + replicaWidth + 16 // 8 spaces between each column
+	total := maxService + maxStack + replicaWidth + statusWidth + createdWidth + updatedWidth + 40 // spacing between columns
 	if total > width {
 		overflow := total - width
 		if maxStack > maxService {
@@ -45,12 +51,15 @@ func (m *Model) View() string {
 	headerStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("15"))
-	
+
 	header := headerStyle.Render(fmt.Sprintf(
-		"%-*s        %-*s        %-*s",
+		"%-*s        %-*s        %-*s        %-*s        %-*s        %-*s",
 		maxService, "SERVICE",
 		maxStack, "STACK",
 		replicaWidth, "REPLICAS",
+		statusWidth, "STATUS",
+		createdWidth, "CREATED",
+		updatedWidth, "UPDATED",
 	))
 
 	// Footer: cursor + optional search query
@@ -70,13 +79,13 @@ func (m *Model) View() string {
 		footer = statusBar
 	}
 
-	content := ui.RenderFramedBox(m.title, header, m.List.View(), footer, width)
+	content := ui.RenderFramedBox(m.title, header, m.List.View(), footer, frameWidth)
 
 	if m.confirmDialog.Visible {
-		content = ui.OverlayCentered(content, m.confirmDialog.View(), width, m.List.Viewport.Height)
+		content = ui.OverlayCentered(content, m.confirmDialog.View(), frameWidth, m.List.Viewport.Height)
 	}
 	if m.loading.Visible() {
-		content = ui.OverlayCentered(content, m.loading.View(), width, m.List.Viewport.Height)
+		content = ui.OverlayCentered(content, m.loading.View(), frameWidth, m.List.Viewport.Height)
 	}
 
 	return content

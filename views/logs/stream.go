@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"swarmcli/docker"
 	"sync"
 
@@ -37,7 +38,7 @@ func StartStreamingCmd(ctx context.Context, service docker.ServiceEntry, tail in
 				ShowStderr: true,
 				Follow:     true,
 				Timestamps: false,
-				Details:    false,
+				Details:    true, // Include task and node information in log prefix
 			}
 			if tail > 0 {
 				opts.Tail = fmt.Sprintf("%d", tail)
@@ -75,7 +76,12 @@ func StartStreamingCmd(ctx context.Context, service docker.ServiceEntry, tail in
 				defer wg.Done()
 				sc := bufio.NewScanner(r)
 				for sc.Scan() {
-					lines <- sc.Text() // sc.Text() does not include newline
+					line := sc.Text()
+					// Format the log line with node information
+					formattedLine, nodeName := formatLogLineWithNode(service.ServiceName, line)
+					// Store both the formatted line and node name (separated by a special marker)
+					// Format: "NODENAME\x00formatted_line" where \x00 is a null byte separator
+					lines <- nodeName + "\x00" + formattedLine
 				}
 			}
 
@@ -121,4 +127,76 @@ func (m *Model) StopStreamingCmd() tea.Cmd {
 		}
 		return nil
 	}
+}
+
+// formatLogLineWithNode parses the Docker log details and formats the line with node information
+// Input format: "com.docker.swarm.node.id=xxx,com.docker.swarm.task.id=yyy actual log message"
+// Output format: formatted line and node name for filtering
+// Returns: ("service_name.task_id@node_name | actual log message", "node_name")
+func formatLogLineWithNode(serviceName string, line string) (string, string) {
+	// Check if line has Docker details prefix
+	if !strings.Contains(line, "com.docker.swarm.") {
+		return line, ""
+	}
+
+	// Split on first space to separate details from message
+	parts := strings.SplitN(line, " ", 2)
+	if len(parts) != 2 {
+		return line, ""
+	}
+
+	details := parts[0]
+	message := parts[1]
+
+	// Extract node ID and task ID from details
+	var nodeID, taskID string
+
+	// Parse key=value pairs
+	pairs := strings.Split(details, ",")
+	for _, pair := range pairs {
+		kv := strings.SplitN(pair, "=", 2)
+		if len(kv) == 2 {
+			switch kv[0] {
+			case "com.docker.swarm.node.id":
+				nodeID = kv[1]
+			case "com.docker.swarm.task.id":
+				taskID = kv[1]
+			}
+		}
+	}
+
+	// Get node hostname from node ID
+	nodeName := getNodeHostname(nodeID)
+	if nodeName == "" {
+		nodeName = nodeID[:12] // fallback to short ID
+	}
+
+	// Format task ID (show first 12 chars)
+	taskIDShort := taskID
+	if len(taskID) > 12 {
+		taskIDShort = taskID[:12]
+	}
+
+	// Build the formatted prefix with blue color (117 is the light blue we use elsewhere)
+	// ANSI escape: \033[38;5;117m for foreground color 117, \033[0m to reset
+	prefix := fmt.Sprintf("\033[38;5;117m%s.%s@%s\033[0m", serviceName, taskIDShort, nodeName)
+
+	return fmt.Sprintf("%s | %s", prefix, message), nodeName
+}
+
+// getNodeHostname retrieves the hostname for a node ID from the snapshot
+func getNodeHostname(nodeID string) string {
+	snap := docker.GetSnapshot()
+	if snap == nil {
+		return ""
+	}
+
+	for _, node := range snap.Nodes {
+		if node.ID == nodeID {
+			if node.Description.Hostname != "" {
+				return node.Description.Hostname
+			}
+		}
+	}
+	return ""
 }

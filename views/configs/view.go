@@ -36,15 +36,18 @@ func (m *Model) View() string {
 	content := m.configsList.View()
 	footer := m.renderConfigsFooter()
 
+	// Add 4 to make frame full terminal width (app reduces viewport by 4 in normal mode)
+	frameWidth := width + 4
+
 	title := fmt.Sprintf("Docker Configs (%d)", len(m.configsList.Filtered))
-	view := ui.RenderFramedBox(title, header, content, footer, width)
+	view := ui.RenderFramedBox(title, header, content, footer, frameWidth)
 
 	if m.confirmDialog.Visible {
-		view = ui.OverlayCentered(view, m.confirmDialog.View(), width, height)
+		view = ui.OverlayCentered(view, m.confirmDialog.View(), frameWidth, height)
 	}
 
 	if m.state == stateLoading || m.loadingView.Visible() {
-		view = ui.OverlayCentered(view, m.loadingView.View(), width, height)
+		view = ui.OverlayCentered(view, m.loadingView.View(), frameWidth, height)
 	}
 
 	return view
