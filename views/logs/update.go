@@ -165,6 +165,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case tea.WindowSizeMsg:
+		// Safety check: ensure dimensions are positive
+		if msg.Width < 1 {
+			msg.Width = 1
+		}
+		if msg.Height < 1 {
+			msg.Height = 1
+		}
+
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height
 		if !m.ready {

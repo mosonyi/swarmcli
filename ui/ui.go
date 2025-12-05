@@ -109,7 +109,15 @@ func RenderFramedBox(title, header, content, footer string, width int) string {
 func padLine(line string, width int) string {
 	l := lipgloss.Width(line)
 	if l >= width {
-		return lipgloss.NewStyle().MaxWidth(width).Render(line)
+		// Truncate but ensure we leave room for proper ending if needed
+		// Use MaxWidth to handle ANSI sequences properly
+		truncated := lipgloss.NewStyle().MaxWidth(width).Render(line)
+		// Ensure the truncated line is exactly the visual width requested
+		truncatedWidth := lipgloss.Width(truncated)
+		if truncatedWidth < width {
+			truncated += strings.Repeat(" ", width-truncatedWidth)
+		}
+		return truncated
 	}
 	return line + strings.Repeat(" ", width-l)
 }
@@ -187,18 +195,61 @@ func OverlayCentered(base, overlay string, width, height int) string {
 
 		// For framed boxes, preserve borders and blank out the content area
 		if hasFrameBorders {
-			// Simple and robust approach: find first and last pipe character
-			firstPipe := strings.Index(baseLine, "│")
-			lastPipe := strings.LastIndex(baseLine, "│")
+			// Find the BORDER pipes, not content pipes
+			// The left border pipe should be at the start (possibly after ANSI codes)
+			// The right border pipe should be at the end (possibly before ANSI codes)
 
-			// If we can't find proper borders, skip this line (shouldn't happen in a well-formed frame)
+			// Find first non-ANSI character position and check if it's a pipe
+			firstPipe := -1
+			lastPipe := -1
+
+			// Scan from start to find left border (skip ANSI codes)
+			inAnsi := false
+			for i := 0; i < len(baseLine); i++ {
+				if baseLine[i] == '\x1b' && i+1 < len(baseLine) && baseLine[i+1] == '[' {
+					inAnsi = true
+					continue
+				}
+				if inAnsi {
+					if baseLine[i] == 'm' {
+						inAnsi = false
+					}
+					continue
+				}
+				// Found first non-ANSI character
+				if strings.HasPrefix(baseLine[i:], "│") {
+					firstPipe = i
+				}
+				break
+			}
+
+			// Scan from end to find right border (skip ANSI codes backward)
+			for i := len(baseLine) - 1; i >= 0; i-- {
+				if strings.HasPrefix(baseLine[i:], "│") {
+					// Check if this is likely the right border by seeing if there's only ANSI codes after it
+					afterPipe := baseLine[i+len("│"):]
+					// Should only contain ANSI reset codes or be empty
+					if len(afterPipe) == 0 || strings.HasPrefix(afterPipe, "\x1b[") {
+						lastPipe = i
+						break
+					}
+				}
+			}
+
+			// If we can't find proper borders, skip this line
 			if firstPipe == -1 || lastPipe == -1 || firstPipe >= lastPipe {
 				continue
 			}
 
-			// Extract parts: everything before first pipe, content between pipes, everything after last pipe
+			// Validate that we have reasonable positions
+			baseLineVisualWidth := lipgloss.Width(baseLine)
+			if baseLineVisualWidth < 2 {
+				continue
+			}
+
+			// Extract the left part INCLUDING the left border (preserves original ANSI codes)
 			leftPart := baseLine[:firstPipe+len("│")]
-			rightPart := baseLine[lastPipe:]
+			// Extract the middle content between the two pipes
 			middleContent := baseLine[firstPipe+len("│") : lastPipe]
 
 			// Calculate visual width of middle content (accounts for ANSI codes)
@@ -209,38 +260,63 @@ func OverlayCentered(base, overlay string, width, height int) string {
 				continue
 			}
 
-			// Completely blank the middle area for ALL lines in the dialog range
-			// and only draw the dialog content on the appropriate lines
-			leftPadSize := (middleVisualWidth - overlayLineWidth) / 2
-			if leftPadSize < 0 {
-				leftPadSize = 0
-			}
-
-			rightPadSize := middleVisualWidth - leftPadSize - overlayLineWidth
-			if rightPadSize < 0 {
-				rightPadSize = 0
-			}
-
-			// Build completely blank line with centered dialog content
-			newMiddle := strings.Repeat(" ", leftPadSize) + line + strings.Repeat(" ", rightPadSize)
-
-			// Pad to exact width if needed
-			actualWidth := lipgloss.Width(newMiddle)
-			if actualWidth < middleVisualWidth {
-				newMiddle += strings.Repeat(" ", middleVisualWidth-actualWidth)
-			} else if actualWidth > middleVisualWidth {
-				// Truncate if somehow too wide
-				excess := actualWidth - middleVisualWidth
-				if excess <= rightPadSize {
-					rightPadSize -= excess
-					if rightPadSize < 0 {
-						rightPadSize = 0
-					}
-					newMiddle = strings.Repeat(" ", leftPadSize) + line + strings.Repeat(" ", rightPadSize)
+			// The expected total width should be: leftBorder(1) + middleWidth + rightBorder(1)
+			// If the calculated middle is much different than expected, something is wrong
+			expectedMiddleWidth := baseLineVisualWidth - 2
+			if middleVisualWidth < expectedMiddleWidth-5 || middleVisualWidth > expectedMiddleWidth+5 {
+				// Width mismatch - likely ANSI code issue, use expected width
+				middleVisualWidth = expectedMiddleWidth
+				if middleVisualWidth <= 0 {
+					continue
 				}
 			}
 
-			canvas[row] = leftPart + newMiddle + rightPart
+			// Center the dialog in the middle content area
+			// RenderFramedBox adds +4 to width (line 41 of this file), so borderWidth has +2 padding
+			// The padding is added at the END by padLine (line 119), so we need to strip it first
+
+			// Strip trailing padding spaces from middleContent to get ACTUAL content
+			middleStr := strings.TrimRight(middleContent, " ")
+			actualContentLen := len(middleStr)
+
+			// Calculate dialog position based on the ORIGINAL content width (minus 2 padding)
+			originalContentWidth := middleVisualWidth - 2
+			dialogStartPos := (originalContentWidth - overlayLineWidth) / 2
+			if dialogStartPos < 0 {
+				dialogStartPos = 0
+			}
+
+			// Build new middle line by blanking out the dialog area
+			var newMiddleBuilder strings.Builder
+
+			// Take left part (before dialog) from the ACTUAL content
+			if dialogStartPos > 0 {
+				if dialogStartPos <= actualContentLen {
+					newMiddleBuilder.WriteString(middleStr[:dialogStartPos])
+				} else {
+					newMiddleBuilder.WriteString(middleStr)
+					newMiddleBuilder.WriteString(strings.Repeat(" ", dialogStartPos-actualContentLen))
+				}
+			}
+
+			// Add the dialog line (which will hide content behind it)
+			newMiddleBuilder.WriteString(line)
+
+			// Add right part (after dialog) from the ACTUAL content
+			dialogEndPos := dialogStartPos + overlayLineWidth
+			if dialogEndPos < actualContentLen {
+				newMiddleBuilder.WriteString(middleStr[dialogEndPos:])
+			}
+
+			// Pad to full width (restore the padding to match middleVisualWidth)
+			newMiddle := newMiddleBuilder.String()
+			if len(newMiddle) < middleVisualWidth {
+				newMiddle += strings.Repeat(" ", middleVisualWidth-len(newMiddle))
+			}
+
+			// Reconstruct: preserve left part with original ANSI, new middle, fresh right border
+			borderStyle := lipgloss.NewStyle().Foreground(FrameBorderColor)
+			canvas[row] = leftPart + newMiddle + borderStyle.Render("│")
 		} else {
 			// Fullscreen mode
 			baseRunes := []rune(baseLine)
