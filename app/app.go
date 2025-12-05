@@ -4,6 +4,7 @@ import (
 	"swarmcli/docker"
 	swarmlog "swarmcli/utils/log"
 	configsview "swarmcli/views/configs"
+	contextsview "swarmcli/views/contexts"
 	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"
 	loadingview "swarmcli/views/loading"
@@ -83,6 +84,17 @@ func Init() {
 		model := nodesview.New(w, h)
 		return model, tea.Batch(model.Init(), nodesview.LoadNodesCmd())
 	})
+
+	registerView(contextsview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
+		model := contextsview.New()
+		model.Visible = true
+		model.SetSize(w, h)
+		model.SetLoading(true)
+		return model, func() tea.Msg {
+			return contextsview.LoadContextsCmd()
+		}
+	})
+
 	registerView(stacksview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		var nodeID string
 		if payload != nil {

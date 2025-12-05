@@ -5,6 +5,7 @@ import (
 	"strings"
 	"swarmcli/commands/api"
 	"swarmcli/views/commandinput"
+	contextsview "swarmcli/views/contexts"
 	loadingview "swarmcli/views/loading"
 	logsview "swarmcli/views/logs"
 	stacksview "swarmcli/views/stacks"
@@ -98,6 +99,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = m.systemInfo.Update(msg)
 		return m, cmd
 
+	case contextsview.ContextChangedNotification:
+		// Context has changed, navigate to stacks view and refresh system info
+		return m, tea.Batch(
+			systeminfoview.LoadStatus(),
+			func() tea.Msg {
+				return view.NavigateToMsg{
+					ViewName: stacksview.ViewName,
+					Payload:  nil,
+				}
+			},
+		)
+
 	default:
 		cmd := m.delegateToCurrentView(msg)
 		return m, cmd
@@ -188,6 +201,16 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}); ok {
 			if logsView.GetFullscreen() || logsView.GetSearchMode() {
 				// Let the view handle esc to exit fullscreen or search mode
+				cmd := m.currentView.Update(msg)
+				return m, cmd
+			}
+		}
+		// Check if contexts view has an active dialog
+		if contextsView, ok := m.currentView.(interface {
+			HasActiveDialog() bool
+		}); ok {
+			if contextsView.HasActiveDialog() {
+				// Let the view handle esc to close the dialog
 				cmd := m.currentView.Update(msg)
 				return m, cmd
 			}
