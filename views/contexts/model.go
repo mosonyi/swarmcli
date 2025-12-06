@@ -139,13 +139,27 @@ func (m *Model) GetContexts() []docker.ContextInfo {
 func (m *Model) SetContexts(contexts []docker.ContextInfo) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// Preserve cursor position if possible
+	oldCursor := m.cursor
 	m.contexts = contexts
-	// Set cursor to current context
-	for i, ctx := range contexts {
-		if ctx.Current {
-			m.cursor = i
-			break
+
+	// If this is the first load (cursor at 0 and contexts were empty), set to current
+	if oldCursor == 0 && len(contexts) > 0 {
+		for i, ctx := range contexts {
+			if ctx.Current {
+				m.cursor = i
+				return
+			}
 		}
+	}
+
+	// Otherwise keep cursor position, but validate bounds
+	if m.cursor >= len(m.contexts) {
+		m.cursor = len(m.contexts) - 1
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
 	}
 }
 
