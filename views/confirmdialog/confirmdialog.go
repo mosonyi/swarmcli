@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"swarmcli/ui"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -45,14 +43,53 @@ func (m *Model) View() string {
 		return ""
 	}
 
-	lines := []string{
-		fmt.Sprintf("⚠️  %s", m.Message),
-		"",
-		"[y] Yes   [n] No",
+	// Calculate content width based on message
+	contentWidth := lipgloss.Width(m.Message) + 4
+	if contentWidth < 50 {
+		contentWidth = 50
 	}
 
+	// Styled title
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("15")).
+		Background(lipgloss.Color("208")). // Orange for warning
+		Padding(0, 1).
+		Width(contentWidth)
+
+	// Message style
+	messageStyle := lipgloss.NewStyle().
+		Padding(1, 2).
+		Width(contentWidth)
+
+	// Help style
+	helpStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		Padding(0, 2).
+		Width(contentWidth)
+
+	keyStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("63")).
+		Bold(true)
+
+	// Border style
+	borderStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("208")).
+		Width(contentWidth + 2)
+
+	// Build content
+	var lines []string
+	lines = append(lines, titleStyle.Render("⚠️  Confirm Action"))
+	lines = append(lines, messageStyle.Render(m.Message))
+
+	helpText := fmt.Sprintf("%s Yes • %s No",
+		keyStyle.Render("<y>"),
+		keyStyle.Render("<n/Esc>"))
+	lines = append(lines, helpStyle.Render(helpText))
+
 	content := strings.Join(lines, "\n")
-	box := ui.RenderFramedBox("Confirm", "", content, "", 0) // width=0 → minimal width
+	box := borderStyle.Render(content)
 
 	return lipgloss.Place(m.Width, m.Height, lipgloss.Center, lipgloss.Center, box)
 }

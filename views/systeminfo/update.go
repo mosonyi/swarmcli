@@ -14,12 +14,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.SetContent(msg)
 		// Trigger slow status load right after fast values
 		return LoadSlowStatus()
-	
+
 	case SlowStatusMsg:
 		m.updateCPUMem(msg)
 		// Schedule next tick 8 seconds after collection completes
 		return m.tickCmd()
-	
+
 	case TickMsg:
 		// Only show spinner on first load, keep previous values during refresh
 		if m.firstLoad {
@@ -29,16 +29,16 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		// Trigger slow status reload (will schedule next tick after completion)
 		return LoadSlowStatus()
-	
+
 	case SpinnerTickMsg:
 		// Fast animation tick - always keep running
 		m.spinner++
 		needsUpdate := false
-		
+
 		if m.loadingCPU || m.loadingMem {
 			needsUpdate = true
 		}
-		
+
 		// Handle pulsing for trend arrows - decrement every 3 ticks for slower pulse
 		if m.cpuBlinkCount > 0 || m.memBlinkCount > 0 {
 			// Decrement counters every 3rd tick (240ms intervals)
@@ -52,11 +52,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			needsUpdate = true
 		}
-		
+
 		if needsUpdate {
 			m.content = m.buildContent()
 		}
-		
+
 		return m.spinnerTickCmd()
 	}
 
@@ -67,7 +67,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 func (m *Model) buildContent() string {
 	// Use briandowns/spinner character set 14 (dots)
 	spinnerFrames := spinner.CharSets[14]
-	
+
 	cpu := m.cpuUsage
 	if m.loadingCPU {
 		cpu = spinnerFrames[m.spinner%len(spinnerFrames)]
@@ -78,7 +78,7 @@ func (m *Model) buildContent() string {
 			cpu = fmt.Sprintf("%.1f%%", cpuVal)
 		}
 	}
-	
+
 	mem := m.memUsage
 	if m.loadingMem {
 		mem = spinnerFrames[m.spinner%len(spinnerFrames)]
@@ -89,7 +89,7 @@ func (m *Model) buildContent() string {
 			mem = fmt.Sprintf("%.1f%%", memVal)
 		}
 	}
-	
+
 	return content(
 		m.context, m.version, cpu, mem, m.containerCount, m.serviceCount,
 	)
@@ -100,7 +100,7 @@ func content(context, version, cpu, mem string, containers, services int) string
 		Foreground(lipgloss.Color("214")).
 		Bold(true).
 		Width(15)
-	
+
 	// Use lipgloss Width to handle styled text properly
 	return fmt.Sprintf(
 		"%s %s\n%s %s\n%s %s\n%s %s\n%s %d\n%s %d",
@@ -115,7 +115,7 @@ func content(context, version, cpu, mem string, containers, services int) string
 
 func (m *Model) SetContent(msg Msg) {
 	m.context = msg.context
-	
+
 	// Update capacity if provided
 	if msg.cpuCapacity != "" {
 		m.cpuCapacity = msg.cpuCapacity
@@ -123,9 +123,9 @@ func (m *Model) SetContent(msg Msg) {
 	if msg.memCapacity != "" {
 		m.memCapacity = msg.memCapacity
 	}
-	
+
 	spinnerMarker := spinner.CharSets[14][0]
-	
+
 	// Only update CPU if it's not the spinner marker
 	if msg.cpu == spinnerMarker {
 		// Keep loading flag, don't update cpuUsage (buildContent will show spinner)
@@ -136,7 +136,7 @@ func (m *Model) SetContent(msg Msg) {
 		m.loadingCPU = false
 	}
 	// If msg.cpu is empty, keep current state
-	
+
 	if msg.mem == spinnerMarker {
 		// Keep loading flag, don't update memUsage (buildContent will show spinner)
 		m.loadingMem = true
@@ -146,7 +146,7 @@ func (m *Model) SetContent(msg Msg) {
 		m.loadingMem = false
 	}
 	// If msg.mem is empty, keep current state
-	
+
 	m.containerCount = msg.containers
 	m.serviceCount = msg.services
 
@@ -158,12 +158,12 @@ func (m *Model) updateCPUMem(msg SlowStatusMsg) {
 	var currentCPU, currentMem float64
 	_, _ = fmt.Sscanf(msg.cpu, "%f%%", &currentCPU)
 	_, _ = fmt.Sscanf(msg.mem, "%f%%", &currentMem)
-	
+
 	// Clear loading flags and firstLoad
 	m.loadingCPU = false
 	m.loadingMem = false
 	m.firstLoad = false
-	
+
 	// Add trend arrows if we have previous values
 	if m.prevCPU > 0 {
 		var currentTrend string
@@ -189,7 +189,7 @@ func (m *Model) updateCPUMem(msg SlowStatusMsg) {
 	} else {
 		m.cpuUsage = msg.cpu
 	}
-	
+
 	if m.prevMem > 0 {
 		var currentTrend string
 		if currentMem > m.prevMem {
@@ -214,7 +214,7 @@ func (m *Model) updateCPUMem(msg SlowStatusMsg) {
 	} else {
 		m.memUsage = msg.mem
 	}
-	
+
 	// Update previous values
 	m.prevCPU = currentCPU
 	m.prevMem = currentMem

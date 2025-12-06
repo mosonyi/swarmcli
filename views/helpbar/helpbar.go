@@ -72,10 +72,10 @@ func (m *Model) View(systemInfo string) string {
 
 	// Fixed: 5 rows per column
 	rowsPerColumn := 5
-	
+
 	// Calculate how many columns we need
 	numCols := (len(allHelp) + rowsPerColumn - 1) / rowsPerColumn
-	
+
 	// Check if we have space for all columns
 	maxCols := availableWidth / m.minColWidth
 	if maxCols < 1 {
@@ -101,7 +101,7 @@ func (m *Model) View(systemInfo string) string {
 	keyStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("39")).
 		Bold(true)
-	
+
 	var renderedCols []string
 	for colIdx, col := range columns {
 		// Find max key length in this column for alignment (visible length)
@@ -113,7 +113,7 @@ func (m *Model) View(systemInfo string) string {
 				maxKeyLen = keyLen
 			}
 		}
-		
+
 		var lines []string
 		for _, entry := range col {
 			styledKey := keyStyle.Render("<" + entry.Key + ">")
@@ -124,14 +124,14 @@ func (m *Model) View(systemInfo string) string {
 			line := styledKey + strings.Repeat(" ", padding+2) + entry.Desc
 			lines = append(lines, line)
 		}
-		
+
 		colContent := strings.Join(lines, "\n")
-		
+
 		// Add spacing between columns (3 spaces)
 		if colIdx > 0 {
 			renderedCols = append(renderedCols, "   ")
 		}
-		
+
 		colBlock := lipgloss.NewStyle().
 			Render(colContent)
 		renderedCols = append(renderedCols, colBlock)

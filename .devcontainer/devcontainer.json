@@ -43,6 +43,6 @@
     "https_proxy": "${localEnv:HTTPS_PROXY}",
     "no_proxy": "${localEnv:NO_PROXY}"
   },
-  "postCreateCommand": "sudo update-ca-certificates && go mod tidy && DOCKER_GID=$(stat -c '%g' /var/run/docker.sock) && (getent group $DOCKER_GID || sudo groupadd -g $DOCKER_GID dockerhost) && sudo usermod -aG $DOCKER_GID vscode",
+  "postCreateCommand": "sudo update-ca-certificates && go mod tidy && DOCKER_GID=$(stat -c '%g' /var/run/docker.sock) && (getent group $DOCKER_GID || sudo groupadd -g $DOCKER_GID dockerhost) && sudo usermod -aG $DOCKER_GID vscode && sudo chmod 666 /var/run/docker.sock",
   "remoteUser": "vscode"
 }

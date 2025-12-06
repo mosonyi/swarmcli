@@ -1,8 +1,8 @@
 package nodesview
 
 import (
-	"time"
 	"swarmcli/docker"
+	"time"
 )
 
 type Msg struct {
