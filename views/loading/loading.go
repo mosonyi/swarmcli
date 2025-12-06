@@ -13,8 +13,8 @@ import (
 
 const ViewName = "loading"
 
-// NavigateToContextsMsg is sent when user presses Enter on error
-type NavigateToContextsMsg struct{}
+// ErrorDismissedMsg is sent when user presses Enter on an error screen
+type ErrorDismissedMsg struct{}
 
 type Model struct {
 	width, height int
@@ -74,9 +74,9 @@ func (m *Model) Name() string      { return ViewName }
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		if m.isError && keyMsg.String() == "enter" {
-			// Navigate to contexts view
+			// Emit generic error dismissed message
 			return func() tea.Msg {
-				return NavigateToContextsMsg{}
+				return ErrorDismissedMsg{}
 			}
 		}
 	}

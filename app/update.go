@@ -119,8 +119,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd,
 		)
 
-	case loadingview.NavigateToContextsMsg:
-		// Navigate to contexts view from error screen
+	case loadingview.ErrorDismissedMsg:
+		// Navigate to contexts view from loading error screen
 		cmd := m.replaceView(contextsview.ViewName, nil)
 		return m, tea.Batch(
 			cmd,
