@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -14,6 +15,7 @@ type ContextInfo struct {
 	Current     bool
 	Description string
 	DockerHost  string
+	TLS         bool
 	Error       string
 }
 
@@ -41,11 +43,39 @@ func ListContexts() ([]ContextInfo, error) {
 				if err := json.Unmarshal(lines, &ctx); err != nil {
 					return nil, fmt.Errorf("failed to parse context JSON: %w", err)
 				}
+
+				// Check if TLS is enabled by inspecting the context
+				usesTLS := false
+				if inspectJSON, err := InspectContext(ctx.Name); err == nil {
+					// Parse as array first since docker context inspect returns an array
+					var inspectArray []map[string]interface{}
+					if err := json.Unmarshal([]byte(inspectJSON), &inspectArray); err == nil && len(inspectArray) > 0 {
+						inspectData := inspectArray[0]
+						// Check for TLSMaterial field (top level)
+						if tlsMaterial, ok := inspectData["TLSMaterial"].(map[string]interface{}); ok {
+							if dockerTLS, ok := tlsMaterial["docker"]; ok && dockerTLS != nil {
+								usesTLS = true
+							}
+						}
+						// Also check legacy TLSData field in Endpoints
+						if !usesTLS {
+							if endpoints, ok := inspectData["Endpoints"].(map[string]interface{}); ok {
+								if docker, ok := endpoints["docker"].(map[string]interface{}); ok {
+									if tlsData, ok := docker["TLSData"]; ok && tlsData != nil {
+										usesTLS = true
+									}
+								}
+							}
+						}
+					}
+				}
+
 				contexts = append(contexts, ContextInfo{
 					Name:        ctx.Name,
 					Current:     ctx.Current,
 					Description: ctx.Description,
 					DockerHost:  ctx.DockerEndpoint,
+					TLS:         usesTLS,
 				})
 				lines = []byte{}
 			}
@@ -188,4 +218,227 @@ func ImportContext(filePath string) (string, error) {
 	}
 
 	return contextName, nil
+}
+
+// CreateContext creates a new Docker context with the given name and Docker host
+func CreateContext(name, dockerHost string) error {
+	return CreateContextWithTLS(name, dockerHost, "", false)
+}
+
+// CreateContextWithTLS creates a new Docker context with optional TLS configuration
+func CreateContextWithTLS(name, dockerHost, tlsPath string, skipTLSVerify bool) error {
+	if name == "" {
+		return fmt.Errorf("context name is required")
+	}
+	if dockerHost == "" {
+		return fmt.Errorf("docker host is required")
+	}
+
+	args := []string{"context", "create", name, "--docker", "host=" + dockerHost}
+
+	// Add TLS options if path is provided
+	if tlsPath != "" {
+		args = append(args, "--docker", "ca="+tlsPath+"/ca.pem")
+		args = append(args, "--docker", "cert="+tlsPath+"/cert.pem")
+		args = append(args, "--docker", "key="+tlsPath+"/key.pem")
+	}
+
+	if skipTLSVerify {
+		args = append(args, "--docker", "skip-tls-verify=true")
+	}
+
+	cmd := exec.Command("docker", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		// Include Docker's error message if available
+		if len(output) > 0 {
+			return fmt.Errorf("failed to create context %s: %s", name, string(output))
+		}
+		return fmt.Errorf("failed to create context %s: %w", name, err)
+	}
+
+	return nil
+}
+
+// CreateContextWithCertFiles creates a Docker context with specific certificate file paths
+func CreateContextWithCertFiles(name, description, dockerHost, caFile, certFile, keyFile string, skipTLSVerify bool) error {
+	if name == "" {
+		return fmt.Errorf("context name is required")
+	}
+	if dockerHost == "" {
+		return fmt.Errorf("docker host is required")
+	}
+
+	// Validate certificate files exist if provided
+	if caFile != "" || certFile != "" || keyFile != "" {
+		if caFile == "" {
+			return fmt.Errorf("CA certificate file is required when using TLS")
+		}
+		if certFile == "" {
+			return fmt.Errorf("client certificate file is required when using TLS")
+		}
+		if keyFile == "" {
+			return fmt.Errorf("client key file is required when using TLS")
+		}
+
+		// Check if files exist and are readable
+		if _, err := os.Stat(caFile); err != nil {
+			return fmt.Errorf("CA file not found or not readable: %s", caFile)
+		}
+		if _, err := os.Stat(certFile); err != nil {
+			return fmt.Errorf("certificate file not found or not readable: %s", certFile)
+		}
+		if _, err := os.Stat(keyFile); err != nil {
+			return fmt.Errorf("key file not found or not readable: %s", keyFile)
+		}
+	}
+
+	args := []string{"context", "create", name}
+
+	// Add description if provided
+	if description != "" {
+		args = append(args, "--description", description)
+	}
+
+	// Build docker endpoint configuration
+	dockerConfig := "host=" + dockerHost
+
+	// Add TLS options with individual cert files
+	if caFile != "" && certFile != "" && keyFile != "" {
+		dockerConfig += ",ca=" + caFile
+		dockerConfig += ",cert=" + certFile
+		dockerConfig += ",key=" + keyFile
+	}
+
+	if skipTLSVerify {
+		dockerConfig += ",skip-tls-verify=true"
+	}
+
+	args = append(args, "--docker", dockerConfig)
+
+	cmd := exec.Command("docker", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		// Include Docker's error message if available
+		if len(output) > 0 {
+			// Clean up Docker's error message
+			errMsg := strings.TrimSpace(string(output))
+			errMsg = strings.ReplaceAll(errMsg, "\n", " ")
+			return fmt.Errorf("%s", errMsg)
+		}
+		return fmt.Errorf("failed to create context %s: %w", name, err)
+	}
+
+	return nil
+}
+
+// UpdateContextDescription updates only the description of a Docker context
+func UpdateContextDescription(name, description string) error {
+	if name == "" {
+		return fmt.Errorf("context name is required")
+	}
+
+	args := []string{"context", "update", name}
+
+	// Add description (even if empty, to allow clearing)
+	args = append(args, "--description", description)
+
+	cmd := exec.Command("docker", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		// Include Docker's error message if available
+		if len(output) > 0 {
+			// Clean up Docker's error message
+			errMsg := strings.TrimSpace(string(output))
+			errMsg = strings.ReplaceAll(errMsg, "\n", " ")
+			return fmt.Errorf("%s", errMsg)
+		}
+		return fmt.Errorf("failed to update context %s: %w", name, err)
+	}
+
+	return nil
+}
+
+// UpdateContextWithCertFiles updates a Docker context with specific certificate file paths
+func UpdateContextWithCertFiles(name, description, dockerHost, caFile, certFile, keyFile string, skipTLSVerify bool) error {
+	if name == "" {
+		return fmt.Errorf("context name is required")
+	}
+
+	// Validate certificate files exist if provided
+	if caFile != "" || certFile != "" || keyFile != "" {
+		if caFile == "" {
+			return fmt.Errorf("CA certificate file is required when using TLS")
+		}
+		if certFile == "" {
+			return fmt.Errorf("client certificate file is required when using TLS")
+		}
+		if keyFile == "" {
+			return fmt.Errorf("client key file is required when using TLS")
+		}
+
+		// Check if files exist and are readable
+		if _, err := os.Stat(caFile); err != nil {
+			return fmt.Errorf("CA file not found or not readable: %s", caFile)
+		}
+		if _, err := os.Stat(certFile); err != nil {
+			return fmt.Errorf("certificate file not found or not readable: %s", certFile)
+		}
+		if _, err := os.Stat(keyFile); err != nil {
+			return fmt.Errorf("key file not found or not readable: %s", keyFile)
+		}
+	}
+
+	args := []string{"context", "update", name}
+
+	// Add description if provided (even if empty, to allow clearing)
+	if description != "" {
+		args = append(args, "--description", description)
+	}
+
+	// Build docker endpoint configuration if host or certs provided
+	if dockerHost != "" || caFile != "" {
+		dockerConfig := ""
+
+		// Add host if provided
+		if dockerHost != "" {
+			dockerConfig = "host=" + dockerHost
+		}
+
+		// Add TLS options with individual cert files
+		if caFile != "" && certFile != "" && keyFile != "" {
+			if dockerConfig != "" {
+				dockerConfig += ","
+			}
+			dockerConfig += "ca=" + caFile
+			dockerConfig += ",cert=" + certFile
+			dockerConfig += ",key=" + keyFile
+		}
+
+		if skipTLSVerify {
+			if dockerConfig != "" {
+				dockerConfig += ","
+			}
+			dockerConfig += "skip-tls-verify=true"
+		}
+
+		if dockerConfig != "" {
+			args = append(args, "--docker", dockerConfig)
+		}
+	}
+
+	cmd := exec.Command("docker", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		// Include Docker's error message if available
+		if len(output) > 0 {
+			// Clean up Docker's error message
+			errMsg := strings.TrimSpace(string(output))
+			errMsg = strings.ReplaceAll(errMsg, "\n", " ")
+			return fmt.Errorf("%s", errMsg)
+		}
+		return fmt.Errorf("failed to update context %s: %w", name, err)
+	}
+
+	return nil
 }

@@ -16,23 +16,39 @@ type Model struct {
 	viewport viewport.Model
 	ready    bool
 
-	contexts             []docker.ContextInfo
-	cursor               int
-	mu                   sync.Mutex
-	loading              bool
-	errorMsg             string
-	successMsg           string
-	switchPending        bool
-	confirmDialog        *confirmdialog.Model
-	pendingExportContext string
-	pendingDeleteContext string
-	pendingAction        string // "export" or "delete"
-	importInput          textinput.Model
-	importInputActive    bool
-	fileBrowserActive    bool
-	fileBrowserPath      string
-	fileBrowserFiles     []string
-	fileBrowserCursor    int
+	contexts              []docker.ContextInfo
+	cursor                int
+	mu                    sync.Mutex
+	loading               bool
+	errorMsg              string
+	successMsg            string
+	switchPending         bool
+	confirmDialog         *confirmdialog.Model
+	pendingExportContext  string
+	pendingDeleteContext  string
+	pendingAction         string // "export" or "delete"
+	importInput           textinput.Model
+	importInputActive     bool
+	fileBrowserActive     bool
+	fileBrowserPath       string
+	fileBrowserFiles      []string
+	fileBrowserCursor     int
+	errorDialogActive     bool
+	createDialogActive    bool
+	createNameInput       textinput.Model
+	createDescInput       textinput.Model
+	createHostInput       textinput.Model
+	createInputFocus      int // 0 = name, 1 = description, 2 = host, 3 = tls toggle, 4 = ca, 5 = cert, 6 = key
+	createTLSEnabled      bool
+	createCAInput         textinput.Model
+	createCertInput       textinput.Model
+	createKeyInput        textinput.Model
+	certFileBrowserActive bool   // true when browsing for cert files (different from import file browser)
+	certFileTarget        string // "ca", "cert", or "key" - which field is being browsed
+	lastCertBrowserPath   string // Remember last directory used in cert file browser
+	editDialogActive      bool
+	editContextName       string // Name of context being edited (immutable)
+	editDescInput         textinput.Model
 }
 
 func New() *Model {
@@ -42,6 +58,48 @@ func New() *Model {
 	importInput.CharLimit = 512
 	importInput.Width = 50
 
+	createNameInput := textinput.New()
+	createNameInput.Placeholder = "my-context"
+	createNameInput.Prompt = "Name: "
+	createNameInput.CharLimit = 100
+	createNameInput.Width = 50
+
+	createDescInput := textinput.New()
+	createDescInput.Placeholder = "Description (optional)"
+	createDescInput.Prompt = "Desc: "
+	createDescInput.CharLimit = 200
+	createDescInput.Width = 50
+
+	createHostInput := textinput.New()
+	createHostInput.Placeholder = "tcp://host:2376"
+	createHostInput.Prompt = "Host: "
+	createHostInput.CharLimit = 256
+	createHostInput.Width = 50
+
+	createCAInput := textinput.New()
+	createCAInput.Placeholder = "/path/to/ca.pem"
+	createCAInput.Prompt = "CA:   "
+	createCAInput.CharLimit = 512
+	createCAInput.Width = 50
+
+	createCertInput := textinput.New()
+	createCertInput.Placeholder = "/path/to/cert.pem"
+	createCertInput.Prompt = "Cert: "
+	createCertInput.CharLimit = 512
+	createCertInput.Width = 50
+
+	createKeyInput := textinput.New()
+	createKeyInput.Placeholder = "/path/to/key.pem"
+	createKeyInput.Prompt = "Key:  "
+	createKeyInput.CharLimit = 512
+	createKeyInput.Width = 50
+
+	editDescInput := textinput.New()
+	editDescInput.Placeholder = "Description (optional)"
+	editDescInput.Prompt = "Desc: "
+	editDescInput.CharLimit = 200
+	editDescInput.Width = 50
+
 	return &Model{
 		Visible:          false,
 		contexts:         []docker.ContextInfo{},
@@ -50,6 +108,13 @@ func New() *Model {
 		importInput:      importInput,
 		fileBrowserPath:  "/tmp",
 		fileBrowserFiles: []string{},
+		createNameInput:  createNameInput,
+		createDescInput:  createDescInput,
+		createHostInput:  createHostInput,
+		createCAInput:    createCAInput,
+		createCertInput:  createCertInput,
+		createKeyInput:   createKeyInput,
+		editDescInput:    editDescInput,
 	}
 }
 
@@ -161,7 +226,7 @@ func (m *Model) IsSwitchPending() bool {
 
 // HasActiveDialog returns true if any dialog is currently active
 func (m *Model) HasActiveDialog() bool {
-	return m.confirmDialog.Visible || m.importInputActive || m.fileBrowserActive
+	return m.confirmDialog.Visible || m.importInputActive || m.fileBrowserActive || m.errorDialogActive || m.createDialogActive || m.certFileBrowserActive || m.editDialogActive
 }
 
 // Init initializes the model (part of View interface)
@@ -186,16 +251,41 @@ func (m *Model) OnExit() tea.Cmd {
 	return nil
 }
 
-// ShortHelpItems returns the help items for the view
+// updateCreateFocus updates focus state for create dialog inputs
+func (m *Model) updateCreateFocus() {
+	m.createNameInput.Blur()
+	m.createDescInput.Blur()
+	m.createHostInput.Blur()
+	m.createCAInput.Blur()
+	m.createCertInput.Blur()
+	m.createKeyInput.Blur()
+
+	switch m.createInputFocus {
+	case 0:
+		m.createNameInput.Focus()
+	case 1:
+		m.createDescInput.Focus()
+	case 2:
+		m.createHostInput.Focus()
+	case 4:
+		m.createCAInput.Focus()
+	case 5:
+		m.createCertInput.Focus()
+	case 6:
+		m.createKeyInput.Focus()
+		// case 3 is the TLS checkbox, no focus needed
+	}
+} // ShortHelpItems returns the help items for the view
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "↑/↓", Desc: "Navigate"},
 		{Key: "Enter", Desc: "Switch"},
 		{Key: "i", Desc: "Inspect"},
-		{Key: "e", Desc: "Export"},
-		{Key: "f", Desc: "Import"},
+		{Key: "e", Desc: "Edit"},
+		{Key: "x", Desc: "Export"},
+		{Key: "m", Desc: "Import"},
+		{Key: "c", Desc: "Create"},
 		{Key: "d", Desc: "Delete"},
-		{Key: "r", Desc: "Refresh"},
 		{Key: "Esc", Desc: "Back"},
 	}
 }

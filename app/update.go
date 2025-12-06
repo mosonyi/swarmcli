@@ -60,6 +60,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if msg.String() == ":" {
+			// Check if current view has an active dialog - if so, don't intercept
+			if viewWithDialog, ok := m.currentView.(interface {
+				HasActiveDialog() bool
+			}); ok {
+				if viewWithDialog.HasActiveDialog() {
+					// Let the view handle it
+					cmd := m.currentView.Update(msg)
+					return m, cmd
+				}
+			}
+
 			if !m.commandInput.Visible() {
 				cmd := m.commandInput.Show()
 				return m, cmd
@@ -100,14 +111,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case contextsview.ContextChangedNotification:
-		// Context has changed, navigate to stacks view and refresh system info
+		// Context has changed, replace contexts view with stacks view (don't add to history)
+		// and refresh system info
+		cmd := m.replaceView(stacksview.ViewName, nil)
 		return m, tea.Batch(
 			systeminfoview.LoadStatus(),
+			cmd,
+		)
+
+	case loadingview.NavigateToContextsMsg:
+		// Navigate to contexts view from error screen
+		cmd := m.replaceView(contextsview.ViewName, nil)
+		return m, tea.Batch(
+			cmd,
 			func() tea.Msg {
-				return view.NavigateToMsg{
-					ViewName: stacksview.ViewName,
-					Payload:  nil,
-				}
+				return contextsview.LoadContextsCmd()
 			},
 		)
 

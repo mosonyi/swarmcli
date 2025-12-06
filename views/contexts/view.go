@@ -40,12 +40,10 @@ func (m *Model) View() string {
 	cursor := m.GetCursor()
 
 	if len(contexts) == 0 && !m.IsLoading() {
-		content.WriteString("No Docker contexts found\n")
-		content.WriteString("\n")
-		content.WriteString("Press 'r' to refresh")
+		content.WriteString("No Docker contexts found")
 	} else {
 		// Table header
-		headerLine := fmt.Sprintf("%-4s %-20s %-45s %s", "CURR", "NAME", "DESCRIPTION", "DOCKER ENDPOINT")
+		headerLine := fmt.Sprintf("%-4s %-20s %-4s %-60s %s", "CURR", "NAME", "TLS", "DESCRIPTION", "DOCKER ENDPOINT")
 		content.WriteString(lipgloss.NewStyle().Bold(true).Render(headerLine))
 		content.WriteString("\n")
 
@@ -62,9 +60,15 @@ func (m *Model) View() string {
 				name = name[:15] + "..."
 			}
 
+			// TLS indicator - show circle only if TLS is enabled
+			tlsChar := " "
+			if ctx.TLS {
+				tlsChar = "●"
+			}
+
 			desc := ctx.Description
-			if len(desc) > 43 {
-				desc = desc[:40] + "..."
+			if len(desc) > 58 {
+				desc = desc[:55] + "..."
 			}
 
 			host := ctx.DockerHost
@@ -72,7 +76,8 @@ func (m *Model) View() string {
 				host = host[:37] + "..."
 			}
 
-			line := fmt.Sprintf("%-4s %-20s %-45s %s", current, name, desc, host)
+			// Build line
+			line := fmt.Sprintf("%-4s %-20s %-4s %-60s %s", current, name, tlsChar, desc, host)
 
 			// Highlight selected row
 			if i == cursor {
@@ -103,7 +108,20 @@ func (m *Model) View() string {
 	paddedContent := strings.Join(contentLines, "\n")
 
 	// Overlay dialogs on content BEFORE framing
-	if m.fileBrowserActive {
+	if m.certFileBrowserActive {
+		// Cert file browser has highest priority when open
+		certFileBrowserDialog := m.renderCertFileBrowserDialog()
+		paddedContent = m.overlayDialog(paddedContent, certFileBrowserDialog, width)
+	} else if m.createDialogActive {
+		createDialog := m.renderCreateDialog()
+		paddedContent = m.overlayDialog(paddedContent, createDialog, width)
+	} else if m.editDialogActive {
+		editDialog := m.renderEditDialog()
+		paddedContent = m.overlayDialog(paddedContent, editDialog, width)
+	} else if m.errorDialogActive {
+		errorDialog := m.renderErrorDialog()
+		paddedContent = m.overlayDialog(paddedContent, errorDialog, width)
+	} else if m.fileBrowserActive {
 		fileBrowserDialog := m.renderFileBrowserDialog()
 		paddedContent = m.overlayDialog(paddedContent, fileBrowserDialog, width)
 	} else if m.importInputActive {
@@ -246,6 +264,166 @@ func (m *Model) renderImportDialog() string {
 	return borderStyle.Render(content)
 }
 
+// renderCreateDialog renders the create context dialog
+func (m *Model) renderCreateDialog() string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("15")).
+		Background(lipgloss.Color("63")).
+		Padding(0, 1)
+
+	borderStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("117"))
+
+	itemStyle := lipgloss.NewStyle().
+		Padding(0, 1)
+
+	helpStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		Padding(0, 1)
+
+	keyStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("63")).
+		Bold(true)
+
+	var lines []string
+	lines = append(lines, titleStyle.Render(" Create Docker Context "))
+	lines = append(lines, itemStyle.Render(""))
+	lines = append(lines, itemStyle.Render(m.createNameInput.View()))
+	lines = append(lines, itemStyle.Render(m.createDescInput.View()))
+	lines = append(lines, itemStyle.Render(m.createHostInput.View()))
+	lines = append(lines, itemStyle.Render(""))
+
+	// TLS checkbox
+	checkbox := "[ ]"
+	if m.createTLSEnabled {
+		checkbox = "[✓]"
+	}
+	checkboxStyle := itemStyle
+	if m.createInputFocus == 3 {
+		checkboxStyle = lipgloss.NewStyle().
+			Padding(0, 1).
+			Foreground(lipgloss.Color("63")).
+			Bold(true)
+	}
+	lines = append(lines, checkboxStyle.Render(checkbox+" Use TLS"))
+
+	// Show cert file inputs only if TLS is enabled
+	if m.createTLSEnabled {
+		lines = append(lines, itemStyle.Render(""))
+
+		// CA file with browse button indicator
+		caLine := m.createCAInput.View()
+		if m.createInputFocus == 4 {
+			caLine += "  " + keyStyle.Render("[f: Browse]")
+		}
+		lines = append(lines, itemStyle.Render(caLine))
+
+		// Cert file with browse button indicator
+		certLine := m.createCertInput.View()
+		if m.createInputFocus == 5 {
+			certLine += "  " + keyStyle.Render("[f: Browse]")
+		}
+		lines = append(lines, itemStyle.Render(certLine))
+
+		// Key file with browse button indicator
+		keyLine := m.createKeyInput.View()
+		if m.createInputFocus == 6 {
+			keyLine += "  " + keyStyle.Render("[f: Browse]")
+		}
+		lines = append(lines, itemStyle.Render(keyLine))
+	}
+
+	// Show error message if present
+	errorMsg := m.GetError()
+	if errorMsg != "" {
+		errorStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("196")).
+			Padding(0, 1)
+		lines = append(lines, itemStyle.Render(""))
+		lines = append(lines, errorStyle.Render(errorMsg))
+	}
+
+	lines = append(lines, itemStyle.Render(""))
+
+	// Adjust help text based on whether error is shown
+	var helpText string
+	if errorMsg != "" {
+		helpText = fmt.Sprintf(" %s Clear Error • %s Cancel",
+			keyStyle.Render("<Enter>"),
+			keyStyle.Render("<Esc>"))
+	} else {
+		helpText = fmt.Sprintf(" %s Create • %s Navigate • %s Toggle TLS • %s Browse • %s Cancel",
+			keyStyle.Render("<Enter>"),
+			keyStyle.Render("<Tab/↑/↓>"),
+			keyStyle.Render("<Space>"),
+			keyStyle.Render("<f>"),
+			keyStyle.Render("<Esc>"))
+	}
+	lines = append(lines, helpStyle.Render(helpText))
+
+	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	return borderStyle.Render(content)
+}
+
+// renderEditDialog renders the edit context dialog (description only)
+func (m *Model) renderEditDialog() string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("15")).
+		Background(lipgloss.Color("63")).
+		Padding(0, 1)
+
+	itemStyle := lipgloss.NewStyle().
+		Padding(0, 1)
+
+	borderStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("117"))
+
+	helpStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		Padding(0, 1)
+
+	keyStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("63")).
+		Bold(true)
+
+	var lines []string
+	lines = append(lines, titleStyle.Render(" Edit Context: "+m.editContextName+" "))
+	lines = append(lines, itemStyle.Render(""))
+	lines = append(lines, itemStyle.Render(m.editDescInput.View()))
+
+	// Show error message if present
+	errorMsg := m.GetError()
+	if errorMsg != "" {
+		errorStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("196")).
+			Padding(0, 1)
+		lines = append(lines, itemStyle.Render(""))
+		lines = append(lines, errorStyle.Render(errorMsg))
+	}
+
+	lines = append(lines, itemStyle.Render(""))
+
+	// Adjust help text based on whether error is shown
+	var helpText string
+	if errorMsg != "" {
+		helpText = fmt.Sprintf(" %s Clear Error • %s Cancel",
+			keyStyle.Render("<Enter>"),
+			keyStyle.Render("<Esc>"))
+	} else {
+		helpText = fmt.Sprintf(" %s Update • %s Cancel",
+			keyStyle.Render("<Enter>"),
+			keyStyle.Render("<Esc>"))
+	}
+	lines = append(lines, helpStyle.Render(helpText))
+
+	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	return borderStyle.Render(content)
+}
+
 // renderConfirmDialog renders the confirmation dialog
 func (m *Model) renderConfirmDialog() string {
 	contentWidth := 60
@@ -324,7 +502,105 @@ func (m *Model) renderFileBrowserDialog() string {
 		Bold(true)
 
 	var lines []string
-	lines = append(lines, titleStyle.Render(fmt.Sprintf(" Select .tar file (%d files) ", len(m.fileBrowserFiles))))
+	lines = append(lines, titleStyle.Render(fmt.Sprintf(" Select .tar file - Directory: %s ", m.fileBrowserPath)))
+	lines = append(lines, itemStyle.Render(""))
+
+	// Show files with cursor
+	maxVisible := 10
+	start := m.fileBrowserCursor - maxVisible/2
+	if start < 0 {
+		start = 0
+	}
+	end := start + maxVisible
+	if end > len(m.fileBrowserFiles) {
+		end = len(m.fileBrowserFiles)
+		start = end - maxVisible
+		if start < 0 {
+			start = 0
+		}
+	}
+
+	for i := start; i < end; i++ {
+		item := m.fileBrowserFiles[i]
+		displayName := ""
+
+		// Handle parent directory
+		if item == ".." {
+			displayName = "📁 .."
+		} else if strings.HasSuffix(item, "/") {
+			// Directory
+			displayName = "📁 " + filepath.Base(strings.TrimSuffix(item, "/"))
+		} else {
+			// File
+			displayName = filepath.Base(item)
+		}
+
+		if i == m.fileBrowserCursor {
+			lines = append(lines, selectedStyle.Render("→ "+displayName))
+		} else {
+			lines = append(lines, itemStyle.Render("  "+displayName))
+		}
+	}
+
+	lines = append(lines, itemStyle.Render(""))
+	helpText := fmt.Sprintf(" %s Select/Navigate • %s / %s Move • %s Cancel",
+		keyStyle.Render("<Enter>"),
+		keyStyle.Render("<↑/↓>"),
+		keyStyle.Render("<PgUp/PgDn>"),
+		keyStyle.Render("<Esc>"))
+	lines = append(lines, helpStyle.Render(helpText))
+
+	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	return borderStyle.Render(content)
+}
+
+// renderCertFileBrowserDialog renders the certificate file browser dialog
+func (m *Model) renderCertFileBrowserDialog() string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("15")).
+		Background(lipgloss.Color("63")).
+		Padding(0, 1)
+
+	borderStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("117"))
+
+	itemStyle := lipgloss.NewStyle().
+		Padding(0, 1)
+
+	selectedStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("15")).
+		Background(lipgloss.Color("63")).
+		Padding(0, 1)
+
+	helpStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		Padding(0, 1)
+
+	keyStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("63")).
+		Bold(true)
+
+	fileTypeLabel := ""
+	switch m.certFileTarget {
+	case "ca":
+		fileTypeLabel = "CA Certificate"
+	case "cert":
+		fileTypeLabel = "Client Certificate"
+	case "key":
+		fileTypeLabel = "Client Key"
+	}
+
+	// Count actual files (excluding "..")
+	fileCount := len(m.fileBrowserFiles)
+	if fileCount > 0 && m.fileBrowserFiles[0] == ".." {
+		fileCount--
+	}
+
+	var lines []string
+	lines = append(lines, titleStyle.Render(fmt.Sprintf(" Select %s ", fileTypeLabel)))
+	lines = append(lines, itemStyle.Render(fmt.Sprintf("Directory: %s (%d files)", m.fileBrowserPath, fileCount)))
 	lines = append(lines, itemStyle.Render(""))
 
 	// Show files with cursor
@@ -344,21 +620,109 @@ func (m *Model) renderFileBrowserDialog() string {
 
 	for i := start; i < end; i++ {
 		filePath := m.fileBrowserFiles[i]
-		fileName := filepath.Base(filePath)
-		if i == m.fileBrowserCursor {
-			lines = append(lines, selectedStyle.Render("→ "+fileName))
+		var displayName string
+		if filePath == ".." {
+			displayName = "📁 .."
 		} else {
-			lines = append(lines, itemStyle.Render("  "+fileName))
+			displayName = filepath.Base(filePath)
+			// Show directory indicator
+			if strings.HasSuffix(filePath, "/") {
+				displayName = "📁 " + strings.TrimSuffix(displayName, "/")
+			}
+		}
+		if i == m.fileBrowserCursor {
+			lines = append(lines, selectedStyle.Render("→ "+displayName))
+		} else {
+			lines = append(lines, itemStyle.Render("  "+displayName))
 		}
 	}
 
 	lines = append(lines, itemStyle.Render(""))
-	helpText := fmt.Sprintf(" %s Select • %s Navigate • %s Cancel",
+	helpText := fmt.Sprintf(" %s Select/Navigate • %s / %s Move • %s Cancel",
 		keyStyle.Render("<Enter>"),
 		keyStyle.Render("<↑/↓>"),
+		keyStyle.Render("<PgUp/PgDn>"),
 		keyStyle.Render("<Esc>"))
 	lines = append(lines, helpStyle.Render(helpText))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	return borderStyle.Render(content)
+}
+
+// renderErrorDialog renders the error dialog
+func (m *Model) renderErrorDialog() string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("15")).
+		Background(lipgloss.Color("196")). // Red background for error
+		Padding(0, 1)
+
+	borderStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("196")) // Red border
+
+	itemStyle := lipgloss.NewStyle().
+		Padding(0, 1)
+
+	helpStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		Padding(0, 1)
+
+	keyStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("63")).
+		Bold(true)
+
+	var lines []string
+	lines = append(lines, titleStyle.Render(" Error "))
+	lines = append(lines, itemStyle.Render(""))
+
+	// Wrap error message if too long
+	errorMsg := m.GetError()
+	maxWidth := 70
+	wrappedLines := wrapText(errorMsg, maxWidth)
+	for _, line := range wrappedLines {
+		lines = append(lines, itemStyle.Render(line))
+	}
+
+	lines = append(lines, itemStyle.Render(""))
+	helpText := fmt.Sprintf("%s %s %s",
+		helpStyle.Render("Press"),
+		keyStyle.Render("<Enter>"),
+		helpStyle.Render("to close"))
+	lines = append(lines, helpText)
+
+	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	return borderStyle.Render(content)
+}
+
+// wrapText wraps text to specified width
+func wrapText(text string, width int) []string {
+	if len(text) <= width {
+		return []string{text}
+	}
+
+	var lines []string
+	words := strings.Fields(text)
+	currentLine := ""
+
+	for _, word := range words {
+		if len(currentLine)+len(word)+1 <= width {
+			if currentLine == "" {
+				currentLine = word
+			} else {
+				currentLine += " " + word
+			}
+		} else {
+			if currentLine != "" {
+				lines = append(lines, currentLine)
+			}
+			currentLine = word
+		}
+	}
+
+	if currentLine != "" {
+		lines = append(lines, currentLine)
+	}
+
+	return lines
 }

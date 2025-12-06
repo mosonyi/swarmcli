@@ -90,9 +90,10 @@ func Init() {
 		model.Visible = true
 		model.SetSize(w, h)
 		model.SetLoading(true)
-		return model, func() tea.Msg {
-			return contextsview.LoadContextsCmd()
-		}
+		return model, tea.Batch(
+			func() tea.Msg { return contextsview.LoadContextsCmd() },
+			contextsview.StartTickerCmd(),
+		)
 	})
 
 	registerView(stacksview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
