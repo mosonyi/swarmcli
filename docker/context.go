@@ -1,6 +1,8 @@
 package docker
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,9 +21,28 @@ type ContextInfo struct {
 	Error       string
 }
 
+// contextListItem represents a single context from docker context ls --format json
+type contextListItem struct {
+	Name           string `json:"Name"`
+	Current        bool   `json:"Current"`
+	Description    string `json:"Description"`
+	DockerEndpoint string `json:"DockerEndpoint"`
+}
+
+// contextInspectResult represents the structure from docker context inspect
+type contextInspectResult struct {
+	TLSMaterial struct {
+		Docker interface{} `json:"docker"`
+	} `json:"TLSMaterial"`
+	Endpoints struct {
+		Docker struct {
+			TLSData interface{} `json:"TLSData"`
+		} `json:"docker"`
+	} `json:"Endpoints"`
+}
+
 // ListContexts returns all available Docker contexts using docker CLI
 func ListContexts() ([]ContextInfo, error) {
-	// Use docker context ls --format json to get context list
 	cmd := exec.Command("docker", "context", "ls", "--format", "json")
 	output, err := cmd.Output()
 	if err != nil {
@@ -29,80 +50,83 @@ func ListContexts() ([]ContextInfo, error) {
 	}
 
 	var contexts []ContextInfo
-	// Parse JSON lines (each line is a separate JSON object)
-	lines := []byte{}
-	for _, b := range output {
-		if b == '\n' {
-			if len(lines) > 0 {
-				var ctx struct {
-					Name           string `json:"Name"`
-					Current        bool   `json:"Current"`
-					Description    string `json:"Description"`
-					DockerEndpoint string `json:"DockerEndpoint"`
-				}
-				if err := json.Unmarshal(lines, &ctx); err != nil {
-					return nil, fmt.Errorf("failed to parse context JSON: %w", err)
-				}
+	scanner := bufio.NewScanner(bytes.NewReader(output))
 
-				// Check if TLS is enabled by inspecting the context
-				usesTLS := false
-				if inspectJSON, err := InspectContext(ctx.Name); err == nil {
-					// Parse as array first since docker context inspect returns an array
-					var inspectArray []map[string]interface{}
-					if err := json.Unmarshal([]byte(inspectJSON), &inspectArray); err == nil && len(inspectArray) > 0 {
-						inspectData := inspectArray[0]
-						// Check for TLSMaterial field (top level)
-						if tlsMaterial, ok := inspectData["TLSMaterial"].(map[string]interface{}); ok {
-							if dockerTLS, ok := tlsMaterial["docker"]; ok && dockerTLS != nil {
-								usesTLS = true
-							}
-						}
-						// Also check legacy TLSData field in Endpoints
-						if !usesTLS {
-							if endpoints, ok := inspectData["Endpoints"].(map[string]interface{}); ok {
-								if docker, ok := endpoints["docker"].(map[string]interface{}); ok {
-									if tlsData, ok := docker["TLSData"]; ok && tlsData != nil {
-										usesTLS = true
-									}
-								}
-							}
-						}
-					}
-				}
-
-				contexts = append(contexts, ContextInfo{
-					Name:        ctx.Name,
-					Current:     ctx.Current,
-					Description: ctx.Description,
-					DockerHost:  ctx.DockerEndpoint,
-					TLS:         usesTLS,
-				})
-				lines = []byte{}
-			}
-		} else {
-			lines = append(lines, b)
-		}
-	}
-	// Handle last line if no trailing newline
-	if len(lines) > 0 {
-		var ctx struct {
-			Name           string `json:"Name"`
-			Current        bool   `json:"Current"`
-			Description    string `json:"Description"`
-			DockerEndpoint string `json:"DockerEndpoint"`
-		}
-		if err := json.Unmarshal(lines, &ctx); err != nil {
+	for scanner.Scan() {
+		var item contextListItem
+		if err := json.Unmarshal(scanner.Bytes(), &item); err != nil {
 			return nil, fmt.Errorf("failed to parse context JSON: %w", err)
 		}
+
 		contexts = append(contexts, ContextInfo{
-			Name:        ctx.Name,
-			Current:     ctx.Current,
-			Description: ctx.Description,
-			DockerHost:  ctx.DockerEndpoint,
+			Name:        item.Name,
+			Current:     item.Current,
+			Description: item.Description,
+			DockerHost:  item.DockerEndpoint,
+			TLS:         checkContextTLS(item.Name),
 		})
 	}
 
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read context list: %w", err)
+	}
+
 	return contexts, nil
+}
+
+// checkContextTLS checks if a context has TLS enabled
+func checkContextTLS(contextName string) bool {
+	inspectJSON, err := InspectContext(contextName)
+	if err != nil {
+		return false
+	}
+
+	var inspectArray []contextInspectResult
+	if err := json.Unmarshal([]byte(inspectJSON), &inspectArray); err != nil || len(inspectArray) == 0 {
+		return false
+	}
+
+	inspect := inspectArray[0]
+
+	// Check for TLSMaterial field (current format)
+	if inspect.TLSMaterial.Docker != nil {
+		return true
+	}
+
+	// Check legacy TLSData field in Endpoints
+	if inspect.Endpoints.Docker.TLSData != nil {
+		return true
+	}
+
+	return false
+}
+
+// validateTLSFiles validates that all three TLS certificate files are provided and exist
+func validateTLSFiles(caFile, certFile, keyFile string) error {
+	// If any TLS file is provided, all three must be provided
+	if caFile != "" || certFile != "" || keyFile != "" {
+		if caFile == "" {
+			return fmt.Errorf("CA certificate file is required when using TLS")
+		}
+		if certFile == "" {
+			return fmt.Errorf("client certificate file is required when using TLS")
+		}
+		if keyFile == "" {
+			return fmt.Errorf("client key file is required when using TLS")
+		}
+
+		// Check if files exist and are readable
+		if _, err := os.Stat(caFile); err != nil {
+			return fmt.Errorf("CA file not found or not readable: %s", caFile)
+		}
+		if _, err := os.Stat(certFile); err != nil {
+			return fmt.Errorf("certificate file not found or not readable: %s", certFile)
+		}
+		if _, err := os.Stat(keyFile); err != nil {
+			return fmt.Errorf("key file not found or not readable: %s", keyFile)
+		}
+	}
+	return nil
 }
 
 // UseContext switches to the specified Docker context
@@ -269,28 +293,9 @@ func CreateContextWithCertFiles(name, description, dockerHost, caFile, certFile,
 		return fmt.Errorf("docker host is required")
 	}
 
-	// Validate certificate files exist if provided
-	if caFile != "" || certFile != "" || keyFile != "" {
-		if caFile == "" {
-			return fmt.Errorf("CA certificate file is required when using TLS")
-		}
-		if certFile == "" {
-			return fmt.Errorf("client certificate file is required when using TLS")
-		}
-		if keyFile == "" {
-			return fmt.Errorf("client key file is required when using TLS")
-		}
-
-		// Check if files exist and are readable
-		if _, err := os.Stat(caFile); err != nil {
-			return fmt.Errorf("CA file not found or not readable: %s", caFile)
-		}
-		if _, err := os.Stat(certFile); err != nil {
-			return fmt.Errorf("certificate file not found or not readable: %s", certFile)
-		}
-		if _, err := os.Stat(keyFile); err != nil {
-			return fmt.Errorf("key file not found or not readable: %s", keyFile)
-		}
+	// Validate certificate files
+	if err := validateTLSFiles(caFile, certFile, keyFile); err != nil {
+		return err
 	}
 
 	args := []string{"context", "create", name}
@@ -365,28 +370,9 @@ func UpdateContextWithCertFiles(name, description, dockerHost, caFile, certFile,
 		return fmt.Errorf("context name is required")
 	}
 
-	// Validate certificate files exist if provided
-	if caFile != "" || certFile != "" || keyFile != "" {
-		if caFile == "" {
-			return fmt.Errorf("CA certificate file is required when using TLS")
-		}
-		if certFile == "" {
-			return fmt.Errorf("client certificate file is required when using TLS")
-		}
-		if keyFile == "" {
-			return fmt.Errorf("client key file is required when using TLS")
-		}
-
-		// Check if files exist and are readable
-		if _, err := os.Stat(caFile); err != nil {
-			return fmt.Errorf("CA file not found or not readable: %s", caFile)
-		}
-		if _, err := os.Stat(certFile); err != nil {
-			return fmt.Errorf("certificate file not found or not readable: %s", certFile)
-		}
-		if _, err := os.Stat(keyFile); err != nil {
-			return fmt.Errorf("key file not found or not readable: %s", keyFile)
-		}
+	// Validate certificate files
+	if err := validateTLSFiles(caFile, certFile, keyFile); err != nil {
+		return err
 	}
 
 	args := []string{"context", "update", name}
