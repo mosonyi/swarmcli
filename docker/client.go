@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	swarmlog "swarmcli/utils/log"
+	"time"
 
 	"github.com/docker/docker/client"
 )
@@ -88,8 +89,10 @@ func GetClient() (*client.Client, error) {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
 
-	// Verify connection
-	if _, err := cli.Ping(context.Background()); err != nil {
+	// Verify connection with timeout
+	pingCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := cli.Ping(pingCtx); err != nil {
 		return nil, fmt.Errorf("ping failed: %w", err)
 	}
 

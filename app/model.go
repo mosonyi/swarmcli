@@ -24,7 +24,7 @@ type Model struct {
 	viewStack   viewstack.Stack
 
 	commandInput *commandinput.Model
-	
+
 	// Terminal dimensions
 	terminalWidth  int
 	terminalHeight int
@@ -56,8 +56,8 @@ func InitialModel() *Model {
 func (m *Model) Init() tea.Cmd {
 	// "" loads all stacks on all nodes
 	return tea.Batch(
-		tick(), 
-		loadSnapshotAsync(), 
+		tick(),
+		loadSnapshotAsync(),
 		systeminfoview.LoadStatus(),
 		m.systemInfo.Init(), // Initialize systeminfo's tick commands
 	)

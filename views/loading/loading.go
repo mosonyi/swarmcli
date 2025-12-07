@@ -13,6 +13,9 @@ import (
 
 const ViewName = "loading"
 
+// ErrorDismissedMsg is sent when user presses Enter on an error screen
+type ErrorDismissedMsg struct{}
+
 type Model struct {
 	width, height int
 	title         string
@@ -20,6 +23,7 @@ type Model struct {
 	message       string
 	spinner       spinner.Model
 	visible       bool
+	isError       bool
 }
 
 func New(width, height int, visible bool, payload any) *Model {
@@ -58,7 +62,8 @@ func New(width, height int, visible bool, payload any) *Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(ui.FrameBorderColor)
-	return &Model{width: width, height: height, title: title, header: header, message: message, spinner: s, visible: visible}
+	isError := strings.HasPrefix(message, "Error")
+	return &Model{width: width, height: height, title: title, header: header, message: message, spinner: s, visible: visible, isError: isError}
 }
 
 func (m *Model) Visible() bool     { return m.visible }
@@ -67,6 +72,14 @@ func (m *Model) Init() tea.Cmd     { return m.spinner.Tick }
 func (m *Model) Name() string      { return ViewName }
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		if m.isError && keyMsg.String() == "enter" {
+			// Emit generic error dismissed message
+			return func() tea.Msg {
+				return ErrorDismissedMsg{}
+			}
+		}
+	}
 	var cmd tea.Cmd
 	m.spinner, cmd = m.spinner.Update(msg)
 	return cmd
@@ -77,10 +90,94 @@ func (m *Model) View() string {
 		return ""
 	}
 
+	if m.isError {
+		// Render error as a styled popup dialog
+		return m.renderErrorDialog()
+	}
+
+	// Normal loading view
 	content := fmt.Sprintf("%s %s", m.spinner.View(), m.message)
 	content = strings.TrimSpace(content)
 	box := ui.RenderFramedBox(m.title, m.header, content, "", 0) // minimal width
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+}
+
+// renderErrorDialog renders the error dialog with red styling
+func (m *Model) renderErrorDialog() string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("15")).
+		Background(lipgloss.Color("196")). // Red background for error
+		Padding(0, 1)
+
+	borderStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("196")) // Red border
+
+	itemStyle := lipgloss.NewStyle().
+		Padding(0, 1)
+
+	helpStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		Padding(0, 1)
+
+	keyStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("63")).
+		Bold(true)
+
+	var lines []string
+	lines = append(lines, titleStyle.Render(" Error "))
+	lines = append(lines, itemStyle.Render(""))
+
+	// Wrap error message if too long
+	maxWidth := 70
+	wrappedLines := wrapText(m.message, maxWidth)
+	for _, line := range wrappedLines {
+		lines = append(lines, itemStyle.Render(line))
+	}
+
+	lines = append(lines, itemStyle.Render(""))
+	helpText := fmt.Sprintf("%s %s %s",
+		helpStyle.Render("Press"),
+		keyStyle.Render("<Enter>"),
+		helpStyle.Render("to go to contexts view"))
+	lines = append(lines, helpText)
+
+	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	dialog := borderStyle.Render(content)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, dialog)
+}
+
+// wrapText wraps text to specified width
+func wrapText(text string, width int) []string {
+	if len(text) <= width {
+		return []string{text}
+	}
+
+	var lines []string
+	words := strings.Fields(text)
+	currentLine := ""
+
+	for _, word := range words {
+		if len(currentLine)+len(word)+1 <= width {
+			if currentLine == "" {
+				currentLine = word
+			} else {
+				currentLine += " " + word
+			}
+		} else {
+			if currentLine != "" {
+				lines = append(lines, currentLine)
+			}
+			currentLine = word
+		}
+	}
+
+	if currentLine != "" {
+		lines = append(lines, currentLine)
+	}
+
+	return lines
 }
 
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {

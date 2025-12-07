@@ -5,6 +5,7 @@ import (
 	"strings"
 	"swarmcli/commands/api"
 	"swarmcli/views/commandinput"
+	contextsview "swarmcli/views/contexts"
 	loadingview "swarmcli/views/loading"
 	logsview "swarmcli/views/logs"
 	stacksview "swarmcli/views/stacks"
@@ -59,6 +60,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if msg.String() == ":" {
+			// Check if current view has an active dialog - if so, don't intercept
+			if viewWithDialog, ok := m.currentView.(interface {
+				HasActiveDialog() bool
+			}); ok {
+				if viewWithDialog.HasActiveDialog() {
+					// Let the view handle it
+					cmd := m.currentView.Update(msg)
+					return m, cmd
+				}
+			}
+
 			if !m.commandInput.Visible() {
 				cmd := m.commandInput.Show()
 				return m, cmd
@@ -97,6 +109,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		cmd = m.systemInfo.Update(msg)
 		return m, cmd
+
+	case contextsview.ContextChangedNotification:
+		// Context has changed, replace contexts view with stacks view (don't add to history)
+		// and refresh system info
+		cmd := m.replaceView(stacksview.ViewName, nil)
+		return m, tea.Batch(
+			systeminfoview.LoadStatus(),
+			cmd,
+		)
+
+	case loadingview.ErrorDismissedMsg:
+		// Navigate to contexts view from loading error screen
+		cmd := m.replaceView(contextsview.ViewName, nil)
+		return m, tea.Batch(
+			cmd,
+			func() tea.Msg {
+				return contextsview.LoadContextsCmd()
+			},
+		)
 
 	default:
 		cmd := m.delegateToCurrentView(msg)
@@ -188,6 +219,16 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}); ok {
 			if logsView.GetFullscreen() || logsView.GetSearchMode() {
 				// Let the view handle esc to exit fullscreen or search mode
+				cmd := m.currentView.Update(msg)
+				return m, cmd
+			}
+		}
+		// Check if contexts view has an active dialog
+		if contextsView, ok := m.currentView.(interface {
+			HasActiveDialog() bool
+		}); ok {
+			if contextsView.HasActiveDialog() {
+				// Let the view handle esc to close the dialog
 				cmd := m.currentView.Update(msg)
 				return m, cmd
 			}
