@@ -328,6 +328,15 @@ func listServicesUsingConfig(ctx context.Context, client *client.Client, configI
 	return filtered, nil
 }
 
+// ListServicesUsingConfigName returns all services that reference a config by name
+func ListServicesUsingConfigName(ctx context.Context, name string) ([]swarm.Service, error) {
+	client, err := GetClient()
+	if err != nil {
+		return nil, err
+	}
+	return listServicesUsingConfigName(ctx, client, name)
+}
+
 func listServicesUsingConfigName(ctx context.Context, client *client.Client, name string) ([]swarm.Service, error) {
 	services, err := client.ServiceList(ctx, swarm.ServiceListOptions{})
 	if err != nil {

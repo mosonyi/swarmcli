@@ -48,6 +48,10 @@ type Model struct {
 	fileBrowserPath    string
 	fileBrowserFiles   []string
 	fileBrowserCursor  int
+
+	// Used By dialog
+	usedByDialogActive bool
+	usedByStacks       []string
 }
 
 type state int
@@ -120,6 +124,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "↑/↓", Desc: "Navigate"},
 		{Key: "c", Desc: "Create"},
 		{Key: "i", Desc: "Inspect"},
+		{Key: "u", Desc: "Used By"},
 		{Key: "Enter", Desc: "Check"},
 		{Key: "e", Desc: "Edit"},
 		{Key: "r", Desc: "Rotate"},
@@ -164,7 +169,7 @@ func (m *Model) OnExit() tea.Cmd {
 
 // HasActiveDialog returns true if a dialog is currently visible
 func (m *Model) HasActiveDialog() bool {
-	return m.confirmDialog.Visible || m.errorDialogActive || m.createDialogActive || m.fileBrowserActive
+	return m.confirmDialog.Visible || m.errorDialogActive || m.createDialogActive || m.fileBrowserActive || m.usedByDialogActive
 }
 
 // validateConfigName validates a config name

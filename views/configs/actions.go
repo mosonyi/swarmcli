@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
@@ -253,5 +254,38 @@ func createConfigFromFileCmd(name, filePath string) tea.Cmd {
 
 		l().Infof("Successfully created config %s from file", name)
 		return configCreatedMsg{Config: newCfg}
+	}
+}
+
+func getUsedByStacksCmd(configName string) tea.Cmd {
+	return func() tea.Msg {
+		l().Infof("Getting stacks that use config: %s", configName)
+
+		ctx := context.Background()
+		services, err := docker.ListServicesUsingConfigName(ctx, configName)
+		if err != nil {
+			l().Errorf("Failed to list services using config %s: %v", configName, err)
+			return usedByMsg{ConfigName: configName, Stacks: nil, Error: err}
+		}
+
+		// Extract unique stack names
+		stackSet := make(map[string]bool)
+		for _, svc := range services {
+			if stackName, ok := svc.Spec.Labels["com.docker.stack.namespace"]; ok && stackName != "" {
+				stackSet[stackName] = true
+			}
+		}
+
+		// Convert to sorted slice
+		stacks := make([]string, 0, len(stackSet))
+		for stack := range stackSet {
+			stacks = append(stacks, stack)
+		}
+		
+		// Sort alphabetically
+		sort.Strings(stacks)
+
+		l().Infof("Config %s is used by %d stack(s)", configName, len(stacks))
+		return usedByMsg{ConfigName: configName, Stacks: stacks, Error: nil}
 	}
 }

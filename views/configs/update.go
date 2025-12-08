@@ -164,6 +164,18 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.fileBrowserActive = true // Ensure browser stays active
 		return nil
 
+	case usedByMsg:
+		if msg.Error != nil {
+			l().Errorf("Error getting used by stacks: %v", msg.Error)
+			m.errorDialogActive = true
+			m.err = msg.Error
+			return nil
+		}
+		l().Infof("Config %s is used by %d stack(s)", msg.ConfigName, len(msg.Stacks))
+		m.usedByDialogActive = true
+		m.usedByStacks = msg.Stacks
+		return nil
+
 	case createConfigMsg:
 		l().Infof("Opening editor to create config: %s", msg.Name)
 		return createConfigInEditorCmd(msg.Name, []byte(m.createConfigData))
@@ -224,6 +236,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return m.handleCreateDialogKey(msg)
 		}
 
+		if m.usedByDialogActive {
+			if msg.String() == "esc" || msg.String() == "enter" || msg.String() == "q" {
+				m.usedByDialogActive = false
+				m.usedByStacks = nil
+			}
+			return nil
+		}
+
 		if m.fileBrowserActive {
 			return m.handleFileBrowserKey(msg)
 		}
@@ -240,8 +260,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 
 		// --- normal mode ---
-		m.configsList.HandleKey(msg) // still handle up/down/pgup/pgdown
-
+		// Handle specific keys in switch, then navigation keys
 		switch msg.String() {
 		case "r":
 			cfgName := m.selectedConfig()
@@ -277,6 +296,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			cfg := m.selectedConfig()
 			l().Infof("Edit key pressed for config: %s", cfg)
 			return editConfigInEditorCmd(m.selectedConfig())
+		case "u":
+			cfgName := m.selectedConfig()
+			if cfgName == "" {
+				l().Warn("UsedBy key pressed but no config selected")
+				return nil
+			}
+			l().Infof("UsedBy key pressed for config: %s", cfgName)
+			return getUsedByStacksCmd(cfgName)
 		case "c":
 			l().Info("Create key pressed")
 			m.createDialogActive = true
@@ -294,6 +321,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			cfg := m.selectedConfig()
 			l().Infof("Inspect key pressed for config: %s", cfg)
 			return inspectRawConfigCmd(m.selectedConfig())
+		default:
+			// Let FilterableList handle navigation keys (up/down/pgup/pgdown)
+			m.configsList.HandleKey(msg)
+			return nil
 		}
 	}
 

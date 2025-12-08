@@ -10,6 +10,35 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Shared dialog styles
+var (
+	dialogTitleStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("15")).
+				Background(lipgloss.Color("63")).
+				Padding(0, 1)
+
+	dialogBorderStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("117"))
+
+	dialogItemStyle = lipgloss.NewStyle().
+			Padding(0, 1)
+
+	dialogSelectedStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("15")).
+				Background(lipgloss.Color("63")).
+				Padding(0, 1)
+
+	dialogHelpStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")).
+			Padding(0, 1)
+
+	dialogKeyStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("63")).
+			Bold(true)
+)
+
 func (m *Model) View() string {
 	if !m.Visible {
 		return ""
@@ -147,84 +176,43 @@ func (m *Model) View() string {
 func (m *Model) renderImportDialog() string {
 	contentWidth := 60
 
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("63")).
-		Padding(0, 1).
-		Width(contentWidth)
-
-	itemStyle := lipgloss.NewStyle().
-		Padding(0, 1).
-		Width(contentWidth)
-
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("117")).
-		Width(contentWidth + 2)
-
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Padding(0, 1).
-		Width(contentWidth)
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("63")).
-		Bold(true)
+	titleStyleWithWidth := dialogTitleStyle.Copy().Width(contentWidth)
+	itemStyleWithWidth := dialogItemStyle.Copy().Width(contentWidth)
+	borderStyleWithWidth := dialogBorderStyle.Copy().Width(contentWidth + 2)
+	helpStyleWithWidth := dialogHelpStyle.Copy().Width(contentWidth)
 
 	var lines []string
-	lines = append(lines, titleStyle.Render(" Import Docker Context "))
-	lines = append(lines, itemStyle.Render("Enter the path to the context tar file:"))
-	lines = append(lines, itemStyle.Render(""))
-	lines = append(lines, itemStyle.Render(m.importInput.View()))
-	lines = append(lines, itemStyle.Render(""))
+	lines = append(lines, titleStyleWithWidth.Render(" Import Docker Context "))
+	lines = append(lines, itemStyleWithWidth.Render("Enter the path to the context tar file:"))
+	lines = append(lines, itemStyleWithWidth.Render(""))
+	lines = append(lines, itemStyleWithWidth.Render(m.importInput.View()))
+	lines = append(lines, itemStyleWithWidth.Render(""))
 
-	helpText := fmt.Sprintf(" %s Import • %s Cancel",
-		keyStyle.Render("<Enter>"),
-		keyStyle.Render("<Esc>"))
-	lines = append(lines, helpStyle.Render(helpText))
+	helpText := fmt.Sprintf(" %s Confirm • %s Cancel",
+		dialogKeyStyle.Render("<Enter>"),
+		dialogKeyStyle.Render("<Esc>"))
+	lines = append(lines, helpStyleWithWidth.Render(helpText))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	return borderStyle.Render(content)
+	return borderStyleWithWidth.Render(content)
 }
 
 // renderCreateDialog renders the create context dialog
 func (m *Model) renderCreateDialog() string {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("63")).
-		Padding(0, 1)
-
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("117"))
-
-	itemStyle := lipgloss.NewStyle().
-		Padding(0, 1)
-
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Padding(0, 1)
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("63")).
-		Bold(true)
-
 	var lines []string
-	lines = append(lines, titleStyle.Render(" Create Docker Context "))
-	lines = append(lines, itemStyle.Render(""))
-	lines = append(lines, itemStyle.Render(m.createNameInput.View()))
-	lines = append(lines, itemStyle.Render(m.createDescInput.View()))
-	lines = append(lines, itemStyle.Render(m.createHostInput.View()))
-	lines = append(lines, itemStyle.Render(""))
+	lines = append(lines, dialogTitleStyle.Render(" Create Docker Context "))
+	lines = append(lines, dialogItemStyle.Render(""))
+	lines = append(lines, dialogItemStyle.Render(m.createNameInput.View()))
+	lines = append(lines, dialogItemStyle.Render(m.createDescInput.View()))
+	lines = append(lines, dialogItemStyle.Render(m.createHostInput.View()))
+	lines = append(lines, dialogItemStyle.Render(""))
 
 	// TLS checkbox
 	checkbox := "[ ]"
 	if m.createTLSEnabled {
 		checkbox = "[✓]"
 	}
-	checkboxStyle := itemStyle
+	checkboxStyle := dialogItemStyle
 	if m.createInputFocus == 3 {
 		checkboxStyle = lipgloss.NewStyle().
 			Padding(0, 1).
@@ -235,28 +223,28 @@ func (m *Model) renderCreateDialog() string {
 
 	// Show cert file inputs only if TLS is enabled
 	if m.createTLSEnabled {
-		lines = append(lines, itemStyle.Render(""))
+		lines = append(lines, dialogItemStyle.Render(""))
 
 		// CA file with browse button indicator
 		caLine := m.createCAInput.View()
 		if m.createInputFocus == 4 {
-			caLine += "  " + keyStyle.Render("[f: Browse]")
+			caLine += "  " + dialogKeyStyle.Render("[f: Browse]")
 		}
-		lines = append(lines, itemStyle.Render(caLine))
+		lines = append(lines, dialogItemStyle.Render(caLine))
 
 		// Cert file with browse button indicator
 		certLine := m.createCertInput.View()
 		if m.createInputFocus == 5 {
-			certLine += "  " + keyStyle.Render("[f: Browse]")
+			certLine += "  " + dialogKeyStyle.Render("[f: Browse]")
 		}
-		lines = append(lines, itemStyle.Render(certLine))
+		lines = append(lines, dialogItemStyle.Render(certLine))
 
 		// Key file with browse button indicator
 		keyLine := m.createKeyInput.View()
 		if m.createInputFocus == 6 {
-			keyLine += "  " + keyStyle.Render("[f: Browse]")
+			keyLine += "  " + dialogKeyStyle.Render("[f: Browse]")
 		}
-		lines = append(lines, itemStyle.Render(keyLine))
+		lines = append(lines, dialogItemStyle.Render(keyLine))
 	}
 
 	// Show error message if present
@@ -265,59 +253,38 @@ func (m *Model) renderCreateDialog() string {
 		errorStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("196")).
 			Padding(0, 1)
-		lines = append(lines, itemStyle.Render(""))
+		lines = append(lines, dialogItemStyle.Render(""))
 		lines = append(lines, errorStyle.Render(errorMsg))
 	}
 
-	lines = append(lines, itemStyle.Render(""))
+	lines = append(lines, dialogItemStyle.Render(""))
 
 	// Adjust help text based on whether error is shown
 	var helpText string
 	if errorMsg != "" {
 		helpText = fmt.Sprintf(" %s Clear Error • %s Cancel",
-			keyStyle.Render("<Enter>"),
-			keyStyle.Render("<Esc>"))
+			dialogKeyStyle.Render("<Enter>"),
+			dialogKeyStyle.Render("<Esc>"))
 	} else {
 		helpText = fmt.Sprintf(" %s Create • %s Navigate • %s Toggle TLS • %s Browse • %s Cancel",
-			keyStyle.Render("<Enter>"),
-			keyStyle.Render("<Tab/↑/↓>"),
-			keyStyle.Render("<Space>"),
-			keyStyle.Render("<f>"),
-			keyStyle.Render("<Esc>"))
+			dialogKeyStyle.Render("<Enter>"),
+			dialogKeyStyle.Render("<Tab/↑/↓>"),
+			dialogKeyStyle.Render("<Space>"),
+			dialogKeyStyle.Render("<f>"),
+			dialogKeyStyle.Render("<Esc>"))
 	}
-	lines = append(lines, helpStyle.Render(helpText))
+	lines = append(lines, dialogHelpStyle.Render(helpText))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	return borderStyle.Render(content)
+	return dialogBorderStyle.Render(content)
 }
 
 // renderEditDialog renders the edit context dialog (description only)
 func (m *Model) renderEditDialog() string {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("63")).
-		Padding(0, 1)
-
-	itemStyle := lipgloss.NewStyle().
-		Padding(0, 1)
-
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("117"))
-
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Padding(0, 1)
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("63")).
-		Bold(true)
-
 	var lines []string
-	lines = append(lines, titleStyle.Render(" Edit Context: "+m.editContextName+" "))
-	lines = append(lines, itemStyle.Render(""))
-	lines = append(lines, itemStyle.Render(m.editDescInput.View()))
+	lines = append(lines, dialogTitleStyle.Render(" Edit Context: "+m.editContextName+" "))
+	lines = append(lines, dialogItemStyle.Render(""))
+	lines = append(lines, dialogItemStyle.Render(m.editDescInput.View()))
 
 	// Show error message if present
 	errorMsg := m.GetError()
@@ -325,138 +292,31 @@ func (m *Model) renderEditDialog() string {
 		errorStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("196")).
 			Padding(0, 1)
-		lines = append(lines, itemStyle.Render(""))
+		lines = append(lines, dialogItemStyle.Render(""))
 		lines = append(lines, errorStyle.Render(errorMsg))
 	}
 
-	lines = append(lines, itemStyle.Render(""))
+	lines = append(lines, dialogItemStyle.Render(""))
 
 	// Adjust help text based on whether error is shown
 	var helpText string
 	if errorMsg != "" {
 		helpText = fmt.Sprintf(" %s Clear Error • %s Cancel",
-			keyStyle.Render("<Enter>"),
-			keyStyle.Render("<Esc>"))
+			dialogKeyStyle.Render("<Enter>"),
+			dialogKeyStyle.Render("<Esc>"))
 	} else {
 		helpText = fmt.Sprintf(" %s Update • %s Cancel",
-			keyStyle.Render("<Enter>"),
-			keyStyle.Render("<Esc>"))
+			dialogKeyStyle.Render("<Enter>"),
+			dialogKeyStyle.Render("<Esc>"))
 	}
-	lines = append(lines, helpStyle.Render(helpText))
+	lines = append(lines, dialogHelpStyle.Render(helpText))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	return borderStyle.Render(content)
-}
-
-// renderFileBrowserDialog renders the file browser dialog
-func (m *Model) renderFileBrowserDialog() string {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("63")).
-		Padding(0, 1)
-
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("117"))
-
-	itemStyle := lipgloss.NewStyle().
-		Padding(0, 1)
-
-	selectedStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("63")).
-		Padding(0, 1)
-
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Padding(0, 1)
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("63")).
-		Bold(true)
-
-	var lines []string
-	lines = append(lines, titleStyle.Render(fmt.Sprintf(" Select .tar file - Directory: %s ", m.fileBrowserPath)))
-	lines = append(lines, itemStyle.Render(""))
-
-	// Show files with cursor
-	maxVisible := 10
-	start := m.fileBrowserCursor - maxVisible/2
-	if start < 0 {
-		start = 0
-	}
-	end := start + maxVisible
-	if end > len(m.fileBrowserFiles) {
-		end = len(m.fileBrowserFiles)
-		start = end - maxVisible
-		if start < 0 {
-			start = 0
-		}
-	}
-
-	for i := start; i < end; i++ {
-		item := m.fileBrowserFiles[i]
-		displayName := ""
-
-		// Handle parent directory
-		if item == ".." {
-			displayName = "📁 .."
-		} else if strings.HasSuffix(item, "/") {
-			// Directory
-			displayName = "📁 " + filepath.Base(strings.TrimSuffix(item, "/"))
-		} else {
-			// File
-			displayName = filepath.Base(item)
-		}
-
-		if i == m.fileBrowserCursor {
-			lines = append(lines, selectedStyle.Render("→ "+displayName))
-		} else {
-			lines = append(lines, itemStyle.Render("  "+displayName))
-		}
-	}
-
-	lines = append(lines, itemStyle.Render(""))
-	helpText := fmt.Sprintf(" %s Select/Navigate • %s / %s Move • %s Cancel",
-		keyStyle.Render("<Enter>"),
-		keyStyle.Render("<↑/↓>"),
-		keyStyle.Render("<PgUp/PgDn>"),
-		keyStyle.Render("<Esc>"))
-	lines = append(lines, helpStyle.Render(helpText))
-
-	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	return borderStyle.Render(content)
+	return dialogBorderStyle.Render(content)
 }
 
 // renderCertFileBrowserDialog renders the certificate file browser dialog
 func (m *Model) renderCertFileBrowserDialog() string {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("63")).
-		Padding(0, 1)
-
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("117"))
-
-	itemStyle := lipgloss.NewStyle().
-		Padding(0, 1)
-
-	selectedStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("63")).
-		Padding(0, 1)
-
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Padding(0, 1)
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("63")).
-		Bold(true)
-
 	fileTypeLabel := ""
 	switch m.certFileTarget {
 	case "ca":
@@ -474,9 +334,9 @@ func (m *Model) renderCertFileBrowserDialog() string {
 	}
 
 	var lines []string
-	lines = append(lines, titleStyle.Render(fmt.Sprintf(" Select %s ", fileTypeLabel)))
-	lines = append(lines, itemStyle.Render(fmt.Sprintf("Directory: %s (%d files)", m.fileBrowserPath, fileCount)))
-	lines = append(lines, itemStyle.Render(""))
+	lines = append(lines, dialogTitleStyle.Render(fmt.Sprintf(" Select %s ", fileTypeLabel)))
+	lines = append(lines, dialogItemStyle.Render(fmt.Sprintf("Directory: %s (%d files)", m.fileBrowserPath, fileCount)))
+	lines = append(lines, dialogItemStyle.Render(""))
 
 	// Show files with cursor
 	maxVisible := 10
@@ -506,22 +366,22 @@ func (m *Model) renderCertFileBrowserDialog() string {
 			}
 		}
 		if i == m.fileBrowserCursor {
-			lines = append(lines, selectedStyle.Render("→ "+displayName))
+			lines = append(lines, dialogSelectedStyle.Render("→ "+displayName))
 		} else {
-			lines = append(lines, itemStyle.Render("  "+displayName))
+			lines = append(lines, dialogItemStyle.Render("  "+displayName))
 		}
 	}
 
-	lines = append(lines, itemStyle.Render(""))
+	lines = append(lines, dialogItemStyle.Render(""))
 	helpText := fmt.Sprintf(" %s Select/Navigate • %s / %s Move • %s Cancel",
-		keyStyle.Render("<Enter>"),
-		keyStyle.Render("<↑/↓>"),
-		keyStyle.Render("<PgUp/PgDn>"),
-		keyStyle.Render("<Esc>"))
-	lines = append(lines, helpStyle.Render(helpText))
+		dialogKeyStyle.Render("<Enter>"),
+		dialogKeyStyle.Render("<↑/↓>"),
+		dialogKeyStyle.Render("<PgUp/PgDn>"),
+		dialogKeyStyle.Render("<Esc>"))
+	lines = append(lines, dialogHelpStyle.Render(helpText))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	return borderStyle.Render(content)
+	return dialogBorderStyle.Render(content)
 }
 
 // renderErrorDialog renders the error dialog

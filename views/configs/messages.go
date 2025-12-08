@@ -55,6 +55,11 @@ type (
 		Files []string
 		Error error
 	}
+	usedByMsg struct {
+		ConfigName string
+		Stacks     []string
+		Error      error
+	}
 	errorMsg error
 )
 
