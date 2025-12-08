@@ -19,12 +19,14 @@ type Model struct {
 	width        int
 	height       int
 	lastSnapshot uint64 // hash of last snapshot for change detection
+	visible      bool   // tracks if view is currently active
 
 	state state
 	err   error
 
 	pendingAction      string
 	confirmDialog      *confirmdialog.Model
+	errorDialogActive  bool
 	loadingView        *loading.Model
 	configs            []docker.ConfigWithDecodedData
 	configToRotateFrom *docker.ConfigWithDecodedData
@@ -58,6 +60,7 @@ func New(width, height int) *Model {
 		width:         width,
 		height:        height,
 		state:         stateLoading,
+		visible:       true,
 		confirmDialog: confirmdialog.New(0, 0),
 		loadingView:   loading.New(width, height, false, "Loading Docker configs..."),
 	}
@@ -66,6 +69,7 @@ func New(width, height int) *Model {
 func (m *Model) Name() string { return ViewName }
 
 func (m *Model) Init() tea.Cmd {
+	l().Info("ConfigsView: Init() called - starting ticker and loading configs")
 	return tea.Batch(tickCmd(), LoadConfigs())
 }
 
@@ -86,6 +90,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "Enter", Desc: "Check"},
 		{Key: "e", Desc: "Edit"},
 		{Key: "r", Desc: "Rotate"},
+		{Key: "ctrl+d", Desc: "Delete"},
 		{Key: "q", Desc: "Back"},
 	}
 }
@@ -113,9 +118,18 @@ func (m *Model) addConfig(cfg docker.ConfigWithDecodedData) {
 }
 
 func (m *Model) OnEnter() tea.Cmd {
-	return nil
+	m.visible = true
+	l().Info("ConfigsView: OnEnter() - view is now visible")
+	return LoadConfigs()
 }
 
 func (m *Model) OnExit() tea.Cmd {
+	m.visible = false
+	l().Info("ConfigsView: OnExit() - view is no longer visible")
 	return nil
+}
+
+// HasActiveDialog returns true if a dialog is currently visible
+func (m *Model) HasActiveDialog() bool {
+	return m.confirmDialog.Visible || m.errorDialogActive
 }

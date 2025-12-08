@@ -99,7 +99,7 @@ func (m *Model) View() string {
 	content := fmt.Sprintf("%s %s", m.spinner.View(), m.message)
 	content = strings.TrimSpace(content)
 	box := ui.RenderFramedBox(m.title, m.header, content, "", 0) // minimal width
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+	return box
 }
 
 // renderErrorDialog renders the error dialog with red styling
@@ -145,7 +145,7 @@ func (m *Model) renderErrorDialog() string {
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	dialog := borderStyle.Render(content)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, dialog)
+	return dialog
 }
 
 // wrapText wraps text to specified width

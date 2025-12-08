@@ -96,13 +96,26 @@ func ListConfigs(ctx context.Context) ([]swarm.Config, error) {
 		return nil, fmt.Errorf("failed to list configs: %w", err)
 	}
 
+	// ConfigList doesn't populate all metadata like CreatedAt, so we need to inspect each config
+	fullConfigs := make([]swarm.Config, len(configs))
+	for i, cfg := range configs {
+		fullCfg, _, err := cli.ConfigInspectWithRaw(ctx, cfg.ID)
+		if err != nil {
+			l().Warnf("[ListConfigs] Failed to inspect config %s: %v", cfg.Spec.Name, err)
+			// Use the list result as fallback
+			fullConfigs[i] = cfg
+			continue
+		}
+		fullConfigs[i] = fullCfg
+	}
+
 	// 🔠 Sort configs alphabetically by name
-	sort.Slice(configs, func(i, j int) bool {
-		return configs[i].Spec.Name < configs[j].Spec.Name
+	sort.Slice(fullConfigs, func(i, j int) bool {
+		return fullConfigs[i].Spec.Name < fullConfigs[j].Spec.Name
 	})
 
-	l().Infof("[ListConfigs] Found %d configs", len(configs))
-	return configs, nil
+	l().Infof("[ListConfigs] Found %d configs", len(fullConfigs))
+	return fullConfigs, nil
 }
 
 func closeCli(cli *client.Client) {

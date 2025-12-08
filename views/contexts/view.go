@@ -112,25 +112,25 @@ func (m *Model) View() string {
 	if m.certFileBrowserActive {
 		// Cert file browser has highest priority when open
 		certFileBrowserDialog := m.renderCertFileBrowserDialog()
-		paddedContent = m.overlayDialog(paddedContent, certFileBrowserDialog, width)
+		paddedContent = ui.OverlayCentered(paddedContent, certFileBrowserDialog, width, 0)
 	} else if m.createDialogActive {
 		createDialog := m.renderCreateDialog()
-		paddedContent = m.overlayDialog(paddedContent, createDialog, width)
+		paddedContent = ui.OverlayCentered(paddedContent, createDialog, width, 0)
 	} else if m.editDialogActive {
 		editDialog := m.renderEditDialog()
-		paddedContent = m.overlayDialog(paddedContent, editDialog, width)
+		paddedContent = ui.OverlayCentered(paddedContent, editDialog, width, 0)
 	} else if m.errorDialogActive {
 		errorDialog := m.renderErrorDialog()
-		paddedContent = m.overlayDialog(paddedContent, errorDialog, width)
+		paddedContent = ui.OverlayCentered(paddedContent, errorDialog, width, 0)
 	} else if m.fileBrowserActive {
 		fileBrowserDialog := m.renderFileBrowserDialog()
-		paddedContent = m.overlayDialog(paddedContent, fileBrowserDialog, width)
+		paddedContent = ui.OverlayCentered(paddedContent, fileBrowserDialog, width, 0)
 	} else if m.importInputActive {
 		importDialog := m.renderImportDialog()
-		paddedContent = m.overlayDialog(paddedContent, importDialog, width)
+		paddedContent = ui.OverlayCentered(paddedContent, importDialog, width, 0)
 	} else if m.confirmDialog.Visible {
-		dialogView := m.renderConfirmDialog()
-		paddedContent = m.overlayDialog(paddedContent, dialogView, width)
+		dialogView := ui.RenderConfirmDialog(m.confirmDialog.Message)
+		paddedContent = ui.OverlayCentered(paddedContent, dialogView, width, 0)
 	}
 
 	rendered := ui.RenderFramedBox(
@@ -142,83 +142,6 @@ func (m *Model) View() string {
 	)
 
 	return rendered
-}
-
-// overlayDialog overlays a dialog on the content, centering it
-func (m *Model) overlayDialog(content, dialog string, width int) string {
-	contentLines := strings.Split(content, "\n")
-	dialogLines := strings.Split(dialog, "\n")
-
-	dialogHeight := len(dialogLines)
-	dialogWidth := 0
-	for _, line := range dialogLines {
-		if w := lipgloss.Width(line); w > dialogWidth {
-			dialogWidth = w
-		}
-	}
-
-	// Center vertically
-	startRow := (len(contentLines) - dialogHeight) / 2
-	if startRow < 0 {
-		startRow = 0
-	}
-
-	// Center horizontally
-	startCol := (width - dialogWidth) / 2
-	if startCol < 0 {
-		startCol = 0
-	}
-
-	// Overlay dialog lines
-	for i, dialogLine := range dialogLines {
-		row := startRow + i
-		if row < 0 || row >= len(contentLines) {
-			continue
-		}
-
-		baseLine := contentLines[row]
-		baseWidth := lipgloss.Width(baseLine)
-
-		// Build new line with dialog centered
-		var newLine strings.Builder
-
-		if baseWidth < startCol {
-			// Base line is shorter than where dialog should start
-			newLine.WriteString(baseLine)
-			newLine.WriteString(strings.Repeat(" ", startCol-baseWidth))
-			newLine.WriteString(dialogLine)
-		} else {
-			// Overlay dialog in the middle
-			leftPart := ""
-			rightPart := ""
-
-			// Get left part (up to startCol)
-			if startCol > 0 {
-				leftPart = baseLine[:min(startCol, len(baseLine))]
-			}
-
-			// Get right part (after dialog)
-			rightStart := startCol + dialogWidth
-			if rightStart < baseWidth && rightStart < len(baseLine) {
-				rightPart = baseLine[rightStart:]
-			}
-
-			newLine.WriteString(leftPart)
-			newLine.WriteString(dialogLine)
-			newLine.WriteString(rightPart)
-		}
-
-		contentLines[row] = newLine.String()
-	}
-
-	return strings.Join(contentLines, "\n")
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func (m *Model) renderImportDialog() string {
@@ -420,55 +343,6 @@ func (m *Model) renderEditDialog() string {
 			keyStyle.Render("<Esc>"))
 	}
 	lines = append(lines, helpStyle.Render(helpText))
-
-	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	return borderStyle.Render(content)
-}
-
-// renderConfirmDialog renders the confirmation dialog
-func (m *Model) renderConfirmDialog() string {
-	contentWidth := 60
-
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("63")).
-		Padding(0, 1)
-
-	itemStyle := lipgloss.NewStyle().
-		Padding(0, 1)
-
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("117"))
-
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Padding(0, 1)
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("63")).
-		Bold(true)
-
-	// Helper function to ensure exact width
-	ensureWidth := func(s string, width int) string {
-		currentWidth := lipgloss.Width(s)
-		if currentWidth < width {
-			return s + strings.Repeat(" ", width-currentWidth)
-		}
-		return s
-	}
-
-	var lines []string
-	lines = append(lines, ensureWidth(titleStyle.Render(" Confirmation "), contentWidth))
-	lines = append(lines, ensureWidth(itemStyle.Render(""), contentWidth))
-	lines = append(lines, ensureWidth(itemStyle.Render(m.confirmDialog.Message), contentWidth))
-	lines = append(lines, ensureWidth(itemStyle.Render(""), contentWidth))
-
-	helpText := fmt.Sprintf(" %s Yes • %s No",
-		keyStyle.Render("<y>"),
-		keyStyle.Render("<n>"))
-	lines = append(lines, ensureWidth(helpStyle.Render(helpText), contentWidth))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	return borderStyle.Render(content)

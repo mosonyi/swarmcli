@@ -9,6 +9,7 @@ import (
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/docker/docker/api/types/swarm"
 )
 
 // --- Async commands ---
@@ -46,7 +47,22 @@ func CheckConfigsCmd(lastHash uint64) tea.Cmd {
 			wrapped[i] = docker.ConfigWithDecodedData{Config: c, Data: c.Spec.Data}
 		}
 
-		newHash, err := hash.Compute(wrapped)
+		// Create a stable hash based only on ID and Version (not timestamps)
+		type stableConfig struct {
+			ID      string
+			Version uint64
+			Name    string
+		}
+		stableConfigs := make([]stableConfig, len(cfgs))
+		for i, c := range cfgs {
+			stableConfigs[i] = stableConfig{
+				ID:      c.ID,
+				Version: c.Version.Index,
+				Name:    c.Spec.Name,
+			}
+		}
+
+		newHash, err := hash.Compute(stableConfigs)
 		if err != nil {
 			l().Errorf("CheckConfigsCmd: Error computing hash: %v", err)
 			// Schedule next poll even on error
@@ -77,13 +93,22 @@ func rotateConfigCmd(oldCfg *docker.ConfigWithDecodedData, newCfg *docker.Config
 	return func() tea.Msg {
 		ctx := context.Background()
 
-		if err := docker.RotateConfigInServices(ctx, &oldCfg.Config, newCfg.Config); err != nil {
+		oldSwarmCfg := &swarm.Config{}
+		if oldCfg != nil {
+			oldSwarmCfg = &oldCfg.Config
+		}
+
+		if err := docker.RotateConfigInServices(ctx, oldSwarmCfg, newCfg.Config); err != nil {
 			return errorMsg(err)
 		}
 
-		return configRotatedMsg{
+		result := configRotatedMsg{
 			New: *newCfg,
 		}
+		if oldCfg != nil {
+			result.Old = *oldCfg
+		}
+		return result
 	}
 }
 

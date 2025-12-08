@@ -21,9 +21,22 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case configsLoadedMsg:
 		l().Infof("ConfigsView: Received configsLoadedMsg with %d configs", len(msg))
-		// Update the hash with new data
+		// Update the hash with new data using stable fields only
+		type stableConfig struct {
+			ID      string
+			Version uint64
+			Name    string
+		}
+		stableConfigs := make([]stableConfig, len(msg))
+		for i, c := range msg {
+			stableConfigs[i] = stableConfig{
+				ID:      c.Config.ID,
+				Version: c.Config.Version.Index,
+				Name:    c.Config.Spec.Name,
+			}
+		}
 		var err error
-		m.lastSnapshot, err = hash.Compute(msg)
+		m.lastSnapshot, err = hash.Compute(stableConfigs)
 		if err != nil {
 			l().Errorf("ConfigsView: Error computing hash: %v", err)
 		}
@@ -42,12 +55,15 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case TickMsg:
-		l().Infof("ConfigsView: Received TickMsg, state=%v", m.state)
-		// Check for changes (this will return either configsLoadedMsg or the next TickMsg)
-		if m.state == stateReady {
-			return CheckConfigsCmd(m.lastSnapshot)
+		l().Infof("ConfigsView: Received TickMsg, state=%v, visible=%v", m.state, m.visible)
+		// Only check for changes if view is visible, ready, and not showing dialogs
+		if m.visible && m.state == stateReady && !m.confirmDialog.Visible && !m.loadingView.Visible() {
+			return tea.Batch(
+				CheckConfigsCmd(m.lastSnapshot),
+				tickCmd(),
+			)
 		}
-		// Continue polling even if not ready
+		// Continue ticking even if not visible/ready
 		return tickCmd()
 
 	case configRotatedMsg:
@@ -90,9 +106,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return tea.Printf("Error editing config: %v", msg.err)
 
 	case errorMsg:
-		l().Errorf("Unhandled error: %v", msg)
+		l().Errorf("Error occurred: %v", msg)
 		m.state = stateError
 		m.err = msg
+		m.errorDialogActive = true
 		return nil
 
 	case confirmdialog.ResultMsg:
@@ -130,6 +147,16 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case tea.KeyMsg:
+		if m.errorDialogActive {
+			if msg.String() == "enter" || msg.String() == "esc" {
+				m.errorDialogActive = false
+				m.err = nil
+				m.state = stateReady
+				return nil
+			}
+			return nil
+		}
+
 		if m.confirmDialog.Visible {
 			l().Debugf("Key input routed to confirm dialog: %q", msg.String())
 			return m.confirmDialog.Update(msg)
@@ -164,7 +191,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.confirmDialog = m.confirmDialog.Show(fmt.Sprintf("Rotate config %s?", cfgName))
 			return nil
 
-		case "d":
+		case "ctrl+d":
 			if len(m.configsList.Filtered) == 0 {
 				return nil
 			}
@@ -216,7 +243,15 @@ func (m *Model) setRenderItem() {
 	// Assign to the list
 	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
 	m.configsList.RenderItem = func(cfg configItem, selected bool, _ int) string {
-		line := fmt.Sprintf("%-*s        %-*s", nameCol, cfg.Name, idCol, cfg.ID)
+		createdStr := "N/A"
+		if !cfg.CreatedAt.IsZero() {
+			createdStr = cfg.CreatedAt.Format("2006-01-02 15:04:05")
+		}
+		updatedStr := "N/A"
+		if !cfg.UpdatedAt.IsZero() {
+			updatedStr = cfg.UpdatedAt.Format("2006-01-02 15:04:05")
+		}
+		line := fmt.Sprintf("%-*s        %-*s        %-19s        %-19s", nameCol, cfg.Name, idCol, cfg.ID, createdStr, updatedStr)
 		if selected {
 			return ui.CursorStyle.Render(line)
 		}

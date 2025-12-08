@@ -80,7 +80,7 @@ func (m *Model) View() string {
 
 	// Build content
 	var lines []string
-	lines = append(lines, titleStyle.Render("⚠️  Confirm Action"))
+	lines = append(lines, titleStyle.Render(" Confirm Action "))
 	lines = append(lines, messageStyle.Render(m.Message))
 
 	helpText := fmt.Sprintf("%s Yes • %s No",
@@ -89,9 +89,7 @@ func (m *Model) View() string {
 	lines = append(lines, helpStyle.Render(helpText))
 
 	content := strings.Join(lines, "\n")
-	box := borderStyle.Render(content)
-
-	return lipgloss.Place(m.Width, m.Height, lipgloss.Center, lipgloss.Center, box)
+	return borderStyle.Render(content)
 }
 
 func (m *Model) WithMessage(msg string) *Model {
