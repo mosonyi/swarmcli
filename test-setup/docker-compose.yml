@@ -6,7 +6,7 @@ x-proxy-env: &proxy_env
 services:
   # ===== Manager (dockerd-in-docker) =====
   manager:
-    image: docker:24-dind
+    image: docker:29-dind
     privileged: true
     environment:
       DOCKER_TLS_CERTDIR:             # disable TLS for local test-setup
@@ -43,7 +43,7 @@ services:
 
   # Initializes Swarm on manager and writes worker join token to the shared volume
   swarm-init:
-    image: docker:24
+    image: docker:29
     depends_on:
       manager:
         condition: service_healthy
@@ -66,7 +66,7 @@ services:
 
   # ===== Worker #1 (dockerd-in-docker) =====
   worker1:
-    image: docker:24-dind
+    image: docker:29-dind
     privileged: true
     environment:
       DOCKER_TLS_CERTDIR:
@@ -99,7 +99,7 @@ services:
 
   # Joins worker1 to the Swarm
   worker1-join:
-    image: docker:24
+    image: docker:29
     depends_on:
       worker1:
         condition: service_healthy
@@ -122,7 +122,7 @@ services:
 
   # ===== Worker #2 (dockerd-in-docker) =====
   worker2:
-    image: docker:24-dind
+    image: docker:29-dind
     privileged: true
     environment:
       DOCKER_TLS_CERTDIR:
@@ -155,7 +155,7 @@ services:
 
   # Joins worker2 to the Swarm
   worker2-join:
-    image: docker:24
+    image: docker:29
     depends_on:
       worker2:
         condition: service_healthy
