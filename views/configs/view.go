@@ -64,11 +64,12 @@ func (i configItem) Description() string {
 
 type usedByItem struct {
 	StackName string
+	ServiceName string
 }
 
-func (i usedByItem) FilterValue() string { return i.StackName }
-func (i usedByItem) Title() string       { return i.StackName }
-func (i usedByItem) Description() string { return "" }
+func (i usedByItem) FilterValue() string { return i.StackName + " " + i.ServiceName }
+func (i usedByItem) Title() string       { return fmt.Sprintf("%-24s %-24s", i.StackName, i.ServiceName) }
+func (i usedByItem) Description() string { return "Service: " + i.ServiceName }
 
 func configItemFromSwarm(c swarm.Config) configItem {
 	return configItem{
@@ -329,7 +330,8 @@ func (m *Model) renderUsedByView() string {
 
 func (m *Model) renderUsedByHeader() string {
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15"))
-	return headerStyle.Render("STACK NAME")
+	// Use fixed column widths for alignment
+	return headerStyle.Render(fmt.Sprintf("%-24s %-24s", "Stack Name", "Service Name"))
 }
 
 func (m *Model) renderUsedByFooter() string {

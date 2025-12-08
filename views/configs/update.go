@@ -171,7 +171,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.err = msg.Error
 			return nil
 		}
-		l().Infof("Config %s is used by %d stack(s)", msg.ConfigName, len(msg.Stacks))
+		l().Infof("Config %s is used by %d service(s)", msg.ConfigName, len(msg.UsedBy))
 
 		// Initialize usedByList with a new viewport
 		vp := viewport.New(m.configsList.Viewport.Width, m.configsList.Viewport.Height)
@@ -180,10 +180,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.usedByList = filterlist.FilterableList[usedByItem]{
 			Viewport: vp,
 			Match: func(item usedByItem, query string) bool {
-				return strings.Contains(strings.ToLower(item.StackName), strings.ToLower(query))
+				return strings.Contains(strings.ToLower(item.StackName), strings.ToLower(query)) ||
+					   strings.Contains(strings.ToLower(item.ServiceName), strings.ToLower(query))
 			},
 			RenderItem: func(item usedByItem, selected bool, _ int) string {
-				line := item.StackName
+				line := fmt.Sprintf("%-24s %-24s", item.StackName, item.ServiceName)
 				if selected {
 					return ui.CursorStyle.Render(line)
 				}
@@ -192,12 +193,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			},
 		}
 
-		// Convert stacks to usedByItem
-		var items []usedByItem
-		for _, stack := range msg.Stacks {
-			items = append(items, usedByItem{StackName: stack})
-		}
-		m.usedByList.Items = items
+		m.usedByList.Items = msg.UsedBy
 		m.usedByList.ApplyFilter()
 
 		m.usedByConfigName = msg.ConfigName

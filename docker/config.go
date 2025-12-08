@@ -1,3 +1,4 @@
+
 package docker
 
 import (
@@ -14,6 +15,15 @@ import (
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/client"
 )
+
+// ListServicesUsingConfigID returns all services that reference a config by ID
+func ListServicesUsingConfigID(ctx context.Context, configID string) ([]swarm.Service, error) {
+	client, err := GetClient()
+	if err != nil {
+		return nil, err
+	}
+	return listServicesUsingConfig(ctx, client, configID)
+}
 
 // ConfigWithDecodedData is a helper struct with the decoded data included.
 type ConfigWithDecodedData struct {

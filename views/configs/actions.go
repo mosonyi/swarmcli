@@ -259,33 +259,59 @@ func createConfigFromFileCmd(name, filePath string) tea.Cmd {
 
 func getUsedByStacksCmd(configName string) tea.Cmd {
 	return func() tea.Msg {
-		l().Infof("Getting stacks that use config: %s", configName)
+		l().Infof("Getting stacks/services that use config: %s", configName)
 
 		ctx := context.Background()
-		services, err := docker.ListServicesUsingConfigName(ctx, configName)
+		// Get config ID for robust matching
+		cfg, err := docker.InspectConfig(ctx, configName)
 		if err != nil {
-			l().Errorf("Failed to list services using config %s: %v", configName, err)
-			return usedByMsg{ConfigName: configName, Stacks: nil, Error: err}
+			l().Errorf("Failed to inspect config %s: %v", configName, err)
+			return usedByMsg{ConfigName: configName, UsedBy: nil, Error: err}
 		}
 
-		// Extract unique stack names
-		stackSet := make(map[string]bool)
-		for _, svc := range services {
-			if stackName, ok := svc.Spec.Labels["com.docker.stack.namespace"]; ok && stackName != "" {
-				stackSet[stackName] = true
+		// Get services by config name and ID
+		servicesByName, err := docker.ListServicesUsingConfigName(ctx, configName)
+		if err != nil {
+			l().Errorf("Failed to list services using config name %s: %v", configName, err)
+			return usedByMsg{ConfigName: configName, UsedBy: nil, Error: err}
+		}
+		servicesByID, err := docker.ListServicesUsingConfigID(ctx, cfg.Config.ID)
+		if err != nil {
+			l().Errorf("Failed to list services using config ID %s: %v", cfg.Config.ID, err)
+			return usedByMsg{ConfigName: configName, UsedBy: nil, Error: err}
+		}
+
+		// Merge services, avoid duplicates
+		svcMap := make(map[string]swarm.Service)
+		for _, svc := range servicesByName {
+			svcMap[svc.ID] = svc
+		}
+		for _, svc := range servicesByID {
+			svcMap[svc.ID] = svc
+		}
+
+		// Collect stack/service pairs
+		var usedBy []usedByItem
+		for _, svc := range svcMap {
+			stackName := svc.Spec.Labels["com.docker.stack.namespace"]
+			if stackName == "" {
+				stackName = "(no stack)"
 			}
+			usedBy = append(usedBy, usedByItem{
+				StackName:   stackName,
+				ServiceName: svc.Spec.Name,
+			})
 		}
 
-		// Convert to sorted slice
-		stacks := make([]string, 0, len(stackSet))
-		for stack := range stackSet {
-			stacks = append(stacks, stack)
-		}
+		// Sort by stack then service
+		sort.Slice(usedBy, func(i, j int) bool {
+			if usedBy[i].StackName == usedBy[j].StackName {
+				return usedBy[i].ServiceName < usedBy[j].ServiceName
+			}
+			return usedBy[i].StackName < usedBy[j].StackName
+		})
 
-		// Sort alphabetically
-		sort.Strings(stacks)
-
-		l().Infof("Config %s is used by %d stack(s)", configName, len(stacks))
-		return usedByMsg{ConfigName: configName, Stacks: stacks, Error: nil}
+		l().Infof("Config %s is used by %d service(s)", configName, len(usedBy))
+		return usedByMsg{ConfigName: configName, UsedBy: usedBy, Error: nil}
 	}
 }

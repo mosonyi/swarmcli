@@ -57,7 +57,7 @@ type (
 	}
 	usedByMsg struct {
 		ConfigName string
-		Stacks     []string
+		UsedBy     []usedByItem
 		Error      error
 	}
 	NavigateToStackMsg struct {
