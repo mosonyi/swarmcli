@@ -176,10 +176,10 @@ func (m *Model) View() string {
 func (m *Model) renderImportDialog() string {
 	contentWidth := 60
 
-	titleStyleWithWidth := dialogTitleStyle.Copy().Width(contentWidth)
-	itemStyleWithWidth := dialogItemStyle.Copy().Width(contentWidth)
-	borderStyleWithWidth := dialogBorderStyle.Copy().Width(contentWidth + 2)
-	helpStyleWithWidth := dialogHelpStyle.Copy().Width(contentWidth)
+	titleStyleWithWidth := dialogTitleStyle.Width(contentWidth)
+	itemStyleWithWidth := dialogItemStyle.Width(contentWidth)
+	borderStyleWithWidth := dialogBorderStyle.Width(contentWidth + 2)
+	helpStyleWithWidth := dialogHelpStyle.Width(contentWidth)
 
 	var lines []string
 	lines = append(lines, titleStyleWithWidth.Render(" Import Docker Context "))
