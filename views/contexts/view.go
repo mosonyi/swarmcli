@@ -123,7 +123,7 @@ func (m *Model) View() string {
 		errorDialog := m.renderErrorDialog()
 		paddedContent = ui.OverlayCentered(paddedContent, errorDialog, width, 0)
 	} else if m.fileBrowserActive {
-		fileBrowserDialog := m.renderFileBrowserDialog()
+		fileBrowserDialog := ui.RenderFileBrowserDialog("Select .tar file", m.fileBrowserPath, m.fileBrowserFiles, m.fileBrowserCursor)
 		paddedContent = ui.OverlayCentered(paddedContent, fileBrowserDialog, width, 0)
 	} else if m.importInputActive {
 		importDialog := m.renderImportDialog()

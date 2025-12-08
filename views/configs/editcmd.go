@@ -10,6 +10,73 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// createConfigInEditorCmd creates a tmp file and opens the editor to create a new config.
+// If existingData is provided, it will be pre-populated in the editor.
+func createConfigInEditorCmd(name string, existingData []byte) tea.Cmd {
+	l().Infoln("createConfigInEditorCmd: started for", name)
+
+	tmp, err := os.CreateTemp("", fmt.Sprintf("%s-*.txt", name))
+	if err != nil {
+		l().Infoln("CreateTemp error:", err)
+		return func() tea.Msg { return configCreateErrorMsg{fmt.Errorf("failed to create temp file: %w", err)} }
+	}
+	defer func(tmp *os.File) {
+		err := tmp.Close()
+		if err != nil {
+			l().Errorln("Failed to close temp file:", tmp.Name(), "error:", err)
+		}
+	}(tmp)
+
+	// Write existing data if provided
+	if len(existingData) > 0 {
+		if _, err := tmp.Write(existingData); err != nil {
+			l().Infoln("Write temp error:", err)
+			return func() tea.Msg { return configCreateErrorMsg{fmt.Errorf("failed to write temp file: %w", err)} }
+		}
+	}
+
+	l().Infoln("Created temp file:", tmp.Name())
+
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "nano"
+	}
+
+	l().Infoln("Invoking editor:", editor, tmp.Name())
+	cmd := exec.Command(editor, tmp.Name())
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		if err != nil {
+			l().Infoln("Editor process error:", err)
+			return configCreateErrorMsg{fmt.Errorf("editor failed: %w", err)}
+		}
+
+		l().Infoln("Editor closed, reading back from temp")
+		newData, err := os.ReadFile(tmp.Name())
+		if err != nil {
+			l().Infoln("ReadFile error:", err)
+			return configCreateErrorMsg{fmt.Errorf("failed to read edited file: %w", err)}
+		}
+
+		l().Infoln("Read new data, length:", len(newData))
+
+		// Create the new config
+		ctx := context.Background()
+		newCfg, err := docker.CreateConfig(ctx, name, newData)
+		if err != nil {
+			l().Infoln("CreateConfig error:", err)
+			// Return error with data so we can retry with corrected name
+			return editorContentReadyMsg{Name: name, Data: newData, Err: err}
+		}
+
+		l().Infoln("Created new config:", newCfg.Spec.Name)
+		return configCreatedMsg{Config: newCfg}
+	})
+}
+
 // editConfigInEditorCmd creates a tmp file and opens the editor to edit the new config.
 func editConfigInEditorCmd(name string) tea.Cmd {
 	l().Infoln("editConfigInEditorCmd: started")

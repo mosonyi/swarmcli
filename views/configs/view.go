@@ -69,17 +69,19 @@ func (m *Model) View() string {
 	paddedContent := strings.Join(contentLines, "\n")
 
 	// Apply overlays to padded content BEFORE framing
-	if m.confirmDialog.Visible {
+	if m.fileBrowserActive {
+		fileBrowserDialog := ui.RenderFileBrowserDialog("Select File", m.fileBrowserPath, m.fileBrowserFiles, m.fileBrowserCursor)
+		paddedContent = ui.OverlayCentered(paddedContent, fileBrowserDialog, width, 0)
+	} else if m.createDialogActive {
+		createDialog := m.renderCreateDialog()
+		paddedContent = ui.OverlayCentered(paddedContent, createDialog, width, 0)
+	} else if m.confirmDialog.Visible {
 		dialogView := ui.RenderConfirmDialog(m.confirmDialog.Message)
 		paddedContent = ui.OverlayCentered(paddedContent, dialogView, width, 0)
-	}
-
-	if m.errorDialogActive {
+	} else if m.errorDialogActive {
 		errorDialog := errordialog.Render(fmt.Sprintf("%v", m.err))
 		paddedContent = ui.OverlayCentered(paddedContent, errorDialog, width, 0)
-	}
-
-	if m.state == stateLoading || m.loadingView.Visible() {
+	} else if m.state == stateLoading || m.loadingView.Visible() {
 		loadingView := m.loadingView.View()
 		paddedContent = ui.OverlayCentered(paddedContent, loadingView, width, 0)
 	}
@@ -130,4 +132,148 @@ func (m *Model) renderConfigsFooter() string {
 		return statusBar + "\n" + footer
 	}
 	return statusBar
+}
+
+func (m *Model) renderCreateDialog() string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("15")).
+		Background(lipgloss.Color("63")).
+		Padding(0, 1)
+
+	borderStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("117"))
+
+	itemStyle := lipgloss.NewStyle().
+		Padding(0, 1)
+
+	selectedStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("15")).
+		Background(lipgloss.Color("63")).
+		Padding(0, 1)
+
+	helpStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		Padding(0, 1)
+
+	keyStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("63")).
+		Bold(true)
+
+	var lines []string
+
+	switch m.createDialogStep {
+	case "source":
+		lines = append(lines, titleStyle.Render(" Create Config - Choose Source "))
+		lines = append(lines, itemStyle.Render(""))
+		lines = append(lines, itemStyle.Render("How would you like to create the config?"))
+		lines = append(lines, itemStyle.Render(""))
+
+		if m.createConfigSource == "file" {
+			lines = append(lines, selectedStyle.Render("→ From file"))
+		} else {
+			lines = append(lines, itemStyle.Render("  From file"))
+		}
+
+		if m.createConfigSource == "inline" {
+			lines = append(lines, selectedStyle.Render("→ Inline editor"))
+		} else {
+			lines = append(lines, itemStyle.Render("  Inline editor"))
+		}
+
+		lines = append(lines, itemStyle.Render(""))
+		helpText := fmt.Sprintf(" %s Select • %s / %s Navigate • %s Cancel",
+			keyStyle.Render("<Enter>"),
+			keyStyle.Render("<↑>"),
+			keyStyle.Render("<↓>"),
+			keyStyle.Render("<Esc>"))
+		lines = append(lines, helpStyle.Render(helpText))
+
+	case "details-file":
+		lines = append(lines, titleStyle.Render(" Create Config from File "))
+		lines = append(lines, itemStyle.Render(""))
+
+		// Show error if present
+		if m.createDialogError != "" {
+			errorStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("196")).
+				Padding(0, 1)
+			lines = append(lines, errorStyle.Render("⚠ "+m.createDialogError))
+			lines = append(lines, itemStyle.Render(""))
+		}
+
+		lines = append(lines, itemStyle.Render(m.createNameInput.View()))
+		lines = append(lines, itemStyle.Render(""))
+
+		// Show file path input with browse indicator when focused
+		fileLine := m.createFileInput.View()
+		if m.createInputFocus == 1 {
+			fileLine += "  " + keyStyle.Render("[f: Browse]")
+		}
+		lines = append(lines, itemStyle.Render(fileLine))
+		lines = append(lines, itemStyle.Render(""))
+
+		// Change help text based on error state
+		var helpText string
+		if m.createDialogError != "" {
+			helpText = fmt.Sprintf(" %s Fix error • %s Navigate • %s Cancel",
+				keyStyle.Render("<Enter>"),
+				keyStyle.Render("<Tab>"),
+				keyStyle.Render("<Esc>"))
+		} else {
+			helpText = fmt.Sprintf(" %s Confirm • %s Navigate • %s Cancel",
+				keyStyle.Render("<Enter>"),
+				keyStyle.Render("<Tab>"),
+				keyStyle.Render("<Esc>"))
+		}
+		lines = append(lines, helpStyle.Render(helpText))
+
+	case "details-inline":
+		lines = append(lines, titleStyle.Render(" Create Config - Inline Editor "))
+		lines = append(lines, itemStyle.Render(""))
+
+		// Show error if present
+		if m.createDialogError != "" {
+			errorStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("196")).
+				Padding(0, 1)
+			lines = append(lines, errorStyle.Render("⚠ "+m.createDialogError))
+			lines = append(lines, itemStyle.Render(""))
+		}
+
+		lines = append(lines, itemStyle.Render(m.createNameInput.View()))
+		lines = append(lines, itemStyle.Render(""))
+
+		// Show editor status with edit hint when focused
+		editorStatus := "Content: "
+		if m.createConfigData != "" {
+			editorStatus += fmt.Sprintf("(%d bytes)", len(m.createConfigData))
+		} else {
+			editorStatus += "(empty)"
+		}
+		if m.createInputFocus == 1 {
+			editorStatus += "  " + keyStyle.Render("[e: Edit]")
+		}
+		lines = append(lines, itemStyle.Render(editorStatus))
+		lines = append(lines, itemStyle.Render(""))
+
+		// Change help text based on error state
+		var helpText string
+		if m.createDialogError != "" {
+			helpText = fmt.Sprintf(" %s Fix error • %s Navigate • %s Cancel",
+				keyStyle.Render("<Enter>"),
+				keyStyle.Render("<Tab>"),
+				keyStyle.Render("<Esc>"))
+		} else {
+			helpText = fmt.Sprintf(" %s Confirm • %s Navigate • %s Cancel",
+				keyStyle.Render("<Enter>"),
+				keyStyle.Render("<Tab>"),
+				keyStyle.Render("<Esc>"))
+		}
+		lines = append(lines, helpStyle.Render(helpText))
+	}
+
+	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	return borderStyle.Render(content)
 }

@@ -183,6 +183,42 @@ func CreateConfigVersion(ctx context.Context, baseConfig swarm.Config, newData [
 	return newCfg, nil
 }
 
+// CreateConfig creates a new config with the given name and data
+func CreateConfig(ctx context.Context, name string, data []byte) (swarm.Config, error) {
+	l().Infof("[CreateConfig] Creating new config %q (size=%d bytes)", name, len(data))
+
+	cli, err := GetClient()
+	if err != nil {
+		return swarm.Config{}, err
+	}
+	defer closeCli(cli)
+
+	spec := swarm.ConfigSpec{
+		Annotations: swarm.Annotations{
+			Name: name,
+			Labels: map[string]string{
+				"swarmcli.created": time.Now().UTC().Format(time.RFC3339),
+			},
+		},
+		Data: data,
+	}
+
+	id, err := cli.ConfigCreate(ctx, spec)
+	if err != nil {
+		l().Errorf("[CreateConfig] Failed to create config %q: %v", name, err)
+		return swarm.Config{}, fmt.Errorf("failed to create config %q: %w", name, err)
+	}
+
+	newCfg, _, err := cli.ConfigInspectWithRaw(ctx, id.ID)
+	if err != nil {
+		l().Errorf("[CreateConfig] Created config %q but failed to re-inspect: %v", name, err)
+		return swarm.Config{}, fmt.Errorf("failed to inspect new config %q: %w", name, err)
+	}
+
+	l().Infof("[CreateConfig] Successfully created new config %q (ID=%s)", newCfg.Spec.Name, newCfg.ID)
+	return newCfg, nil
+}
+
 // RotateConfigInServices updates all services that reference oldCfg to use newCfg.
 // If oldCfg is nil, it tries to infer affected services automatically based on labels or content.
 func RotateConfigInServices(ctx context.Context, oldCfg *swarm.Config, newCfg swarm.Config) error {

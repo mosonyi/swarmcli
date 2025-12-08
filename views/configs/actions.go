@@ -3,6 +3,9 @@ package configsview
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	inspectview "swarmcli/views/inspect"
@@ -174,5 +177,81 @@ func deleteConfigCmd(name string) tea.Cmd {
 			return errorMsg(fmt.Errorf("failed to delete config %q: %w", name, err))
 		}
 		return configDeletedMsg{Name: name}
+	}
+}
+
+func loadFilesCmd(dirPath string) tea.Cmd {
+	return func() tea.Msg {
+		files := []string{}
+
+		// Expand ~ to home directory
+		if strings.HasPrefix(dirPath, "~") {
+			if homeDir, err := os.UserHomeDir(); err == nil {
+				dirPath = strings.Replace(dirPath, "~", homeDir, 1)
+			}
+		}
+
+		// Add parent directory option if not root
+		if dirPath != "/" {
+			files = append(files, "..")
+		}
+
+		entries, err := os.ReadDir(dirPath)
+		if err != nil {
+			return filesLoadedMsg{
+				Path:  dirPath,
+				Files: files,
+				Error: err,
+			}
+		}
+
+		// Separate directories and regular files
+		var dirs []string
+		var regFiles []string
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				// Add directory with trailing slash
+				dirs = append(dirs, filepath.Join(dirPath, entry.Name())+"/")
+			} else {
+				// Add all files (not just .tar like in contexts)
+				regFiles = append(regFiles, filepath.Join(dirPath, entry.Name()))
+			}
+		}
+
+		// Add directories first, then files
+		files = append(files, dirs...)
+		files = append(files, regFiles...)
+
+		return filesLoadedMsg{
+			Path:  dirPath,
+			Files: files,
+			Error: nil,
+		}
+	}
+}
+
+func createConfigFromFileCmd(name, filePath string) tea.Cmd {
+	return func() tea.Msg {
+		l().Infof("Creating config %s from file %s", name, filePath)
+
+		// Read file content
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			l().Errorf("Failed to read file %s: %v", filePath, err)
+			return configCreateErrorMsg{fmt.Errorf("failed to read file: %w", err)}
+		}
+
+		// Create the config
+		ctx := context.Background()
+		newCfg, err := docker.CreateConfig(ctx, name, data)
+		if err != nil {
+			l().Errorf("Failed to create config %s: %v", name, err)
+			// Return error with file path so we can retry with corrected name
+			return fileContentReadyMsg{Name: name, FilePath: filePath, Data: data, Err: err}
+		}
+
+		l().Infof("Successfully created config %s from file", name)
+		return configCreatedMsg{Config: newCfg}
 	}
 }

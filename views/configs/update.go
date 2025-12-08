@@ -2,6 +2,9 @@ package configsview
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
@@ -105,6 +108,66 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.err = msg.err
 		return tea.Printf("Error editing config: %v", msg.err)
 
+	case configCreatedMsg:
+		l().Infof("Config created successfully: %s", msg.Config.Spec.Name)
+		return loadConfigsCmd()
+
+	case editorContentReadyMsg:
+		if msg.Err != nil {
+			l().Errorf("Error creating config from editor: %v", msg.Err)
+			// Preserve the content and return to name entry
+			m.createDialogActive = true
+			m.createDialogStep = "details-inline"
+			m.createConfigData = string(msg.Data)
+			m.createDialogError = msg.Err.Error()
+			m.createInputFocus = 0
+			m.createNameInput.Focus()
+			return nil
+		}
+		// Success
+		return loadConfigsCmd()
+
+	case fileContentReadyMsg:
+		if msg.Err != nil {
+			l().Errorf("Error creating config from file: %v", msg.Err)
+			// Preserve the file path and return to name entry
+			m.createDialogActive = true
+			m.createDialogStep = "details-file"
+			m.createFileInput.SetValue(msg.FilePath)
+			m.createDialogError = msg.Err.Error()
+			m.createInputFocus = 0
+			m.createNameInput.Focus()
+			return nil
+		}
+		// Success
+		return loadConfigsCmd()
+
+	case configCreateErrorMsg:
+		l().Errorf("Error creating config: %v", msg.err)
+		// Return to create dialog with error message
+		m.createDialogActive = true
+		m.createDialogError = msg.err.Error()
+		m.fileBrowserActive = false
+		return nil
+
+	case filesLoadedMsg:
+		if msg.Error != nil {
+			l().Errorf("Error loading files: %v", msg.Error)
+			m.fileBrowserActive = false
+			m.createDialogActive = true
+			m.createDialogError = fmt.Sprintf("Failed to load directory: %v", msg.Error)
+			return nil
+		}
+		m.fileBrowserPath = msg.Path
+		m.fileBrowserFiles = msg.Files
+		m.fileBrowserCursor = 0
+		m.fileBrowserActive = true // Ensure browser stays active
+		return nil
+
+	case createConfigMsg:
+		l().Infof("Opening editor to create config: %s", msg.Name)
+		return createConfigInEditorCmd(msg.Name, []byte(m.createConfigData))
+
 	case errorMsg:
 		l().Errorf("Error occurred: %v", msg)
 		m.state = stateError
@@ -157,6 +220,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 
+		if m.createDialogActive {
+			return m.handleCreateDialogKey(msg)
+		}
+
+		if m.fileBrowserActive {
+			return m.handleFileBrowserKey(msg)
+		}
+
 		if m.confirmDialog.Visible {
 			l().Debugf("Key input routed to confirm dialog: %q", msg.String())
 			return m.confirmDialog.Update(msg)
@@ -206,6 +277,15 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			cfg := m.selectedConfig()
 			l().Infof("Edit key pressed for config: %s", cfg)
 			return editConfigInEditorCmd(m.selectedConfig())
+		case "c":
+			l().Info("Create key pressed")
+			m.createDialogActive = true
+			m.createDialogStep = "source"
+			m.createConfigSource = "file" // default
+			m.createNameInput.SetValue("")
+			m.createConfigData = ""
+			m.createDialogError = ""
+			return nil
 		case "i":
 			cfg := m.selectedConfig()
 			l().Infof("Inspect key pressed for config: %s", cfg)
@@ -257,4 +337,274 @@ func (m *Model) setRenderItem() {
 		}
 		return itemStyle.Render(line)
 	}
+}
+
+func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
+	switch m.createDialogStep {
+	case "source":
+		switch msg.String() {
+		case "esc":
+			m.createDialogActive = false
+			m.createDialogError = ""
+			return nil
+		case "up", "down":
+			// Toggle between file and inline
+			if m.createConfigSource == "file" {
+				m.createConfigSource = "inline"
+			} else {
+				m.createConfigSource = "file"
+			}
+			return nil
+		case "enter":
+			// Move to name entry
+			m.createDialogError = "" // Clear any previous error
+			if m.createConfigSource == "file" {
+				m.createDialogStep = "details-file"
+			} else {
+				m.createDialogStep = "details-inline"
+			}
+			m.createInputFocus = 0
+			m.createNameInput.SetValue("")
+			m.createFileInput.SetValue("")
+			m.createConfigData = ""
+			m.createNameInput.Focus()
+			m.createFileInput.Blur()
+			return nil
+		}
+
+	case "details-file":
+		switch msg.String() {
+		case "esc":
+			m.createDialogActive = false
+			m.createDialogError = ""
+			m.createNameInput.Blur()
+			m.createFileInput.Blur()
+			m.createConfigPath = ""
+			m.createInputFocus = 0
+			return nil
+		case "tab", "shift+tab":
+			// Toggle focus between name and file inputs
+			if m.createInputFocus == 0 {
+				m.createInputFocus = 1
+				m.createNameInput.Blur()
+				m.createFileInput.Focus()
+			} else {
+				m.createInputFocus = 0
+				m.createFileInput.Blur()
+				m.createNameInput.Focus()
+			}
+			return nil
+		case "f", "F":
+			// Only open file browser when focused on file input
+			if m.createInputFocus == 1 {
+				m.createDialogActive = false
+				m.fileBrowserActive = true
+				homeDir, _ := os.UserHomeDir()
+				if homeDir == "" {
+					homeDir = "/"
+				}
+				return loadFilesCmd(homeDir)
+			}
+			// Otherwise let textinput handle it (typing 'f')
+			var cmd tea.Cmd
+			if m.createInputFocus == 0 {
+				m.createNameInput, cmd = m.createNameInput.Update(msg)
+			} else {
+				m.createFileInput, cmd = m.createFileInput.Update(msg)
+			}
+			if m.createDialogError != "" {
+				m.createDialogError = ""
+			}
+			return cmd
+		case "enter":
+			// If there's an error, clear it and stay in editing mode
+			if m.createDialogError != "" {
+				m.createDialogError = ""
+				return nil
+			}
+			// Validate name
+			if m.createNameInput.Value() == "" {
+				m.createDialogError = "Config name cannot be empty"
+				return nil
+			}
+			if err := validateConfigName(m.createNameInput.Value()); err != nil {
+				m.createDialogError = err.Error()
+				return nil
+			}
+			// Validate file path
+			filePath := m.createFileInput.Value()
+			if filePath == "" {
+				m.createDialogError = "Please enter or select a file path"
+				return nil
+			}
+			// All valid, create config
+			m.createDialogActive = false
+			m.createDialogError = ""
+			m.createNameInput.Blur()
+			m.createFileInput.Blur()
+			return createConfigFromFileCmd(m.createNameInput.Value(), filePath)
+		default:
+			// Pass keys to the focused textinput
+			var cmd tea.Cmd
+			if m.createInputFocus == 0 {
+				m.createNameInput, cmd = m.createNameInput.Update(msg)
+			} else {
+				m.createFileInput, cmd = m.createFileInput.Update(msg)
+			}
+			// Clear error when user types
+			if m.createDialogError != "" {
+				m.createDialogError = ""
+			}
+			return cmd
+		}
+	case "details-inline":
+		switch msg.String() {
+		case "esc":
+			m.createDialogActive = false
+			m.createDialogError = ""
+			m.createNameInput.Blur()
+			m.createConfigData = ""
+			m.createInputFocus = 0
+			return nil
+		case "tab", "shift+tab":
+			// Toggle focus between name and content
+			if m.createInputFocus == 0 {
+				m.createInputFocus = 1
+				m.createNameInput.Blur()
+			} else {
+				m.createInputFocus = 0
+				m.createNameInput.Focus()
+			}
+			return nil
+		case "e", "E":
+			// Only open editor when focused on content field
+			if m.createInputFocus == 1 {
+				if m.createNameInput.Value() == "" {
+					m.createDialogError = "Please enter a config name first"
+					return nil
+				}
+				if err := validateConfigName(m.createNameInput.Value()); err != nil {
+					m.createDialogError = err.Error()
+					return nil
+				}
+				m.createDialogActive = false
+				m.createNameInput.Blur()
+				return createConfigInEditorCmd(m.createNameInput.Value(), []byte(m.createConfigData))
+			}
+			// Otherwise let textinput handle it (typing 'e')
+			var cmd tea.Cmd
+			m.createNameInput, cmd = m.createNameInput.Update(msg)
+			if m.createDialogError != "" {
+				m.createDialogError = ""
+			}
+			return cmd
+		case "enter":
+			// If there's an error, clear it and stay in editing mode
+			if m.createDialogError != "" {
+				m.createDialogError = ""
+				return nil
+			}
+			// Validate name
+			if m.createNameInput.Value() == "" {
+				m.createDialogError = "Config name cannot be empty"
+				return nil
+			}
+			if err := validateConfigName(m.createNameInput.Value()); err != nil {
+				m.createDialogError = err.Error()
+				return nil
+			}
+			// Check if we have data
+			if m.createConfigData == "" {
+				m.createDialogError = "Please add content in editor (press Tab then E)"
+				return nil
+			}
+			// All valid, create config with existing data
+			m.createDialogActive = false
+			m.createDialogError = ""
+			m.createNameInput.Blur()
+			return createConfigInEditorCmd(m.createNameInput.Value(), []byte(m.createConfigData))
+		default:
+			// Pass keys to name input only when focused on it
+			if m.createInputFocus == 0 {
+				var cmd tea.Cmd
+				m.createNameInput, cmd = m.createNameInput.Update(msg)
+				// Clear error when user types
+				if m.createDialogError != "" {
+					m.createDialogError = ""
+				}
+				return cmd
+			}
+			return nil
+		}
+	}
+
+	return nil
+}
+
+func (m *Model) handleFileBrowserKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "esc":
+		m.fileBrowserActive = false
+		m.createDialogActive = true
+		return nil
+
+	case "up":
+		if m.fileBrowserCursor > 0 {
+			m.fileBrowserCursor--
+		}
+		return nil
+
+	case "down":
+		if m.fileBrowserCursor < len(m.fileBrowserFiles)-1 {
+			m.fileBrowserCursor++
+		}
+		return nil
+
+	case "pgup":
+		m.fileBrowserCursor -= 10
+		if m.fileBrowserCursor < 0 {
+			m.fileBrowserCursor = 0
+		}
+		return nil
+
+	case "pgdown":
+		m.fileBrowserCursor += 10
+		if m.fileBrowserCursor >= len(m.fileBrowserFiles) {
+			m.fileBrowserCursor = len(m.fileBrowserFiles) - 1
+		}
+		return nil
+
+	case "enter":
+		if len(m.fileBrowserFiles) == 0 {
+			return nil
+		}
+
+		selected := m.fileBrowserFiles[m.fileBrowserCursor]
+
+		// Handle parent directory
+		if selected == ".." {
+			parentDir := filepath.Dir(m.fileBrowserPath)
+			if parentDir == m.fileBrowserPath {
+				parentDir = "/"
+			}
+			return loadFilesCmd(parentDir)
+		}
+
+		// Handle directory
+		if strings.HasSuffix(selected, "/") {
+			dirPath := strings.TrimSuffix(selected, "/")
+			return loadFilesCmd(dirPath)
+		}
+
+		// Handle file selection - save path and return to dialog
+		m.fileBrowserActive = false
+		m.createDialogActive = true
+		m.createFileInput.SetValue(selected)
+		m.createInputFocus = 1
+		m.createFileInput.Focus()
+		l().Infof("Selected file: %s", selected)
+		return nil
+	}
+
+	return nil
 }

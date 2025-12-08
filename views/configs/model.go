@@ -10,6 +10,7 @@ import (
 	loading "swarmcli/views/loading"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -32,6 +33,21 @@ type Model struct {
 	configToRotateFrom *docker.ConfigWithDecodedData
 	configToRotateInto *docker.ConfigWithDecodedData
 	configToDelete     *docker.ConfigWithDecodedData
+
+	// Create config dialog
+	createDialogActive bool
+	createDialogStep   string // "source", "details-file", "details-inline"
+	createDialogError  string // error message to display
+	createInputFocus   int    // 0 = name, 1 = file path
+	createNameInput    textinput.Model
+	createFileInput    textinput.Model // For typing file path
+	createConfigSource string          // "file" or "inline"
+	createConfigPath   string          // selected file path from browser
+	createConfigData   string
+	fileBrowserActive  bool
+	fileBrowserPath    string
+	fileBrowserFiles   []string
+	fileBrowserCursor  int
 }
 
 type state int
@@ -55,14 +71,30 @@ func New(width, height int) *Model {
 		},
 	}
 
+	// Initialize name input for create dialog
+	nameInput := textinput.New()
+	nameInput.Placeholder = "my-config"
+	nameInput.Prompt = "Name: "
+	nameInput.CharLimit = 100
+	nameInput.Width = 50
+
+	// Initialize file path input for create dialog
+	fileInput := textinput.New()
+	fileInput.Placeholder = "/path/to/file"
+	fileInput.Prompt = "File: "
+	fileInput.CharLimit = 512
+	fileInput.Width = 50
+
 	return &Model{
-		configsList:   list,
-		width:         width,
-		height:        height,
-		state:         stateLoading,
-		visible:       true,
-		confirmDialog: confirmdialog.New(0, 0),
-		loadingView:   loading.New(width, height, false, "Loading Docker configs..."),
+		configsList:     list,
+		width:           width,
+		height:          height,
+		state:           stateLoading,
+		visible:         true,
+		confirmDialog:   confirmdialog.New(0, 0),
+		loadingView:     loading.New(width, height, false, "Loading Docker configs..."),
+		createNameInput: nameInput,
+		createFileInput: fileInput,
 	}
 }
 
@@ -86,6 +118,7 @@ func LoadConfigs() tea.Cmd {
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "↑/↓", Desc: "Navigate"},
+		{Key: "c", Desc: "Create"},
 		{Key: "i", Desc: "Inspect"},
 		{Key: "Enter", Desc: "Check"},
 		{Key: "e", Desc: "Edit"},
@@ -131,5 +164,19 @@ func (m *Model) OnExit() tea.Cmd {
 
 // HasActiveDialog returns true if a dialog is currently visible
 func (m *Model) HasActiveDialog() bool {
-	return m.confirmDialog.Visible || m.errorDialogActive
+	return m.confirmDialog.Visible || m.errorDialogActive || m.createDialogActive || m.fileBrowserActive
+}
+
+// validateConfigName validates a config name
+func validateConfigName(name string) error {
+	if name == "" {
+		return fmt.Errorf("config name cannot be empty")
+	}
+	if strings.ContainsAny(name, " \t\n") {
+		return fmt.Errorf("config name cannot contain whitespace")
+	}
+	if strings.ContainsAny(name, "/\\:*?\"<>|") {
+		return fmt.Errorf("config name contains invalid characters")
+	}
+	return nil
 }

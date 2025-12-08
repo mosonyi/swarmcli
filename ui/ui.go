@@ -171,6 +171,95 @@ func RenderConfirmDialog(message string) string {
 	return borderStyle.Render(content)
 }
 
+// RenderFileBrowserDialog renders a file browser dialog with common styling
+func RenderFileBrowserDialog(title, currentPath string, files []string, cursor int) string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("15")).
+		Background(lipgloss.Color("63")).
+		Padding(0, 1)
+
+	borderStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("117"))
+
+	itemStyle := lipgloss.NewStyle().
+		Padding(0, 1)
+
+	selectedStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("15")).
+		Background(lipgloss.Color("63")).
+		Padding(0, 1)
+
+	helpStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		Padding(0, 1)
+
+	keyStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("63")).
+		Bold(true)
+
+	var lines []string
+	lines = append(lines, titleStyle.Render(fmt.Sprintf(" %s - Directory: %s ", title, currentPath)))
+	lines = append(lines, itemStyle.Render(""))
+
+	// Show files with cursor
+	maxVisible := 10
+	start := cursor - maxVisible/2
+	if start < 0 {
+		start = 0
+	}
+	end := start + maxVisible
+	if end > len(files) {
+		end = len(files)
+		start = end - maxVisible
+		if start < 0 {
+			start = 0
+		}
+	}
+
+	for i := start; i < end; i++ {
+		item := files[i]
+		displayName := ""
+
+		// Handle parent directory
+		if item == ".." {
+			displayName = "📁 .."
+		} else if strings.HasSuffix(item, "/") {
+			// Directory
+			baseName := strings.TrimSuffix(item, "/")
+			if idx := strings.LastIndex(baseName, "/"); idx >= 0 {
+				baseName = baseName[idx+1:]
+			}
+			displayName = "📁 " + baseName
+		} else {
+			// File
+			baseName := item
+			if idx := strings.LastIndex(baseName, "/"); idx >= 0 {
+				baseName = baseName[idx+1:]
+			}
+			displayName = baseName
+		}
+
+		if i == cursor {
+			lines = append(lines, selectedStyle.Render("→ "+displayName))
+		} else {
+			lines = append(lines, itemStyle.Render("  "+displayName))
+		}
+	}
+
+	lines = append(lines, itemStyle.Render(""))
+	helpText := fmt.Sprintf(" %s Select/Navigate • %s / %s Move • %s Cancel",
+		keyStyle.Render("<Enter>"),
+		keyStyle.Render("<↑/↓>"),
+		keyStyle.Render("<PgUp/PgDn>"),
+		keyStyle.Render("<Esc>"))
+	lines = append(lines, helpStyle.Render(helpText))
+
+	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	return borderStyle.Render(content)
+}
+
 func OverlayCentered(base, overlay string, width, height int) string {
 	baseLines := strings.Split(base, "\n")
 	overlayLines := strings.Split(overlay, "\n")
@@ -242,12 +331,12 @@ func truncateANSI(s string, width int) string {
 	var result strings.Builder
 	var currentWidth int
 	inEscape := false
-	
+
 	for _, r := range s {
 		if r == '\x1b' {
 			inEscape = true
 		}
-		
+
 		if inEscape {
 			result.WriteRune(r)
 			if r == 'm' {
@@ -255,15 +344,15 @@ func truncateANSI(s string, width int) string {
 			}
 			continue
 		}
-		
+
 		if currentWidth >= width {
 			break
 		}
-		
+
 		result.WriteRune(r)
 		currentWidth++
 	}
-	
+
 	return result.String()
 }
 
@@ -276,13 +365,13 @@ func truncateANSIAfter(s string, skipWidth int) string {
 	var currentWidth int
 	inEscape := false
 	var escapeBuffer strings.Builder
-	
+
 	for _, r := range s {
 		if r == '\x1b' {
 			inEscape = true
 			escapeBuffer.Reset()
 		}
-		
+
 		if inEscape {
 			escapeBuffer.WriteRune(r)
 			if r == 'm' {
@@ -293,12 +382,12 @@ func truncateANSIAfter(s string, skipWidth int) string {
 			}
 			continue
 		}
-		
+
 		if currentWidth >= skipWidth {
 			result.WriteRune(r)
 		}
 		currentWidth++
 	}
-	
+
 	return result.String()
 }
