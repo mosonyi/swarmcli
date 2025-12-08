@@ -5,6 +5,7 @@ import (
 	"strings"
 	"swarmcli/commands/api"
 	"swarmcli/views/commandinput"
+	configsview "swarmcli/views/configs"
 	contextsview "swarmcli/views/contexts"
 	loadingview "swarmcli/views/loading"
 	logsview "swarmcli/views/logs"
@@ -129,6 +130,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			},
 		)
 
+	case configsview.NavigateToStackMsg:
+		// Switch to stacks view, passing the stack name as payload
+		cmd := m.replaceView(stacksview.ViewName, msg.StackName)
+		return m, cmd
+
+	case configsview.NavigateToServicesInStackMsg:
+		// Switch to services view, passing the stack name as payload
+		payload := map[string]interface{}{"stackName": msg.StackName}
+		cmd := m.switchToView("services", payload)
+		return m, cmd
+
 	default:
 		cmd := m.delegateToCurrentView(msg)
 		return m, cmd
@@ -229,6 +241,26 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}); ok {
 			if contextsView.HasActiveDialog() {
 				// Let the view handle esc to close the dialog
+				cmd := m.currentView.Update(msg)
+				return m, cmd
+			}
+		}
+		// Check if configs view is in UsedBy view
+		if configsView, ok := m.currentView.(interface {
+			IsInUsedByView() bool
+		}); ok {
+			if configsView.IsInUsedByView() {
+				// Let the configs view handle esc to close UsedBy view
+				cmd := m.currentView.Update(msg)
+				return m, cmd
+			}
+		}
+		// Check if services view is in stack services mode
+		if servicesView, ok := m.currentView.(interface {
+			IsInStackServicesView() bool
+		}); ok {
+			if servicesView.IsInStackServicesView() {
+				// Let the services view handle esc to go back to stacks
 				cmd := m.currentView.Update(msg)
 				return m, cmd
 			}

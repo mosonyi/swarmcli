@@ -49,9 +49,10 @@ type Model struct {
 	fileBrowserFiles   []string
 	fileBrowserCursor  int
 
-	// Used By dialog
-	usedByDialogActive bool
-	usedByStacks       []string
+	// Used By view
+	usedByViewActive bool
+	usedByList       filterlist.FilterableList[usedByItem]
+	usedByConfigName string
 }
 
 type state int
@@ -120,6 +121,15 @@ func LoadConfigs() tea.Cmd {
 }
 
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
+	if m.usedByViewActive {
+		return []helpbar.HelpEntry{
+			{Key: "↑/↓", Desc: "Navigate"},
+			{Key: "Enter", Desc: "Go to Stack"},
+			{Key: "/", Desc: "Filter"},
+			{Key: "Esc", Desc: "Back"},
+		}
+	}
+
 	return []helpbar.HelpEntry{
 		{Key: "↑/↓", Desc: "Navigate"},
 		{Key: "c", Desc: "Create"},
@@ -169,7 +179,12 @@ func (m *Model) OnExit() tea.Cmd {
 
 // HasActiveDialog returns true if a dialog is currently visible
 func (m *Model) HasActiveDialog() bool {
-	return m.confirmDialog.Visible || m.errorDialogActive || m.createDialogActive || m.fileBrowserActive || m.usedByDialogActive
+	return m.confirmDialog.Visible || m.errorDialogActive || m.createDialogActive || m.fileBrowserActive
+}
+
+// IsInUsedByView returns true if currently viewing the used-by list
+func (m *Model) IsInUsedByView() bool {
+	return m.usedByViewActive
 }
 
 // validateConfigName validates a config name

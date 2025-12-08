@@ -281,7 +281,7 @@ func getUsedByStacksCmd(configName string) tea.Cmd {
 		for stack := range stackSet {
 			stacks = append(stacks, stack)
 		}
-		
+
 		// Sort alphabetically
 		sort.Strings(stacks)
 

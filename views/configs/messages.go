@@ -60,6 +60,13 @@ type (
 		Stacks     []string
 		Error      error
 	}
+	NavigateToStackMsg struct {
+		StackName string
+	}
+	// New message for navigating directly to services in a stack
+	NavigateToServicesInStackMsg struct {
+		StackName string
+	}
 	errorMsg error
 )
 

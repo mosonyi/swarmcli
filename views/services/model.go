@@ -14,6 +14,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+const ViewName = "services"
+
 type FilterType int
 
 const (

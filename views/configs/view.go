@@ -24,11 +24,6 @@ var (
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color("117"))
 
-	dialogBorderWithPaddingStyle = lipgloss.NewStyle().
-					Border(lipgloss.RoundedBorder()).
-					BorderForeground(lipgloss.Color("117")).
-					Padding(1, 2)
-
 	dialogItemStyle = lipgloss.NewStyle().
 			Padding(0, 1)
 
@@ -67,6 +62,14 @@ func (i configItem) Description() string {
 	return fmt.Sprintf("ID: %s        Created: %s        Updated: %s", i.ID, createdStr, updatedStr)
 }
 
+type usedByItem struct {
+	StackName string
+}
+
+func (i usedByItem) FilterValue() string { return i.StackName }
+func (i usedByItem) Title() string       { return i.StackName }
+func (i usedByItem) Description() string { return "" }
+
 func configItemFromSwarm(c swarm.Config) configItem {
 	return configItem{
 		Name:      c.Spec.Name,
@@ -77,6 +80,11 @@ func configItemFromSwarm(c swarm.Config) configItem {
 }
 
 func (m *Model) View() string {
+	// If in UsedBy view, render it instead of the main configs view
+	if m.usedByViewActive {
+		return m.renderUsedByView()
+	}
+
 	width := 80
 	if m.configsList.Viewport.Width > 0 {
 		width = m.configsList.Viewport.Width
@@ -106,9 +114,6 @@ func (m *Model) View() string {
 	if m.fileBrowserActive {
 		fileBrowserDialog := ui.RenderFileBrowserDialog("Select File", m.fileBrowserPath, m.fileBrowserFiles, m.fileBrowserCursor)
 		paddedContent = ui.OverlayCentered(paddedContent, fileBrowserDialog, width, 0)
-	} else if m.usedByDialogActive {
-		usedByDialog := m.renderUsedByDialog()
-		paddedContent = ui.OverlayCentered(paddedContent, usedByDialog, width, 0)
 	} else if m.createDialogActive {
 		createDialog := m.renderCreateDialog()
 		paddedContent = ui.OverlayCentered(paddedContent, createDialog, width, 0)
@@ -289,28 +294,62 @@ func (m *Model) renderCreateDialog() string {
 	return dialogBorderStyle.Render(content)
 }
 
-func (m *Model) renderUsedByDialog() string {
-	var lines []string
-	
-	// Get the config name
-	cfgName := m.selectedConfig()
-	lines = append(lines, dialogTitleStyle.Render(fmt.Sprintf(" Config: %s - Used By ", cfgName)))
-	lines = append(lines, dialogItemStyle.Render(""))
-
-	if len(m.usedByStacks) == 0 {
-		lines = append(lines, dialogItemStyle.Render("This config is not currently used by any stacks."))
-	} else {
-		lines = append(lines, dialogItemStyle.Render(fmt.Sprintf("This config is used by %d stack(s):", len(m.usedByStacks))))
-		lines = append(lines, dialogItemStyle.Render(""))
-		for _, stack := range m.usedByStacks {
-			lines = append(lines, dialogItemStyle.Render("  • "+stack))
-		}
+func (m *Model) renderUsedByView() string {
+	// Safety check - if list is not properly initialized, show error
+	if m.usedByList.Viewport.Width == 0 {
+		m.usedByViewActive = false
+		return "Error: UsedBy view not properly initialized"
 	}
 
-	lines = append(lines, dialogItemStyle.Render(""))
-	helpText := fmt.Sprintf(" %s Close", dialogKeyStyle.Render("<Esc>"))
-	lines = append(lines, dialogHelpStyle.Render(helpText))
+	header := m.renderUsedByHeader()
+	content := m.usedByList.View()
+	footer := m.renderUsedByFooter()
 
-	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	return dialogBorderWithPaddingStyle.Render(content)
+	// Pad content to fill viewport height
+	height := m.usedByList.Viewport.Height
+	if height <= 0 {
+		height = 20
+	}
+	contentLines := strings.Split(content, "\n")
+	availableLines := height - 4
+	if availableLines < 0 {
+		availableLines = 0
+	}
+	for len(contentLines) < availableLines {
+		contentLines = append(contentLines, "")
+	}
+	paddedContent := strings.Join(contentLines, "\n")
+
+	// Add 4 to make frame full terminal width (app reduces viewport by 4 in normal mode)
+	frameWidth := m.usedByList.Viewport.Width + 4
+
+	title := fmt.Sprintf("Config: %s - Used By Stacks (%d)", m.usedByConfigName, len(m.usedByList.Filtered))
+	return ui.RenderFramedBox(title, header, paddedContent, footer, frameWidth)
+}
+
+func (m *Model) renderUsedByHeader() string {
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15"))
+	return headerStyle.Render("STACK NAME")
+}
+
+func (m *Model) renderUsedByFooter() string {
+	totalStacks := len(m.usedByList.Items)
+	if totalStacks == 0 {
+		return ui.StatusBarStyle.Render("No stacks use this config")
+	}
+
+	status := fmt.Sprintf("Stack %d of %d", m.usedByList.Cursor+1, len(m.usedByList.Filtered))
+	statusBar := ui.StatusBarStyle.Render(status)
+
+	var footer string
+	if m.usedByList.Mode == filterlist.ModeSearching {
+		footer = ui.StatusBarStyle.Render("Filter (type then Enter): " + m.usedByList.Query)
+	} else if m.usedByList.Query != "" {
+		footer = ui.StatusBarStyle.Render("Filter: " + m.usedByList.Query)
+	}
+
+	if footer != "" {
+		return statusBar + "\n" + footer
+	}
+	return statusBar
 }

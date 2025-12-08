@@ -10,6 +10,7 @@ import (
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -35,7 +36,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			stableConfigs[i] = stableConfig{
 				ID:      c.Config.ID,
 				Version: c.Config.Version.Index,
-				Name:    c.Config.Spec.Name,
 			}
 		}
 		var err error
@@ -172,8 +172,36 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		l().Infof("Config %s is used by %d stack(s)", msg.ConfigName, len(msg.Stacks))
-		m.usedByDialogActive = true
-		m.usedByStacks = msg.Stacks
+
+		// Initialize usedByList with a new viewport
+		vp := viewport.New(m.configsList.Viewport.Width, m.configsList.Viewport.Height)
+		vp.SetContent("")
+
+		m.usedByList = filterlist.FilterableList[usedByItem]{
+			Viewport: vp,
+			Match: func(item usedByItem, query string) bool {
+				return strings.Contains(strings.ToLower(item.StackName), strings.ToLower(query))
+			},
+			RenderItem: func(item usedByItem, selected bool, _ int) string {
+				line := item.StackName
+				if selected {
+					return ui.CursorStyle.Render(line)
+				}
+				itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
+				return itemStyle.Render(line)
+			},
+		}
+
+		// Convert stacks to usedByItem
+		var items []usedByItem
+		for _, stack := range msg.Stacks {
+			items = append(items, usedByItem{StackName: stack})
+		}
+		m.usedByList.Items = items
+		m.usedByList.ApplyFilter()
+
+		m.usedByConfigName = msg.ConfigName
+		m.usedByViewActive = true
 		return nil
 
 	case createConfigMsg:
@@ -236,12 +264,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return m.handleCreateDialogKey(msg)
 		}
 
-		if m.usedByDialogActive {
-			if msg.String() == "esc" || msg.String() == "enter" || msg.String() == "q" {
-				m.usedByDialogActive = false
-				m.usedByStacks = nil
-			}
-			return nil
+		if m.usedByViewActive {
+			return m.handleUsedByViewKey(msg)
 		}
 
 		if m.fileBrowserActive {
@@ -627,15 +651,46 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyMsg) tea.Cmd {
 			return loadFilesCmd(dirPath)
 		}
 
-		// Handle file selection - save path and return to dialog
-		m.fileBrowserActive = false
-		m.createDialogActive = true
+		// It's a file - set the path and close the file browser
+		m.createConfigPath = selected
 		m.createFileInput.SetValue(selected)
-		m.createInputFocus = 1
-		m.createFileInput.Focus()
-		l().Infof("Selected file: %s", selected)
+		m.fileBrowserActive = false
 		return nil
 	}
-
 	return nil
+}
+
+func (m *Model) handleUsedByViewKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "esc":
+		// Go back to configs view
+		m.usedByViewActive = false
+		m.usedByList.Items = nil
+		m.usedByConfigName = ""
+		return nil
+
+	case "enter":
+		// Navigate to the services in the selected stack
+		if len(m.usedByList.Filtered) == 0 {
+			return nil
+		}
+		selectedStack := m.usedByList.Filtered[m.usedByList.Cursor].StackName
+		l().Infof("Navigating to services in stack: %s", selectedStack)
+		m.usedByViewActive = false
+		m.usedByList.Items = nil
+		m.usedByConfigName = ""
+		return func() tea.Msg {
+			// Send a navigation message with payload for services view
+			return NavigateToServicesInStackMsg{StackName: selectedStack}
+		}
+
+	default:
+		// Handle navigation in the used by list
+		if m.usedByList.Mode == filterlist.ModeSearching {
+			m.usedByList.HandleKey(msg)
+		} else {
+			m.usedByList.HandleKey(msg)
+		}
+		return nil
+	}
 }
