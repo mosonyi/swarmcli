@@ -183,7 +183,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			Viewport: vp,
 			Match: func(item usedByItem, query string) bool {
 				return strings.Contains(strings.ToLower(item.StackName), strings.ToLower(query)) ||
-					   strings.Contains(strings.ToLower(item.ServiceName), strings.ToLower(query))
+					strings.Contains(strings.ToLower(item.ServiceName), strings.ToLower(query))
 			},
 			RenderItem: func(item usedByItem, selected bool, _ int) string {
 				line := fmt.Sprintf("%-24s %-24s", item.StackName, item.ServiceName)
@@ -326,7 +326,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			l().Infof("UsedBy key pressed for config: %s", cfgName)
 			return getUsedByStacksCmd(cfgName)
-		case "c":
+		case "n":
 			l().Info("Create key pressed")
 			m.createDialogActive = true
 			m.createDialogStep = "source"
@@ -653,6 +653,24 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyMsg) tea.Cmd {
 		m.createConfigPath = selected
 		m.createFileInput.SetValue(selected)
 		m.fileBrowserActive = false
+
+		// If a name is already provided and valid, create immediately
+		name := m.createNameInput.Value()
+		if name != "" {
+			if err := validateConfigName(name); err == nil {
+				m.createDialogActive = false
+				m.createDialogError = ""
+				m.createNameInput.Blur()
+				m.createFileInput.Blur()
+				return createConfigFromFileCmd(name, selected)
+			}
+		}
+
+		// Otherwise return focus to create dialog so user can enter a name
+		m.createDialogActive = true
+		m.createDialogStep = "details-file"
+		m.createInputFocus = 1
+		m.createFileInput.Focus()
 		return nil
 	}
 	return nil

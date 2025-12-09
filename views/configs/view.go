@@ -66,7 +66,7 @@ func (i configItem) Description() string {
 }
 
 type usedByItem struct {
-	StackName string
+	StackName   string
 	ServiceName string
 }
 
@@ -75,18 +75,18 @@ func (i usedByItem) Title() string       { return fmt.Sprintf("%-24s %-24s", i.S
 func (i usedByItem) Description() string { return "Service: " + i.ServiceName }
 
 func configItemFromSwarm(ctx context.Context, c swarm.Config) configItem {
-    used := false
-    services, err := docker.ListServicesUsingConfigID(ctx, c.ID)
-    if err == nil && len(services) > 0 {
-        used = true
-    }
-    return configItem{
-        Name:      c.Spec.Name,
-        ID:        c.ID,
-        CreatedAt: c.CreatedAt,
-        UpdatedAt: c.UpdatedAt,
-        Used:      used,
-    }
+	used := false
+	services, err := docker.ListServicesUsingConfigID(ctx, c.ID)
+	if err == nil && len(services) > 0 {
+		used = true
+	}
+	return configItem{
+		Name:      c.Spec.Name,
+		ID:        c.ID,
+		CreatedAt: c.CreatedAt,
+		UpdatedAt: c.UpdatedAt,
+		Used:      used,
+	}
 }
 
 func (m *Model) View() string {
@@ -177,27 +177,27 @@ func (m *Model) View() string {
 }
 
 func renderConfigsHeader(items []configItem) string {
-    if len(items) == 0 {
-        return "NAME         ID                 CONFIG USED      CREATED AT             UPDATED AT"
-    }
+	if len(items) == 0 {
+		return "NAME         ID                 CONFIG USED      CREATED AT             UPDATED AT"
+	}
 
-    // Compute max widths
-    nameCol := len("NAME")
-    idCol := len("ID")
-    usedCol := len("CONFIG USED")
-    space := 6 // extra space between columns
-    for _, cfg := range items {
-        if len(cfg.Name) > nameCol {
-            nameCol = len(cfg.Name)
-        }
-        if len(cfg.ID) > idCol {
-            idCol = len(cfg.ID)
-        }
-    }
-    headerStyle := lipgloss.NewStyle().
-        Foreground(lipgloss.Color("15")). // white
-        Bold(true)
-    return headerStyle.Render(fmt.Sprintf("%-*s%*s%-*s%*s%-*s%*s%-19s%*s%-19s", nameCol, "NAME", space, "", idCol, "ID", space, "", usedCol, "CONFIG USED", space, "", "CREATED AT", space, "", "UPDATED AT"))
+	// Compute max widths
+	nameCol := len("NAME")
+	idCol := len("ID")
+	usedCol := len("CONFIG USED")
+	space := 6 // extra space between columns
+	for _, cfg := range items {
+		if len(cfg.Name) > nameCol {
+			nameCol = len(cfg.Name)
+		}
+		if len(cfg.ID) > idCol {
+			idCol = len(cfg.ID)
+		}
+	}
+	headerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("15")). // white
+		Bold(true)
+	return headerStyle.Render(fmt.Sprintf("%-*s%*s%-*s%*s%-*s%*s%-19s%*s%-19s", nameCol, "NAME", space, "", idCol, "ID", space, "", usedCol, "CONFIG USED", space, "", "CREATED AT", space, "", "UPDATED AT"))
 }
 func (m *Model) renderConfigsFooter() string {
 	status := fmt.Sprintf("Config %d of %d", m.configsList.Cursor+1, len(m.configsList.Filtered))
