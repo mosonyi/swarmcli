@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"swarmcli/core/primitives/hash"
+	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
@@ -334,6 +335,34 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.createNameInput.SetValue("")
 			m.createConfigData = ""
 			m.createDialogError = ""
+			return nil
+
+		case "c":
+			// Clone selected config: ask for new name, prefill editor with existing content
+			cfgName := m.selectedConfig()
+			if cfgName == "" {
+				l().Warn("Clone key pressed but no config selected")
+				return nil
+			}
+			l().Infof("Clone key pressed for config: %s", cfgName)
+			// Inspect to get content
+			ctx := context.Background()
+			cfg, err := docker.InspectConfig(ctx, cfgName)
+			if err != nil {
+				l().Errorf("Failed to inspect config for clone: %v", err)
+				m.err = err
+				m.errorDialogActive = true
+				return nil
+			}
+			// Prefill create dialog with existing content and suggested name
+			suggested := cfg.Config.Spec.Name + "_clone"
+			m.createDialogActive = true
+			m.createDialogStep = "details-inline"
+			m.createNameInput.SetValue(suggested)
+			m.createConfigData = string(cfg.Data)
+			m.createDialogError = ""
+			m.createInputFocus = 0
+			m.createNameInput.Focus()
 			return nil
 		case "i":
 			cfg := m.selectedConfig()

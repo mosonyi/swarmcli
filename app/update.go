@@ -212,6 +212,13 @@ func (m *Model) updateViewports(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// If current view has an active dialog, forward keys to it first
+	if viewWithDialog, ok := m.currentView.(interface{ HasActiveDialog() bool }); ok {
+		if viewWithDialog.HasActiveDialog() {
+			cmd := m.currentView.Update(msg)
+			return m, cmd
+		}
+	}
 	// Check if current view is in fullscreen or search mode before handling global esc
 	if msg.Type == tea.KeyEsc || msg.String() == "esc" {
 		// Check if logs view has dialog open
