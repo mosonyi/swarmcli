@@ -1,6 +1,7 @@
 package configsview
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -46,8 +47,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 		m.configs = msg
 		items := make([]configItem, len(msg))
+		ctx := context.Background()
 		for i, cfg := range msg {
-			items[i] = configItemFromSwarm(cfg.Config)
+			items[i] = configItemFromSwarm(ctx, cfg.Config)
 		}
 		m.configsList.Items = items
 		m.setRenderItem()

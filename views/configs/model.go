@@ -1,6 +1,7 @@
 package configsview
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"swarmcli/docker"
@@ -161,7 +162,8 @@ func (m *Model) findConfigByName(name string) (*docker.ConfigWithDecodedData, er
 
 func (m *Model) addConfig(cfg docker.ConfigWithDecodedData) {
 	m.configs = append(m.configs, cfg)
-	m.configsList.Items = append(m.configsList.Items, configItemFromSwarm(cfg.Config))
+	ctx := context.Background()
+	m.configsList.Items = append(m.configsList.Items, configItemFromSwarm(ctx, cfg.Config))
 	m.configsList.ApplyFilter()
 }
 
