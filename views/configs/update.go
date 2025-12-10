@@ -74,7 +74,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case configRotatedMsg:
 		l().Infof("Config rotated: %s → %s", msg.Old.Config.Spec.Name, msg.New.Config.Spec.Name)
-		return tea.Printf("Rotated %s → %s", msg.Old.Config.Spec.Name, msg.New.Config.Spec.Name)
+		// After rotating a config, reload the config list so the "Used" state
+		// is recalculated (services may have been updated to reference the new config).
+		return tea.Batch(
+			loadConfigsCmd(),
+			tea.Printf("Rotated %s → %s", msg.Old.Config.Spec.Name, msg.New.Config.Spec.Name),
+		)
 
 	case configDeletedMsg:
 		l().Infof("Config deleted successfully: %s", msg.Name)
@@ -285,25 +290,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// --- normal mode ---
 		// Handle specific keys in switch, then navigation keys
 		switch msg.String() {
-		case "r":
-			cfgName := m.selectedConfig()
-			if cfgName == "" {
-				l().Warn("Rotate key pressed but no config selected")
-				return nil
-			}
-			cfg, err := m.findConfigByName(cfgName)
-			if err != nil {
-				l().Errorf("Failed to find config %q for rotation: %v", cfgName, err)
-				return tea.Printf("Cannot rotate: %v", err)
-			}
-
-			l().Infof("Rotate key pressed for config: %s", cfgName)
-
-			m.pendingAction = "rotate"
-			m.configToRotateInto = cfg
-			m.confirmDialog = m.confirmDialog.Show(fmt.Sprintf("Rotate config %s?", cfgName))
-			return nil
-
 		case "ctrl+d":
 			if len(m.configsList.Filtered) == 0 {
 				return nil
@@ -316,9 +302,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return nil
 
 		case "e":
-			cfg := m.selectedConfig()
-			l().Infof("Edit key pressed for config: %s", cfg)
-			return editConfigInEditorCmd(m.selectedConfig())
+			cfgName := m.selectedConfig()
+			l().Infof("Edit key pressed for config: %s", cfgName)
+			// Start editor; the editCmd will send back editConfigDoneMsg or editConfigErrorMsg
+			return editConfigInEditorCmd(cfgName)
 		case "u":
 			cfgName := m.selectedConfig()
 			if cfgName == "" {
