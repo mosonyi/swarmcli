@@ -211,16 +211,18 @@ func createConfigWithSpec(ctx context.Context, spec swarm.ConfigSpec, logPrefix 
 	}
 	defer closeCli(cli)
 
+	cfgName := spec.Name
+
 	id, err := cli.ConfigCreate(ctx, spec)
 	if err != nil {
-		l().Errorf("%s Failed to create config %q: %v", logPrefix, spec.Annotations.Name, err)
-		return swarm.Config{}, fmt.Errorf("failed to create config %q: %w", spec.Annotations.Name, err)
+		l().Errorf("%s Failed to create config %q: %v", logPrefix, cfgName, err)
+		return swarm.Config{}, fmt.Errorf("failed to create config %q: %w", cfgName, err)
 	}
 
 	newCfg, _, err := cli.ConfigInspectWithRaw(ctx, id.ID)
 	if err != nil {
-		l().Errorf("%s Created config %q but failed to re-inspect: %v", logPrefix, spec.Annotations.Name, err)
-		return swarm.Config{}, fmt.Errorf("failed to inspect new config %q: %w", spec.Annotations.Name, err)
+		l().Errorf("%s Created config %q but failed to re-inspect: %v", logPrefix, cfgName, err)
+		return swarm.Config{}, fmt.Errorf("failed to inspect new config %q: %w", cfgName, err)
 	}
 
 	l().Infof("%s Successfully created new config %q (ID=%s)", logPrefix, newCfg.Spec.Name, newCfg.ID)
