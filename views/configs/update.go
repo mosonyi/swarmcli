@@ -401,7 +401,13 @@ func (m *Model) setRenderItem() {
 		if !cfg.UpdatedAt.IsZero() {
 			updatedStr = cfg.UpdatedAt.Format("2006-01-02 15:04:05")
 		}
-		line := fmt.Sprintf("%-*s        %-*s        %-19s        %-19s", nameCol, cfg.Name, idCol, cfg.ID, createdStr, updatedStr)
+		// Include "CONFIG USED" column
+		usedCol := len("CONFIG USED")
+		usedStr := " "
+		if cfg.Used {
+			usedStr = "●"
+		}
+		line := fmt.Sprintf("%-*s        %-*s        %-*s        %-19s        %-19s", nameCol, cfg.Name, idCol, cfg.ID, usedCol, usedStr, createdStr, updatedStr)
 		if selected {
 			return ui.CursorStyle.Render(line)
 		}

@@ -101,11 +101,18 @@ func (m *Model) View() string {
 	}
 
 	header := renderConfigsHeader(m.configsList.Items)
+
+	// NOTE (collaborator): The filterable list already supports a
+	// customizable `RenderItem` and a `View()` method that renders the
+	// whole list. We currently rebuild rows manually here which duplicates
+	// behavior that should live in `m.setRenderItem()` via
+	// `m.configsList.RenderItem`. Prefer updating `setRenderItem` and then
+	// calling `m.configsList.View()` here to keep rendering logic centralized.
 	var contentLines []string
 	nameCol := len("NAME")
 	idCol := len("ID")
-	usedCol := len("CONFIG USED")
-	space := 6 // extra space between columns
+	// column width calculations are handled in setRenderItem; the
+	// FilterableList's RenderItem now controls formatting.
 	for _, cfg := range m.configsList.Items {
 		if len(cfg.Name) > nameCol {
 			nameCol = len(cfg.Name)
@@ -114,23 +121,8 @@ func (m *Model) View() string {
 			idCol = len(cfg.ID)
 		}
 	}
-	for idx, item := range m.configsList.Items {
-		usedStr := " "
-		if item.Used {
-			usedStr = "●"
-		}
-		row := fmt.Sprintf("%-*s%*s%-*s%*s%*s%*s%-19s%*s%-19s",
-			nameCol, item.Name, space, "",
-			idCol, item.ID, space, "",
-			usedCol, usedStr, space, "",
-			item.CreatedAt.Format("2006-01-02 15:04:05"), space, "",
-			item.UpdatedAt.Format("2006-01-02 15:04:05"))
-		if idx == m.configsList.Cursor {
-			row = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("63")).Bold(true).Render(row)
-		}
-		contentLines = append(contentLines, row)
-	}
-	content := strings.Join(contentLines, "\n")
+	// Use the centralized RenderItem via the FilterableList's View()
+	content := m.configsList.View()
 	footer := m.renderConfigsFooter()
 
 	// Pad content to fill viewport height
