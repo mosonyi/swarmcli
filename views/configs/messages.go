@@ -60,13 +60,8 @@ type (
 		UsedBy     []usedByItem
 		Error      error
 	}
-	NavigateToStackMsg struct {
-		StackName string
-	}
-	// New message for navigating directly to services in a stack
-	NavigateToServicesInStackMsg struct {
-		StackName string
-	}
+	// Deprecated: use view.NavigateToMsg with Replace flag instead of
+	// specialized NavigateToStackMsg/NavigateToServicesInStackMsg.
 	errorMsg error
 )
 

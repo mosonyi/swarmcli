@@ -5,7 +5,6 @@ import (
 	"strings"
 	"swarmcli/commands/api"
 	"swarmcli/views/commandinput"
-	configsview "swarmcli/views/configs"
 	contextsview "swarmcli/views/contexts"
 	loadingview "swarmcli/views/loading"
 	logsview "swarmcli/views/logs"
@@ -44,6 +43,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd.Execute(ctx, parsedArgs)
 
 	case view.NavigateToMsg:
+		// Use Replace flag to decide whether to replace current view
+		if msg.Replace {
+			cmd := m.replaceView(msg.ViewName, msg.Payload)
+			return m, cmd
+		}
 		cmd := m.switchToView(msg.ViewName, msg.Payload)
 		return m, cmd
 
@@ -130,16 +134,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			},
 		)
 
-	case configsview.NavigateToStackMsg:
-		// Switch to stacks view, passing the stack name as payload
-		cmd := m.replaceView(stacksview.ViewName, msg.StackName)
-		return m, cmd
-
-	case configsview.NavigateToServicesInStackMsg:
-		// Switch to services view, passing the stack name as payload
-		payload := map[string]interface{}{"stackName": msg.StackName}
-		cmd := m.switchToView("services", payload)
-		return m, cmd
+	// Navigation from views should now use the generic view.NavigateToMsg
+	// with the Replace flag set appropriately; specialized navigation
+	// messages have been removed.
 
 	default:
 		cmd := m.delegateToCurrentView(msg)

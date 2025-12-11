@@ -5,6 +5,10 @@ import tea "github.com/charmbracelet/bubbletea"
 type NavigateToMsg struct {
 	ViewName string
 	Payload  any // Can be service ID, stack ID, etc.
+	// Replace indicates whether the target view should replace the current
+	// view (i.e., not be pushed onto the navigation stack). When false,
+	// the view manager should push the new view onto the history stack.
+	Replace bool
 }
 
 type NavigateBackMsg struct{}

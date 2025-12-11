@@ -9,6 +9,7 @@ import (
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	"swarmcli/ui"
+	view "swarmcli/views/view"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 
@@ -712,8 +713,10 @@ func (m *Model) handleUsedByViewKey(msg tea.KeyMsg) tea.Cmd {
 		m.usedByList.Items = nil
 		m.usedByConfigName = ""
 		return func() tea.Msg {
-			// Send a navigation message with payload for services view
-			return NavigateToServicesInStackMsg{StackName: selectedStack}
+			// Send a generic navigation message with a payload for services view.
+			// Use Replace=false to indicate this should be pushed onto the view stack.
+			payload := map[string]interface{}{"stackName": selectedStack}
+			return view.NavigateToMsg{ViewName: "services", Payload: payload, Replace: false}
 		}
 
 	default:
