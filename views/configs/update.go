@@ -9,9 +9,9 @@ import (
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	"swarmcli/ui"
-	view "swarmcli/views/view"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
+	view "swarmcli/views/view"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"

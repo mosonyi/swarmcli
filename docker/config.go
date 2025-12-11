@@ -158,13 +158,6 @@ func CreateConfigVersion(ctx context.Context, baseConfig swarm.Config, newData [
 	newName := nextConfigVersionName(baseConfig.Spec.Name)
 	l().Infof("[CreateConfigVersion] Creating new config version from %q → %q (size=%d bytes)",
 		baseConfig.Spec.Name, newName, len(newData))
-
-	cli, err := GetClient()
-	if err != nil {
-		return swarm.Config{}, err
-	}
-	defer closeCli(cli)
-
 	spec := swarm.ConfigSpec{
 		Annotations: swarm.Annotations{
 			Name: newName,
@@ -176,32 +169,24 @@ func CreateConfigVersion(ctx context.Context, baseConfig swarm.Config, newData [
 		Data: newData,
 	}
 
-	id, err := cli.ConfigCreate(ctx, spec)
-	if err != nil {
-		l().Errorf("[CreateConfigVersion] Failed to create config %q: %v", newName, err)
-		return swarm.Config{}, fmt.Errorf("failed to create config %q: %w", newName, err)
-	}
-
-	newCfg, _, err := cli.ConfigInspectWithRaw(ctx, id.ID)
-	if err != nil {
-		l().Errorf("[CreateConfigVersion] Created config %q but failed to re-inspect: %v", newName, err)
-		return swarm.Config{}, fmt.Errorf("failed to inspect new config %q: %w", newName, err)
-	}
-
-	l().Infof("[CreateConfigVersion] Successfully created new config %q (ID=%s)", newCfg.Spec.Name, newCfg.ID)
-	return newCfg, nil
+	return createConfigWithSpec(ctx, spec, "[CreateConfigVersion]")
 }
 
 // CreateConfig creates a new config with the given name and data
+//
+// NOTE: `CreateConfigVersion` and `CreateConfig` currently contain a
+// lot of duplicated logic: both build a `swarm.ConfigSpec`, call
+// `cli.ConfigCreate`, then immediately re-inspect the created config.
+//
+// To reduce redundancy we should extract the common creation path into a
+// small helper (for example `createConfigWithSpec(ctx, spec)`) that both
+// functions call. Another option is to allow `CreateConfig` to accept
+// additional labels/annotations so `CreateConfigVersion` can reuse it and
+// simply pass the `swarmcli.origin` label. This will centralize error
+// handling and logging for config creation and make future changes
+// (e.g. telemetry or retries) easier to implement.
 func CreateConfig(ctx context.Context, name string, data []byte) (swarm.Config, error) {
 	l().Infof("[CreateConfig] Creating new config %q (size=%d bytes)", name, len(data))
-
-	cli, err := GetClient()
-	if err != nil {
-		return swarm.Config{}, err
-	}
-	defer closeCli(cli)
-
 	spec := swarm.ConfigSpec{
 		Annotations: swarm.Annotations{
 			Name: name,
@@ -212,19 +197,33 @@ func CreateConfig(ctx context.Context, name string, data []byte) (swarm.Config, 
 		Data: data,
 	}
 
+	return createConfigWithSpec(ctx, spec, "[CreateConfig]")
+}
+
+// createConfigWithSpec centralizes config creation: it calls the Docker API
+// to create a config from the provided spec, re-inspects the created config,
+// and returns the populated swarm.Config or an error. The caller may pass a
+// prefix for logging context (e.g. "[CreateConfigVersion]").
+func createConfigWithSpec(ctx context.Context, spec swarm.ConfigSpec, logPrefix string) (swarm.Config, error) {
+	cli, err := GetClient()
+	if err != nil {
+		return swarm.Config{}, err
+	}
+	defer closeCli(cli)
+
 	id, err := cli.ConfigCreate(ctx, spec)
 	if err != nil {
-		l().Errorf("[CreateConfig] Failed to create config %q: %v", name, err)
-		return swarm.Config{}, fmt.Errorf("failed to create config %q: %w", name, err)
+		l().Errorf("%s Failed to create config %q: %v", logPrefix, spec.Annotations.Name, err)
+		return swarm.Config{}, fmt.Errorf("failed to create config %q: %w", spec.Annotations.Name, err)
 	}
 
 	newCfg, _, err := cli.ConfigInspectWithRaw(ctx, id.ID)
 	if err != nil {
-		l().Errorf("[CreateConfig] Created config %q but failed to re-inspect: %v", name, err)
-		return swarm.Config{}, fmt.Errorf("failed to inspect new config %q: %w", name, err)
+		l().Errorf("%s Created config %q but failed to re-inspect: %v", logPrefix, spec.Annotations.Name, err)
+		return swarm.Config{}, fmt.Errorf("failed to inspect new config %q: %w", spec.Annotations.Name, err)
 	}
 
-	l().Infof("[CreateConfig] Successfully created new config %q (ID=%s)", newCfg.Spec.Name, newCfg.ID)
+	l().Infof("%s Successfully created new config %q (ID=%s)", logPrefix, newCfg.Spec.Name, newCfg.ID)
 	return newCfg, nil
 }
 
