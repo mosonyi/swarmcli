@@ -17,25 +17,24 @@ func (m *Model) View() string {
 		return m.currentView.View()
 	}
 
-	// Build a fixed-height header block consisting of systemInfo + helpbar,
-	// ensuring it occupies exactly systeminfoview.Height lines.
 	systemInfo := m.systemInfo.View()
-	helpBar := helpbar.New(m.viewport.Width, systeminfoview.Height).
+
+	help := helpbar.New(m.viewport.Width, systeminfoview.Height).
 		WithGlobalHelp([]helpbar.HelpEntry{{Key: "?", Desc: "Help"}}).
 		WithViewHelp(m.currentView.ShortHelpItems()).
 		View(systemInfo)
 
-	// Combine and ensure exact height
-	headerLines := append(strings.Split(systemInfo, "\n"), strings.Split(helpBar, "\n")...)
-	// If combined lines exceed the fixed height, truncate; if fewer, pad.
-	if len(headerLines) > systeminfoview.Height {
-		headerLines = headerLines[:systeminfoview.Height]
-	} else if len(headerLines) < systeminfoview.Height {
-		for i := 0; i < systeminfoview.Height-len(headerLines); i++ {
-			headerLines = append(headerLines, "")
+	// Clamp or pad the help output to exactly systeminfoview.Height lines so
+	// the top header area never shifts due to variable helpbar rendering.
+	hl := strings.Split(help, "\n")
+	if len(hl) > systeminfoview.Height {
+		hl = hl[:systeminfoview.Height]
+	} else if len(hl) < systeminfoview.Height {
+		for i := 0; i < systeminfoview.Height-len(hl); i++ {
+			hl = append(hl, "")
 		}
 	}
-	help := strings.Join(headerLines, "\n")
+	help = strings.Join(hl, "\n")
 
 	if m.commandInput.Visible() {
 		return lipgloss.JoinVertical(
