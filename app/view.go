@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"strings"
 	"swarmcli/ui"
 	"swarmcli/views/helpbar"
 	systeminfoview "swarmcli/views/systeminfo"
@@ -23,18 +22,6 @@ func (m *Model) View() string {
 		WithGlobalHelp([]helpbar.HelpEntry{{Key: "?", Desc: "Help"}}).
 		WithViewHelp(m.currentView.ShortHelpItems()).
 		View(systemInfo)
-
-	// Clamp or pad the help output to exactly systeminfoview.Height lines so
-	// the top header area never shifts due to variable helpbar rendering.
-	hl := strings.Split(help, "\n")
-	if len(hl) > systeminfoview.Height {
-		hl = hl[:systeminfoview.Height]
-	} else if len(hl) < systeminfoview.Height {
-		for i := 0; i < systeminfoview.Height-len(hl); i++ {
-			hl = append(hl, "")
-		}
-	}
-	help = strings.Join(hl, "\n")
 
 	if m.commandInput.Visible() {
 		return lipgloss.JoinVertical(
