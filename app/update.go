@@ -134,10 +134,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			},
 		)
 
-	// Navigation from views should now use the generic view.NavigateToMsg
-	// with the Replace flag set appropriately; specialized navigation
-	// messages have been removed.
-
 	default:
 		cmd := m.delegateToCurrentView(msg)
 		return m, cmd

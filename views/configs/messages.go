@@ -60,8 +60,6 @@ type (
 		UsedBy     []usedByItem
 		Error      error
 	}
-	// Deprecated: use view.NavigateToMsg with Replace flag instead of
-	// specialized NavigateToStackMsg/NavigateToServicesInStackMsg.
 	errorMsg error
 )
 

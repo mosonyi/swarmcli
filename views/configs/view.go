@@ -102,12 +102,7 @@ func (m *Model) View() string {
 
 	header := renderConfigsHeader(m.configsList.Items)
 
-	// NOTE (collaborator): The filterable list already supports a
-	// customizable `RenderItem` and a `View()` method that renders the
-	// whole list. We currently rebuild rows manually here which duplicates
-	// behavior that should live in `m.setRenderItem()` via
-	// `m.configsList.RenderItem`. Prefer updating `setRenderItem` and then
-	// calling `m.configsList.View()` here to keep rendering logic centralized.
+	// Fixme: https://github.com/mosonyi/swarmcli/issues/141
 	var contentLines []string
 	nameCol := len("NAME")
 	idCol := len("ID")

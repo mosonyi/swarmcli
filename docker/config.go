@@ -173,18 +173,6 @@ func CreateConfigVersion(ctx context.Context, baseConfig swarm.Config, newData [
 }
 
 // CreateConfig creates a new config with the given name and data
-//
-// NOTE: `CreateConfigVersion` and `CreateConfig` currently contain a
-// lot of duplicated logic: both build a `swarm.ConfigSpec`, call
-// `cli.ConfigCreate`, then immediately re-inspect the created config.
-//
-// To reduce redundancy we should extract the common creation path into a
-// small helper (for example `createConfigWithSpec(ctx, spec)`) that both
-// functions call. Another option is to allow `CreateConfig` to accept
-// additional labels/annotations so `CreateConfigVersion` can reuse it and
-// simply pass the `swarmcli.origin` label. This will centralize error
-// handling and logging for config creation and make future changes
-// (e.g. telemetry or retries) easier to implement.
 func CreateConfig(ctx context.Context, name string, data []byte) (swarm.Config, error) {
 	l().Infof("[CreateConfig] Creating new config %q (size=%d bytes)", name, len(data))
 	spec := swarm.ConfigSpec{
