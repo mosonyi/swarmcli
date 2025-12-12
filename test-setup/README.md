@@ -18,7 +18,31 @@ Spin up a 1× manager + 2× worker Docker‑in‑Docker (DinD) Swarm locally, ex
 
 ```bash
 # From the repo folder that contains docker-compose.yml
-docker compose up -d --build
+docker compose up --build
+```
+You may get errors like
+```
+worker2-1  | WARNING: ca-cert-placeholder.pem does not contain exactly one certificate or CRL: skipping
+worker1-1  | WARNING: ca-cert-corporate-proxy.pem does not contain exactly one certificate or CRL: skipping
+manager-1  | WARNING: ca-cert-corporate-proxy.pem does not contain exactly one certificate or CRL: skipping
+worker2-1  | WARNING: ca-cert-corporate-proxy.pem does not contain exactly one certificate or CRL: skipping
+worker2-1  | time="2025-12-12T08:56:10.038970524Z" level=info msg="Starting up"
+worker1-1  | time="2025-12-12T08:56:10.038970875Z" level=info msg="Starting up"
+manager-1  | time="2025-12-12T08:56:10.039031366Z" level=info msg="Starting up"
+worker2-1  | failed to start daemon, ensure docker is not running or delete /var/run/docker.pid: process with PID 1 is still running
+manager-1  | failed to start daemon, ensure docker is not running or delete /var/run/docker.pid: process with PID 1 is still running
+worker1-1  | failed to start daemon, ensure docker is not running or delete /var/run/docker.pid: process with PID 1 is still running
+worker2-1 exited with code 1
+worker1-1 exited with code 1
+manager-1 exited with code 1
+dependency failed to start: container test-setup-manager-1 exited (1)
+```
+
+Then run
+
+```bash
+docker compose down -v
+docker compose up --build --remove-orphans
 ```
 
 Wait ~10–20 seconds for the Swarm to bootstrap (manager + workers join).

@@ -209,12 +209,18 @@ func (m *Model) View() string {
 		}
 	}
 
-	content := ui.RenderFramedBox(
+	frameHeight := m.viewport.Height - 2
+	if frameHeight < 0 {
+		frameHeight = 0
+	}
+
+	content := ui.RenderFramedBoxHeight(
 		title,
 		headerRendered,
 		viewportContent,
 		"",
 		frameWidth,
+		frameHeight,
 	)
 
 	return content

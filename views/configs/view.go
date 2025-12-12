@@ -120,20 +120,45 @@ func (m *Model) View() string {
 	content := m.configsList.View()
 	footer := m.renderConfigsFooter()
 
-	// Pad content to fill viewport height
-	height := m.configsList.Viewport.Height
-	if height <= 0 {
-		height = 20
+	// Compute frame height (total lines including borders). Use viewport height.
+	frameHeight := m.configsList.Viewport.Height
+	if frameHeight <= 0 {
+		frameHeight = 20
 	}
+
+	// Header occupies one line when present
+	headerLines := 0
+	if header != "" {
+		headerLines = 1
+	}
+
+	// Footer lines
+	footerLines := 0
+	if footer != "" {
+		footerLines = len(strings.Split(footer, "\n"))
+	}
+
+	// Desired content lines inside the box (not counting borders)
+	desiredContentLines := frameHeight - 2 - headerLines - footerLines
+	if desiredContentLines < 0 {
+		desiredContentLines = 0
+	}
+
 	contentLines = strings.Split(content, "\n")
-	// Account for frame borders (2), title (1), header (1) = 4 lines overhead
-	availableLines := height - 4
-	if availableLines < 0 {
-		availableLines = 0
+	// Trim trailing empty lines for stable calculation
+	for len(contentLines) > 0 && contentLines[len(contentLines)-1] == "" {
+		contentLines = contentLines[:len(contentLines)-1]
 	}
-	for len(contentLines) < availableLines {
-		contentLines = append(contentLines, "")
+
+	// Pad or trim content to desired length
+	if len(contentLines) < desiredContentLines {
+		for i := 0; i < desiredContentLines-len(contentLines); i++ {
+			contentLines = append(contentLines, "")
+		}
+	} else if len(contentLines) > desiredContentLines {
+		contentLines = contentLines[:desiredContentLines]
 	}
+
 	paddedContent := strings.Join(contentLines, "\n")
 
 	// Apply overlays to padded content BEFORE framing
@@ -158,7 +183,9 @@ func (m *Model) View() string {
 	frameWidth := width + 4
 
 	title := fmt.Sprintf("Docker Configs (%d)", len(m.configsList.Filtered))
-	view := ui.RenderFramedBox(title, header, paddedContent, footer, frameWidth)
+	view := ui.RenderFramedBoxHeight(title, header, paddedContent, footer, frameWidth, frameHeight)
+
+	// Final rendering (no debug overlay)
 
 	return view
 }
@@ -351,7 +378,11 @@ func (m *Model) renderUsedByView() string {
 	frameWidth := m.usedByList.Viewport.Width + 4
 
 	title := fmt.Sprintf("Config: %s - Used By Stacks (%d)", m.usedByConfigName, len(m.usedByList.Filtered))
-	return ui.RenderFramedBox(title, header, paddedContent, footer, frameWidth)
+	frameHeight := m.usedByList.Viewport.Height - 2
+	if frameHeight < 0 {
+		frameHeight = 0
+	}
+	return ui.RenderFramedBoxHeight(title, header, paddedContent, footer, frameWidth, frameHeight)
 }
 
 func (m *Model) renderUsedByHeader() string {

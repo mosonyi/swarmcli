@@ -167,9 +167,12 @@ func (m *Model) updateForResize(msg tea.WindowSizeMsg) tea.Cmd {
 		usableWidth = msg.Width
 		usableHeight = msg.Height - 2 // Just for top/bottom borders
 	} else {
-		// Normal mode: leave room for helpbar, systeminfo, etc.
+		// Normal mode: pass the full terminal height to the viewport. The
+		// per-view resize handler (`handleViewResize`) will subtract the
+		// systeminfo height (header), so the final view height becomes
+		// terminalHeight - systeminfoview.Height (i.e. max - 6).
 		usableWidth = msg.Width - 4
-		usableHeight = msg.Height - 10
+		usableHeight = msg.Height
 	}
 
 	m.viewport.Width = usableWidth

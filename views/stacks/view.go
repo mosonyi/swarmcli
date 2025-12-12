@@ -2,6 +2,7 @@ package stacksview
 
 import (
 	"fmt"
+	"strings"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 
@@ -45,9 +46,55 @@ func (m *Model) View() string {
 		footer = statusBar
 	}
 
+	// Use the FilterableList's View() which formats items and sets
+	// the internal viewport content. This keeps behavior consistent
+	// with `configs` and `services` and avoids layout mismatches.
 	content := m.List.View()
 
 	// Add 4 to make frame full terminal width (app reduces viewport by 4 in normal mode)
 	frameWidth := m.List.Viewport.Width + 4
-	return ui.RenderFramedBox(title, header, content, footer, frameWidth)
+
+	// Compute frameHeight from viewport (treat Viewport.Height as the total
+	// frame height like `configs` view does). Then compute desired inner
+	// content lines = frameHeight - borders - header - footer, and pad/trim
+	// content to that length.
+	// Subtract 3 to account for the app's stackbar, bottom status line,
+	// and one extra padding line to align with composition
+	frameHeight := m.List.Viewport.Height - 3
+	if frameHeight <= 0 {
+		frameHeight = 20
+	}
+
+	headerLines := 0
+	if header != "" {
+		headerLines = len(strings.Split(header, "\n"))
+	}
+	footerLines := 0
+	if footer != "" {
+		footerLines = len(strings.Split(footer, "\n"))
+	}
+
+	desiredContentLines := frameHeight - 2 - headerLines - footerLines
+	if desiredContentLines < 0 {
+		desiredContentLines = 0
+	}
+
+	contentLines := strings.Split(content, "\n")
+	// Trim trailing empty lines
+	for len(contentLines) > 0 && contentLines[len(contentLines)-1] == "" {
+		contentLines = contentLines[:len(contentLines)-1]
+	}
+	if len(contentLines) < desiredContentLines {
+		for i := 0; i < desiredContentLines-len(contentLines); i++ {
+			contentLines = append(contentLines, "")
+		}
+	} else if len(contentLines) > desiredContentLines {
+		contentLines = contentLines[:desiredContentLines]
+	}
+	paddedContent := strings.Join(contentLines, "\n")
+
+	framed := ui.RenderFramedBoxHeight(title, header, paddedContent, footer, frameWidth, frameHeight)
+
+	// Final rendering (no debug overlay)
+	return framed
 }

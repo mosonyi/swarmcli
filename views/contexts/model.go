@@ -1,6 +1,7 @@
 package contexts
 
 import (
+	"strings"
 	"swarmcli/docker"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
@@ -9,12 +10,16 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+
+	filterlist "swarmcli/ui/components/filterable/list"
 )
 
 type Model struct {
 	Visible  bool
 	viewport viewport.Model
 	ready    bool
+
+	List filterlist.FilterableList[docker.ContextInfo]
 
 	contexts              []docker.ContextInfo
 	cursor                int
@@ -100,6 +105,17 @@ func New() *Model {
 	editDescInput.CharLimit = 200
 	editDescInput.Width = 50
 
+	// Initialize an internal viewport for the filterable list
+	vp := viewport.New(80, 20)
+	vp.SetContent("")
+
+	list := filterlist.FilterableList[docker.ContextInfo]{
+		Viewport: vp,
+		Match: func(item docker.ContextInfo, query string) bool {
+			return strings.Contains(strings.ToLower(item.Name), strings.ToLower(query))
+		},
+	}
+
 	return &Model{
 		Visible:          false,
 		contexts:         []docker.ContextInfo{},
@@ -115,6 +131,7 @@ func New() *Model {
 		createCertInput:  createCertInput,
 		createKeyInput:   createKeyInput,
 		editDescInput:    editDescInput,
+		List:             list,
 	}
 }
 
