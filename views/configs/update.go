@@ -182,8 +182,22 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		l().Infof("Config %s is used by %d service(s)", msg.ConfigName, len(msg.UsedBy))
 
-		// Initialize usedByList with a new viewport
-		vp := viewport.New(m.configsList.Viewport.Width, m.configsList.Viewport.Height)
+		// Initialize usedByList with a new viewport. Use sensible fallbacks
+		// (model width/height) if configsList viewport hasn't been sized yet.
+		w := m.configsList.Viewport.Width
+		if w <= 0 {
+			w = m.width
+		}
+		h := m.configsList.Viewport.Height
+		if h <= 0 {
+			if m.height > 0 {
+				h = m.height - 2
+			}
+			if h <= 0 {
+				h = 20
+			}
+		}
+		vp := viewport.New(w, h)
 		vp.SetContent("")
 
 		m.usedByList = filterlist.FilterableList[usedByItem]{
@@ -203,6 +217,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 
 		m.usedByList.Items = msg.UsedBy
+		// Keep viewport sizes in sync
+		m.usedByList.Viewport.Width = vp.Width
+		m.usedByList.Viewport.Height = vp.Height
 		m.usedByList.ApplyFilter()
 
 		m.usedByConfigName = msg.ConfigName
