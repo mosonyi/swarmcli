@@ -25,17 +25,17 @@ func (m *Model) View() string {
 		WithViewHelp(m.currentView.ShortHelpItems()).
 		View(systemInfo)
 
-	// helpBar already includes systemInfo. Clamp/pad helpBar to the fixed
-	// header height so the top area always occupies the expected lines.
-	hl := strings.Split(helpBar, "\n")
-	if len(hl) > systeminfoview.Height {
-		hl = hl[:systeminfoview.Height]
-	} else if len(hl) < systeminfoview.Height {
-		for i := 0; i < systeminfoview.Height-len(hl); i++ {
-			hl = append(hl, "")
+	// Combine and ensure exact height
+	headerLines := append(strings.Split(systemInfo, "\n"), strings.Split(helpBar, "\n")...)
+	// If combined lines exceed the fixed height, truncate; if fewer, pad.
+	if len(headerLines) > systeminfoview.Height {
+		headerLines = headerLines[:systeminfoview.Height]
+	} else if len(headerLines) < systeminfoview.Height {
+		for i := 0; i < systeminfoview.Height-len(headerLines); i++ {
+			headerLines = append(headerLines, "")
 		}
 	}
-	help := strings.Join(hl, "\n")
+	help := strings.Join(headerLines, "\n")
 
 	if m.commandInput.Visible() {
 		return lipgloss.JoinVertical(
