@@ -46,7 +46,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case tea.WindowSizeMsg:
 		m.List.Viewport.Width = msg.Width
-		m.List.Viewport.Height = msg.Height - 3
+		m.List.Viewport.Height = msg.Height
 		m.ready = true
 		m.List.Viewport.SetContent(m.List.View())
 		return nil
