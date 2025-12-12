@@ -98,6 +98,8 @@ func (m *Model) View() string {
 	width := 80
 	if m.configsList.Viewport.Width > 0 {
 		width = m.configsList.Viewport.Width
+	} else if m.width > 0 {
+		width = m.width
 	}
 
 	header := renderConfigsHeader(m.configsList.Items)
@@ -123,7 +125,15 @@ func (m *Model) View() string {
 	// Compute frame height (total lines including borders). Use viewport height.
 	frameHeight := m.configsList.Viewport.Height
 	if frameHeight <= 0 {
-		frameHeight = 20
+		// Fall back to the model height (minus reserved lines) if viewport
+		// hasn't been initialized yet. This avoids rendering a tiny 20-line
+		// box while the app is still wiring up sizes.
+		if m.height > 0 {
+			frameHeight = m.height - 2
+		}
+		if frameHeight <= 0 {
+			frameHeight = 20
+		}
 	}
 
 	// Header occupies one line when present
@@ -362,7 +372,12 @@ func (m *Model) renderUsedByView() string {
 	// Pad content to fill viewport height
 	height := m.usedByList.Viewport.Height
 	if height <= 0 {
-		height = 20
+		if m.height > 0 {
+			height = m.height - 2
+		}
+		if height <= 0 {
+			height = 20
+		}
 	}
 	contentLines := strings.Split(content, "\n")
 	availableLines := height - 4
@@ -378,7 +393,7 @@ func (m *Model) renderUsedByView() string {
 	frameWidth := m.usedByList.Viewport.Width + 4
 
 	title := fmt.Sprintf("Config: %s - Used By Stacks (%d)", m.usedByConfigName, len(m.usedByList.Filtered))
-	frameHeight := m.usedByList.Viewport.Height - 2
+	frameHeight := height - 2
 	if frameHeight < 0 {
 		frameHeight = 0
 	}
