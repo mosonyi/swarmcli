@@ -14,14 +14,14 @@ import (
 )
 
 type Model struct {
-	List         filterlist.FilterableList[docker.StackEntry]
-	Visible      bool
-	nodeID       string
-	ready        bool
-	width        int
-	height       int
-	lastSnapshot uint64 // hash of last snapshot for change detection
-	DelayInitialLoad bool // when true, delay the first LoadStacksCmd by 3s
+	List             filterlist.FilterableList[docker.StackEntry]
+	Visible          bool
+	nodeID           string
+	ready            bool
+	width            int
+	height           int
+	lastSnapshot     uint64 // hash of last snapshot for change detection
+	DelayInitialLoad bool   // when true, delay the first LoadStacksCmd by 3s
 }
 
 func New(width, height int) *Model {

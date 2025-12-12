@@ -52,7 +52,12 @@ func (m *Model) View() string {
 	content := m.List.View()
 
 	// Add 4 to make frame full terminal width (app reduces viewport by 4 in normal mode)
-	frameWidth := m.List.Viewport.Width + 4
+	frameWidth := m.List.Viewport.Width
+	if frameWidth <= 0 {
+		// Fallback to model width if viewport hasn't been initialized yet
+		frameWidth = m.width
+	}
+	frameWidth = frameWidth + 4
 
 	// Compute frameHeight from viewport (treat Viewport.Height as the total
 	// frame height like `configs` view does). Then compute desired inner
@@ -60,14 +65,22 @@ func (m *Model) View() string {
 	// content to that length.
 	// Use the adjusted viewport height directly; the framing helper
 	// will account for borders. Do not subtract extra rows here.
-	frameHeight := m.List.Viewport.Height
+	// Reserve two lines from the viewport height for surrounding UI (helpbar/systeminfo)
+	frameHeight := m.List.Viewport.Height - 2
 	if frameHeight <= 0 {
-		frameHeight = 20
+		// Fallback to model height minus reserved lines if viewport not initialized
+		if m.height > 0 {
+			frameHeight = m.height - 4
+		}
+		if frameHeight <= 0 {
+			frameHeight = 20
+		}
 	}
 
+	// Header occupies one line when present (styled header renders single line)
 	headerLines := 0
 	if header != "" {
-		headerLines = len(strings.Split(header, "\n"))
+		headerLines = 1
 	}
 	footerLines := 0
 	if footer != "" {

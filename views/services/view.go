@@ -96,10 +96,15 @@ func (m *Model) View() string {
 	// desired inner content height before framing (same approach as configs).
 	content := m.List.View()
 
-	// Treat the viewport height as the total frame height (consistent with configs/stacks)
-	frameHeight := m.List.Viewport.Height
+	// Reserve two lines from the viewport height for surrounding UI (helpbar/systeminfo)
+	frameHeight := m.List.Viewport.Height - 2
 	if frameHeight <= 0 {
-		frameHeight = 20
+		if m.height > 0 {
+			frameHeight = m.height - 4
+		}
+		if frameHeight <= 0 {
+			frameHeight = 20
+		}
 	}
 
 	desiredContentLines := frameHeight - 2 - headerLines - footerLines
