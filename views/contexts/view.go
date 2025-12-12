@@ -72,7 +72,7 @@ func (m *Model) View() string {
 	// Set the list viewport height to the frame height we'll use below
 	// Reserve 2 lines for the stackbar and bottom status line so the
 	// framed box fills the rest of the available area.
-	frameHeight := m.viewport.Height - 2
+	frameHeight := m.viewport.Height
 	if frameHeight <= 0 {
 		frameHeight = 20
 	}

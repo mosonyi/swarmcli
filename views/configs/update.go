@@ -23,7 +23,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case tea.WindowSizeMsg:
 		m.configsList.Viewport.Width = msg.Width
-		m.configsList.Viewport.Height = msg.Height - 3
+		// msg.Height is already adjusted by the app to account for the
+		// systeminfo header; avoid subtracting extra lines here.
+		m.configsList.Viewport.Height = msg.Height
 		return nil
 
 	case configsLoadedMsg:

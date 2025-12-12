@@ -99,7 +99,7 @@ func (m *Model) View() string {
 	content := fmt.Sprintf("%s %s", m.spinner.View(), m.message)
 	content = strings.TrimSpace(content)
 	// Use height-aware framed box: m.height holds the available height for this view
-	frameHeight := m.height - 2
+	frameHeight := m.height
 	if frameHeight < 0 {
 		frameHeight = 0
 	}

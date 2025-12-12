@@ -209,7 +209,7 @@ func (m *Model) View() string {
 		}
 	}
 
-	frameHeight := m.viewport.Height - 2
+	frameHeight := m.viewport.Height
 	if frameHeight < 0 {
 		frameHeight = 0
 	}
