@@ -140,6 +140,19 @@ func (m *Model) SetSize(width, height int) {
 	m.viewport.Height = height
 	m.confirmDialog.Width = width
 	m.confirmDialog.Height = height
+	// Keep the internal list viewport in sync so it doesn't stay at its
+	// initial 80x20 size when the view receives data.
+	if width > 0 {
+		m.List.Viewport.Width = width
+	}
+	if height > 0 {
+		// Reserve 2 lines for stackbar/bottom status like other views
+		h := height - 2
+		if h <= 0 {
+			h = 20
+		}
+		m.List.Viewport.Height = h
+	}
 	if !m.ready {
 		m.ready = true
 	}
@@ -178,6 +191,22 @@ func (m *Model) SetContexts(contexts []docker.ContextInfo) {
 	if m.cursor < 0 {
 		m.cursor = 0
 	}
+
+	// Update the FilterableList backing items and apply filter
+	m.List.Items = m.contexts
+	// Ensure the list viewport matches the current view size so the
+	// content fills the frame immediately when contexts arrive.
+	if m.viewport.Width > 0 {
+		m.List.Viewport.Width = m.viewport.Width
+	}
+	if m.viewport.Height > 0 {
+		h := m.viewport.Height - 2
+		if h <= 0 {
+			h = 20
+		}
+		m.List.Viewport.Height = h
+	}
+	m.List.ApplyFilter()
 }
 
 func (m *Model) GetCursor() int {
