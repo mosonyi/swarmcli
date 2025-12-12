@@ -106,7 +106,16 @@ func (m *Model) View() string {
 		return line
 	}
 
-	content := m.List.View()
+	// If we're still loading, show a loading placeholder to avoid flashing
+	// "No items found." before the async load completes.
+	var content string
+	if m.IsLoading() {
+		content = ""
+		// ensure viewport content is empty so viewport doesn't show "No items found."
+		m.List.Viewport.SetContent("")
+	} else {
+		content = m.List.View()
+	}
 	frameWidth := width + 4
 
 	headerLines := 0
