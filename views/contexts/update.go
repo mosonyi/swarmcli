@@ -41,6 +41,18 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case tea.WindowSizeMsg:
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height
+		// Keep the internal list viewport in sync with the new size so
+		// the framed box fills the area immediately.
+		if msg.Width > 0 {
+			m.List.Viewport.Width = msg.Width
+		}
+		if msg.Height > 0 {
+			h := msg.Height - 2
+			if h <= 0 {
+				h = 20
+			}
+			m.List.Viewport.Height = h
+		}
 		if !m.ready {
 			m.ready = true
 		}
