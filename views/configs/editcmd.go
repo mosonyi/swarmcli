@@ -10,6 +10,88 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// editWithTempFileCmd creates a temp file pre-populated with `initialData`,
+// opens the user's editor, and calls `onDone` with the edited bytes when the
+// editor exits successfully. On any error (temp file creation, editor
+// execution, or reading back the file), `onErr` is called with the error so
+// callers can return appropriate message types.
+func editWithTempFileCmd(baseName string, initialData []byte, onDone func([]byte) tea.Msg, onErr func(error) tea.Msg) tea.Cmd {
+	l().Infoln("editWithTempFileCmd: started for", baseName)
+
+	tmp, err := os.CreateTemp("", fmt.Sprintf("%s-*.txt", baseName))
+	if err != nil {
+		l().Infoln("CreateTemp error:", err)
+		return func() tea.Msg { return onErr(fmt.Errorf("failed to create temp file: %w", err)) }
+	}
+	// Ensure file is closed; we'll remove it in the ExecProcess callback
+	defer func(tmp *os.File) {
+		_ = tmp.Close()
+	}(tmp)
+
+	if len(initialData) > 0 {
+		if _, err := tmp.Write(initialData); err != nil {
+			l().Infoln("Write temp error:", err)
+			return func() tea.Msg { return onErr(fmt.Errorf("failed to write temp file: %w", err)) }
+		}
+	}
+
+	l().Infoln("Created temp file:", tmp.Name())
+
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "nano"
+	}
+
+	l().Infoln("Invoking editor:", editor, tmp.Name())
+	cmd := exec.Command(editor, tmp.Name())
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		// Clean up temp file
+		defer func(name string) {
+			_ = os.Remove(name)
+		}(tmp.Name())
+
+		if err != nil {
+			l().Infoln("Editor process error:", err)
+			return onErr(fmt.Errorf("editor failed: %w", err))
+		}
+
+		l().Infoln("Editor closed, reading back from temp")
+		newData, err := os.ReadFile(tmp.Name())
+		if err != nil {
+			l().Infoln("ReadFile error:", err)
+			return onErr(fmt.Errorf("failed to read edited file: %w", err))
+		}
+
+		l().Infoln("Read new data, length:", len(newData))
+		return onDone(newData)
+	})
+}
+
+// createConfigInEditorCmd creates a tmp file and opens the editor to create a new config.
+// If existingData is provided, it will be pre-populated in the editor.
+func createConfigInEditorCmd(name string, existingData []byte) tea.Cmd {
+	return editWithTempFileCmd(name, existingData,
+		func(newData []byte) tea.Msg {
+			// Create the new config
+			ctx := context.Background()
+			newCfg, err := docker.CreateConfig(ctx, name, newData)
+			if err != nil {
+				l().Infoln("CreateConfig error:", err)
+				// Return error with data so we can retry with corrected name
+				return editorContentReadyMsg{Name: name, Data: newData, Err: err}
+			}
+			l().Infoln("Created new config:", newCfg.Spec.Name)
+			return configCreatedMsg{Config: newCfg}
+		},
+		func(err error) tea.Msg {
+			return configCreateErrorMsg{err}
+		})
+}
+
 // editConfigInEditorCmd creates a tmp file and opens the editor to edit the new config.
 func editConfigInEditorCmd(name string) tea.Cmd {
 	l().Infoln("editConfigInEditorCmd: started")
@@ -22,92 +104,41 @@ func editConfigInEditorCmd(name string) tea.Cmd {
 	}
 	l().Infoln("InspectConfig OK")
 
-	// Get the human-readable UTF-8 content to edit
-	content := cfg.Data
-	l().Infoln("Prepared editable content, length:", len(content))
+	// Use helper to open editor with existing content and process result
+	return editWithTempFileCmd(cfg.Config.Spec.Name, cfg.Data,
+		func(newData []byte) tea.Msg {
+			// Check if content changed
+			if string(newData) == string(cfg.Data) {
+				l().Infoln("No changes made to config")
+				return editConfigDoneMsg{
+					Name:      cfg.Config.Spec.Name,
+					Changed:   false,
+					OldConfig: *cfg,
+					NewConfig: *cfg,
+				}
+			}
 
-	tmp, err := os.CreateTemp("", fmt.Sprintf("%s-*.txt", cfg.Config.Spec.Name))
-	if err != nil {
-		l().Infoln("CreateTemp error:", err)
-		return func() tea.Msg { return editConfigErrorMsg{fmt.Errorf("failed to create temp file: %w", err)} }
-	}
-	defer func(tmp *os.File) {
-		err := tmp.Close()
-		if err != nil {
-			l().Errorln("Failed to close temp file:", tmp.Name(), "error:", err)
-		}
-	}(tmp)
-
-	if _, err := tmp.Write(content); err != nil {
-		l().Infoln("Write temp error:", err)
-		return func() tea.Msg { return editConfigErrorMsg{fmt.Errorf("failed to write temp file: %w", err)} }
-	}
-	l().Infoln("Wrote plain data to temp file:", tmp.Name())
-
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "nano"
-	}
-	l().Infoln("Using editor:", editor)
-
-	cmd := exec.Command(editor, tmp.Name())
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	l().Infoln("Prepared command:", cmd.String())
-
-	return tea.ExecProcess(cmd, func(err error) tea.Msg {
-		defer func(name string) {
-			err := os.Remove(name)
+			// Create a new Docker config version with the edited data
+			newCfg, err := docker.CreateConfigVersion(ctx, cfg.Config, newData)
 			if err != nil {
-				l().Errorln("Failed to remove temp file:", name, "error:", err)
+				l().Infoln("CreateConfigVersion error:", err)
+				return editConfigErrorMsg{err}
 			}
-		}(tmp.Name())
+			l().Infoln("Config updated:", newCfg.Spec.Name)
 
-		l().Infoln("In ExecProcess callback")
-		if err != nil {
-			l().Infoln("Editor returned error:", err)
-			return editConfigErrorMsg{fmt.Errorf("editor failed: %w", err)}
-		}
-		l().Infoln("Editor finished successfully")
+			wrapped := docker.ConfigWithDecodedData{
+				Config: newCfg,
+				Data:   newData,
+			}
 
-		// Read the edited plain UTF-8 data
-		newData, err := os.ReadFile(tmp.Name())
-		if err != nil {
-			l().Infoln("ReadFile error:", err)
-			return editConfigErrorMsg{fmt.Errorf("failed to read edited file: %w", err)}
-		}
-		l().Infoln("Read edited data, length:", len(newData))
-
-		// Check if content changed
-		if string(newData) == string(cfg.Data) {
-			l().Infoln("No changes made to config")
 			return editConfigDoneMsg{
-				Name:      cfg.Config.Spec.Name,
-				Changed:   false,
+				Name:      newCfg.Spec.Name,
+				Changed:   true,
 				OldConfig: *cfg,
-				NewConfig: *cfg,
+				NewConfig: wrapped,
 			}
-		}
-
-		// Create a new Docker config version with the edited data
-		newCfg, err := docker.CreateConfigVersion(ctx, cfg.Config, newData)
-		if err != nil {
-			l().Infoln("CreateConfigVersion error:", err)
+		},
+		func(err error) tea.Msg {
 			return editConfigErrorMsg{err}
-		}
-		l().Infoln("Config updated:", newCfg.Spec.Name)
-
-		wrapped := docker.ConfigWithDecodedData{
-			Config: newCfg,
-			Data:   newData,
-		}
-
-		return editConfigDoneMsg{
-			Name:      newCfg.Spec.Name,
-			Changed:   true,
-			OldConfig: *cfg,
-			NewConfig: wrapped,
-		}
-	})
+		})
 }

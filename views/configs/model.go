@@ -1,6 +1,7 @@
 package configsview
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"swarmcli/docker"
@@ -10,6 +11,7 @@ import (
 	loading "swarmcli/views/loading"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -19,17 +21,39 @@ type Model struct {
 	width        int
 	height       int
 	lastSnapshot uint64 // hash of last snapshot for change detection
+	visible      bool   // tracks if view is currently active
 
 	state state
 	err   error
 
 	pendingAction      string
 	confirmDialog      *confirmdialog.Model
+	errorDialogActive  bool
 	loadingView        *loading.Model
 	configs            []docker.ConfigWithDecodedData
 	configToRotateFrom *docker.ConfigWithDecodedData
 	configToRotateInto *docker.ConfigWithDecodedData
 	configToDelete     *docker.ConfigWithDecodedData
+
+	// Create config dialog
+	createDialogActive bool
+	createDialogStep   string // "source", "details-file", "details-inline"
+	createDialogError  string // error message to display
+	createInputFocus   int    // 0 = name, 1 = file path
+	createNameInput    textinput.Model
+	createFileInput    textinput.Model // For typing file path
+	createConfigSource string          // "file" or "inline"
+	createConfigPath   string          // selected file path from browser
+	createConfigData   string
+	fileBrowserActive  bool
+	fileBrowserPath    string
+	fileBrowserFiles   []string
+	fileBrowserCursor  int
+
+	// Used By view
+	usedByViewActive bool
+	usedByList       filterlist.FilterableList[usedByItem]
+	usedByConfigName string
 }
 
 type state int
@@ -53,19 +77,37 @@ func New(width, height int) *Model {
 		},
 	}
 
+	// Initialize name input for create dialog
+	nameInput := textinput.New()
+	nameInput.Placeholder = "my-config"
+	nameInput.Prompt = "Name: "
+	nameInput.CharLimit = 100
+	nameInput.Width = 50
+
+	// Initialize file path input for create dialog
+	fileInput := textinput.New()
+	fileInput.Placeholder = "/path/to/file"
+	fileInput.Prompt = "File: "
+	fileInput.CharLimit = 512
+	fileInput.Width = 50
+
 	return &Model{
-		configsList:   list,
-		width:         width,
-		height:        height,
-		state:         stateLoading,
-		confirmDialog: confirmdialog.New(0, 0),
-		loadingView:   loading.New(width, height, false, "Loading Docker configs..."),
+		configsList:     list,
+		width:           width,
+		height:          height,
+		state:           stateLoading,
+		visible:         true,
+		confirmDialog:   confirmdialog.New(0, 0),
+		loadingView:     loading.New(width, height, false, "Loading Docker configs..."),
+		createNameInput: nameInput,
+		createFileInput: fileInput,
 	}
 }
 
 func (m *Model) Name() string { return ViewName }
 
 func (m *Model) Init() tea.Cmd {
+	l().Info("ConfigsView: Init() called - starting ticker and loading configs")
 	return tea.Batch(tickCmd(), LoadConfigs())
 }
 
@@ -80,13 +122,25 @@ func LoadConfigs() tea.Cmd {
 }
 
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
+	if m.usedByViewActive {
+		return []helpbar.HelpEntry{
+			{Key: "↑/↓", Desc: "Navigate"},
+			{Key: "Enter", Desc: "Go to Stack"},
+			{Key: "/", Desc: "Filter"},
+			{Key: "Esc", Desc: "Back"},
+		}
+	}
+
 	return []helpbar.HelpEntry{
 		{Key: "↑/↓", Desc: "Navigate"},
+		{Key: "n", Desc: "New"},
+		{Key: "c", Desc: "Clone"},
 		{Key: "i", Desc: "Inspect"},
+		{Key: "u", Desc: "Used By"},
 		{Key: "Enter", Desc: "Check"},
-		{Key: "e", Desc: "Edit"},
-		{Key: "r", Desc: "Rotate"},
-		{Key: "q", Desc: "Back"},
+		{Key: "e", Desc: "Edit & Rotate"},
+		{Key: "ctrl+d", Desc: "Delete"},
+		{Key: "esc/q", Desc: "Back"},
 	}
 }
 
@@ -108,14 +162,43 @@ func (m *Model) findConfigByName(name string) (*docker.ConfigWithDecodedData, er
 
 func (m *Model) addConfig(cfg docker.ConfigWithDecodedData) {
 	m.configs = append(m.configs, cfg)
-	m.configsList.Items = append(m.configsList.Items, configItemFromSwarm(cfg.Config))
+	ctx := context.Background()
+	m.configsList.Items = append(m.configsList.Items, configItemFromSwarm(ctx, cfg.Config))
 	m.configsList.ApplyFilter()
 }
 
 func (m *Model) OnEnter() tea.Cmd {
-	return nil
+	m.visible = true
+	l().Info("ConfigsView: OnEnter() - view is now visible")
+	return LoadConfigs()
 }
 
 func (m *Model) OnExit() tea.Cmd {
+	m.visible = false
+	l().Info("ConfigsView: OnExit() - view is no longer visible")
+	return nil
+}
+
+// HasActiveDialog returns true if a dialog is currently visible
+func (m *Model) HasActiveDialog() bool {
+	return m.confirmDialog.Visible || m.errorDialogActive || m.createDialogActive || m.fileBrowserActive
+}
+
+// IsInUsedByView returns true if currently viewing the used-by list
+func (m *Model) IsInUsedByView() bool {
+	return m.usedByViewActive
+}
+
+// validateConfigName validates a config name
+func validateConfigName(name string) error {
+	if name == "" {
+		return fmt.Errorf("config name cannot be empty")
+	}
+	if strings.ContainsAny(name, " \t\n") {
+		return fmt.Errorf("config name cannot contain whitespace")
+	}
+	if strings.ContainsAny(name, "/\\:*?\"<>|") {
+		return fmt.Errorf("config name contains invalid characters")
+	}
 	return nil
 }

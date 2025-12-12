@@ -15,6 +15,15 @@ import (
 	"github.com/docker/docker/client"
 )
 
+// ListServicesUsingConfigID returns all services that reference a config by ID
+func ListServicesUsingConfigID(ctx context.Context, configID string) ([]swarm.Service, error) {
+	client, err := GetClient()
+	if err != nil {
+		return nil, err
+	}
+	return listServicesUsingConfig(ctx, client, configID)
+}
+
 // ConfigWithDecodedData is a helper struct with the decoded data included.
 type ConfigWithDecodedData struct {
 	Config swarm.Config
@@ -96,13 +105,26 @@ func ListConfigs(ctx context.Context) ([]swarm.Config, error) {
 		return nil, fmt.Errorf("failed to list configs: %w", err)
 	}
 
+	// ConfigList doesn't populate all metadata like CreatedAt, so we need to inspect each config
+	fullConfigs := make([]swarm.Config, len(configs))
+	for i, cfg := range configs {
+		fullCfg, _, err := cli.ConfigInspectWithRaw(ctx, cfg.ID)
+		if err != nil {
+			l().Warnf("[ListConfigs] Failed to inspect config %s: %v", cfg.Spec.Name, err)
+			// Use the list result as fallback
+			fullConfigs[i] = cfg
+			continue
+		}
+		fullConfigs[i] = fullCfg
+	}
+
 	// 🔠 Sort configs alphabetically by name
-	sort.Slice(configs, func(i, j int) bool {
-		return configs[i].Spec.Name < configs[j].Spec.Name
+	sort.Slice(fullConfigs, func(i, j int) bool {
+		return fullConfigs[i].Spec.Name < fullConfigs[j].Spec.Name
 	})
 
-	l().Infof("[ListConfigs] Found %d configs", len(configs))
-	return configs, nil
+	l().Infof("[ListConfigs] Found %d configs", len(fullConfigs))
+	return fullConfigs, nil
 }
 
 func closeCli(cli *client.Client) {
@@ -136,13 +158,6 @@ func CreateConfigVersion(ctx context.Context, baseConfig swarm.Config, newData [
 	newName := nextConfigVersionName(baseConfig.Spec.Name)
 	l().Infof("[CreateConfigVersion] Creating new config version from %q → %q (size=%d bytes)",
 		baseConfig.Spec.Name, newName, len(newData))
-
-	cli, err := GetClient()
-	if err != nil {
-		return swarm.Config{}, err
-	}
-	defer closeCli(cli)
-
 	spec := swarm.ConfigSpec{
 		Annotations: swarm.Annotations{
 			Name: newName,
@@ -154,19 +169,51 @@ func CreateConfigVersion(ctx context.Context, baseConfig swarm.Config, newData [
 		Data: newData,
 	}
 
+	return createConfigWithSpec(ctx, spec, "[CreateConfigVersion]")
+}
+
+// CreateConfig creates a new config with the given name and data
+func CreateConfig(ctx context.Context, name string, data []byte) (swarm.Config, error) {
+	l().Infof("[CreateConfig] Creating new config %q (size=%d bytes)", name, len(data))
+	spec := swarm.ConfigSpec{
+		Annotations: swarm.Annotations{
+			Name: name,
+			Labels: map[string]string{
+				"swarmcli.created": time.Now().UTC().Format(time.RFC3339),
+			},
+		},
+		Data: data,
+	}
+
+	return createConfigWithSpec(ctx, spec, "[CreateConfig]")
+}
+
+// createConfigWithSpec centralizes config creation: it calls the Docker API
+// to create a config from the provided spec, re-inspects the created config,
+// and returns the populated swarm.Config or an error. The caller may pass a
+// prefix for logging context (e.g. "[CreateConfigVersion]").
+func createConfigWithSpec(ctx context.Context, spec swarm.ConfigSpec, logPrefix string) (swarm.Config, error) {
+	cli, err := GetClient()
+	if err != nil {
+		return swarm.Config{}, err
+	}
+	defer closeCli(cli)
+
+	cfgName := spec.Name
+
 	id, err := cli.ConfigCreate(ctx, spec)
 	if err != nil {
-		l().Errorf("[CreateConfigVersion] Failed to create config %q: %v", newName, err)
-		return swarm.Config{}, fmt.Errorf("failed to create config %q: %w", newName, err)
+		l().Errorf("%s Failed to create config %q: %v", logPrefix, cfgName, err)
+		return swarm.Config{}, fmt.Errorf("failed to create config %q: %w", cfgName, err)
 	}
 
 	newCfg, _, err := cli.ConfigInspectWithRaw(ctx, id.ID)
 	if err != nil {
-		l().Errorf("[CreateConfigVersion] Created config %q but failed to re-inspect: %v", newName, err)
-		return swarm.Config{}, fmt.Errorf("failed to inspect new config %q: %w", newName, err)
+		l().Errorf("%s Created config %q but failed to re-inspect: %v", logPrefix, cfgName, err)
+		return swarm.Config{}, fmt.Errorf("failed to inspect new config %q: %w", cfgName, err)
 	}
 
-	l().Infof("[CreateConfigVersion] Successfully created new config %q (ID=%s)", newCfg.Spec.Name, newCfg.ID)
+	l().Infof("%s Successfully created new config %q (ID=%s)", logPrefix, newCfg.Spec.Name, newCfg.ID)
 	return newCfg, nil
 }
 
@@ -277,6 +324,15 @@ func listServicesUsingConfig(ctx context.Context, client *client.Client, configI
 		}
 	}
 	return filtered, nil
+}
+
+// ListServicesUsingConfigName returns all services that reference a config by name
+func ListServicesUsingConfigName(ctx context.Context, name string) ([]swarm.Service, error) {
+	client, err := GetClient()
+	if err != nil {
+		return nil, err
+	}
+	return listServicesUsingConfigName(ctx, client, name)
 }
 
 func listServicesUsingConfigName(ctx context.Context, client *client.Client, name string) ([]swarm.Service, error) {

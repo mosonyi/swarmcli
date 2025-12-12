@@ -43,6 +43,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd.Execute(ctx, parsedArgs)
 
 	case view.NavigateToMsg:
+		// Use Replace flag to decide whether to replace current view
+		if msg.Replace {
+			cmd := m.replaceView(msg.ViewName, msg.Payload)
+			return m, cmd
+		}
 		cmd := m.switchToView(msg.ViewName, msg.Payload)
 		return m, cmd
 
@@ -200,6 +205,13 @@ func (m *Model) updateViewports(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// If current view has an active dialog, forward keys to it first
+	if viewWithDialog, ok := m.currentView.(interface{ HasActiveDialog() bool }); ok {
+		if viewWithDialog.HasActiveDialog() {
+			cmd := m.currentView.Update(msg)
+			return m, cmd
+		}
+	}
 	// Check if current view is in fullscreen or search mode before handling global esc
 	if msg.Type == tea.KeyEsc || msg.String() == "esc" {
 		// Check if logs view has dialog open
@@ -229,6 +241,26 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}); ok {
 			if contextsView.HasActiveDialog() {
 				// Let the view handle esc to close the dialog
+				cmd := m.currentView.Update(msg)
+				return m, cmd
+			}
+		}
+		// Check if configs view is in UsedBy view
+		if configsView, ok := m.currentView.(interface {
+			IsInUsedByView() bool
+		}); ok {
+			if configsView.IsInUsedByView() {
+				// Let the configs view handle esc to close UsedBy view
+				cmd := m.currentView.Update(msg)
+				return m, cmd
+			}
+		}
+		// Check if services view is in stack services mode
+		if servicesView, ok := m.currentView.(interface {
+			IsInStackServicesView() bool
+		}); ok {
+			if servicesView.IsInStackServicesView() {
+				// Let the services view handle esc to go back to stacks
 				cmd := m.currentView.Update(msg)
 				return m, cmd
 			}

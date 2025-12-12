@@ -3,12 +3,17 @@ package configsview
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	inspectview "swarmcli/views/inspect"
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/docker/docker/api/types/swarm"
 )
 
 // --- Async commands ---
@@ -46,7 +51,22 @@ func CheckConfigsCmd(lastHash uint64) tea.Cmd {
 			wrapped[i] = docker.ConfigWithDecodedData{Config: c, Data: c.Spec.Data}
 		}
 
-		newHash, err := hash.Compute(wrapped)
+		// Create a stable hash based only on ID and Version (not timestamps)
+		type stableConfig struct {
+			ID      string
+			Version uint64
+			Name    string
+		}
+		stableConfigs := make([]stableConfig, len(cfgs))
+		for i, c := range cfgs {
+			stableConfigs[i] = stableConfig{
+				ID:      c.ID,
+				Version: c.Version.Index,
+				Name:    c.Spec.Name,
+			}
+		}
+
+		newHash, err := hash.Compute(stableConfigs)
 		if err != nil {
 			l().Errorf("CheckConfigsCmd: Error computing hash: %v", err)
 			// Schedule next poll even on error
@@ -77,13 +97,22 @@ func rotateConfigCmd(oldCfg *docker.ConfigWithDecodedData, newCfg *docker.Config
 	return func() tea.Msg {
 		ctx := context.Background()
 
-		if err := docker.RotateConfigInServices(ctx, &oldCfg.Config, newCfg.Config); err != nil {
+		oldSwarmCfg := &swarm.Config{}
+		if oldCfg != nil {
+			oldSwarmCfg = &oldCfg.Config
+		}
+
+		if err := docker.RotateConfigInServices(ctx, oldSwarmCfg, newCfg.Config); err != nil {
 			return errorMsg(err)
 		}
 
-		return configRotatedMsg{
+		result := configRotatedMsg{
 			New: *newCfg,
 		}
+		if oldCfg != nil {
+			result.Old = *oldCfg
+		}
+		return result
 	}
 }
 
@@ -149,5 +178,140 @@ func deleteConfigCmd(name string) tea.Cmd {
 			return errorMsg(fmt.Errorf("failed to delete config %q: %w", name, err))
 		}
 		return configDeletedMsg{Name: name}
+	}
+}
+
+func loadFilesCmd(dirPath string) tea.Cmd {
+	return func() tea.Msg {
+		files := []string{}
+
+		// Expand ~ to home directory
+		if strings.HasPrefix(dirPath, "~") {
+			if homeDir, err := os.UserHomeDir(); err == nil {
+				dirPath = strings.Replace(dirPath, "~", homeDir, 1)
+			}
+		}
+
+		// Add parent directory option if not root
+		if dirPath != "/" {
+			files = append(files, "..")
+		}
+
+		entries, err := os.ReadDir(dirPath)
+		if err != nil {
+			return filesLoadedMsg{
+				Path:  dirPath,
+				Files: files,
+				Error: err,
+			}
+		}
+
+		// Separate directories and regular files
+		var dirs []string
+		var regFiles []string
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				// Add directory with trailing slash
+				dirs = append(dirs, filepath.Join(dirPath, entry.Name())+"/")
+			} else {
+				// Add all files (not just .tar like in contexts)
+				regFiles = append(regFiles, filepath.Join(dirPath, entry.Name()))
+			}
+		}
+
+		// Add directories first, then files
+		files = append(files, dirs...)
+		files = append(files, regFiles...)
+
+		return filesLoadedMsg{
+			Path:  dirPath,
+			Files: files,
+			Error: nil,
+		}
+	}
+}
+
+func createConfigFromFileCmd(name, filePath string) tea.Cmd {
+	return func() tea.Msg {
+		l().Infof("Creating config %s from file %s", name, filePath)
+
+		// Read file content
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			l().Errorf("Failed to read file %s: %v", filePath, err)
+			return configCreateErrorMsg{fmt.Errorf("failed to read file: %w", err)}
+		}
+
+		// Create the config
+		ctx := context.Background()
+		newCfg, err := docker.CreateConfig(ctx, name, data)
+		if err != nil {
+			l().Errorf("Failed to create config %s: %v", name, err)
+			// Return error with file path so we can retry with corrected name
+			return fileContentReadyMsg{Name: name, FilePath: filePath, Data: data, Err: err}
+		}
+
+		l().Infof("Successfully created config %s from file", name)
+		return configCreatedMsg{Config: newCfg}
+	}
+}
+
+func getUsedByStacksCmd(configName string) tea.Cmd {
+	return func() tea.Msg {
+		l().Infof("Getting stacks/services that use config: %s", configName)
+
+		ctx := context.Background()
+		// Get config ID for robust matching
+		cfg, err := docker.InspectConfig(ctx, configName)
+		if err != nil {
+			l().Errorf("Failed to inspect config %s: %v", configName, err)
+			return usedByMsg{ConfigName: configName, UsedBy: nil, Error: err}
+		}
+
+		// Get services by config name and ID
+		servicesByName, err := docker.ListServicesUsingConfigName(ctx, configName)
+		if err != nil {
+			l().Errorf("Failed to list services using config name %s: %v", configName, err)
+			return usedByMsg{ConfigName: configName, UsedBy: nil, Error: err}
+		}
+		servicesByID, err := docker.ListServicesUsingConfigID(ctx, cfg.Config.ID)
+		if err != nil {
+			l().Errorf("Failed to list services using config ID %s: %v", cfg.Config.ID, err)
+			return usedByMsg{ConfigName: configName, UsedBy: nil, Error: err}
+		}
+
+		// Merge services, avoid duplicates
+		svcMap := make(map[string]swarm.Service)
+		for _, svc := range servicesByName {
+			svcMap[svc.ID] = svc
+		}
+		for _, svc := range servicesByID {
+			svcMap[svc.ID] = svc
+		}
+
+		// Collect stack/service pairs
+		var usedBy []usedByItem
+		for _, svc := range svcMap {
+			stackName := svc.Spec.Labels["com.docker.stack.namespace"]
+			if stackName == "" {
+				stackName = "(no stack)"
+			}
+			usedBy = append(usedBy, usedByItem{
+				StackName:   stackName,
+				ServiceName: svc.Spec.Name,
+			})
+		}
+
+		// Sort by stack then service
+		sort.Slice(usedBy, func(i, j int) bool {
+			if usedBy[i].StackName == usedBy[j].StackName {
+				return usedBy[i].ServiceName < usedBy[j].ServiceName
+			}
+			return usedBy[i].StackName < usedBy[j].StackName
+		})
+
+		l().Infof("Config %s is used by %d service(s)", configName, len(usedBy))
+		return usedByMsg{ConfigName: configName, UsedBy: usedBy, Error: nil}
 	}
 }

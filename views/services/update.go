@@ -141,6 +141,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 		case "q":
 			m.Visible = false
+			// Go back to stacks view
+			return func() tea.Msg { return view.NavigateToMsg{ViewName: "stacks", Payload: nil} }
+
+		case "esc":
+			// ESC should also go back to stacks view
+			m.Visible = false
+			return func() tea.Msg { return view.NavigateToMsg{ViewName: "stacks", Payload: nil} }
 		}
 
 		m.List.Viewport.SetContent(m.List.View())
