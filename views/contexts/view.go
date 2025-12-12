@@ -70,7 +70,9 @@ func (m *Model) View() string {
 	// so the framed box fills the area.
 	m.List.Viewport.Width = width
 	// Set the list viewport height to the frame height we'll use below
-	frameHeight := m.viewport.Height - 3
+	// Reserve 2 lines for the stackbar and bottom status line so the
+	// framed box fills the rest of the available area.
+	frameHeight := m.viewport.Height - 2
 	if frameHeight <= 0 {
 		frameHeight = 20
 	}
@@ -110,9 +112,11 @@ func (m *Model) View() string {
 	// "No items found." before the async load completes.
 	var content string
 	if m.IsLoading() {
-		content = ""
-		// ensure viewport content is empty so viewport doesn't show "No items found."
-		m.List.Viewport.SetContent("")
+		// Show an explicit loading line inside the framed box so users
+		// see progress immediately instead of a blank area.
+		loadingLine := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("Loading contexts...")
+		m.List.Viewport.SetContent(loadingLine)
+		content = m.List.Viewport.View()
 	} else {
 		content = m.List.View()
 	}

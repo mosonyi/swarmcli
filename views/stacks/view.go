@@ -58,9 +58,8 @@ func (m *Model) View() string {
 	// frame height like `configs` view does). Then compute desired inner
 	// content lines = frameHeight - borders - header - footer, and pad/trim
 	// content to that length.
-	// Subtract 3 to account for the app's stackbar, bottom status line,
-	// and one extra padding line to align with composition
-	frameHeight := m.List.Viewport.Height - 3
+	// Subtract 2 to account for the app's stackbar and bottom status line
+	frameHeight := m.List.Viewport.Height - 2
 	if frameHeight <= 0 {
 		frameHeight = 20
 	}
