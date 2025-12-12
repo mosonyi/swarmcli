@@ -13,6 +13,7 @@ import (
 	servicesview "swarmcli/views/services"
 	stacksview "swarmcli/views/stacks"
 	"swarmcli/views/view"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -102,7 +103,16 @@ func Init() {
 			nodeID, _ = payload.(string)
 		}
 		model := stacksview.New(w, h)
-		return model, tea.Batch(model.Init(), stacksview.LoadStacksCmd(nodeID))
+		// For this test we want to delay initial stacks load by 3s so the
+		// frame can render first. Enable the flag on the model and then
+		// return a delayed command.
+		model.DelayInitialLoad = true
+		delayedCmd := func() tea.Msg {
+			// Wait 3 seconds then invoke the real LoadStacksCmd
+			time.Sleep(3 * time.Second)
+			return stacksview.LoadStacksCmd(nodeID)()
+		}
+		return model, tea.Batch(model.Init(), delayedCmd)
 	})
 
 	registerView(servicesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
