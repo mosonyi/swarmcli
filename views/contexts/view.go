@@ -101,6 +101,19 @@ func (m *Model) View() string {
 		if len(host) > 40 {
 			host = host[:37] + "..."
 		}
+		// Determine total used width in columns and expand name column if space remains
+		width := m.List.Viewport.Width
+		if width <= 0 {
+			width = 80
+		}
+		// The formatted parts use: 4 + 1 + colWidth + 1 + 4 + 1 + 60 + 1 + len(host)
+		fixed := 4 + 1 + 4 + 1 + 60 + 1
+		// host is last field; we don't try to compute its max here. Instead, give leftover to colWidth
+		total := fixed + colWidth
+		if total < width {
+			colWidth += width - total
+		}
+
 		line := fmt.Sprintf("%-4s %-*s %-4s %-60s %s", current, colWidth, name, tlsChar, desc, host)
 		if selected {
 			return lipgloss.NewStyle().Background(lipgloss.Color("63")).Foreground(lipgloss.Color("230")).Render(line)

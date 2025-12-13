@@ -426,6 +426,23 @@ func (m *Model) setRenderItem() {
 		if cfg.Used {
 			usedStr = "●"
 		}
+		// Compute gaps: there are 4 gaps of 8 spaces in the format string
+		gapWidth := 8
+		gaps := 4
+		total := nameCol + idCol + usedCol + 19 + 19 + gapWidth*gaps
+		width := m.configsList.Viewport.Width
+		if width <= 0 {
+			width = 80
+		}
+		if total < width {
+			// Distribute remaining width to the name column primarily
+			nameCol += width - total
+		}
+
+		// Cache widths so view header aligns with item columns
+		m.colName = nameCol
+		m.colID = idCol
+
 		line := fmt.Sprintf("%-*s        %-*s        %-*s        %-19s        %-19s", nameCol, cfg.Name, idCol, cfg.ID, usedCol, usedStr, createdStr, updatedStr)
 		if selected {
 			return ui.CursorStyle.Render(line)

@@ -106,8 +106,14 @@ func (m *Model) View() string {
 
 	// Fixme: https://github.com/mosonyi/swarmcli/issues/141
 	var contentLines []string
-	nameCol := len("NAME")
-	idCol := len("ID")
+	nameCol := m.colName
+	idCol := m.colID
+	if nameCol <= 0 {
+		nameCol = len("NAME")
+	}
+	if idCol <= 0 {
+		idCol = len("ID")
+	}
 	// column width calculations are handled in setRenderItem; the
 	// FilterableList's RenderItem now controls formatting.
 	for _, cfg := range m.configsList.Items {

@@ -25,6 +25,20 @@ func (m *Model) View() string {
 	if colWidth < 15 {
 		colWidth = 15
 	}
+	// Expand colWidth to fill viewport width consistently with RenderItem
+	width := m.List.Viewport.Width
+	if width <= 0 {
+		width = m.width
+	}
+	if width <= 0 {
+		width = 80
+	}
+	gapWidth := 8
+	reserved := 4 // reserved for service count
+	total := colWidth + gapWidth + reserved
+	if total < width {
+		colWidth += width - total
+	}
 
 	// Format: %-*s (stack name) + 8 spaces + left-aligned SERVICES
 	header := headerStyle.Render(fmt.Sprintf("%-*s        %-s", colWidth, "STACK", "SERVICES"))

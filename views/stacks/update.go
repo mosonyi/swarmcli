@@ -109,6 +109,23 @@ func (m *Model) setRenderItem() {
 	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
 
 	m.List.RenderItem = func(s docker.StackEntry, selected bool, colWidth int) string {
+		// Expand colWidth to fill available viewport width so the single-row lines align
+		width := m.List.Viewport.Width
+		if width <= 0 {
+			width = m.width
+		}
+		if width <= 0 {
+			width = 80
+		}
+		gapWidth := 8 // the spacing used between columns in the format string
+		// ServiceCount field uses up to e.g. 4 chars; reserve small space
+		reserved := 4
+		// Compute total and add leftover to colWidth
+		total := colWidth + gapWidth + reserved
+		if total < width {
+			colWidth += width - total
+		}
+
 		line := fmt.Sprintf("%-*s        %-d", colWidth, s.Name, s.ServiceCount)
 		if selected {
 			return ui.CursorStyle.Render(line)

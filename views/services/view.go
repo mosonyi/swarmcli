@@ -18,19 +18,25 @@ func (m *Model) View() string {
 	// Add 4 to make frame full terminal width (app reduces viewport by 4 in normal mode)
 	frameWidth := width + 4
 
-	// Compute dynamic column widths (same as in setRenderItem)
+	// Compute dynamic column widths (same as in setRenderItem). Prefer
+	// cached widths computed earlier to ensure header aligns exactly with rows.
 	replicaWidth := 10
 	statusWidth := 12
 	createdWidth := 10
 	updatedWidth := 10
-	maxService := len("SERVICE")
-	maxStack := len("STACK")
-	for _, e := range m.List.Filtered {
-		if len(e.ServiceName) > maxService {
-			maxService = len(e.ServiceName)
-		}
-		if len(e.StackName) > maxStack {
-			maxStack = len(e.StackName)
+	maxService := m.colService
+	maxStack := m.colStack
+	// Fallback to naive computation if cached values are not yet set
+	if maxService <= 0 || maxStack <= 0 {
+		maxService = len("SERVICE")
+		maxStack = len("STACK")
+		for _, e := range m.List.Filtered {
+			if len(e.ServiceName) > maxService {
+				maxService = len(e.ServiceName)
+			}
+			if len(e.StackName) > maxStack {
+				maxStack = len(e.StackName)
+			}
 		}
 	}
 	total := maxService + maxStack + replicaWidth + statusWidth + createdWidth + updatedWidth + 40 // spacing between columns
