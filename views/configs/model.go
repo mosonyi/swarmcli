@@ -54,6 +54,10 @@ type Model struct {
 	usedByViewActive bool
 	usedByList       filterlist.FilterableList[usedByItem]
 	usedByConfigName string
+
+	// Cached column widths for header alignment
+	colName int
+	colID   int
 }
 
 type state int

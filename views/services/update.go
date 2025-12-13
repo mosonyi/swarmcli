@@ -203,22 +203,16 @@ func (m *Model) setRenderItem() {
 		}
 	}
 
-	// Ensure total width fits viewport
-	total := maxService + maxStack + replicaWidth + statusWidth + createdWidth + updatedWidth + 5*gap
-	if total > width {
-		overflow := total - width
-		if maxStack > maxService {
-			maxStack -= overflow
-			if maxStack < 5 {
-				maxStack = 5
-			}
-		} else {
-			maxService -= overflow
-			if maxService < 5 {
-				maxService = 5
-			}
-		}
-	}
+	// Use DistributeColumns to ensure columns fill the viewport width.
+	cols := []int{maxService, maxStack, replicaWidth, statusWidth, createdWidth, updatedWidth}
+	// There are 5 gaps of 8 spaces in the formatted line
+	adjusted := ui.DistributeColumns(width, 5, 8, cols, []int{0})
+	maxService = adjusted[0]
+	maxStack = adjusted[1]
+
+	// Cache column widths on the model so the view header can align exactly
+	m.colService = maxService
+	m.colStack = maxStack
 
 	m.List.RenderItem = func(e docker.ServiceEntry, selected bool, _ int) string {
 		// Format plain text first for proper alignment

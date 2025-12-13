@@ -9,6 +9,13 @@ import (
 
 func (f *FilterableList[T]) View() string {
 	if len(f.Filtered) == 0 {
+		// If the underlying Items slice is still nil, the list hasn't been
+		// initialized yet (e.g. still loading). In that case return the
+		// viewport view so any placeholder content set by the parent view
+		// (like a loading line) is shown instead of the default message.
+		if f.Items == nil {
+			return f.Viewport.View()
+		}
 		if f.Mode == ModeSearching && f.Query != "" {
 			return fmt.Sprintf("No items match: %q", f.Query)
 		}

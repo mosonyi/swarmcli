@@ -1,6 +1,7 @@
 package contexts
 
 import (
+	"strings"
 	"swarmcli/docker"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
@@ -9,12 +10,16 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+
+	filterlist "swarmcli/ui/components/filterable/list"
 )
 
 type Model struct {
 	Visible  bool
 	viewport viewport.Model
 	ready    bool
+
+	List filterlist.FilterableList[docker.ContextInfo]
 
 	contexts              []docker.ContextInfo
 	cursor                int
@@ -100,6 +105,17 @@ func New() *Model {
 	editDescInput.CharLimit = 200
 	editDescInput.Width = 50
 
+	// Initialize an internal viewport for the filterable list
+	vp := viewport.New(80, 20)
+	vp.SetContent("")
+
+	list := filterlist.FilterableList[docker.ContextInfo]{
+		Viewport: vp,
+		Match: func(item docker.ContextInfo, query string) bool {
+			return strings.Contains(strings.ToLower(item.Name), strings.ToLower(query))
+		},
+	}
+
 	return &Model{
 		Visible:          false,
 		contexts:         []docker.ContextInfo{},
@@ -115,6 +131,7 @@ func New() *Model {
 		createCertInput:  createCertInput,
 		createKeyInput:   createKeyInput,
 		editDescInput:    editDescInput,
+		List:             list,
 	}
 }
 
@@ -123,6 +140,19 @@ func (m *Model) SetSize(width, height int) {
 	m.viewport.Height = height
 	m.confirmDialog.Width = width
 	m.confirmDialog.Height = height
+	// Keep the internal list viewport in sync so it doesn't stay at its
+	// initial 80x20 size when the view receives data.
+	if width > 0 {
+		m.List.Viewport.Width = width
+	}
+	if height > 0 {
+		// Reserve 2 lines for stackbar/bottom status like other views
+		h := height - 2
+		if h <= 0 {
+			h = 20
+		}
+		m.List.Viewport.Height = h
+	}
 	if !m.ready {
 		m.ready = true
 	}
@@ -161,6 +191,22 @@ func (m *Model) SetContexts(contexts []docker.ContextInfo) {
 	if m.cursor < 0 {
 		m.cursor = 0
 	}
+
+	// Update the FilterableList backing items and apply filter
+	m.List.Items = m.contexts
+	// Ensure the list viewport matches the current view size so the
+	// content fills the frame immediately when contexts arrive.
+	if m.viewport.Width > 0 {
+		m.List.Viewport.Width = m.viewport.Width
+	}
+	if m.viewport.Height > 0 {
+		h := m.viewport.Height - 2
+		if h <= 0 {
+			h = 20
+		}
+		m.List.Viewport.Height = h
+	}
+	m.List.ApplyFilter()
 }
 
 func (m *Model) GetCursor() int {

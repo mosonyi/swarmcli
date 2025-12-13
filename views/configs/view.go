@@ -98,14 +98,22 @@ func (m *Model) View() string {
 	width := 80
 	if m.configsList.Viewport.Width > 0 {
 		width = m.configsList.Viewport.Width
+	} else if m.width > 0 {
+		width = m.width
 	}
 
 	header := renderConfigsHeader(m.configsList.Items)
 
 	// Fixme: https://github.com/mosonyi/swarmcli/issues/141
 	var contentLines []string
-	nameCol := len("NAME")
-	idCol := len("ID")
+	nameCol := m.colName
+	idCol := m.colID
+	if nameCol <= 0 {
+		nameCol = len("NAME")
+	}
+	if idCol <= 0 {
+		idCol = len("ID")
+	}
 	// column width calculations are handled in setRenderItem; the
 	// FilterableList's RenderItem now controls formatting.
 	for _, cfg := range m.configsList.Items {
@@ -120,20 +128,53 @@ func (m *Model) View() string {
 	content := m.configsList.View()
 	footer := m.renderConfigsFooter()
 
-	// Pad content to fill viewport height
-	height := m.configsList.Viewport.Height
-	if height <= 0 {
-		height = 20
+	// Compute frame height (total lines including borders). Use viewport height.
+	frameHeight := m.configsList.Viewport.Height
+	if frameHeight <= 0 {
+		// Fall back to the model height (minus reserved lines) if viewport
+		// hasn't been initialized yet. This avoids rendering a tiny 20-line
+		// box while the app is still wiring up sizes.
+		if m.height > 0 {
+			frameHeight = m.height - 2
+		}
+		if frameHeight <= 0 {
+			frameHeight = 20
+		}
 	}
+
+	// Header occupies one line when present
+	headerLines := 0
+	if header != "" {
+		headerLines = 1
+	}
+
+	// Footer lines
+	footerLines := 0
+	if footer != "" {
+		footerLines = len(strings.Split(footer, "\n"))
+	}
+
+	// Desired content lines inside the box (not counting borders)
+	desiredContentLines := frameHeight - 2 - headerLines - footerLines
+	if desiredContentLines < 0 {
+		desiredContentLines = 0
+	}
+
 	contentLines = strings.Split(content, "\n")
-	// Account for frame borders (2), title (1), header (1) = 4 lines overhead
-	availableLines := height - 4
-	if availableLines < 0 {
-		availableLines = 0
+	// Trim trailing empty lines for stable calculation
+	for len(contentLines) > 0 && contentLines[len(contentLines)-1] == "" {
+		contentLines = contentLines[:len(contentLines)-1]
 	}
-	for len(contentLines) < availableLines {
-		contentLines = append(contentLines, "")
+
+	// Pad or trim content to desired length
+	if len(contentLines) < desiredContentLines {
+		for i := 0; i < desiredContentLines-len(contentLines); i++ {
+			contentLines = append(contentLines, "")
+		}
+	} else if len(contentLines) > desiredContentLines {
+		contentLines = contentLines[:desiredContentLines]
 	}
+
 	paddedContent := strings.Join(contentLines, "\n")
 
 	// Apply overlays to padded content BEFORE framing
@@ -158,7 +199,9 @@ func (m *Model) View() string {
 	frameWidth := width + 4
 
 	title := fmt.Sprintf("Docker Configs (%d)", len(m.configsList.Filtered))
-	view := ui.RenderFramedBox(title, header, paddedContent, footer, frameWidth)
+	view := ui.RenderFramedBoxHeight(title, header, paddedContent, footer, frameWidth, frameHeight)
+
+	// Final rendering (no debug overlay)
 
 	return view
 }
@@ -335,7 +378,12 @@ func (m *Model) renderUsedByView() string {
 	// Pad content to fill viewport height
 	height := m.usedByList.Viewport.Height
 	if height <= 0 {
-		height = 20
+		if m.height > 0 {
+			height = m.height - 2
+		}
+		if height <= 0 {
+			height = 20
+		}
 	}
 	contentLines := strings.Split(content, "\n")
 	availableLines := height - 4
@@ -351,7 +399,11 @@ func (m *Model) renderUsedByView() string {
 	frameWidth := m.usedByList.Viewport.Width + 4
 
 	title := fmt.Sprintf("Config: %s - Used By Stacks (%d)", m.usedByConfigName, len(m.usedByList.Filtered))
-	return ui.RenderFramedBox(title, header, paddedContent, footer, frameWidth)
+	frameHeight := height - 2
+	if frameHeight < 0 {
+		frameHeight = 0
+	}
+	return ui.RenderFramedBoxHeight(title, header, paddedContent, footer, frameWidth, frameHeight)
 }
 
 func (m *Model) renderUsedByHeader() string {

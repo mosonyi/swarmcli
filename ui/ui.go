@@ -105,6 +105,57 @@ func RenderFramedBox(title, header, content, footer string, width int) string {
 	return strings.Join(boxLines, "\n")
 }
 
+// RenderFramedBoxHeight renders a framed box constrained to `frameHeight` lines
+// (including borders). If `frameHeight` <= 0 the function falls back to the
+// unconstrained `RenderFramedBox` behavior. This helper pads the content so
+// the resulting framed box occupies exactly `frameHeight` lines when possible.
+func RenderFramedBoxHeight(title, header, content, footer string, width, frameHeight int) string {
+	if frameHeight <= 0 {
+		return RenderFramedBox(title, header, content, footer, width)
+	}
+
+	// Count footer lines
+	footerLines := []string{}
+	if footer != "" {
+		footerLines = strings.Split(footer, "\n")
+	}
+
+	// Header occupies one line if present
+	headerLines := 0
+	if header != "" {
+		headerLines = 1
+	}
+
+	// Desired content lines inside the box (not counting borders/top/bottom)
+	// total box lines = 2 (top+bottom) + headerLines + contentLines + len(footerLines)
+	desiredContentLines := frameHeight - 2 - headerLines - len(footerLines)
+	if desiredContentLines < 0 {
+		desiredContentLines = 0
+	}
+
+	// Current content lines
+	contentLines := strings.Split(content, "\n")
+	// Trim trailing empty lines for stable calculation
+	for len(contentLines) > 0 && contentLines[len(contentLines)-1] == "" {
+		contentLines = contentLines[:len(contentLines)-1]
+	}
+
+	// Pad or trim content lines to desired length
+	if len(contentLines) < desiredContentLines {
+		// Append empty lines
+		for i := 0; i < desiredContentLines-len(contentLines); i++ {
+			contentLines = append(contentLines, "")
+		}
+	} else if len(contentLines) > desiredContentLines {
+		contentLines = contentLines[:desiredContentLines]
+	}
+
+	// No debug logging
+
+	paddedContent := strings.Join(contentLines, "\n")
+	return RenderFramedBox(title, header, paddedContent, footer, width)
+}
+
 // padLine fits a line to width, preserving ANSI sequences
 func padLine(line string, width int) string {
 	l := lipgloss.Width(line)

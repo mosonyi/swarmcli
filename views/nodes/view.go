@@ -48,7 +48,19 @@ func (m *Model) View() string {
 
 	// Add 4 to make frame full terminal width (app reduces viewport by 4 in normal mode)
 	frameWidth := m.List.Viewport.Width + 4
-	return ui.RenderFramedBox(title, header, content, footer, frameWidth)
+	headerLines := 0
+	if header != "" {
+		headerLines = 1
+	}
+	footerLines := 0
+	if footer != "" {
+		footerLines = len(strings.Split(footer, "\n"))
+	}
+	frameHeight := m.List.Viewport.Height + 2 + headerLines + footerLines
+	if frameHeight <= 0 {
+		frameHeight = 20
+	}
+	return ui.RenderFramedBoxHeight(title, header, content, footer, frameWidth, frameHeight)
 }
 
 func plural(n int) string {

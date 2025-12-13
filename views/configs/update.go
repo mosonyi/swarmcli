@@ -23,7 +23,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case tea.WindowSizeMsg:
 		m.configsList.Viewport.Width = msg.Width
-		m.configsList.Viewport.Height = msg.Height - 3
+		// msg.Height is already adjusted by the app to account for the
+		// systeminfo header; avoid subtracting extra lines here.
+		m.configsList.Viewport.Height = msg.Height
 		return nil
 
 	case configsLoadedMsg:
@@ -182,8 +184,22 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		l().Infof("Config %s is used by %d service(s)", msg.ConfigName, len(msg.UsedBy))
 
-		// Initialize usedByList with a new viewport
-		vp := viewport.New(m.configsList.Viewport.Width, m.configsList.Viewport.Height)
+		// Initialize usedByList with a new viewport. Use sensible fallbacks
+		// (model width/height) if configsList viewport hasn't been sized yet.
+		w := m.configsList.Viewport.Width
+		if w <= 0 {
+			w = m.width
+		}
+		h := m.configsList.Viewport.Height
+		if h <= 0 {
+			if m.height > 0 {
+				h = m.height - 2
+			}
+			if h <= 0 {
+				h = 20
+			}
+		}
+		vp := viewport.New(w, h)
 		vp.SetContent("")
 
 		m.usedByList = filterlist.FilterableList[usedByItem]{
@@ -203,6 +219,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 
 		m.usedByList.Items = msg.UsedBy
+		// Keep viewport sizes in sync
+		m.usedByList.Viewport.Width = vp.Width
+		m.usedByList.Viewport.Height = vp.Height
 		m.usedByList.ApplyFilter()
 
 		m.usedByConfigName = msg.ConfigName
@@ -407,6 +426,23 @@ func (m *Model) setRenderItem() {
 		if cfg.Used {
 			usedStr = "●"
 		}
+		// Compute gaps: there are 4 gaps of 8 spaces in the format string
+		gapWidth := 8
+		gaps := 4
+		total := nameCol + idCol + usedCol + 19 + 19 + gapWidth*gaps
+		width := m.configsList.Viewport.Width
+		if width <= 0 {
+			width = 80
+		}
+		if total < width {
+			// Distribute remaining width to the name column primarily
+			nameCol += width - total
+		}
+
+		// Cache widths so view header aligns with item columns
+		m.colName = nameCol
+		m.colID = idCol
+
 		line := fmt.Sprintf("%-*s        %-*s        %-*s        %-19s        %-19s", nameCol, cfg.Name, idCol, cfg.ID, usedCol, usedStr, createdStr, updatedStr)
 		if selected {
 			return ui.CursorStyle.Render(line)
