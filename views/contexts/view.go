@@ -51,7 +51,8 @@ func (m *Model) View() string {
 	}
 
 	title := "Docker Contexts"
-	header := "Select a context to switch"
+	// Default header is empty; only show it for loading/switch/error/success
+	header := ""
 
 	if m.IsLoading() {
 		header = "Loading contexts..."
@@ -63,6 +64,8 @@ func (m *Model) View() string {
 		header = msg
 	}
 
+	// We'll render the column header in the frame header slot so it
+	// appears directly under the top border and aligns with content.
 	headerRendered := ui.FrameHeaderStyle.Render(header)
 
 	// Use FilterableList for the contexts content. Keep its viewport
@@ -72,49 +75,101 @@ func (m *Model) View() string {
 	// Set the list viewport height to the frame height we'll use below
 	// Reserve 2 lines for the stackbar and bottom status line so the
 	// framed box fills the rest of the available area.
-	frameHeight := m.viewport.Height
+	frameHeight := m.viewport.Height - 2
 	if frameHeight <= 0 {
 		frameHeight = 20
 	}
 	m.List.Viewport.Height = frameHeight
 
-	// Compute column width for the name field and set RenderItem
-	m.List.ComputeAndSetColWidth(func(ctx docker.ContextInfo) string { return ctx.Name }, 15)
-	m.List.RenderItem = func(ctx docker.ContextInfo, selected bool, colWidth int) string {
+	// Compute column widths as five equal percentage chunks so columns
+	// start at 0%, 20%, 40%, 60% and 80% of the content width.
+	contentWidth := width
+	base := contentWidth / 5
+	colWidths := make([]int, 5)
+	for i := 0; i < 5; i++ {
+		colWidths[i] = base
+	}
+	// Distribute remainder to the leftmost columns
+	rem := contentWidth - base*5
+	for i := 0; i < rem && i < 5; i++ {
+		colWidths[i]++
+	}
+
+	// Now define render using those exact column widths so items align
+	m.List.RenderItem = func(ctx docker.ContextInfo, selected bool, _ int) string {
 		current := " "
 		if ctx.Current {
 			current = "*"
 		}
-		name := ctx.Name
-		if len(name) > 18 {
-			name = name[:15] + "..."
+
+		// Prepare name with room for the current marker and a space
+		nameMax := colWidths[0] - 2
+		if nameMax < 0 {
+			nameMax = 0
 		}
+		name := ctx.Name
+		if len(name) > nameMax {
+			if nameMax > 3 {
+				name = name[:nameMax-3] + "..."
+			} else {
+				name = name[:nameMax]
+			}
+		}
+		firstCol := fmt.Sprintf("%s %s", current, name)
+
 		tlsChar := " "
 		if ctx.TLS {
 			tlsChar = "●"
 		}
+
+		descMax := colWidths[2]
+		if descMax < 0 {
+			descMax = 0
+		}
 		desc := ctx.Description
-		if len(desc) > 58 {
-			desc = desc[:55] + "..."
-		}
-		host := ctx.DockerHost
-		if len(host) > 40 {
-			host = host[:37] + "..."
-		}
-		// Determine total used width in columns and expand name column if space remains
-		width := m.List.Viewport.Width
-		if width <= 0 {
-			width = 80
-		}
-		// The formatted parts use: 4 + 1 + colWidth + 1 + 4 + 1 + 60 + 1 + len(host)
-		fixed := 4 + 1 + 4 + 1 + 60 + 1
-		// host is last field; we don't try to compute its max here. Instead, give leftover to colWidth
-		total := fixed + colWidth
-		if total < width {
-			colWidth += width - total
+		if len(desc) > descMax {
+			if descMax > 3 {
+				desc = desc[:descMax-3] + "..."
+			} else {
+				desc = desc[:descMax]
+			}
 		}
 
-		line := fmt.Sprintf("%-4s %-*s %-4s %-60s %s", current, colWidth, name, tlsChar, desc, host)
+		hostMax := colWidths[3]
+		if hostMax < 0 {
+			hostMax = 0
+		}
+		host := ctx.DockerHost
+		if len(host) > hostMax {
+			if hostMax > 3 {
+				host = host[:hostMax-3] + "..."
+			} else {
+				host = host[:hostMax]
+			}
+		}
+
+		errMax := colWidths[4]
+		if errMax < 0 {
+			errMax = 0
+		}
+		errStr := ctx.Error
+		if len(errStr) > errMax {
+			if errMax > 3 {
+				errStr = errStr[:errMax-3] + "..."
+			} else {
+				errStr = errStr[:errMax]
+			}
+		}
+
+		// Build the line with exact column widths and no extra spacing so
+		// each column starts at the expected percent positions.
+		line := fmt.Sprintf("%-*s%-*s%-*s%-*s%-*s",
+			colWidths[0], firstCol,
+			colWidths[1], tlsChar,
+			colWidths[2], desc,
+			colWidths[3], host,
+			colWidths[4], errStr,
+		)
 		if selected {
 			return lipgloss.NewStyle().Background(lipgloss.Color("63")).Foreground(lipgloss.Color("230")).Render(line)
 		}
@@ -131,7 +186,22 @@ func (m *Model) View() string {
 		m.List.Viewport.SetContent(loadingLine)
 		content = m.List.Viewport.View()
 	} else {
-		content = m.List.View()
+		// Column header displayed in the frame header slot. Build it here
+		// so it aligns exactly with the row layout.
+		listContent := m.List.View()
+
+		// Header: reserve two leading spaces so the NAME label lines up
+		// with the name text that starts after the current marker and a space.
+		headerLine := fmt.Sprintf("%-*s%-*s%-*s%-*s%-*s",
+			colWidths[0], "  NAME",
+			colWidths[1], "TLS",
+			colWidths[2], "DESCRIPTION",
+			colWidths[3], "ENDPOINT",
+			colWidths[4], "ERROR",
+		)
+		headerRendered = ui.FrameHeaderStyle.Render(headerLine)
+
+		content = listContent
 	}
 	frameWidth := width + 4
 
@@ -147,6 +217,7 @@ func (m *Model) View() string {
 	}
 
 	contentLines := strings.Split(content, "\n")
+
 	for len(contentLines) > 0 && contentLines[len(contentLines)-1] == "" {
 		contentLines = contentLines[:len(contentLines)-1]
 	}

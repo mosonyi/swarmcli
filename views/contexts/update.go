@@ -1,10 +1,12 @@
 package contexts
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/confirmdialog"
 	"time"
 
@@ -59,6 +61,28 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case ContextsLoadedMsg:
+		// Instrumentation: log that the message was received and dump a
+		// small debug JSON so we can confirm delivery in user environments.
+		lg := swarmlog.L()
+		if msg.Error != nil {
+			lg.Warnw("ContextsLoadedMsg received with error", "error", msg.Error)
+		} else {
+			lg.Infow("ContextsLoadedMsg received", "count", len(msg.Contexts))
+		}
+
+		// Write a debug file so users can inspect whether the view got the
+		// message and what payload arrived.
+		debug := map[string]any{
+			"count": len(msg.Contexts),
+			"error": nil,
+		}
+		if msg.Error != nil {
+			debug["error"] = msg.Error.Error()
+		}
+		if b, jerr := json.MarshalIndent(debug, "", "  "); jerr == nil {
+			_ = os.WriteFile("/tmp/swarmcli_contexts_update_debug.json", b, 0644)
+		}
+
 		if msg.Error != nil {
 			m.SetError(msg.Error.Error())
 			m.SetLoading(false)

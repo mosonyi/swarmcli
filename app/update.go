@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"strings"
 	"swarmcli/commands/api"
+	"swarmcli/docker"
 	"swarmcli/views/commandinput"
 	contextsview "swarmcli/views/contexts"
 	loadingview "swarmcli/views/loading"
 	logsview "swarmcli/views/logs"
+	nodesview "swarmcli/views/nodes"
 	stacksview "swarmcli/views/stacks"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
@@ -17,6 +19,23 @@ import (
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case docker.EventMsg:
+		// On Docker events, refresh global snapshot and, if currently
+		// viewing stacks, trigger a reload so the UI updates immediately.
+		_, _ = docker.RefreshSnapshot()
+		// If node event, refresh nodes view; if stacks view, refresh stacks.
+		switch msg.Type {
+		case "node":
+			if m.currentView.Name() == nodesview.ViewName {
+				return m, tea.Batch(nodesview.LoadNodesCmd(), docker.WatchEventsCmd())
+			}
+		case "service", "config", "network":
+			if m.currentView.Name() == stacksview.ViewName {
+				return m, tea.Batch(stacksview.LoadStacksCmd(""), docker.WatchEventsCmd())
+			}
+		}
+		// Re-issue watcher after handling
+		return m, docker.WatchEventsCmd()
 	case snapshotLoadedMsg:
 		if msg.Err != nil {
 			// Replace with error message in the loading view
@@ -78,15 +97,33 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if !m.commandInput.Visible() {
 				cmd := m.commandInput.Show()
-				return m, cmd
+				// After showing the command input, trigger a resize so the current view
+				// is passed a usable height reduced by 3 lines for the command frame.
+				adjHeight := m.viewport.Height - 3
+				if adjHeight < 0 {
+					adjHeight = 0
+				}
+				resizeCmd := handleViewResize(m.currentView, m.viewport.Width, adjHeight, false)
+				return m, tea.Batch(cmd, resizeCmd)
 			}
 			// If already visible, consume it and do nothing
 			return m, nil
 		}
 
-		// If command input is visible, forward all keys to it exclusively
+		// If command input is visible, forward all keys to it exclusively.
+		// When the command input hides (e.g., on Enter or Esc) we need to
+		// trigger a resize so the current view regains its full height. The
+		// commandinput.Update will return a cmd that may include hiding the
+		// input; we detect visibility change by checking before/after Update.
 		if m.commandInput.Visible() {
+			prevVisible := m.commandInput.Visible()
 			cmd := m.commandInput.Update(msg)
+			// If visibility changed from true -> false, trigger resize to restore height
+			if prevVisible && !m.commandInput.Visible() {
+				// Command input just hid: restore the full usable viewport height.
+				resizeCmd := handleViewResize(m.currentView, m.viewport.Width, m.viewport.Height, false)
+				return m, tea.Batch(cmd, resizeCmd)
+			}
 			return m, cmd
 		}
 
@@ -173,10 +210,24 @@ func (m *Model) updateForResize(msg tea.WindowSizeMsg) tea.Cmd {
 		// terminalHeight - systeminfoview.Height (i.e. max - 6).
 		usableWidth = msg.Width - 4
 		usableHeight = msg.Height
+		// If command input is visible, reserve 3 lines so the main view is
+		// reduced instead of moving the header. This keeps the header fixed
+		// at the top while space for the command box is deducted from the
+		// usableHeight passed to views.
+		if m.commandInput != nil && m.commandInput.Visible() {
+			usableHeight = usableHeight - 3
+			if usableHeight < 0 {
+				usableHeight = 0
+			}
+		}
 	}
 
 	m.viewport.Width = usableWidth
 	m.viewport.Height = usableHeight
+	// Ensure the viewport's YPosition sits below the system info header.
+	// If the command input is visible, push the viewport down by 0 (we
+	// keep header fixed) and reserve 3 lines by reducing usableHeight above.
+	m.viewport.YPosition = systeminfoview.Height
 
 	cmd = handleViewResize(m.currentView, usableWidth, usableHeight, isFullscreen)
 	return cmd

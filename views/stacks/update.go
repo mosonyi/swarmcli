@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
-	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	servicesview "swarmcli/views/services"
 	"swarmcli/views/view"
@@ -109,7 +108,6 @@ func (m *Model) setRenderItem() {
 	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
 
 	m.List.RenderItem = func(s docker.StackEntry, selected bool, colWidth int) string {
-		// Expand colWidth to fill available viewport width so the single-row lines align
 		width := m.List.Viewport.Width
 		if width <= 0 {
 			width = m.width
@@ -117,18 +115,37 @@ func (m *Model) setRenderItem() {
 		if width <= 0 {
 			width = 80
 		}
-		gapWidth := 8 // the spacing used between columns in the format string
-		// ServiceCount field uses up to e.g. 4 chars; reserve small space
-		reserved := 4
-		// Compute total and add leftover to colWidth
-		total := colWidth + gapWidth + reserved
-		if total < width {
-			colWidth += width - total
+
+		cols := 2
+		starts := make([]int, cols)
+		for i := 0; i < cols; i++ {
+			starts[i] = (i * width) / cols
+		}
+		colWidths := make([]int, cols)
+		for i := 0; i < cols; i++ {
+			if i == cols-1 {
+				colWidths[i] = width - starts[i]
+			} else {
+				colWidths[i] = starts[i+1] - starts[i]
+			}
+			if colWidths[i] < 1 {
+				colWidths[i] = 1
+			}
 		}
 
-		line := fmt.Sprintf("%-*s        %-d", colWidth, s.Name, s.ServiceCount)
+		// Update cached widths so header stays aligned after resize
+		m.width = width
+
+		nameCol := fmt.Sprintf("%-*s", colWidths[0], s.Name)
+		svcCol := fmt.Sprintf("%-*d", colWidths[1], s.ServiceCount)
+		line := nameCol + svcCol
+
 		if selected {
-			return ui.CursorStyle.Render(line)
+			selBg := lipgloss.Color("63")
+			selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
+			nameCol = selStyle.Render(fmt.Sprintf("%-*s", colWidths[0], s.Name))
+			svcCol = selStyle.Render(fmt.Sprintf("%-*d", colWidths[1], s.ServiceCount))
+			return nameCol + svcCol
 		}
 		return itemStyle.Render(line)
 	}

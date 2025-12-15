@@ -31,13 +31,18 @@ type dockerContext struct {
 
 // GetClient returns a Docker SDK client configured based on the current Docker context.
 func GetClient() (*client.Client, error) {
-	ctxNameBytes, err := exec.Command("docker", "context", "show").Output()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get docker context: %w", err)
-	}
-	ctxName := string(ctxNameBytes)
-	if len(ctxName) > 0 && ctxName[len(ctxName)-1] == '\n' {
-		ctxName = ctxName[:len(ctxName)-1]
+	// Allow overriding the docker context via environment variable so the
+	// application can be run against a specific context (useful in CI/dev).
+	ctxName := os.Getenv("DOCKER_CONTEXT")
+	if ctxName == "" {
+		ctxNameBytes, err := exec.Command("docker", "context", "show").Output()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get docker context: %w", err)
+		}
+		ctxName = string(ctxNameBytes)
+		if len(ctxName) > 0 && ctxName[len(ctxName)-1] == '\n' {
+			ctxName = ctxName[:len(ctxName)-1]
+		}
 	}
 
 	inspectOut, err := exec.Command("docker", "context", "inspect", ctxName).Output()

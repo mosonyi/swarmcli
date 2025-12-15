@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
-	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	inspectview "swarmcli/views/inspect"
@@ -180,94 +179,120 @@ func (m *Model) SetContent(msg Msg) {
 }
 
 func (m *Model) setRenderItem() {
-	const replicaWidth = 10
-	const statusWidth = 12
-	const createdWidth = 10
-	const updatedWidth = 10
-	const gap = 2
-
+	// We'll partition the available width into equal columns (6 columns):
+	// SERVICE | STACK | REPLICAS | STATUS | CREATED | UPDATED
 	width := m.List.Viewport.Width
 	if width <= 0 {
 		width = 80
 	}
 
-	// Compute the longest service and stack names in the filtered list
-	maxService := len("SERVICE")
-	maxStack := len("STACK")
-	for _, e := range m.List.Filtered {
-		if len(e.ServiceName) > maxService {
-			maxService = len(e.ServiceName)
+	cols := 6
+	starts := make([]int, cols)
+	for i := 0; i < cols; i++ {
+		starts[i] = (i * width) / cols
+	}
+	colWidths := make([]int, cols)
+	for i := 0; i < cols; i++ {
+		if i == cols-1 {
+			colWidths[i] = width - starts[i]
+		} else {
+			colWidths[i] = starts[i+1] - starts[i]
 		}
-		if len(e.StackName) > maxStack {
-			maxStack = len(e.StackName)
+		if colWidths[i] < 1 {
+			colWidths[i] = 1
 		}
 	}
 
-	// Use DistributeColumns to ensure columns fill the viewport width.
-	cols := []int{maxService, maxStack, replicaWidth, statusWidth, createdWidth, updatedWidth}
-	// There are 5 gaps of 8 spaces in the formatted line
-	adjusted := ui.DistributeColumns(width, 5, 8, cols, []int{0})
-	maxService = adjusted[0]
-	maxStack = adjusted[1]
-
-	// Cache column widths on the model so the view header can align exactly
-	m.colService = maxService
-	m.colStack = maxStack
-
 	m.List.RenderItem = func(e docker.ServiceEntry, selected bool, _ int) string {
-		// Format plain text first for proper alignment
+		// Recompute column widths on each render so items adapt to viewport resizes
+		width := m.List.Viewport.Width
+		if width <= 0 {
+			width = 80
+		}
+		cols := 6
+		starts := make([]int, cols)
+		for i := 0; i < cols; i++ {
+			starts[i] = (i * width) / cols
+		}
+		colWidths := make([]int, cols)
+		for i := 0; i < cols; i++ {
+			if i == cols-1 {
+				colWidths[i] = width - starts[i]
+			} else {
+				colWidths[i] = starts[i+1] - starts[i]
+			}
+			if colWidths[i] < 1 {
+				colWidths[i] = 1
+			}
+		}
+
+		// Update cached widths so header aligns
+		m.colService = colWidths[0]
+		m.colStack = colWidths[1]
+
+		// Prepare texts
 		replicasText := fmt.Sprintf("%d/%d", e.ReplicasOnNode, e.ReplicasTotal)
 		if e.ReplicasTotal == 0 {
 			replicasText = "—"
 		}
 
-		serviceName := truncateWithEllipsis(e.ServiceName, maxService)
-		stackName := truncateWithEllipsis(e.StackName, maxStack)
-		statusText := e.Status
-		created := formatRelativeTime(e.CreatedAt)
-		updated := formatRelativeTime(e.UpdatedAt)
+		// Truncate strings to their column width
+		serviceName := truncateWithEllipsis(e.ServiceName, colWidths[0])
+		stackName := truncateWithEllipsis(e.StackName, colWidths[1])
+		statusText := truncateWithEllipsis(e.Status, colWidths[3])
+		created := truncateWithEllipsis(formatRelativeTime(e.CreatedAt), colWidths[4])
+		updated := truncateWithEllipsis(formatRelativeTime(e.UpdatedAt), colWidths[5])
 
-		// Build the line with proper spacing
-		line := fmt.Sprintf(
-			"%-*s        %-*s        %-*s        %-*s        %-*s        %-*s",
-			maxService, serviceName,
-			maxStack, stackName,
-			replicaWidth, replicasText,
-			statusWidth, statusText,
-			createdWidth, created,
-			updatedWidth, updated,
-		)
+		// Build each column text and apply coloring where appropriate
+		// Service + Stack use base item style (white content) and reserve a leading space
+		itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
+		// Keep one leading space in first column so it aligns with header
+		col0 := itemStyle.Render(fmt.Sprintf(" %-*s", colWidths[0]-1, serviceName))
+		col1 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[1], stackName))
+
+		// Replicas colored
+		var replicasColor lipgloss.Color
+		switch {
+		case e.ReplicasTotal == 0:
+			replicasColor = lipgloss.Color("8")
+		case e.ReplicasOnNode == 0:
+			replicasColor = lipgloss.Color("9")
+		case e.ReplicasOnNode < e.ReplicasTotal:
+			replicasColor = lipgloss.Color("11")
+		default:
+			replicasColor = lipgloss.Color("10")
+		}
+		replicasStyle := lipgloss.NewStyle().Foreground(replicasColor)
+		col2 := replicasStyle.Render(fmt.Sprintf("%-*s", colWidths[2], replicasText))
+
+		// Status colored
+		statusColor := getStatusColor(e.Status)
+		statusStyle := lipgloss.NewStyle().Foreground(statusColor)
+		col3 := statusStyle.Render(fmt.Sprintf("%-*s", colWidths[3], statusText))
+
+		// Created/Updated use base style
+		col4 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[4], created))
+		col5 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[5], updated))
+
+		line := col0 + col1 + col2 + col3 + col4 + col5
 
 		if selected {
-			line = ui.CursorStyle.Render(line)
-		} else {
-			// Apply colors using lipgloss styles on individual columns
-			itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
+			selBg := lipgloss.Color("63")
+			// Base selected style for text columns
+			selBase := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
+			// Replicas selected style
+			selRep := lipgloss.NewStyle().Foreground(replicasColor).Background(selBg).Bold(true)
+			// Status selected style
+			selStatus := lipgloss.NewStyle().Foreground(statusColor).Background(selBg).Bold(true)
 
-			// Color replicas based on status
-			var replicasColor lipgloss.Color
-			switch {
-			case e.ReplicasTotal == 0:
-				replicasColor = lipgloss.Color("8") // gray
-			case e.ReplicasOnNode == 0:
-				replicasColor = lipgloss.Color("9") // red
-			case e.ReplicasOnNode < e.ReplicasTotal:
-				replicasColor = lipgloss.Color("11") // yellow
-			default:
-				replicasColor = lipgloss.Color("10") // green
-			}
-			replicasStyle := lipgloss.NewStyle().Foreground(replicasColor)
-
-			// Color status
-			statusColor := getStatusColor(e.Status)
-			statusStyle := lipgloss.NewStyle().Foreground(statusColor)
-
-			// Build colored line maintaining exact spacing
-			line = itemStyle.Render(fmt.Sprintf("%-*s        %-*s        ", maxService, serviceName, maxStack, stackName)) +
-				replicasStyle.Render(fmt.Sprintf("%-*s", replicaWidth, replicasText)) +
-				itemStyle.Render("        ") +
-				statusStyle.Render(fmt.Sprintf("%-*s", statusWidth, statusText)) +
-				itemStyle.Render(fmt.Sprintf("        %-*s        %-*s", createdWidth, created, updatedWidth, updated))
+			// Preserve leading space when selected as well
+			col0 = selBase.Render(fmt.Sprintf(" %-*s", colWidths[0]-1, serviceName))
+			col1 = selBase.Render(fmt.Sprintf("%-*s", colWidths[1], stackName))
+			col2 = selRep.Render(fmt.Sprintf("%-*s", colWidths[2], replicasText))
+			col3 = selStatus.Render(fmt.Sprintf("%-*s", colWidths[3], statusText))
+			col4 = selBase.Render(fmt.Sprintf("%-*s", colWidths[4], created))
+			col5 = selBase.Render(fmt.Sprintf("%-*s", colWidths[5], updated))
+			line = col0 + col1 + col2 + col3 + col4 + col5
 		}
 		return line
 	}

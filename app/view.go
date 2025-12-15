@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"swarmcli/ui"
 	"swarmcli/views/helpbar"
 	systeminfoview "swarmcli/views/systeminfo"
@@ -24,34 +23,30 @@ func (m *Model) View() string {
 		View(systemInfo)
 
 	if m.commandInput.Visible() {
+		// Render a framed 3-line command box between the header and main view.
+		// Use the viewport width (which is usable width) and add 4 to match
+		// the frame sizing used by views that render full-width frames.
+		frameWidth := m.viewport.Width + 4
+		// Render the normal framed command box then post-process the top
+		// border to replace corner glyphs so it visually integrates with
+		// the header above.
+		cmdFrame := ui.RenderFramedBoxHeight("", "", m.commandInput.View(), "", frameWidth, 3)
+
+		// Use the framed command box as rendered (keep corner glyphs)
+
 		return lipgloss.JoinVertical(
 			lipgloss.Left,
 			help,
-			m.commandInput.View(),
+			cmdFrame,
 			m.currentView.View(),
 			m.renderStackBar(),
 		)
 	}
-
-	// Add an autorunning bottom line showing sizes: terminal, usable viewport, expected view height
-	// Compute expected view height the same way as handleViewResize
-	isFullscreen := false
-	if logsView, ok := m.currentView.(interface{ GetFullscreen() bool }); ok {
-		isFullscreen = logsView.GetFullscreen()
-	}
-	var expectedViewHeight int
-	if isFullscreen {
-		expectedViewHeight = m.viewport.Height - 1
-	} else {
-		expectedViewHeight = m.viewport.Height - systeminfoview.Height
-	}
-	bottomLine := ui.StatusBarStyle.Render(fmt.Sprintf("Max:%d usable:%d viewH:%d", m.terminalHeight, m.viewport.Height, expectedViewHeight))
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		help,
 		m.currentView.View(),
 		m.renderStackBar(),
-		bottomLine,
 	)
 }

@@ -1,6 +1,8 @@
 package contexts
 
 import (
+	"fmt"
+	"os"
 	"strings"
 	"swarmcli/docker"
 	"swarmcli/views/confirmdialog"
@@ -179,7 +181,7 @@ func (m *Model) SetContexts(contexts []docker.ContextInfo) {
 		for i, ctx := range contexts {
 			if ctx.Current {
 				m.cursor = i
-				return
+				break
 			}
 		}
 	}
@@ -194,6 +196,9 @@ func (m *Model) SetContexts(contexts []docker.ContextInfo) {
 
 	// Update the FilterableList backing items and apply filter
 	m.List.Items = m.contexts
+	// Keep FilterableList cursor in sync with our cursor so keyboard navigation
+	// that manipulates m.cursor affects the list selection and visible offset.
+	m.List.Cursor = m.cursor
 	// Ensure the list viewport matches the current view size so the
 	// content fills the frame immediately when contexts arrive.
 	if m.viewport.Width > 0 {
@@ -207,6 +212,10 @@ func (m *Model) SetContexts(contexts []docker.ContextInfo) {
 		m.List.Viewport.Height = h
 	}
 	m.List.ApplyFilter()
+	// Update the internal viewport content immediately so parent view
+	// that uses the viewport's content (e.g., during initial render)
+	// doesn't keep showing the loading placeholder.
+	m.List.Viewport.SetContent(m.List.View())
 }
 
 func (m *Model) GetCursor() int {
@@ -225,6 +234,12 @@ func (m *Model) MoveCursor(delta int) {
 	if m.cursor >= len(m.contexts) {
 		m.cursor = len(m.contexts) - 1
 	}
+	// Mirror to internal FilterableList cursor and ensure visible
+	if m.List.Cursor != m.cursor {
+		m.List.Cursor = m.cursor
+		// ApplyFilter will keep the cursor in-bounds and update viewport offset
+		m.List.ApplyFilter()
+	}
 }
 
 func (m *Model) GetSelectedContext() (docker.ContextInfo, bool) {
@@ -240,6 +255,14 @@ func (m *Model) SetLoading(loading bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.loading = loading
+	// Write debug state when loading changes
+	go m.debugWriteLoadingState()
+}
+
+// debug write of loading state for diagnostics
+func (m *Model) debugWriteLoadingState() {
+	// best-effort write; don't fail on error
+	_ = os.WriteFile("/tmp/swarmcli_contexts_state_debug.json", []byte(fmt.Sprintf("{\"loading\":%v,\"count\":%d}\n", m.loading, len(m.contexts))), 0644)
 }
 
 func (m *Model) IsLoading() bool {
@@ -302,6 +325,13 @@ func (m *Model) Name() string {
 // OnEnter is called when the view becomes active
 func (m *Model) OnEnter() tea.Cmd {
 	m.Visible = true
+	// If we have no contexts loaded, trigger a load on enter so the
+	// view shows progress and fills itself. Also allow explicit reloads
+	// from other code paths by calling SetLoading(true) before navigating.
+	if len(m.contexts) == 0 {
+		m.SetLoading(true)
+		return func() tea.Msg { return LoadContextsCmd() }
+	}
 	return nil
 }
 

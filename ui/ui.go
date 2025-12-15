@@ -49,24 +49,35 @@ func RenderFramedBox(title, header, content, footer string, width int) string {
 	// Border style
 	borderStyle := lipgloss.NewStyle().Foreground(FrameBorderColor)
 
-	// Top border with centered title
-	leftPad := (borderWidth - lipgloss.Width(titleStyled)) / 2
-	if leftPad < 0 {
-		leftPad = 0
-	}
-	rightPad := borderWidth - leftPad - lipgloss.Width(titleStyled)
-	if rightPad < 0 {
-		rightPad = 0
-	}
+	// Top border: if title is empty render a solid line between corners;
+	// otherwise center the title in the top border.
+	var topLine string
+	if strings.TrimSpace(title) == "" {
+		topLine = fmt.Sprintf("%s%s%s",
+			borderStyle.Render("┌"),
+			borderStyle.Render(strings.Repeat("─", borderWidth)),
+			borderStyle.Render("┐"),
+		)
+	} else {
+		// Top border with centered title
+		leftPad := (borderWidth - lipgloss.Width(titleStyled)) / 2
+		if leftPad < 0 {
+			leftPad = 0
+		}
+		rightPad := borderWidth - leftPad - lipgloss.Width(titleStyled)
+		if rightPad < 0 {
+			rightPad = 0
+		}
 
-	topLine := fmt.Sprintf(
-		"%s%s%s%s%s",
-		borderStyle.Render("╭"),
-		borderStyle.Render(strings.Repeat("─", leftPad)),
-		titleStyled,
-		borderStyle.Render(strings.Repeat("─", rightPad)),
-		borderStyle.Render("╮"),
-	)
+		topLine = fmt.Sprintf(
+			"%s%s%s%s%s",
+			borderStyle.Render("┌"),
+			borderStyle.Render(strings.Repeat("─", leftPad)),
+			titleStyled,
+			borderStyle.Render(strings.Repeat("─", rightPad)),
+			borderStyle.Render("┐"),
+		)
+	}
 
 	// Box lines start with top border
 	boxLines := []string{topLine}
@@ -97,9 +108,9 @@ func RenderFramedBox(title, header, content, footer string, width int) string {
 
 	// Bottom border
 	bottomLine := fmt.Sprintf("%s%s%s",
-		borderStyle.Render("╰"),
+		borderStyle.Render("└"),
 		borderStyle.Render(strings.Repeat("─", borderWidth)),
-		borderStyle.Render("╯"))
+		borderStyle.Render("┘"))
 	boxLines = append(boxLines, bottomLine)
 
 	return strings.Join(boxLines, "\n")
@@ -171,6 +182,23 @@ func padLine(line string, width int) string {
 		return truncated
 	}
 	return line + strings.Repeat(" ", width-l)
+}
+
+// RenderColumnHeader builds a single-line header from labels and column widths.
+// `labels` and `colWidths` must have the same length. It applies the
+// FrameHeaderStyle to the resulting line so callers can place it in the
+// framed header slot.
+func RenderColumnHeader(labels []string, colWidths []int) string {
+	if len(labels) == 0 || len(colWidths) == 0 || len(labels) != len(colWidths) {
+		return ""
+	}
+
+	parts := make([]string, len(labels))
+	for i := range labels {
+		parts[i] = fmt.Sprintf("%-*s", colWidths[i], labels[i])
+	}
+	line := strings.Join(parts, "")
+	return FrameHeaderStyle.Render(line)
 }
 
 // RenderConfirmDialog renders a standard confirmation dialog with y/n options
@@ -310,6 +338,10 @@ func RenderFileBrowserDialog(title, currentPath string, files []string, cursor i
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	return borderStyle.Render(content)
 }
+
+// (reverted) Previously we experimented with omitting the top border for
+// stacked frames, but that change was reverted — keep only the canonical
+// framing helpers here.
 
 func OverlayCentered(base, overlay string, width, height int) string {
 	baseLines := strings.Split(base, "\n")
