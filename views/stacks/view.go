@@ -173,6 +173,5 @@ func (m *Model) View() string {
 
 	framed := ui.RenderFramedBoxHeight(title, header, paddedContent, footer, frameWidth, frameHeight)
 
-	// Final rendering (no debug overlay)
 	return framed
 }

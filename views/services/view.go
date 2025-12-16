@@ -103,8 +103,6 @@ func (m *Model) View() string {
 
 	framed := ui.RenderFramedBoxHeight(m.title, header, paddedContent, footer, frameWidth, frameHeight)
 
-	// No debug overlays in final rendering
-
 	if m.confirmDialog.Visible {
 		framed = ui.OverlayCentered(framed, m.confirmDialog.View(), frameWidth, m.List.Viewport.Height)
 	}

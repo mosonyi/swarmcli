@@ -10,12 +10,12 @@ import (
 // Styles (you can override these per-view if desired)
 var (
 	FrameTitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("81")).
-			Bold(true)
+		Foreground(lipgloss.Color("81")).
+		Bold(true)
 
 	FrameHeaderStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("75")).
-				Bold(true)
+		Foreground(lipgloss.Color("75")).
+		Bold(true)
 
 	FrameBorderColor = lipgloss.Color("117")
 )
@@ -338,10 +338,6 @@ func RenderFileBrowserDialog(title, currentPath string, files []string, cursor i
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	return borderStyle.Render(content)
 }
-
-// (reverted) Previously we experimented with omitting the top border for
-// stacked frames, but that change was reverted — keep only the canonical
-// framing helpers here.
 
 func OverlayCentered(base, overlay string, width, height int) string {
 	baseLines := strings.Split(base, "\n")

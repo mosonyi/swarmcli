@@ -219,8 +219,6 @@ func (m *Model) View() string {
 	title := fmt.Sprintf("Docker Configs (%d)", len(m.configsList.Filtered))
 	view := ui.RenderFramedBoxHeight(title, header, paddedContent, footer, frameWidth, frameHeight)
 
-	// Final rendering (no debug overlay)
-
 	return view
 }
 
