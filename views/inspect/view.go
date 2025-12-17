@@ -39,9 +39,16 @@ func (m *Model) View() string {
 
 	// Add 4 to make frame full terminal width (app reduces viewport by 4 in normal mode)
 	frameWidth := width + 4
-	frameHeight := m.viewport.Height
-	if frameHeight < 0 {
-		frameHeight = 0
+
+	// Reserve two lines from the viewport height for surrounding UI (helpbar/systeminfo)
+	frameHeight := m.viewport.Height - 2
+	if frameHeight <= 0 {
+		if m.height > 0 {
+			frameHeight = m.height - 4
+		}
+		if frameHeight <= 0 {
+			frameHeight = 20
+		}
 	}
 
 	// ---- Render framed box ----
