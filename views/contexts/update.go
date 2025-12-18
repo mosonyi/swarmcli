@@ -61,17 +61,15 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case ContextsLoadedMsg:
-		// Instrumentation: log that the message was received and dump a
-		// small debug JSON so we can confirm delivery in user environments.
-		lg := swarmlog.L()
+		// Instrumentation: use package logger helper and emit compact debug JSON
+		// so we can confirm delivery in user environments.
+		lg := l()
 		if msg.Error != nil {
 			lg.Warnw("ContextsLoadedMsg received with error", "error", msg.Error)
 		} else {
 			lg.Infow("ContextsLoadedMsg received", "count", len(msg.Contexts))
 		}
 
-		// Write a debug file so users can inspect whether the view got the
-		// message and what payload arrived.
 		debug := map[string]any{
 			"count": len(msg.Contexts),
 			"error": nil,
@@ -79,8 +77,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		if msg.Error != nil {
 			debug["error"] = msg.Error.Error()
 		}
-		if b, jerr := json.MarshalIndent(debug, "", "  "); jerr == nil {
-			_ = os.WriteFile("/tmp/swarmcli_contexts_update_debug.json", b, 0644)
+		if b, jerr := json.Marshal(debug); jerr == nil {
+			lg.Debugf("[ContextsLoaded] %s", string(b))
 		}
 
 		if msg.Error != nil {
