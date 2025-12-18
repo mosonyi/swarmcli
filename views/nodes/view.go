@@ -7,8 +7,6 @@ import (
 	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 func (m *Model) View() string {
@@ -25,7 +23,35 @@ func (m *Model) View() string {
 	}
 
 	title := fmt.Sprintf("Nodes (%d total, %d manager%s)", total, managers, plural(managers))
-	header := renderHeader(m.colWidths)
+	// Compute proportional column widths (6 equal partitions) so header aligns with items
+	labels := []string{"HOSTNAME", "ROLE", "STATE", "MANAGER", "ADDRESS", "LABELS"}
+	width := m.List.Viewport.Width
+	if width <= 0 {
+		if m.width > 0 {
+			width = m.width
+		} else {
+			width = 80
+		}
+	}
+	cols := 6
+	starts := make([]int, cols)
+	for i := 0; i < cols; i++ {
+		starts[i] = (i * width) / cols
+	}
+	colWidths := make([]int, cols)
+	for i := 0; i < cols; i++ {
+		if i == cols-1 {
+			colWidths[i] = width - starts[i]
+		} else {
+			colWidths[i] = starts[i+1] - starts[i]
+		}
+		if colWidths[i] < 1 {
+			colWidths[i] = 1
+		}
+	}
+	// Prefix first label with a leading space to match item alignment
+	labels[0] = " " + labels[0]
+	header := ui.RenderColumnHeader(labels, colWidths)
 
 	// Footer: cursor + optional search query
 	status := fmt.Sprintf("Node %d of %d", m.List.Cursor+1, len(m.List.Filtered))
@@ -48,7 +74,17 @@ func (m *Model) View() string {
 
 	// Add 4 to make frame full terminal width (app reduces viewport by 4 in normal mode)
 	frameWidth := m.List.Viewport.Width + 4
-	return ui.RenderFramedBox(title, header, content, footer, frameWidth)
+	// Reserve two lines from the viewport height for surrounding UI
+	frameHeight := m.List.Viewport.Height - 2
+	if frameHeight <= 0 {
+		if m.height > 0 {
+			frameHeight = m.height - 4
+		}
+		if frameHeight <= 0 {
+			frameHeight = 20
+		}
+	}
+	return ui.RenderFramedBoxHeight(title, header, content, footer, frameWidth, frameHeight)
 }
 
 func plural(n int) string {
@@ -56,27 +92,6 @@ func plural(n int) string {
 		return ""
 	}
 	return "s"
-}
-
-// renderHeader uses pre-calculated column widths.
-func renderHeader(colWidths map[string]int) string {
-	if len(colWidths) == 0 {
-		return "HOSTNAME  ROLE  STATE  MANAGER  ADDRESS"
-	}
-
-	headerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("15")). // white
-		Bold(true)
-
-	return headerStyle.Render(fmt.Sprintf(
-		"%-*s        %-*s        %-*s        %-*s        %-*s        %-*s",
-		colWidths["Hostname"], "HOSTNAME",
-		colWidths["Role"], "ROLE",
-		colWidths["State"], "STATE",
-		colWidths["Manager"], "MANAGER",
-		colWidths["Addr"], "ADDRESS",
-		colWidths["Labels"], "LABELS",
-	))
 }
 
 // calcColumnWidths determines the best width per column based on the longest cell.

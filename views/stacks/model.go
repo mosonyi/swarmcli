@@ -14,13 +14,14 @@ import (
 )
 
 type Model struct {
-	List         filterlist.FilterableList[docker.StackEntry]
-	Visible      bool
-	nodeID       string
-	ready        bool
-	width        int
-	height       int
-	lastSnapshot uint64 // hash of last snapshot for change detection
+	List             filterlist.FilterableList[docker.StackEntry]
+	Visible          bool
+	nodeID           string
+	ready            bool
+	width            int
+	height           int
+	lastSnapshot     uint64 // hash of last snapshot for change detection
+	DelayInitialLoad bool   // when true, delay the first LoadStacksCmd by 3s
 }
 
 func New(width, height int) *Model {
@@ -67,19 +68,34 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 }
 
 func LoadStacks(nodeID string) []docker.StackEntry {
+	stacks, _ := LoadStacksWithErr(nodeID)
+	return stacks
+}
+
+// LoadStacksWithErr refreshes snapshot and returns stack entries along with any error
+func LoadStacksWithErr(nodeID string) ([]docker.StackEntry, error) {
 	// Refresh the snapshot to get latest data
 	snap, err := docker.RefreshSnapshot()
 	if err != nil {
-		l().Errorf("LoadStacks: RefreshSnapshot failed: %v", err)
+		l().Errorf("LoadStacksWithErr: RefreshSnapshot failed: %v", err)
 		// Fall back to cached snapshot
 		snap = docker.GetSnapshot()
+		if snap == nil {
+			return []docker.StackEntry{}, err
+		}
 	}
-	return snap.ToStackEntries()
+	return snap.ToStackEntries(), nil
 }
 
 func LoadStacksCmd(nodeID string) tea.Cmd {
 	return func() tea.Msg {
-		stacks := LoadStacks(nodeID)
+		stacks, err := LoadStacksWithErr(nodeID)
+		if err != nil {
+			l().Errorf("LoadStacksCmd: Error loading stacks: %v", err)
+		}
+
+		l().Debugf("LoadStacksCmd: Loaded %v stacks", stacks)
+
 		return Msg{NodeID: nodeID, Stacks: stacks}
 	}
 }
@@ -94,11 +110,17 @@ func CheckStacksCmd(lastHash uint64, nodeID string) tea.Cmd {
 		newHash, err := hash.Compute(stacks)
 		if err != nil {
 			l().Errorf("CheckStacksCmd: Error computing hash: %v", err)
-			return nil
+			// Keep polling on error instead of returning nil which would stop the tick loop
+			return tickCmd()
 		}
 
 		l().Infof("CheckStacksCmd: lastHash=%s, newHash=%s, stackCount=%d",
 			hash.Fmt(lastHash), hash.Fmt(newHash), len(stacks))
+
+		l().Debugf("CheckStacksCmd: Stacks: %+v", stacks)
+
+		ctxName, _ := docker.GetCurrentContext()
+		l().Debugf("CheckStacksCmd: docker context: %s", ctxName)
 
 		// Only return update message if something changed
 		if newHash != lastHash {

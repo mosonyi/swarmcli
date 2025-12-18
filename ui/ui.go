@@ -10,12 +10,12 @@ import (
 // Styles (you can override these per-view if desired)
 var (
 	FrameTitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("81")).
-			Bold(true)
+		Foreground(lipgloss.Color("81")).
+		Bold(true)
 
 	FrameHeaderStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("75")).
-				Bold(true)
+		Foreground(lipgloss.Color("75")).
+		Bold(true)
 
 	FrameBorderColor = lipgloss.Color("117")
 )
@@ -49,24 +49,35 @@ func RenderFramedBox(title, header, content, footer string, width int) string {
 	// Border style
 	borderStyle := lipgloss.NewStyle().Foreground(FrameBorderColor)
 
-	// Top border with centered title
-	leftPad := (borderWidth - lipgloss.Width(titleStyled)) / 2
-	if leftPad < 0 {
-		leftPad = 0
-	}
-	rightPad := borderWidth - leftPad - lipgloss.Width(titleStyled)
-	if rightPad < 0 {
-		rightPad = 0
-	}
+	// Top border: if title is empty render a solid line between corners;
+	// otherwise center the title in the top border.
+	var topLine string
+	if strings.TrimSpace(title) == "" {
+		topLine = fmt.Sprintf("%s%s%s",
+			borderStyle.Render("┌"),
+			borderStyle.Render(strings.Repeat("─", borderWidth)),
+			borderStyle.Render("┐"),
+		)
+	} else {
+		// Top border with centered title
+		leftPad := (borderWidth - lipgloss.Width(titleStyled)) / 2
+		if leftPad < 0 {
+			leftPad = 0
+		}
+		rightPad := borderWidth - leftPad - lipgloss.Width(titleStyled)
+		if rightPad < 0 {
+			rightPad = 0
+		}
 
-	topLine := fmt.Sprintf(
-		"%s%s%s%s%s",
-		borderStyle.Render("╭"),
-		borderStyle.Render(strings.Repeat("─", leftPad)),
-		titleStyled,
-		borderStyle.Render(strings.Repeat("─", rightPad)),
-		borderStyle.Render("╮"),
-	)
+		topLine = fmt.Sprintf(
+			"%s%s%s%s%s",
+			borderStyle.Render("┌"),
+			borderStyle.Render(strings.Repeat("─", leftPad)),
+			titleStyled,
+			borderStyle.Render(strings.Repeat("─", rightPad)),
+			borderStyle.Render("┐"),
+		)
+	}
 
 	// Box lines start with top border
 	boxLines := []string{topLine}
@@ -97,12 +108,63 @@ func RenderFramedBox(title, header, content, footer string, width int) string {
 
 	// Bottom border
 	bottomLine := fmt.Sprintf("%s%s%s",
-		borderStyle.Render("╰"),
+		borderStyle.Render("└"),
 		borderStyle.Render(strings.Repeat("─", borderWidth)),
-		borderStyle.Render("╯"))
+		borderStyle.Render("┘"))
 	boxLines = append(boxLines, bottomLine)
 
 	return strings.Join(boxLines, "\n")
+}
+
+// RenderFramedBoxHeight renders a framed box constrained to `frameHeight` lines
+// (including borders). If `frameHeight` <= 0 the function falls back to the
+// unconstrained `RenderFramedBox` behavior. This helper pads the content so
+// the resulting framed box occupies exactly `frameHeight` lines when possible.
+func RenderFramedBoxHeight(title, header, content, footer string, width, frameHeight int) string {
+	if frameHeight <= 0 {
+		return RenderFramedBox(title, header, content, footer, width)
+	}
+
+	// Count footer lines
+	footerLines := []string{}
+	if footer != "" {
+		footerLines = strings.Split(footer, "\n")
+	}
+
+	// Header occupies one line if present
+	headerLines := 0
+	if header != "" {
+		headerLines = 1
+	}
+
+	// Desired content lines inside the box (not counting borders/top/bottom)
+	// total box lines = 2 (top+bottom) + headerLines + contentLines + len(footerLines)
+	desiredContentLines := frameHeight - 2 - headerLines - len(footerLines)
+	if desiredContentLines < 0 {
+		desiredContentLines = 0
+	}
+
+	// Current content lines
+	contentLines := strings.Split(content, "\n")
+	// Trim trailing empty lines for stable calculation
+	for len(contentLines) > 0 && contentLines[len(contentLines)-1] == "" {
+		contentLines = contentLines[:len(contentLines)-1]
+	}
+
+	// Pad or trim content lines to desired length
+	if len(contentLines) < desiredContentLines {
+		// Append empty lines
+		for i := 0; i < desiredContentLines-len(contentLines); i++ {
+			contentLines = append(contentLines, "")
+		}
+	} else if len(contentLines) > desiredContentLines {
+		contentLines = contentLines[:desiredContentLines]
+	}
+
+	// No debug logging
+
+	paddedContent := strings.Join(contentLines, "\n")
+	return RenderFramedBox(title, header, paddedContent, footer, width)
 }
 
 // padLine fits a line to width, preserving ANSI sequences
@@ -120,6 +182,23 @@ func padLine(line string, width int) string {
 		return truncated
 	}
 	return line + strings.Repeat(" ", width-l)
+}
+
+// RenderColumnHeader builds a single-line header from labels and column widths.
+// `labels` and `colWidths` must have the same length. It applies the
+// FrameHeaderStyle to the resulting line so callers can place it in the
+// framed header slot.
+func RenderColumnHeader(labels []string, colWidths []int) string {
+	if len(labels) == 0 || len(colWidths) == 0 || len(labels) != len(colWidths) {
+		return ""
+	}
+
+	parts := make([]string, len(labels))
+	for i := range labels {
+		parts[i] = fmt.Sprintf("%-*s", colWidths[i], labels[i])
+	}
+	line := strings.Join(parts, "")
+	return FrameHeaderStyle.Render(line)
 }
 
 // RenderConfirmDialog renders a standard confirmation dialog with y/n options

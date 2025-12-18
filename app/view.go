@@ -1,6 +1,7 @@
 package app
 
 import (
+	"swarmcli/ui"
 	"swarmcli/views/helpbar"
 	systeminfoview "swarmcli/views/systeminfo"
 
@@ -22,10 +23,21 @@ func (m *Model) View() string {
 		View(systemInfo)
 
 	if m.commandInput.Visible() {
+		// Render a framed 3-line command box between the header and main view.
+		// Use the viewport width (which is usable width) and add 4 to match
+		// the frame sizing used by views that render full-width frames.
+		frameWidth := m.viewport.Width + 4
+		// Render the normal framed command box then post-process the top
+		// border to replace corner glyphs so it visually integrates with
+		// the header above.
+		cmdFrame := ui.RenderFramedBoxHeight("", "", m.commandInput.View(), "", frameWidth, 3)
+
+		// Use the framed command box as rendered (keep corner glyphs)
+
 		return lipgloss.JoinVertical(
 			lipgloss.Left,
 			help,
-			m.commandInput.View(),
+			cmdFrame,
 			m.currentView.View(),
 			m.renderStackBar(),
 		)

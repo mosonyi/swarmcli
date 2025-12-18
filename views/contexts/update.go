@@ -1,6 +1,7 @@
 package contexts
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -41,12 +42,44 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case tea.WindowSizeMsg:
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height
+		// Keep the internal list viewport in sync with the new size so
+		// the framed box fills the area immediately.
+		if msg.Width > 0 {
+			m.List.Viewport.Width = msg.Width
+		}
+		if msg.Height > 0 {
+			h := msg.Height - 2
+			if h <= 0 {
+				h = 20
+			}
+			m.List.Viewport.Height = h
+		}
 		if !m.ready {
 			m.ready = true
 		}
 		return nil
 
 	case ContextsLoadedMsg:
+		// Instrumentation: use package logger helper and emit compact debug JSON
+		// so we can confirm delivery in user environments.
+		lg := l()
+		if msg.Error != nil {
+			lg.Warnw("ContextsLoadedMsg received with error", "error", msg.Error)
+		} else {
+			lg.Infow("ContextsLoadedMsg received", "count", len(msg.Contexts))
+		}
+
+		debug := map[string]any{
+			"count": len(msg.Contexts),
+			"error": nil,
+		}
+		if msg.Error != nil {
+			debug["error"] = msg.Error.Error()
+		}
+		if b, jerr := json.Marshal(debug); jerr == nil {
+			lg.Debugf("[ContextsLoaded] %s", string(b))
+		}
+
 		if msg.Error != nil {
 			m.SetError(msg.Error.Error())
 			m.SetLoading(false)

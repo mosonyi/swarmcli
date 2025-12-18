@@ -98,7 +98,12 @@ func (m *Model) View() string {
 	// Normal loading view
 	content := fmt.Sprintf("%s %s", m.spinner.View(), m.message)
 	content = strings.TrimSpace(content)
-	box := ui.RenderFramedBox(m.title, m.header, content, "", 0) // minimal width
+	// Use height-aware framed box: m.height holds the available height for this view
+	frameHeight := m.height
+	if frameHeight < 0 {
+		frameHeight = 0
+	}
+	box := ui.RenderFramedBoxHeight(m.title, m.header, content, "", 0, frameHeight) // minimal width
 	return box
 }
 

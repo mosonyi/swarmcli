@@ -97,6 +97,8 @@ func CheckNodesCmd(lastHash uint64) tea.Cmd {
 		l().Infof("CheckNodesCmd: lastHash=%s, newHash=%s, nodeCount=%d",
 			hash.Fmt(lastHash), hash.Fmt(newHash), len(entries))
 
+		l().Debugf("CheckNodesCmd: Node entries: %+v", entries)
+
 		// Only return update message if something changed
 		if newHash != lastHash {
 			l().Info("CheckNodesCmd: Change detected! Refreshing node list")

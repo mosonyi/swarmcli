@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"swarmcli/docker"
 	"swarmcli/ui"
 	"swarmcli/views/commandinput"
 	loadingview "swarmcli/views/loading"
@@ -32,6 +33,7 @@ type Model struct {
 
 func InitialModel() *Model {
 	vp := viewport.New(80, 20)
+	// Start viewport below the system info header (original default)
 	vp.YPosition = 5
 
 	loading := loadingview.New(80, 20, true, map[string]string{
@@ -60,6 +62,7 @@ func (m *Model) Init() tea.Cmd {
 		loadSnapshotAsync(),
 		systeminfoview.LoadStatus(),
 		m.systemInfo.Init(), // Initialize systeminfo's tick commands
+		docker.WatchEventsCmd(),
 	)
 }
 

@@ -1,7 +1,9 @@
 package contexts
 
 import (
+	"strings"
 	"swarmcli/docker"
+	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	"sync"
@@ -9,12 +11,16 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+
+	filterlist "swarmcli/ui/components/filterable/list"
 )
 
 type Model struct {
 	Visible  bool
 	viewport viewport.Model
 	ready    bool
+
+	List filterlist.FilterableList[docker.ContextInfo]
 
 	contexts              []docker.ContextInfo
 	cursor                int
@@ -100,6 +106,17 @@ func New() *Model {
 	editDescInput.CharLimit = 200
 	editDescInput.Width = 50
 
+	// Initialize an internal viewport for the filterable list
+	vp := viewport.New(80, 20)
+	vp.SetContent("")
+
+	list := filterlist.FilterableList[docker.ContextInfo]{
+		Viewport: vp,
+		Match: func(item docker.ContextInfo, query string) bool {
+			return strings.Contains(strings.ToLower(item.Name), strings.ToLower(query))
+		},
+	}
+
 	return &Model{
 		Visible:          false,
 		contexts:         []docker.ContextInfo{},
@@ -115,6 +132,7 @@ func New() *Model {
 		createCertInput:  createCertInput,
 		createKeyInput:   createKeyInput,
 		editDescInput:    editDescInput,
+		List:             list,
 	}
 }
 
@@ -123,6 +141,19 @@ func (m *Model) SetSize(width, height int) {
 	m.viewport.Height = height
 	m.confirmDialog.Width = width
 	m.confirmDialog.Height = height
+	// Keep the internal list viewport in sync so it doesn't stay at its
+	// initial 80x20 size when the view receives data.
+	if width > 0 {
+		m.List.Viewport.Width = width
+	}
+	if height > 0 {
+		// Reserve 2 lines for stackbar/bottom status like other views
+		h := height - 2
+		if h <= 0 {
+			h = 20
+		}
+		m.List.Viewport.Height = h
+	}
 	if !m.ready {
 		m.ready = true
 	}
@@ -149,7 +180,7 @@ func (m *Model) SetContexts(contexts []docker.ContextInfo) {
 		for i, ctx := range contexts {
 			if ctx.Current {
 				m.cursor = i
-				return
+				break
 			}
 		}
 	}
@@ -161,6 +192,29 @@ func (m *Model) SetContexts(contexts []docker.ContextInfo) {
 	if m.cursor < 0 {
 		m.cursor = 0
 	}
+
+	// Update the FilterableList backing items and apply filter
+	m.List.Items = m.contexts
+	// Keep FilterableList cursor in sync with our cursor so keyboard navigation
+	// that manipulates m.cursor affects the list selection and visible offset.
+	m.List.Cursor = m.cursor
+	// Ensure the list viewport matches the current view size so the
+	// content fills the frame immediately when contexts arrive.
+	if m.viewport.Width > 0 {
+		m.List.Viewport.Width = m.viewport.Width
+	}
+	if m.viewport.Height > 0 {
+		h := m.viewport.Height - 2
+		if h <= 0 {
+			h = 20
+		}
+		m.List.Viewport.Height = h
+	}
+	m.List.ApplyFilter()
+	// Update the internal viewport content immediately so parent view
+	// that uses the viewport's content (e.g., during initial render)
+	// doesn't keep showing the loading placeholder.
+	m.List.Viewport.SetContent(m.List.View())
 }
 
 func (m *Model) GetCursor() int {
@@ -179,6 +233,12 @@ func (m *Model) MoveCursor(delta int) {
 	if m.cursor >= len(m.contexts) {
 		m.cursor = len(m.contexts) - 1
 	}
+	// Mirror to internal FilterableList cursor and ensure visible
+	if m.List.Cursor != m.cursor {
+		m.List.Cursor = m.cursor
+		// ApplyFilter will keep the cursor in-bounds and update viewport offset
+		m.List.ApplyFilter()
+	}
 }
 
 func (m *Model) GetSelectedContext() (docker.ContextInfo, bool) {
@@ -194,6 +254,15 @@ func (m *Model) SetLoading(loading bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.loading = loading
+	// Write debug state when loading changes
+	go m.debugWriteLoadingState()
+}
+
+// debug write of loading state for diagnostics
+func (m *Model) debugWriteLoadingState() {
+	// Only log this information at debug level using the standard logger.
+	// The logger will no-op if not running in debug mode.
+	swarmlog.L().Debugf("[contexts] loading=%v count=%d", m.loading, len(m.contexts))
 }
 
 func (m *Model) IsLoading() bool {
@@ -256,6 +325,13 @@ func (m *Model) Name() string {
 // OnEnter is called when the view becomes active
 func (m *Model) OnEnter() tea.Cmd {
 	m.Visible = true
+	// If we have no contexts loaded, trigger a load on enter so the
+	// view shows progress and fills itself. Also allow explicit reloads
+	// from other code paths by calling SetLoading(true) before navigating.
+	if len(m.contexts) == 0 {
+		m.SetLoading(true)
+		return func() tea.Msg { return LoadContextsCmd() }
+	}
 	return nil
 }
 

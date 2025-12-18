@@ -31,13 +31,12 @@ type dockerContext struct {
 
 // GetClient returns a Docker SDK client configured based on the current Docker context.
 func GetClient() (*client.Client, error) {
-	ctxNameBytes, err := exec.Command("docker", "context", "show").Output()
+	// Determine the Docker context to use. Prefer the `DOCKER_CONTEXT`
+	// environment variable (useful for CI/dev), otherwise fall back to the
+	// currently active Docker context reported by `docker context show`.
+	ctxName, err := GetContextFromEnv()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get docker context: %w", err)
-	}
-	ctxName := string(ctxNameBytes)
-	if len(ctxName) > 0 && ctxName[len(ctxName)-1] == '\n' {
-		ctxName = ctxName[:len(ctxName)-1]
+		return nil, err
 	}
 
 	inspectOut, err := exec.Command("docker", "context", "inspect", ctxName).Output()
@@ -111,6 +110,28 @@ func GetCurrentContext() (string, error) {
 		return "", fmt.Errorf("failed to get docker context: %w", err)
 	}
 	ctxName := string(ctxNameBytes)
+	if len(ctxName) > 0 && ctxName[len(ctxName)-1] == '\n' {
+		ctxName = ctxName[:len(ctxName)-1]
+	}
+	return ctxName, nil
+}
+
+// GetContextFromEnv returns the docker context to use. It prefers the
+// DOCKER_CONTEXT environment variable (so the app can be run against a
+// specific context, e.g. in CI or local testing). If that variable is not
+// set, it falls back to calling `docker context show` to retrieve the active
+// context. The returned string will not contain a trailing newline.
+func GetContextFromEnv() (string, error) {
+	ctxName := os.Getenv("DOCKER_CONTEXT")
+	if ctxName != "" {
+		return ctxName, nil
+	}
+
+	ctxNameBytes, err := exec.Command("docker", "context", "show").Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get docker context: %w", err)
+	}
+	ctxName = string(ctxNameBytes)
 	if len(ctxName) > 0 && ctxName[len(ctxName)-1] == '\n' {
 		ctxName = ctxName[:len(ctxName)-1]
 	}

@@ -33,6 +33,10 @@ type Model struct {
 	height       int
 	lastSnapshot uint64 // hash of last snapshot for change detection
 
+	// Column widths cached after computation
+	colServiceWidth int
+	colStackWidth   int
+
 	// Filter
 	filterType FilterType
 	nodeID     string

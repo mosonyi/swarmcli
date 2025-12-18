@@ -19,7 +19,7 @@ type Model struct {
 func New() *Model {
 	ti := textinput.New()
 	ti.Placeholder = ""
-	ti.Prompt = ": "
+	ti.Prompt = "> "
 	ti.CharLimit = 256
 	return &Model{input: ti}
 }

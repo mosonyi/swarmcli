@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
-	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	inspectview "swarmcli/views/inspect"
 	servicesview "swarmcli/views/services"
@@ -27,6 +26,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		m.SetContent(msg)
+		// Ensure viewport content is updated immediately so UI reflects changes
+		m.List.Viewport.SetContent(m.List.View())
+		m.List.Viewport.GotoTop()
 		m.Visible = true
 		return tickCmd()
 
@@ -125,27 +127,59 @@ func (m *Model) setRenderItem() {
 		return n.Hostname
 	}, 15)
 
-	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
+	// Use bright white for content and reserve leading space in first column
+	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
 
 	m.List.RenderItem = func(n docker.NodeEntry, selected bool, colWidth int) string {
+		// Compute proportional column widths for the current viewport width
+		width := m.List.Viewport.Width
+		if width <= 0 {
+			width = 80
+		}
+		cols := 6
+		starts := make([]int, cols)
+		for i := 0; i < cols; i++ {
+			starts[i] = (i * width) / cols
+		}
+		colWidths := make([]int, cols)
+		for i := 0; i < cols; i++ {
+			if i == cols-1 {
+				colWidths[i] = width - starts[i]
+			} else {
+				colWidths[i] = starts[i+1] - starts[i]
+			}
+			if colWidths[i] < 1 {
+				colWidths[i] = 1
+			}
+		}
 		manager := "no"
 		if n.Manager {
 			manager = "yes"
 		}
 		labelsStr := formatLabels(n.Labels)
 		// Use the pre-calculated column widths instead of the single colWidth
-		line := fmt.Sprintf(
-			"%-*s        %-*s        %-*s        %-*s        %-*s        %-*s",
-			m.colWidths["Hostname"], n.Hostname,
-			m.colWidths["Role"], n.Role,
-			m.colWidths["State"], n.State,
-			m.colWidths["Manager"], manager,
-			m.colWidths["Addr"], n.Addr,
-			m.colWidths["Labels"], labelsStr,
-		)
 		if selected {
-			return ui.CursorStyle.Render(line)
+			selBg := lipgloss.Color("63")
+			selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
+			// Preserve leading space for hostname when selected
+			return selStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s",
+				colWidths[0]-1, n.Hostname,
+				colWidths[1], n.Role,
+				colWidths[2], n.State,
+				colWidths[3], manager,
+				colWidths[4], n.Addr,
+				colWidths[5], labelsStr,
+			))
 		}
-		return itemStyle.Render(line)
+
+		// Ensure the first column has a leading space to align with header
+		return itemStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s",
+			colWidths[0]-1, n.Hostname,
+			colWidths[1], n.Role,
+			colWidths[2], n.State,
+			colWidths[3], manager,
+			colWidths[4], n.Addr,
+			colWidths[5], labelsStr,
+		))
 	}
 }

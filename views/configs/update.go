@@ -8,7 +8,6 @@ import (
 	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
-	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	view "swarmcli/views/view"
@@ -23,7 +22,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case tea.WindowSizeMsg:
 		m.configsList.Viewport.Width = msg.Width
-		m.configsList.Viewport.Height = msg.Height - 3
+		// msg.Height is already adjusted by the app to account for the
+		// systeminfo header; avoid subtracting extra lines here.
+		m.configsList.Viewport.Height = msg.Height
 		return nil
 
 	case configsLoadedMsg:
@@ -182,8 +183,22 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		l().Infof("Config %s is used by %d service(s)", msg.ConfigName, len(msg.UsedBy))
 
-		// Initialize usedByList with a new viewport
-		vp := viewport.New(m.configsList.Viewport.Width, m.configsList.Viewport.Height)
+		// Initialize usedByList with a new viewport. Use sensible fallbacks
+		// (model width/height) if configsList viewport hasn't been sized yet.
+		w := m.configsList.Viewport.Width
+		if w <= 0 {
+			w = m.width
+		}
+		h := m.configsList.Viewport.Height
+		if h <= 0 {
+			if m.height > 0 {
+				h = m.height - 2
+			}
+			if h <= 0 {
+				h = 20
+			}
+		}
+		vp := viewport.New(w, h)
 		vp.SetContent("")
 
 		m.usedByList = filterlist.FilterableList[usedByItem]{
@@ -193,16 +208,62 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					strings.Contains(strings.ToLower(item.ServiceName), strings.ToLower(query))
 			},
 			RenderItem: func(item usedByItem, selected bool, _ int) string {
-				line := fmt.Sprintf("%-24s %-24s", item.StackName, item.ServiceName)
-				if selected {
-					return ui.CursorStyle.Render(line)
+				// Compute proportional widths for two columns based on viewport
+				width := vp.Width
+				if width <= 0 {
+					width = 80
 				}
-				itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
-				return itemStyle.Render(line)
+				cols := 2
+				starts := make([]int, cols)
+				for i := 0; i < cols; i++ {
+					starts[i] = (i * width) / cols
+				}
+				colWidths := make([]int, cols)
+				for i := 0; i < cols; i++ {
+					if i == cols-1 {
+						colWidths[i] = width - starts[i]
+					} else {
+						colWidths[i] = starts[i+1] - starts[i]
+					}
+					if colWidths[i] < 1 {
+						colWidths[i] = 1
+					}
+				}
+
+				// Prepare truncated texts
+				stackText := item.StackName
+				if len(stackText) > colWidths[0] {
+					stackText = stackText[:colWidths[0]-1] + "…"
+				}
+				svcText := item.ServiceName
+				if len(svcText) > colWidths[1] {
+					svcText = svcText[:colWidths[1]-1] + "…"
+				}
+
+				// Use bright white for content and reserve a leading space
+				itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
+				// Reserve one leading space for the first column so content aligns with headers
+				var col0 string
+				col0 = itemStyle.Render(fmt.Sprintf(" %-*s", colWidths[0]-1, stackText))
+				col1 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[1], svcText))
+				line := col0 + col1
+
+				if selected {
+					selBg := lipgloss.Color("63")
+					selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
+					// Keep leading space for first column when selected as well
+					col0 = selStyle.Render(fmt.Sprintf(" %-*s", colWidths[0]-1, stackText))
+					col1 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[1], svcText))
+					return col0 + col1
+				}
+				return line
 			},
 		}
 
 		m.usedByList.Items = msg.UsedBy
+		// Keep viewport sizes in sync
+		m.usedByList.Viewport.Width = vp.Width
+		m.usedByList.Viewport.Height = vp.Height
 		m.usedByList.ApplyFilter()
 
 		m.usedByConfigName = msg.ConfigName
@@ -378,21 +439,80 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) setRenderItem() {
-	// Compute max width per column
-	nameCol := 0
-	idCol := 0
-	for _, cfg := range m.configsList.Items {
-		if len(cfg.Name) > nameCol {
-			nameCol = len(cfg.Name)
-		}
-		if len(cfg.ID) > idCol {
-			idCol = len(cfg.ID)
-		}
-	}
+	// Use bright white for content (color 15) for better contrast
+	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
 
-	// Assign to the list
-	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
 	m.configsList.RenderItem = func(cfg configItem, selected bool, _ int) string {
+		// Recompute proportional column widths on each render to adapt to viewport resizes.
+		width := m.configsList.Viewport.Width
+		if width <= 0 {
+			width = 80
+		}
+
+		// Columns: NAME | ID | USED | CREATED | UPDATED
+		cols := 5
+		starts := make([]int, cols)
+		for i := 0; i < cols; i++ {
+			starts[i] = (i * width) / cols
+		}
+		colWidths := make([]int, cols)
+		for i := 0; i < cols; i++ {
+			if i == cols-1 {
+				colWidths[i] = width - starts[i]
+			} else {
+				colWidths[i] = starts[i+1] - starts[i]
+			}
+			if colWidths[i] < 1 {
+				colWidths[i] = 1
+			}
+		}
+
+		// Ensure CREATED and UPDATED columns have at least 19 chars
+		minTime := 19
+		// current sum of last two
+		cur := colWidths[3] + colWidths[4]
+		if cur < 2*minTime {
+			deficit := 2*minTime - cur
+			// steal space from earlier cols (prefer NAME then ID)
+			for i := 1; i >= 0 && deficit > 0; i-- {
+				take := deficit
+				if colWidths[i] > take+5 { // leave minimum 5 for each
+					colWidths[i] -= take
+					deficit = 0
+				} else {
+					take = colWidths[i] - 5
+					if take > 0 {
+						colWidths[i] -= take
+						deficit -= take
+					}
+				}
+			}
+			// recompute last two to have minTime each if possible
+			if colWidths[3] < minTime {
+				colWidths[3] = minTime
+			}
+			if colWidths[4] < minTime {
+				colWidths[4] = minTime
+			}
+		}
+
+		// Ensure USED column has at least 1 char
+		if colWidths[2] < 1 {
+			colWidths[2] = 1
+		}
+
+		// Update cached widths for header alignment
+		m.colNameWidth = colWidths[0]
+		m.colIdWidth = colWidths[1]
+
+		// Prepare cell texts (truncate where necessary)
+		// Reserve one character for the leading space in the first column
+		nameText := truncateWithEllipsis(cfg.Name, colWidths[0]-1)
+		idText := truncateWithEllipsis(cfg.ID, colWidths[1])
+		usedText := " "
+		if cfg.Used {
+			usedText = "●"
+		}
 		createdStr := "N/A"
 		if !cfg.CreatedAt.IsZero() {
 			createdStr = cfg.CreatedAt.Format("2006-01-02 15:04:05")
@@ -401,18 +521,44 @@ func (m *Model) setRenderItem() {
 		if !cfg.UpdatedAt.IsZero() {
 			updatedStr = cfg.UpdatedAt.Format("2006-01-02 15:04:05")
 		}
-		// Include "CONFIG USED" column
-		usedCol := len("CONFIG USED")
-		usedStr := " "
-		if cfg.Used {
-			usedStr = "●"
-		}
-		line := fmt.Sprintf("%-*s        %-*s        %-*s        %-19s        %-19s", nameCol, cfg.Name, idCol, cfg.ID, usedCol, usedStr, createdStr, updatedStr)
+		createdText := truncateWithEllipsis(createdStr, colWidths[3])
+		updatedText := truncateWithEllipsis(updatedStr, colWidths[4])
+
+		// Build columns and apply styles
+		col0 := itemStyle.Render(fmt.Sprintf(" %-*s", colWidths[0]-1, nameText))
+		col1 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[1], idText))
+		col2 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[2], usedText))
+		col3 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[3], createdText))
+		col4 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[4], updatedText))
+
+		line := col0 + col1 + col2 + col3 + col4
+
 		if selected {
-			return ui.CursorStyle.Render(line)
+			selBg := lipgloss.Color("63")
+			// Keep leading space for first column when selected as well
+			col0 = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true).Render(fmt.Sprintf(" %-*s", colWidths[0]-1, nameText))
+			col1 = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true).Render(fmt.Sprintf("%-*s", colWidths[1], idText))
+			col2 = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true).Render(fmt.Sprintf("%-*s", colWidths[2], usedText))
+			col3 = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true).Render(fmt.Sprintf("%-*s", colWidths[3], createdText))
+			col4 = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true).Render(fmt.Sprintf("%-*s", colWidths[4], updatedText))
+			line = col0 + col1 + col2 + col3 + col4
 		}
-		return itemStyle.Render(line)
+		return line
 	}
+}
+
+// truncateWithEllipsis truncates a string preserving room for an ellipsis
+func truncateWithEllipsis(s string, maxWidth int) string {
+	if len(s) <= maxWidth {
+		return s
+	}
+	if maxWidth <= 1 {
+		return "…"
+	}
+	if maxWidth == 2 {
+		return s[:1] + "…"
+	}
+	return s[:maxWidth-1] + "…"
 }
 
 func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {

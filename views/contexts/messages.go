@@ -1,11 +1,13 @@
 package contexts
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"swarmcli/docker"
+	swarmlog "swarmcli/utils/log"
 	inspectview "swarmcli/views/inspect"
 	"swarmcli/views/view"
 
@@ -61,6 +63,26 @@ type ContextChangedNotification struct{}
 // LoadContextsCmd loads all Docker contexts
 func LoadContextsCmd() tea.Msg {
 	contexts, err := docker.ListContexts()
+	// Log the result so we can diagnose environments where the CLI is slow
+	// or returns an error even though `docker context ls` seems fast.
+	l := swarmlog.L()
+	if err != nil {
+		l.Warnw("ListContexts failed", "error", err)
+	} else {
+		l.Infow("ListContexts succeeded", "count", len(contexts))
+	}
+	// Also emit debug information at debug log level so test runs and CI
+	// can be inspected via the standard logger instead of writing to /tmp.
+	debug := map[string]any{
+		"count": len(contexts),
+		"error": nil,
+	}
+	if err != nil {
+		debug["error"] = err.Error()
+	}
+	if b, jerr := json.Marshal(debug); jerr == nil {
+		swarmlog.L().Debugf("[LoadContexts] %s", string(b))
+	}
 	return ContextsLoadedMsg{
 		Contexts: contexts,
 		Error:    err,

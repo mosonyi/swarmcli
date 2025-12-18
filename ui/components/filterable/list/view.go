@@ -9,10 +9,27 @@ import (
 
 func (f *FilterableList[T]) View() string {
 	if len(f.Filtered) == 0 {
-		if f.Mode == ModeSearching && f.Query != "" {
-			return fmt.Sprintf("No items match: %q", f.Query)
+		// If the underlying Items slice is still nil, the list hasn't been
+		// initialized yet (e.g. still loading). In that case keep any
+		// placeholder content set on the viewport by the parent view so it
+		// can control sizing (e.g. a loading line).
+		if f.Items == nil {
+			return f.Viewport.View()
 		}
-		return "No items found."
+
+		// For an empty-but-initialized list, render a message into the
+		// viewport instead of returning a raw string. This ensures parent
+		// views that pad/trim the viewport content (to occupy full height)
+		// will receive the message as viewport content and can size
+		// correctly.
+		var msg string
+		if f.Mode == ModeSearching && f.Query != "" {
+			msg = fmt.Sprintf("No items match: %q", f.Query)
+		} else {
+			msg = "No items found."
+		}
+		f.Viewport.SetContent(msg)
+		return f.Viewport.View()
 	}
 
 	lines := make([]string, len(f.Filtered))

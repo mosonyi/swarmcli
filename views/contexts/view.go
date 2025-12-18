@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"swarmcli/docker"
 	"swarmcli/ui"
 	"swarmcli/ui/components/errordialog"
 
@@ -50,7 +51,8 @@ func (m *Model) View() string {
 	}
 
 	title := "Docker Contexts"
-	header := "Select a context to switch"
+	// Default header is empty; only show it for loading/switch/error/success
+	header := ""
 
 	if m.IsLoading() {
 		header = "Loading contexts..."
@@ -62,78 +64,169 @@ func (m *Model) View() string {
 		header = msg
 	}
 
+	// We'll render the column header in the frame header slot so it
+	// appears directly under the top border and aligns with content.
 	headerRendered := ui.FrameHeaderStyle.Render(header)
 
-	// Build content
-	var content strings.Builder
-	contexts := m.GetContexts()
-	cursor := m.GetCursor()
+	// Use FilterableList for the contexts content. Keep its viewport
+	// size in sync with the containing viewport and compute padding
+	// so the framed box fills the area.
+	m.List.Viewport.Width = width
+	// Set the list viewport height to the frame height we'll use below
+	// Reserve 2 lines for the stackbar and bottom status line so the
+	// framed box fills the rest of the available area.
+	frameHeight := m.viewport.Height - 2
+	if frameHeight <= 0 {
+		frameHeight = 20
+	}
+	m.List.Viewport.Height = frameHeight
 
-	if len(contexts) == 0 && !m.IsLoading() {
-		content.WriteString("No Docker contexts found")
-	} else {
-		// Table header
-		headerLine := fmt.Sprintf("%-4s %-20s %-4s %-60s %s", "CURR", "NAME", "TLS", "DESCRIPTION", "DOCKER ENDPOINT")
-		content.WriteString(lipgloss.NewStyle().Bold(true).Render(headerLine))
-		content.WriteString("\n")
+	// Compute column widths as five equal percentage chunks so columns
+	// start at 0%, 20%, 40%, 60% and 80% of the content width.
+	contentWidth := width
+	base := contentWidth / 5
+	colWidths := make([]int, 5)
+	for i := 0; i < 5; i++ {
+		colWidths[i] = base
+	}
+	// Distribute remainder to the leftmost columns
+	rem := contentWidth - base*5
+	for i := 0; i < rem && i < 5; i++ {
+		colWidths[i]++
+	}
 
-		// Contexts list
-		for i, ctx := range contexts {
-			current := " "
-			if ctx.Current {
-				current = "*"
-			}
-
-			// Truncate long values
-			name := ctx.Name
-			if len(name) > 18 {
-				name = name[:15] + "..."
-			}
-
-			// TLS indicator - show circle only if TLS is enabled
-			tlsChar := " "
-			if ctx.TLS {
-				tlsChar = "●"
-			}
-
-			desc := ctx.Description
-			if len(desc) > 58 {
-				desc = desc[:55] + "..."
-			}
-
-			host := ctx.DockerHost
-			if len(host) > 40 {
-				host = host[:37] + "..."
-			}
-
-			// Build line
-			line := fmt.Sprintf("%-4s %-20s %-4s %-60s %s", current, name, tlsChar, desc, host)
-
-			// Highlight selected row
-			if i == cursor {
-				line = lipgloss.NewStyle().
-					Background(lipgloss.Color("63")).
-					Foreground(lipgloss.Color("230")).
-					Render(line)
-			}
-
-			content.WriteString(line)
-			content.WriteString("\n")
+	// Now define render using those exact column widths so items align
+	m.List.RenderItem = func(ctx docker.ContextInfo, selected bool, _ int) string {
+		current := " "
+		if ctx.Current {
+			current = "*"
 		}
+
+		// Prepare name with room for the current marker and a space
+		nameMax := colWidths[0] - 2
+		if nameMax < 0 {
+			nameMax = 0
+		}
+		name := ctx.Name
+		if len(name) > nameMax {
+			if nameMax > 3 {
+				name = name[:nameMax-3] + "..."
+			} else {
+				name = name[:nameMax]
+			}
+		}
+		firstCol := fmt.Sprintf("%s %s", current, name)
+
+		tlsChar := " "
+		if ctx.TLS {
+			tlsChar = "●"
+		}
+
+		descMax := colWidths[2]
+		if descMax < 0 {
+			descMax = 0
+		}
+		desc := ctx.Description
+		if len(desc) > descMax {
+			if descMax > 3 {
+				desc = desc[:descMax-3] + "..."
+			} else {
+				desc = desc[:descMax]
+			}
+		}
+
+		hostMax := colWidths[3]
+		if hostMax < 0 {
+			hostMax = 0
+		}
+		host := ctx.DockerHost
+		if len(host) > hostMax {
+			if hostMax > 3 {
+				host = host[:hostMax-3] + "..."
+			} else {
+				host = host[:hostMax]
+			}
+		}
+
+		errMax := colWidths[4]
+		if errMax < 0 {
+			errMax = 0
+		}
+		errStr := ctx.Error
+		if len(errStr) > errMax {
+			if errMax > 3 {
+				errStr = errStr[:errMax-3] + "..."
+			} else {
+				errStr = errStr[:errMax]
+			}
+		}
+
+		// Build the line with exact column widths and no extra spacing so
+		// each column starts at the expected percent positions.
+		line := fmt.Sprintf("%-*s%-*s%-*s%-*s%-*s",
+			colWidths[0], firstCol,
+			colWidths[1], tlsChar,
+			colWidths[2], desc,
+			colWidths[3], host,
+			colWidths[4], errStr,
+		)
+		if selected {
+			return lipgloss.NewStyle().Background(lipgloss.Color("63")).Foreground(lipgloss.Color("230")).Render(line)
+		}
+		return line
 	}
 
+	// If we're still loading, show a loading placeholder to avoid flashing
+	// "No items found." before the async load completes.
+	var content string
+	if m.IsLoading() {
+		// Show an explicit loading line inside the framed box so users
+		// see progress immediately instead of a blank area.
+		loadingLine := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("Loading contexts...")
+		m.List.Viewport.SetContent(loadingLine)
+		content = m.List.Viewport.View()
+	} else {
+		// Column header displayed in the frame header slot. Build it here
+		// so it aligns exactly with the row layout.
+		listContent := m.List.View()
+
+		// Header: reserve two leading spaces so the NAME label lines up
+		// with the name text that starts after the current marker and a space.
+		headerLine := fmt.Sprintf("%-*s%-*s%-*s%-*s%-*s",
+			colWidths[0], "  NAME",
+			colWidths[1], "TLS",
+			colWidths[2], "DESCRIPTION",
+			colWidths[3], "ENDPOINT",
+			colWidths[4], "ERROR",
+		)
+		headerRendered = ui.FrameHeaderStyle.Render(headerLine)
+
+		content = listContent
+	}
 	frameWidth := width + 4
-	height := m.viewport.Height
 
-	// Pad content to fill viewport height
-	contentLines := strings.Split(content.String(), "\n")
-	// Account for frame borders (2), title (1), header (1) = 4 lines overhead
-	availableLines := height - 4
-	if availableLines < 0 {
-		availableLines = 0
+	headerLines := 0
+	if headerRendered != "" {
+		headerLines = len(strings.Split(headerRendered, "\n"))
 	}
-	for len(contentLines) < availableLines {
-		contentLines = append(contentLines, "")
+	footerLines := 0
+
+	desiredContentLines := frameHeight - 2 - headerLines - footerLines
+	if desiredContentLines < 0 {
+		desiredContentLines = 0
+	}
+
+	contentLines := strings.Split(content, "\n")
+
+	for len(contentLines) > 0 && contentLines[len(contentLines)-1] == "" {
+		contentLines = contentLines[:len(contentLines)-1]
+	}
+	if len(contentLines) < desiredContentLines {
+		for i := 0; i < desiredContentLines-len(contentLines); i++ {
+			contentLines = append(contentLines, "")
+		}
+	} else if len(contentLines) > desiredContentLines {
+		contentLines = contentLines[:desiredContentLines]
 	}
 	paddedContent := strings.Join(contentLines, "\n")
 
@@ -162,12 +255,13 @@ func (m *Model) View() string {
 		paddedContent = ui.OverlayCentered(paddedContent, dialogView, width, 0)
 	}
 
-	rendered := ui.RenderFramedBox(
+	rendered := ui.RenderFramedBoxHeight(
 		title,
 		headerRendered,
 		paddedContent,
 		"",
 		frameWidth,
+		frameHeight,
 	)
 
 	return rendered

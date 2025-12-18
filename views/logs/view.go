@@ -209,12 +209,25 @@ func (m *Model) View() string {
 		}
 	}
 
-	content := ui.RenderFramedBox(
+	// Reserve two lines from the viewport height for surrounding UI (match other views)
+	frameHeight := m.viewport.Height - 2
+	if frameHeight <= 0 {
+		// Fall back to a reasonable default using the viewport height if available
+		if m.viewport.Height > 0 {
+			frameHeight = m.viewport.Height - 4
+		}
+		if frameHeight <= 0 {
+			frameHeight = 20
+		}
+	}
+
+	content := ui.RenderFramedBoxHeight(
 		title,
 		headerRendered,
 		viewportContent,
 		"",
 		frameWidth,
+		frameHeight,
 	)
 
 	return content
