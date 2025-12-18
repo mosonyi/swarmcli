@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/confirmdialog"
 	"time"
 
