@@ -71,17 +71,17 @@ func LoadContextsCmd() tea.Msg {
 	} else {
 		l.Infow("ListContexts succeeded", "count", len(contexts))
 	}
-	// Also write a debug file to /tmp so we can inspect the result from test runs
+	// Also emit debug information at debug log level so test runs and CI
+	// can be inspected via the standard logger instead of writing to /tmp.
 	debug := map[string]any{
 		"count": len(contexts),
 		"error": nil,
-		"items": contexts,
 	}
 	if err != nil {
 		debug["error"] = err.Error()
 	}
-	if b, jerr := json.MarshalIndent(debug, "", "  "); jerr == nil {
-		_ = os.WriteFile("/tmp/swarmcli_contexts_debug.json", b, 0644)
+	if b, jerr := json.Marshal(debug); jerr == nil {
+		swarmlog.L().Debugf("[LoadContexts] %s", string(b))
 	}
 	return ContextsLoadedMsg{
 		Contexts: contexts,
