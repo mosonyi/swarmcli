@@ -56,8 +56,8 @@ type Model struct {
 	usedByConfigName string
 
 	// Cached column widths for header alignment
-	colName int
-	colID   int
+	colNameWidth int
+	colIdWidth   int
 }
 
 type state int

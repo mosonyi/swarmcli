@@ -227,8 +227,8 @@ func (m *Model) setRenderItem() {
 		}
 
 		// Update cached widths so header aligns
-		m.colService = colWidths[0]
-		m.colStack = colWidths[1]
+		m.colServiceWidth = colWidths[0]
+		m.colStackWidth = colWidths[1]
 
 		// Prepare texts
 		replicasText := fmt.Sprintf("%d/%d", e.ReplicasOnNode, e.ReplicasTotal)

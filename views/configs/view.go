@@ -106,8 +106,8 @@ func (m *Model) View() string {
 
 	// Fixme: https://github.com/mosonyi/swarmcli/issues/141
 	var contentLines []string
-	nameCol := m.colName
-	idCol := m.colID
+	nameCol := m.colNameWidth
+	idCol := m.colIdWidth
 	if nameCol <= 0 {
 		nameCol = len("NAME")
 	}

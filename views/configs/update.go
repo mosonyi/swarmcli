@@ -502,8 +502,8 @@ func (m *Model) setRenderItem() {
 		}
 
 		// Update cached widths for header alignment
-		m.colName = colWidths[0]
-		m.colID = colWidths[1]
+		m.colNameWidth = colWidths[0]
+		m.colIdWidth = colWidths[1]
 
 		// Prepare cell texts (truncate where necessary)
 		// Reserve one character for the leading space in the first column
