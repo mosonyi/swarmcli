@@ -3,48 +3,47 @@
 package docker
 
 import (
-    "os"
-    "os/exec"
-    "testing"
+	"os/exec"
+	"testing"
 
-    "swarmcli/docker"
+	"swarmcli/docker"
 )
 
 func TestGetContextFromEnv_EnvOverride(t *testing.T) {
-    const want = "ci-test-context"
-    os.Setenv("DOCKER_CONTEXT", want)
-    defer os.Unsetenv("DOCKER_CONTEXT")
+	const want = "ci-test-context"
+	t.Setenv("DOCKER_CONTEXT", want)
 
-    ctx, err := docker.GetContextFromEnv()
-    if err != nil {
-        t.Fatalf("unexpected error: %v", err)
-    }
-    if ctx != want {
-        t.Fatalf("expected context %q, got %q", want, ctx)
-    }
+	ctx, err := docker.GetContextFromEnv()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ctx != want {
+		t.Fatalf("expected context %q, got %q", want, ctx)
+	}
 }
 
 func TestGetContextFromEnv_FallbackToDocker(t *testing.T) {
-    // Ensure docker is available; otherwise skip this integration test.
-    if _, err := exec.LookPath("docker"); err != nil {
-        t.Skip("docker not available; skipping integration test")
-    }
+	// Ensure docker is available; otherwise skip this integration test.
+	if _, err := exec.LookPath("docker"); err != nil {
+		t.Skip("docker not available; skipping integration test")
+	}
 
-    // Unset env so the function falls back to calling `docker context show`.
-    os.Unsetenv("DOCKER_CONTEXT")
+	// Ensure env is empty so the function falls back to calling
+	// `docker context show`.
+	t.Setenv("DOCKER_CONTEXT", "")
 
-    ctxFromFunc, err := docker.GetContextFromEnv()
-    if err != nil {
-        t.Fatalf("GetContextFromEnv failed: %v", err)
-    }
+	ctxFromFunc, err := docker.GetContextFromEnv()
+	if err != nil {
+		t.Fatalf("GetContextFromEnv failed: %v", err)
+	}
 
-    // Compare against the public helper which also queries docker.
-    ctxCurrent, err := docker.GetCurrentContext()
-    if err != nil {
-        t.Fatalf("GetCurrentContext failed: %v", err)
-    }
+	// Compare against the public helper which also queries docker.
+	ctxCurrent, err := docker.GetCurrentContext()
+	if err != nil {
+		t.Fatalf("GetCurrentContext failed: %v", err)
+	}
 
-    if ctxFromFunc != ctxCurrent {
-        t.Fatalf("mismatch: GetContextFromEnv=%q GetCurrentContext=%q", ctxFromFunc, ctxCurrent)
-    }
+	if ctxFromFunc != ctxCurrent {
+		t.Fatalf("mismatch: GetContextFromEnv=%q GetCurrentContext=%q", ctxFromFunc, ctxCurrent)
+	}
 }

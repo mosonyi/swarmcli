@@ -116,7 +116,7 @@ func GetCurrentContext() (string, error) {
 	return ctxName, nil
 }
 
-// getContextFromEnv returns the docker context to use. It prefers the
+// GetContextFromEnv returns the docker context to use. It prefers the
 // DOCKER_CONTEXT environment variable (so the app can be run against a
 // specific context, e.g. in CI or local testing). If that variable is not
 // set, it falls back to calling `docker context show` to retrieve the active
