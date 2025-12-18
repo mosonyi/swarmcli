@@ -1,10 +1,9 @@
 package contexts
 
 import (
-	"fmt"
-	"os"
 	"strings"
 	"swarmcli/docker"
+	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	"sync"
@@ -261,8 +260,9 @@ func (m *Model) SetLoading(loading bool) {
 
 // debug write of loading state for diagnostics
 func (m *Model) debugWriteLoadingState() {
-	// best-effort write; don't fail on error
-	_ = os.WriteFile("/tmp/swarmcli_contexts_state_debug.json", []byte(fmt.Sprintf("{\"loading\":%v,\"count\":%d}\n", m.loading, len(m.contexts))), 0644)
+	// Only log this information at debug level using the standard logger.
+	// The logger will no-op if not running in debug mode.
+	swarmlog.L().Debugf("[contexts] loading=%v count=%d", m.loading, len(m.contexts))
 }
 
 func (m *Model) IsLoading() bool {
