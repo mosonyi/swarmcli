@@ -1,8 +1,6 @@
 package nodesview
 
 import (
-	"encoding/json"
-	"os"
 	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
@@ -99,30 +97,7 @@ func CheckNodesCmd(lastHash uint64) tea.Cmd {
 		l().Infof("CheckNodesCmd: lastHash=%s, newHash=%s, nodeCount=%d",
 			hash.Fmt(lastHash), hash.Fmt(newHash), len(entries))
 
-		// Write debug dump to /tmp for quick inspection during troubleshooting
-		go func() {
-			type dump struct {
-				Last    string              `json:"last"`
-				New     string              `json:"new"`
-				Count   int                 `json:"count"`
-				Entries []map[string]string `json:"entries"`
-			}
-			d := dump{Last: hash.Fmt(lastHash), New: hash.Fmt(newHash), Count: len(entries), Entries: []map[string]string{}}
-			for i, e := range entries {
-				if i >= 10 {
-					break
-				}
-				labels := ""
-				if e.Labels != nil {
-					// Marshal labels into JSON string for readability
-					lb, _ := json.Marshal(e.Labels)
-					labels = string(lb)
-				}
-				d.Entries = append(d.Entries, map[string]string{"ID": e.ID, "Hostname": e.Hostname, "Labels": labels})
-			}
-			b, _ := json.MarshalIndent(d, "", "  ")
-			_ = os.WriteFile("/tmp/swarmcli_nodes_check.json", b, 0644)
-		}()
+		l().Debugf("CheckNodesCmd: Node entries: %+v", entries)
 
 		// Only return update message if something changed
 		if newHash != lastHash {

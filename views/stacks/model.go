@@ -1,8 +1,6 @@
 package stacksview
 
 import (
-	"encoding/json"
-	"os"
 	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
@@ -92,34 +90,11 @@ func LoadStacksWithErr(nodeID string) ([]docker.StackEntry, error) {
 func LoadStacksCmd(nodeID string) tea.Cmd {
 	return func() tea.Msg {
 		stacks, err := LoadStacksWithErr(nodeID)
-		// Also write an initial debug dump so it's easy to confirm loading occurred
-		go func() {
-			type dumpEntry struct {
-				Name         string `json:"name"`
-				ServiceCount int    `json:"service_count"`
-				NodeCount    int    `json:"node_count"`
-			}
-			type dump struct {
-				Count   int         `json:"count"`
-				Context string      `json:"context"`
-				Err     string      `json:"error,omitempty"`
-				Stacks  []dumpEntry `json:"stacks"`
-			}
-			ctxName, _ := docker.GetCurrentContext()
-			errStr := ""
-			if err != nil {
-				errStr = err.Error()
-			}
-			d := dump{Count: len(stacks), Context: ctxName, Err: errStr, Stacks: []dumpEntry{}}
-			for i, s := range stacks {
-				if i >= 50 {
-					break
-				}
-				d.Stacks = append(d.Stacks, dumpEntry{Name: s.Name, ServiceCount: s.ServiceCount, NodeCount: s.NodeCount})
-			}
-			b, _ := json.MarshalIndent(d, "", "  ")
-			_ = os.WriteFile("/tmp/swarmcli_stacks_initial.json", b, 0644)
-		}()
+		if err != nil {
+			l().Errorf("LoadStacksCmd: Error loading stacks: %v", err)
+		}
+
+		l().Debugf("LoadStacksCmd: Loaded %v stacks", stacks)
 
 		return Msg{NodeID: nodeID, Stacks: stacks}
 	}
@@ -142,31 +117,10 @@ func CheckStacksCmd(lastHash uint64, nodeID string) tea.Cmd {
 		l().Infof("CheckStacksCmd: lastHash=%s, newHash=%s, stackCount=%d",
 			hash.Fmt(lastHash), hash.Fmt(newHash), len(stacks))
 
-		// Write a debug dump (like nodes view) for troubleshooting
-		go func() {
-			type dumpEntry struct {
-				Name         string `json:"name"`
-				ServiceCount int    `json:"service_count"`
-				NodeCount    int    `json:"node_count"`
-			}
-			type dump struct {
-				Last    string      `json:"last"`
-				New     string      `json:"new"`
-				Count   int         `json:"count"`
-				Context string      `json:"context"`
-				Stacks  []dumpEntry `json:"stacks"`
-			}
-			ctxName, _ := docker.GetCurrentContext()
-			d := dump{Last: hash.Fmt(lastHash), New: hash.Fmt(newHash), Count: len(stacks), Context: ctxName, Stacks: []dumpEntry{}}
-			for i, s := range stacks {
-				if i >= 50 {
-					break
-				}
-				d.Stacks = append(d.Stacks, dumpEntry{Name: s.Name, ServiceCount: s.ServiceCount, NodeCount: s.NodeCount})
-			}
-			b, _ := json.MarshalIndent(d, "", "  ")
-			_ = os.WriteFile("/tmp/swarmcli_stacks_check.json", b, 0644)
-		}()
+		l().Debugf("CheckStacksCmd: Stacks: %+v", stacks)
+
+		ctxName, _ := docker.GetCurrentContext()
+		l().Debugf("CheckStacksCmd: docker context: %s", ctxName)
 
 		// Only return update message if something changed
 		if newHash != lastHash {
