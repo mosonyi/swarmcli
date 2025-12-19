@@ -10,6 +10,7 @@ before:
 release:
   prerelease: auto
   draft: false
+  use_existing_draft: true
 
 env:
   - CGO_ENABLED=0

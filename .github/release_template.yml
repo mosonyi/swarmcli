@@ -1,0 +1,25 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+exclude-labels:
+  - 'E0-silent'
+categories:
+  - title: ' ‼️ High Priority Release '
+    labels:
+      - 'B2-high-priority'
+  - title: '⚡ Breaking API Changes'
+    labels:
+      - 'C1-breaking-change'
+  - title: ' [Bug Fixes] '
+    label:
+      - 'A2-bugfix'
+  - title: '[UI]'
+    labels:
+      - 'A0-ui'
+  - title: ' [Feature] '
+    label:
+      - 'A1-feature'
+change-template: '- $TITLE (#$NUMBER) @$AUTHOR '
+change-title-escapes: '\<*_&' # You can add # and @ to disable mentions, and add ` to disable code blocks.
+template: |
+  ## What's Changed since $PREVIOUS_TAG
+  $CHANGES
