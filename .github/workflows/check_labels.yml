@@ -6,7 +6,7 @@ on:
 jobs:
   label-check:
     runs-on: ubuntu-latest
-    if: github.base_ref == 'master' && github.event.pull_request.draft == false
+    if: github.base_ref == 'main' && github.event.pull_request.draft == false
     strategy:
       fail-fast: false
       matrix:
