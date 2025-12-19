@@ -1,0 +1,28 @@
+name: Check labels
+on:
+  pull_request:
+    types: [opened, labeled, unlabeled, synchronize, ready_for_review]
+
+jobs:
+  label-check:
+    runs-on: ubuntu-latest
+    if: github.base_ref == 'main' && github.event.pull_request.draft == false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - test: A Label (change type)
+            enforced_labels: "A0-ui,A1-feature,A2-bugfix,A3-technical"
+          - test: B Label (urgency)
+            enforced_labels: "B0-low-priority,B2-high-priority"
+          - test: C Label (breaking changes)
+            enforced_labels: "C0-breaks-nothing,C1-breaking-change"
+    steps:
+      - name: Label check (At least one of each type)
+        run: |
+          MATCH=$(jq -cn '${{ toJSON(github.event.pull_request.labels.*.name) }} as $USER_LABELS |
+          ${{ toJSON(matrix.enforced_labels)  }} | split(",") as $LABELS |
+          $USER_LABELS - ($USER_LABELS - $LABELS)')
+          if [[  "$MATCH" == '[]' ]]; then
+              exit 1
+          fi
