@@ -12,7 +12,7 @@ jobs:
       matrix:
         include:
           - test: A Label (change type)
-            enforced_labels: "A0-ui,A1-feature,A2-bugfix"
+            enforced_labels: "A0-ui,A1-feature,A2-bugfix,A3-technical"
           - test: B Label (urgency)
             enforced_labels: "B0-low-priority,B2-high-priority"
           - test: C Label (breaking changes)
