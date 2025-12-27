@@ -8,8 +8,8 @@ import (
 	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
-	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/ui"
+	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	view "swarmcli/views/view"
 
