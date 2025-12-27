@@ -2,6 +2,7 @@ package stacksview
 
 import (
 	"fmt"
+	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
@@ -121,7 +122,8 @@ func (m *Model) setRenderItem() {
 			width = 80
 		}
 
-		cols := 2
+		cols := 3
+		sepLen := 2
 		starts := make([]int, cols)
 		for i := 0; i < cols; i++ {
 			starts[i] = (i * width) / cols
@@ -138,19 +140,59 @@ func (m *Model) setRenderItem() {
 			}
 		}
 
-		// Update cached widths so header stays aligned after resize
-		m.width = width
+		// Prepare texts with truncation where necessary
+		// First column reserves two leading spaces for marker
+		nameMax := colWidths[0] - 2
+		if nameMax < 0 {
+			nameMax = 0
+		}
+		name := s.Name
+		if lipgloss.Width(name) > nameMax {
+			// Simple rune-aware truncation with ellipsis
+			// fallback: use substring based on runes
+			runes := []rune(name)
+			if len(runes) > nameMax {
+				if nameMax > 1 {
+					name = string(runes[:nameMax-1]) + "…"
+				} else {
+					name = string(runes[:nameMax])
+				}
+			}
+		}
+		first := fmt.Sprintf("  %s", name)
 
-		nameCol := fmt.Sprintf("%-*s", colWidths[0], s.Name)
-		svcCol := fmt.Sprintf("%-*d", colWidths[1], s.ServiceCount)
-		line := nameCol + svcCol
+		svcStr := fmt.Sprintf("%d", s.ServiceCount)
+		svcMax := colWidths[1]
+		if lipgloss.Width(svcStr) > svcMax {
+			svcRunes := []rune(svcStr)
+			if len(svcRunes) > svcMax {
+				svcStr = string(svcRunes[:svcMax])
+			}
+		}
+
+		nodeStr := fmt.Sprintf("%d", s.NodeCount)
+		nodeMax := colWidths[2]
+		if lipgloss.Width(nodeStr) > nodeMax {
+			nodeRunes := []rune(nodeStr)
+			if len(nodeRunes) > nodeMax {
+				nodeStr = string(nodeRunes[:nodeMax])
+			}
+		}
+
+		sep := strings.Repeat(" ", sepLen)
+		col0 := fmt.Sprintf("%-*s", colWidths[0], first)
+		col1 := fmt.Sprintf("%-*s", colWidths[1], svcStr)
+		col2 := fmt.Sprintf("%-*s", colWidths[2], nodeStr)
+
+		line := col0 + sep + col1 + sep + col2
 
 		if selected {
 			selBg := lipgloss.Color("63")
 			selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
-			nameCol = selStyle.Render(fmt.Sprintf("%-*s", colWidths[0], s.Name))
-			svcCol = selStyle.Render(fmt.Sprintf("%-*d", colWidths[1], s.ServiceCount))
-			return nameCol + svcCol
+			col0 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[0], first) + sep)
+			col1 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[1], svcStr) + sep)
+			col2 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[2], nodeStr))
+			return col0 + col1 + col2
 		}
 		return itemStyle.Render(line)
 	}

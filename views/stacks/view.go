@@ -17,8 +17,7 @@ func (m *Model) View() string {
 
 	title := fmt.Sprintf("Stacks on Node (Total: %d)", len(m.List.Items))
 
-	// Compute five percentage-based column widths so columns start at
-	// 0%, 20%, 40%, 60%, 80% of the available content width.
+	// Compute column widths for 3 columns: STACK | SERVICES | NODES
 	width := m.List.Viewport.Width
 	if width <= 0 {
 		width = m.width
@@ -26,27 +25,37 @@ func (m *Model) View() string {
 	if width <= 0 {
 		width = 80
 	}
-	contentWidth := width
-	base := contentWidth / 5
-	colWidths := make([]int, 5)
-	for i := 0; i < 5; i++ {
-		colWidths[i] = base
+
+	cols := 3
+	sepLen := 2
+	// compute proportional starts to mimic row renderer
+	starts := make([]int, cols)
+	for i := 0; i < cols; i++ {
+		starts[i] = (i * width) / cols
 	}
-	rem := contentWidth - base*5
-	for i := 0; i < rem && i < 5; i++ {
-		colWidths[i]++
+	colWidths := make([]int, cols)
+	for i := 0; i < cols; i++ {
+		if i == cols-1 {
+			colWidths[i] = width - starts[i]
+		} else {
+			colWidths[i] = starts[i+1] - starts[i]
+		}
+		if colWidths[i] < 1 {
+			colWidths[i] = 1
+		}
 	}
 
-	// Build header using frame header style so it appears on the first
-	// line inside the framed box and aligns with rows below.
-	headerLine := fmt.Sprintf("%-*s%-*s%-*s%-*s%-*s",
-		colWidths[0], "  STACK",
-		colWidths[1], "SERVICES",
-		colWidths[2], "NODES",
-		colWidths[3], "",
-		colWidths[4], "",
-	)
-	header := ui.FrameHeaderStyle.Render(headerLine)
+	// Add separator space back into header widths so labels align with rendered rows
+	headerRenderWidths := make([]int, cols)
+	for i := 0; i < cols; i++ {
+		if i < cols-1 {
+			headerRenderWidths[i] = colWidths[i] + sepLen
+		} else {
+			headerRenderWidths[i] = colWidths[i]
+		}
+	}
+	labels := []string{"  STACK", "SERVICES", "NODES"}
+	header := ui.RenderColumnHeader(labels, headerRenderWidths)
 
 	// Footer: cursor + optional search query
 	status := fmt.Sprintf("Stack %d of %d", m.List.Cursor+1, len(m.List.Filtered))
@@ -74,41 +83,49 @@ func (m *Model) View() string {
 			nameMax = 0
 		}
 		name := s.Name
-		if len(name) > nameMax {
-			if nameMax > 3 {
-				name = name[:nameMax-3] + "..."
-			} else {
-				name = name[:nameMax]
+		if lipgloss.Width(name) > nameMax {
+			runes := []rune(name)
+			if len(runes) > nameMax {
+				if nameMax > 1 {
+					name = string(runes[:nameMax-1]) + "…"
+				} else {
+					name = string(runes[:nameMax])
+				}
 			}
 		}
 		first := fmt.Sprintf("  %s", name)
 
 		svcStr := fmt.Sprintf("%d", s.ServiceCount)
 		svcMax := colWidths[1]
-		if len(svcStr) > svcMax {
-			svcStr = svcStr[:svcMax]
+		if lipgloss.Width(svcStr) > svcMax {
+			runes := []rune(svcStr)
+			if len(runes) > svcMax {
+				svcStr = string(runes[:svcMax])
+			}
 		}
 
 		nodeStr := fmt.Sprintf("%d", s.NodeCount)
 		nodeMax := colWidths[2]
-		if len(nodeStr) > nodeMax {
-			nodeStr = nodeStr[:nodeMax]
+		if lipgloss.Width(nodeStr) > nodeMax {
+			runes := []rune(nodeStr)
+			if len(runes) > nodeMax {
+				nodeStr = string(runes[:nodeMax])
+			}
 		}
 
-		// Empty placeholders for remaining columns
-		col4 := ""
-		col5 := ""
+		sep := strings.Repeat(" ", sepLen)
+		col0 := fmt.Sprintf("%-*s", colWidths[0], first)
+		col1 := fmt.Sprintf("%-*s", colWidths[1], svcStr)
+		col2 := fmt.Sprintf("%-*s", colWidths[2], nodeStr)
 
-		line := fmt.Sprintf("%-*s%-*s%-*s%-*s%-*s",
-			colWidths[0], first,
-			colWidths[1], svcStr,
-			colWidths[2], nodeStr,
-			colWidths[3], col4,
-			colWidths[4], col5,
-		)
+		line := col0 + sep + col1 + sep + col2
+
 		if selected {
 			selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("63")).Bold(true)
-			return selStyle.Render(line)
+			col0 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[0], first) + sep)
+			col1 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[1], svcStr) + sep)
+			col2 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[2], nodeStr))
+			return col0 + col1 + col2
 		}
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("117")).Render(line)
 	}

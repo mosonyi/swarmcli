@@ -584,23 +584,27 @@ func (m *Model) setRenderItem() {
 		createdText := truncateWithEllipsis(createdStr, colWidths[3])
 		updatedText := truncateWithEllipsis(updatedStr, colWidths[4])
 
-		// Build columns and apply styles
+		// Build columns and apply styles; join with two-space separators
+		sepLen := 2
+		sep := strings.Repeat(" ", sepLen)
 		col0 := itemStyle.Render(fmt.Sprintf(" %-*s", colWidths[0]-1, nameText))
 		col1 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[1], idText))
 		col2 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[2], usedText))
 		col3 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[3], createdText))
 		col4 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[4], updatedText))
 
-		line := col0 + col1 + col2 + col3 + col4
+		line := col0 + sep + col1 + sep + col2 + sep + col3 + sep + col4
 
 		if selected {
 			selBg := lipgloss.Color("63")
-			// Keep leading space for first column when selected as well
-			col0 = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true).Render(fmt.Sprintf(" %-*s", colWidths[0]-1, nameText))
-			col1 = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true).Render(fmt.Sprintf("%-*s", colWidths[1], idText))
-			col2 = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true).Render(fmt.Sprintf("%-*s", colWidths[2], usedText))
-			col3 = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true).Render(fmt.Sprintf("%-*s", colWidths[3], createdText))
-			col4 = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true).Render(fmt.Sprintf("%-*s", colWidths[4], updatedText))
+			selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
+			// Render styled columns including separators so highlight is continuous
+			sepStr := strings.Repeat(" ", sepLen)
+			col0 = selStyle.Render(fmt.Sprintf(" %-*s", colWidths[0]-1, nameText) + sepStr)
+			col1 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[1], idText) + sepStr)
+			col2 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[2], usedText) + sepStr)
+			col3 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[3], createdText) + sepStr)
+			col4 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[4], updatedText))
 			line = col0 + col1 + col2 + col3 + col4
 		}
 		return line

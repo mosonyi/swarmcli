@@ -220,15 +220,12 @@ func renderConfigsHeader(items []configItem, width int) string {
 	if len(items) == 0 {
 		return "NAME         ID                 CONFIG USED      CREATED AT             UPDATED AT"
 	}
-	// Compute proportional widths for 5 columns: NAME | ID | USED | CREATED | UPDATED
+	// Compute proportional widths using the same logic as the row renderer
 	if width <= 0 {
 		width = 80
 	}
-	// In header context, the caller will have already determined viewport width.
-	// We'll attempt to use the current terminal width via lipgloss if possible,
-	// but fall back to 80 if not available. The parent view will set header
-	// line into the frame width, so we just compute equal partitions.
 	cols := 5
+	sepLen := 2
 	starts := make([]int, cols)
 	for i := 0; i < cols; i++ {
 		starts[i] = (i * width) / cols
@@ -245,8 +242,47 @@ func renderConfigsHeader(items []configItem, width int) string {
 		}
 	}
 
+	// Ensure CREATED and UPDATED columns have at least 19 chars
+	minTime := 19
+	cur := colWidths[3] + colWidths[4]
+	if cur < 2*minTime {
+		deficit := 2*minTime - cur
+		for i := 1; i >= 0 && deficit > 0; i-- {
+			take := deficit
+			if colWidths[i] > take+5 {
+				colWidths[i] -= take
+				deficit = 0
+			} else {
+				take = colWidths[i] - 5
+				if take > 0 {
+					colWidths[i] -= take
+					deficit -= take
+				}
+			}
+		}
+		if colWidths[3] < minTime {
+			colWidths[3] = minTime
+		}
+		if colWidths[4] < minTime {
+			colWidths[4] = minTime
+		}
+	}
+
+	if colWidths[2] < 1 {
+		colWidths[2] = 1
+	}
+
+	// Add separators back for header rendering
+	headerRenderWidths := make([]int, cols)
+	for i := 0; i < cols; i++ {
+		if i < cols-1 {
+			headerRenderWidths[i] = colWidths[i] + sepLen
+		} else {
+			headerRenderWidths[i] = colWidths[i]
+		}
+	}
 	labels := []string{" NAME", "ID", "CONFIG USED", "CREATED AT", "UPDATED AT"}
-	return ui.RenderColumnHeader(labels, colWidths)
+	return ui.RenderColumnHeader(labels, headerRenderWidths)
 }
 func (m *Model) renderConfigsFooter() string {
 	status := fmt.Sprintf("Config %d of %d", m.configsList.Cursor+1, len(m.configsList.Filtered))
