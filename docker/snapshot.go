@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/docker/docker/api/types/swarm"
@@ -39,6 +40,8 @@ type SwarmSnapshot struct {
 var (
 	snapshotMu sync.RWMutex
 	snapshot   *SwarmSnapshot
+	// refreshInProgress indicates whether a background refresh goroutine is running.
+	refreshInProgress int32
 )
 
 // cacheTTL controls how long we reuse the snapshot before refreshing.
@@ -93,6 +96,33 @@ func RefreshSnapshot() (*SwarmSnapshot, error) {
 
 	SetSnapshot(snap)
 	return snap, nil
+}
+
+// RefreshSnapshotAsync triggers a background refresh if one is not already running.
+// It returns immediately.
+func RefreshSnapshotAsync() {
+	if !atomic.CompareAndSwapInt32(&refreshInProgress, 0, 1) {
+		// already refreshing
+		return
+	}
+
+	go func() {
+		defer atomic.StoreInt32(&refreshInProgress, 0)
+		// Run a refresh and ignore the error; the cached snapshot will be updated on success.
+		_, _ = RefreshSnapshot()
+	}()
+}
+
+// TriggerRefreshIfNeeded will check the cache TTL and start a background refresh
+// if the snapshot is empty or stale.
+func TriggerRefreshIfNeeded() {
+	snapshotMu.RLock()
+	s := snapshot
+	snapshotMu.RUnlock()
+
+	if s == nil || time.Since(s.Fetched) > cacheTTL {
+		RefreshSnapshotAsync()
+	}
 }
 
 // GetOrRefreshSnapshot returns the current snapshot, refreshing it

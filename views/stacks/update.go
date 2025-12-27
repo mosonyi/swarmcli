@@ -84,12 +84,17 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 func (m *Model) setStacks(stacks []docker.StackEntry) {
 	l().Infof("StacksView.setStacks: Updating display with %d stacks", len(stacks))
 
+	// Update backing items but do not clobber the current Filtered slice or
+	// query/mode. Re-apply the existing filter so the user's current search
+	// remains after a refresh.
 	m.List.Items = stacks
-	m.List.Filtered = stacks
+	m.List.ApplyFilter()
 
 	m.setRenderItem()
 
 	if m.ready {
+		// Refresh viewport content so the parent view sees the filtered
+		// content immediately.
 		m.List.Viewport.SetContent(m.List.View())
 		l().Info("StacksView.setStacks: Viewport content updated")
 	} else {

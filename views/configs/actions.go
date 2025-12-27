@@ -34,6 +34,23 @@ func loadConfigsCmd() tea.Cmd {
 	}
 }
 
+// computeConfigUsedCmd checks which configs are used by services in background
+// and returns a usedStatusUpdatedMsg containing a map[id]bool.
+func computeConfigUsedCmd(cfgs []docker.ConfigWithDecodedData) tea.Cmd {
+	return func() tea.Msg {
+		usedMap := make(map[string]bool, len(cfgs))
+		ctx := context.Background()
+		for _, c := range cfgs {
+			usedMap[c.Config.ID] = false
+			svcs, err := docker.ListServicesUsingConfigID(ctx, c.Config.ID)
+			if err == nil && len(svcs) > 0 {
+				usedMap[c.Config.ID] = true
+			}
+		}
+		return usedStatusUpdatedMsg(usedMap)
+	}
+}
+
 // CheckConfigsCmd checks if configs have changed and returns update message if so
 func CheckConfigsCmd(lastHash uint64) tea.Cmd {
 	return func() tea.Msg {

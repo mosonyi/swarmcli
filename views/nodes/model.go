@@ -65,14 +65,20 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 }
 
 func LoadNodes() []docker.NodeEntry {
-	// Refresh the snapshot to get latest data
-	snapshot, err := docker.RefreshSnapshot()
-	if err != nil {
-		l().Errorf("LoadNodes: RefreshSnapshot failed: %v", err)
-		// Fall back to cached snapshot
-		snapshot = docker.GetSnapshot()
+	// Prefer cached snapshot to avoid blocking the UI. Trigger an async refresh if needed.
+	docker.TriggerRefreshIfNeeded()
+
+	snap := docker.GetSnapshot()
+	if snap == nil {
+		// Try synchronous refresh as a last resort
+		s, err := docker.RefreshSnapshot()
+		if err != nil {
+			l().Errorf("LoadNodes: RefreshSnapshot failed: %v", err)
+			return []docker.NodeEntry{}
+		}
+		snap = s
 	}
-	return snapshot.ToNodeEntries()
+	return snap.ToNodeEntries()
 }
 
 func LoadNodesCmd() tea.Cmd {

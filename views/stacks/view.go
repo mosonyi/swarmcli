@@ -113,9 +113,6 @@ func (m *Model) View() string {
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("117")).Render(line)
 	}
 
-	// Content rendered by the FilterableList
-	content := m.List.View()
-
 	// Add 4 to make frame full terminal width (app reduces viewport by 4 in normal mode)
 	frameWidth := m.List.Viewport.Width
 	if frameWidth <= 0 {
@@ -156,6 +153,10 @@ func (m *Model) View() string {
 	if desiredContentLines < 0 {
 		desiredContentLines = 0
 	}
+
+	// Obtain content for exactly `desiredContentLines` rows without mutating
+	// the viewport height each render to prevent frame jitter.
+	content := m.List.VisibleContent(desiredContentLines)
 
 	contentLines := strings.Split(content, "\n")
 	// Trim trailing empty lines

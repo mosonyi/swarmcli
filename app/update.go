@@ -20,9 +20,9 @@ import (
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case docker.EventMsg:
-		// On Docker events, refresh global snapshot and, if currently
-		// viewing stacks, trigger a reload so the UI updates immediately.
-		_, _ = docker.RefreshSnapshot()
+		// On Docker events, trigger a background refresh and, if currently
+		// viewing stacks/nodes, trigger a reload so the UI updates quickly using cached data.
+		docker.TriggerRefreshIfNeeded()
 		// If node event, refresh nodes view; if stacks view, refresh stacks.
 		switch msg.Type {
 		case "node":
@@ -31,6 +31,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "service", "config", "network":
 			if m.currentView.Name() == stacksview.ViewName {
+				// Use cached snapshot to update stacks quickly
 				return m, tea.Batch(stacksview.LoadStacksCmd(""), docker.WatchEventsCmd())
 			}
 		}
