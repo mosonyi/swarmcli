@@ -49,6 +49,7 @@ type configItem struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	Used      bool // true if used by any service
+	UsedKnown bool // true if Used has been computed (false => loading/unknown)
 }
 
 func (i configItem) FilterValue() string { return i.Name }
@@ -86,6 +87,7 @@ func configItemFromSwarm(ctx context.Context, c swarm.Config) configItem {
 		CreatedAt: c.CreatedAt,
 		UpdatedAt: c.UpdatedAt,
 		Used:      used,
+		UsedKnown: true,
 	}
 }
 
@@ -124,18 +126,20 @@ func (m *Model) View() string {
 			idCol = len(cfg.ID)
 		}
 	}
-	// Use the centralized RenderItem via the FilterableList's View()
-	content := m.configsList.View()
+	// Render exactly desiredContentLines rows from the configs list without
+	// mutating the viewport height each render to prevent jitter.
+	// We'll compute desiredContentLines below and then call VisibleContent.
+	// (placeholder for content variable; actual value assigned later)
+	var content string
 	footer := m.renderConfigsFooter()
 
-	// Compute frame height (total lines including borders). Use viewport height.
-	frameHeight := m.configsList.Viewport.Height
+	// Compute frameHeight similarly to stacks view: reserve two lines from
+	// the viewport height for surrounding UI and fall back to model height
+	// minus reserved lines when viewport hasn't been initialized yet.
+	frameHeight := m.configsList.Viewport.Height - 2
 	if frameHeight <= 0 {
-		// Fall back to the model height (minus reserved lines) if viewport
-		// hasn't been initialized yet. This avoids rendering a tiny 20-line
-		// box while the app is still wiring up sizes.
 		if m.height > 0 {
-			frameHeight = m.height - 2
+			frameHeight = m.height - 4
 		}
 		if frameHeight <= 0 {
 			frameHeight = 20
@@ -160,6 +164,9 @@ func (m *Model) View() string {
 		desiredContentLines = 0
 	}
 
+	// Determine content before trimming/padding by computing desired lines
+	// and asking the FilterableList to render that exact slice.
+	content = m.configsList.VisibleContent(desiredContentLines)
 	contentLines = strings.Split(content, "\n")
 	// Trim trailing empty lines for stable calculation
 	for len(contentLines) > 0 && contentLines[len(contentLines)-1] == "" {
@@ -202,19 +209,6 @@ func (m *Model) View() string {
 		frameWidth = m.width
 	}
 	frameWidth = frameWidth + 4
-
-	// Compute frameHeight similarly to stacks view: reserve two lines from
-	// the viewport height for surrounding UI and fall back to model height
-	// minus reserved lines when viewport hasn't been initialized yet.
-	frameHeight = m.configsList.Viewport.Height - 2
-	if frameHeight <= 0 {
-		if m.height > 0 {
-			frameHeight = m.height - 4
-		}
-		if frameHeight <= 0 {
-			frameHeight = 20
-		}
-	}
 
 	title := fmt.Sprintf("Docker Configs (%d)", len(m.configsList.Filtered))
 	view := ui.RenderFramedBoxHeight(title, header, paddedContent, footer, frameWidth, frameHeight)

@@ -51,9 +51,11 @@ func restartServiceWithProgressCmd(serviceName string, msgCh chan tea.Msg) tea.C
 
 func refreshServicesCmd(nodeID, stackName string, filterType FilterType) tea.Cmd {
 	return func() tea.Msg {
+		// Explicit user-initiated refresh: perform synchronous refresh but keep it defensive.
 		_, err := docker.RefreshSnapshot()
 		if err != nil {
-			return nil
+			// If refresh fails, fall back to cached snapshot and continue
+			l().Errorf("refreshServicesCmd: RefreshSnapshot failed: %v", err)
 		}
 
 		entries, title := LoadServicesForView(filterType, nodeID, stackName)
@@ -87,11 +89,9 @@ func CheckServicesCmd(lastHash uint64, filterType FilterType, nodeID, stackName 
 	return func() tea.Msg {
 		l().Info("CheckServicesCmd: Polling for service changes")
 
-		_, err := docker.RefreshSnapshot()
-		if err != nil {
-			l().Errorf("CheckServicesCmd: RefreshSnapshot failed: %v", err)
-			// Continue with cached snapshot
-		}
+		// Do not block the UI waiting for network calls. Trigger an async refresh if needed
+		// and use the cached snapshot for quick checks.
+		docker.TriggerRefreshIfNeeded()
 
 		entries, title := LoadServicesForView(filterType, nodeID, stackName)
 		newHash, err := hash.Compute(entries)

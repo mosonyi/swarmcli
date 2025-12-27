@@ -9,6 +9,7 @@ import (
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
+	"swarmcli/ui"
 	"swarmcli/views/confirmdialog"
 	view "swarmcli/views/view"
 
@@ -17,8 +18,38 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// usedStatusUpdatedMsg carries a map of config ID -> used boolean
+type usedStatusUpdatedMsg map[string]bool
+
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
+	case SpinnerTickMsg:
+		// advance spinner and refresh view only if there are unknown UsedKnown items
+		m.spinner++
+		need := false
+		for _, it := range m.configsList.Items {
+			if !it.UsedKnown {
+				need = true
+				break
+			}
+		}
+		if need {
+			m.configsList.Viewport.SetContent(m.configsList.View())
+		}
+		return m.spinnerTickCmd()
+	case usedStatusUpdatedMsg:
+		l().Infof("ConfigsView: Received used status updates for %d configs", len(msg))
+		// Update m.configsList.Items used flag based on map
+		for i := range m.configsList.Items {
+			id := m.configsList.Items[i].ID
+			if used, ok := msg[id]; ok {
+				m.configsList.Items[i].Used = used
+				m.configsList.Items[i].UsedKnown = true
+			}
+		}
+
+		m.configsList.Viewport.SetContent(m.configsList.View())
+		return nil
 
 	case tea.WindowSizeMsg:
 		m.configsList.Viewport.Width = msg.Width
@@ -50,17 +81,42 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 		m.configs = msg
 		items := make([]configItem, len(msg))
-		ctx := context.Background()
+		// Preserve previous Used state where possible to avoid UI "blinking".
+		// Build a lookup of existing Used values by ID and reuse them until
+		// the background computation finishes and sends an update.
+		// Preserve previous Used and UsedKnown state where possible to avoid UI "blinking".
+		prevUsed := make(map[string]bool, len(m.configsList.Items))
+		prevKnown := make(map[string]bool, len(m.configsList.Items))
+		for _, it := range m.configsList.Items {
+			prevUsed[it.ID] = it.Used
+			prevKnown[it.ID] = it.UsedKnown
+		}
 		for i, cfg := range msg {
-			items[i] = configItemFromSwarm(ctx, cfg.Config)
+			used := false
+			known := false
+			if val, ok := prevUsed[cfg.Config.ID]; ok {
+				used = val
+			}
+			if k, ok := prevKnown[cfg.Config.ID]; ok {
+				known = k
+			}
+			items[i] = configItem{
+				Name:      cfg.Config.Spec.Name,
+				ID:        cfg.Config.ID,
+				CreatedAt: cfg.Config.CreatedAt,
+				UpdatedAt: cfg.Config.UpdatedAt,
+				Used:      used,
+				UsedKnown: known,
+			}
 		}
 		m.configsList.Items = items
 		m.setRenderItem()
 		m.configsList.ApplyFilter()
 
 		m.state = stateReady
-		l().Info("ConfigsView: Config list updated")
-		return nil
+		l().Info("ConfigsView: Config list updated (used status pending)")
+		// Start background computation of Used flags
+		return computeConfigUsedCmd(msg)
 
 	case TickMsg:
 		l().Infof("ConfigsView: Received TickMsg, state=%v, visible=%v", m.state, m.visible)
@@ -198,6 +254,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				h = 20
 			}
 		}
+
 		vp := viewport.New(w, h)
 		vp.SetContent("")
 
@@ -510,7 +567,10 @@ func (m *Model) setRenderItem() {
 		nameText := truncateWithEllipsis(cfg.Name, colWidths[0]-1)
 		idText := truncateWithEllipsis(cfg.ID, colWidths[1])
 		usedText := " "
-		if cfg.Used {
+		if !cfg.UsedKnown {
+			// Use same spinner charset as systeminfo (14) for consistency
+			usedText = ui.SpinnerCharAt(m.spinner)
+		} else if cfg.Used {
 			usedText = "●"
 		}
 		createdStr := "N/A"

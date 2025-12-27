@@ -66,3 +66,5 @@ type (
 type TickMsg time.Time
 
 const PollInterval = 5 * time.Second
+
+type SpinnerTickMsg time.Time

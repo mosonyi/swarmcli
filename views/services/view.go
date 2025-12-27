@@ -65,11 +65,6 @@ func (m *Model) View() string {
 		footer = statusBar
 	}
 
-	// Use the FilterableList's View() which already formats items and sets
-	// the internal viewport content. Then pad/trim the textual lines to the
-	// desired inner content height before framing (same approach as configs).
-	content := m.List.View()
-
 	// Reserve two lines from the viewport height for surrounding UI (helpbar/systeminfo)
 	frameHeight := m.List.Viewport.Height - 2
 	if frameHeight <= 0 {
@@ -85,6 +80,10 @@ func (m *Model) View() string {
 	if desiredContentLines < 0 {
 		desiredContentLines = 0
 	}
+
+	// Render exactly the number of lines that will be displayed without
+	// mutating viewport height each render to avoid frame jitter.
+	content := m.List.VisibleContent(desiredContentLines)
 
 	contentLines := strings.Split(content, "\n")
 	// Trim trailing empty lines

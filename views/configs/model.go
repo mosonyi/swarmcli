@@ -58,6 +58,9 @@ type Model struct {
 	// Cached column widths for header alignment
 	colNameWidth int
 	colIdWidth   int
+
+	// Spinner for slow-used-status indicator
+	spinner int
 }
 
 type state int
@@ -112,7 +115,13 @@ func (m *Model) Name() string { return ViewName }
 
 func (m *Model) Init() tea.Cmd {
 	l().Info("ConfigsView: Init() called - starting ticker and loading configs")
-	return tea.Batch(tickCmd(), LoadConfigs())
+	return tea.Batch(tickCmd(), m.spinnerTickCmd(), LoadConfigs())
+}
+
+func (m *Model) spinnerTickCmd() tea.Cmd {
+	return tea.Tick(80*time.Millisecond, func(t time.Time) tea.Msg {
+		return SpinnerTickMsg(t)
+	})
 }
 
 func tickCmd() tea.Cmd {
