@@ -74,18 +74,15 @@ func LoadStacks(nodeID string) []docker.StackEntry {
 
 // LoadStacksWithErr refreshes snapshot and returns stack entries along with any error
 func LoadStacksWithErr(nodeID string) ([]docker.StackEntry, error) {
-	// Trigger a background refresh if needed, but prefer using cached data to avoid blocking UI
-	docker.TriggerRefreshIfNeeded()
-
-	snap := docker.GetSnapshot()
-	if snap == nil {
-		// No cached data available; attempt a synchronous refresh as a last resort
-		s, err := docker.RefreshSnapshot()
-		if err != nil {
-			l().Errorf("LoadStacksWithErr: RefreshSnapshot failed: %v", err)
+	// Refresh the snapshot to get latest data
+	snap, err := docker.RefreshSnapshot()
+	if err != nil {
+		l().Errorf("LoadStacksWithErr: RefreshSnapshot failed: %v", err)
+		// Fall back to cached snapshot
+		snap = docker.GetSnapshot()
+		if snap == nil {
 			return []docker.StackEntry{}, err
 		}
-		snap = s
 	}
 	return snap.ToStackEntries(), nil
 }
