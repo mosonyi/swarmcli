@@ -204,7 +204,7 @@ func (m *Model) SetContexts(contexts []docker.ContextInfo) {
 		m.List.Viewport.Width = m.viewport.Width
 	}
 	if m.viewport.Height > 0 {
-		h := m.viewport.Height - 2
+		h := m.viewport.Height
 		if h <= 0 {
 			h = 20
 		}

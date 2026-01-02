@@ -18,6 +18,7 @@ type Model struct {
 	Visible          bool
 	nodeID           string
 	ready            bool
+	firstResize      bool // tracks if we've received the first window size
 	width            int
 	height           int
 	lastSnapshot     uint64 // hash of last snapshot for change detection
@@ -27,6 +28,7 @@ type Model struct {
 func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
+	vp.YOffset = 0
 
 	list := filterlist.FilterableList[docker.StackEntry]{
 		Viewport: vp,
@@ -37,10 +39,11 @@ func New(width, height int) *Model {
 	}
 
 	return &Model{
-		List:    list,
-		Visible: false,
-		width:   width,
-		height:  height,
+		List:        list,
+		Visible:     false,
+		firstResize: true,
+		width:       width,
+		height:      height,
 	}
 }
 
@@ -74,15 +77,18 @@ func LoadStacks(nodeID string) []docker.StackEntry {
 
 // LoadStacksWithErr refreshes snapshot and returns stack entries along with any error
 func LoadStacksWithErr(nodeID string) ([]docker.StackEntry, error) {
-	// Refresh the snapshot to get latest data
-	snap, err := docker.RefreshSnapshot()
-	if err != nil {
-		l().Errorf("LoadStacksWithErr: RefreshSnapshot failed: %v", err)
-		// Fall back to cached snapshot
-		snap = docker.GetSnapshot()
-		if snap == nil {
+	// Trigger a background refresh if needed, but prefer using cached data to avoid blocking UI
+	docker.TriggerRefreshIfNeeded()
+
+	snap := docker.GetSnapshot()
+	if snap == nil {
+		// No cached data available; attempt a synchronous refresh as a last resort
+		s, err := docker.RefreshSnapshot()
+		if err != nil {
+			l().Errorf("LoadStacksWithErr: RefreshSnapshot failed: %v", err)
 			return []docker.StackEntry{}, err
 		}
+		snap = s
 	}
 	return snap.ToStackEntries(), nil
 }
@@ -135,3 +141,7 @@ func CheckStacksCmd(lastHash uint64, nodeID string) tea.Cmd {
 
 func (m *Model) OnEnter() tea.Cmd { return nil }
 func (m *Model) OnExit() tea.Cmd  { return nil }
+
+func (m *Model) HasActiveFilter() bool {
+	return m.List.Query != ""
+}

@@ -5,13 +5,16 @@ import (
 	"strings"
 	"swarmcli/ui"
 	"swarmcli/views/helpbar"
+	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 const ViewName = "loading"
+
+// SpinnerTickMsg for animating the spinner
+type SpinnerTickMsg time.Time
 
 // ErrorDismissedMsg is sent when user presses Enter on an error screen
 type ErrorDismissedMsg struct{}
@@ -21,7 +24,7 @@ type Model struct {
 	title         string
 	header        string
 	message       string
-	spinner       spinner.Model
+	spinner       int // frame counter for spinner animation
 	visible       bool
 	isError       bool
 }
@@ -59,30 +62,43 @@ func New(width, height int, visible bool, payload any) *Model {
 		}
 	}
 
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(ui.FrameBorderColor)
 	isError := strings.HasPrefix(message, "Error")
-	return &Model{width: width, height: height, title: title, header: header, message: message, spinner: s, visible: visible, isError: isError}
+	return &Model{width: width, height: height, title: title, header: header, message: message, spinner: 0, visible: visible, isError: isError}
 }
 
 func (m *Model) Visible() bool     { return m.visible }
 func (m *Model) SetVisible(v bool) { m.visible = v }
-func (m *Model) Init() tea.Cmd     { return m.spinner.Tick }
+func (m *Model) SetSize(w, h int)  { m.width = w; m.height = h }
+func (m *Model) Init() tea.Cmd     { return m.spinnerTickCmd() }
 func (m *Model) Name() string      { return ViewName }
 
+func (m *Model) spinnerTickCmd() tea.Cmd {
+	return tea.Tick(80*time.Millisecond, func(t time.Time) tea.Msg {
+		return SpinnerTickMsg(t)
+	})
+}
+
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
-	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		if m.isError && keyMsg.String() == "enter" {
+	switch msg := msg.(type) {
+	case SpinnerTickMsg:
+		m.spinner++
+		return m.spinnerTickCmd()
+	case tea.WindowSizeMsg:
+		// WindowSizeMsg here is already adjusted by the app (height minus systeminfo header and footer)
+		// But we need to add back the 4 pixels that were subtracted for viewport padding
+		// because the loading view renders its own frame
+		m.width = msg.Width + 4
+		m.height = msg.Height
+		return nil
+	case tea.KeyMsg:
+		if m.isError && msg.String() == "enter" {
 			// Emit generic error dismissed message
 			return func() tea.Msg {
 				return ErrorDismissedMsg{}
 			}
 		}
 	}
-	var cmd tea.Cmd
-	m.spinner, cmd = m.spinner.Update(msg)
-	return cmd
+	return nil
 }
 
 func (m *Model) View() string {
@@ -96,14 +112,19 @@ func (m *Model) View() string {
 	}
 
 	// Normal loading view
-	content := fmt.Sprintf("%s %s", m.spinner.View(), m.message)
+	spinnerChar := ui.SpinnerCharAt(m.spinner)
+	content := fmt.Sprintf("%s  %s", spinnerChar, m.message)
 	content = strings.TrimSpace(content)
-	// Use height-aware framed box: m.height holds the available height for this view
+	// Use height-aware framed box with proper width
 	frameHeight := m.height
 	if frameHeight < 0 {
 		frameHeight = 0
 	}
-	box := ui.RenderFramedBoxHeight(m.title, m.header, content, "", 0, frameHeight) // minimal width
+	frameWidth := m.width
+	if frameWidth < 0 {
+		frameWidth = 0
+	}
+	box := ui.RenderFramedBoxHeight(m.title, m.header, content, "", frameWidth, frameHeight)
 	return box
 }
 

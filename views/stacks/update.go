@@ -45,10 +45,23 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
 		m.List.Viewport.Width = msg.Width
 		m.List.Viewport.Height = msg.Height
 		m.ready = true
-		m.List.Viewport.SetContent(m.List.View())
+
+		// On first resize (initialization), always reset YOffset to 0
+		// This fixes the issue where the view is created with small dimensions,
+		// then resized, causing YOffset to be incorrectly set
+		if m.firstResize {
+			m.List.Viewport.YOffset = 0
+			m.firstResize = false
+			l().Info("First WindowSizeMsg: resetting YOffset to 0")
+		} else if m.List.Cursor == 0 {
+			// On subsequent resizes, only reset YOffset if cursor is at top
+			m.List.Viewport.YOffset = 0
+		}
 		return nil
 
 	case tea.KeyMsg:
@@ -59,6 +72,16 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 
 		// --- normal mode ---
+		// If ESC is pressed and there's an active filter, clear it instead of quitting
+		if msg.Type == tea.KeyEsc && m.List.Query != "" {
+			m.List.Query = ""
+			m.List.Mode = filterlist.ModeNormal
+			m.List.ApplyFilter()
+			m.List.Cursor = 0
+			m.List.Viewport.GotoTop()
+			return nil
+		}
+
 		m.List.HandleKey(msg) // still handle up/down/pgup/pgdown
 
 		// Enter triggers navigation
@@ -84,16 +107,47 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 func (m *Model) setStacks(stacks []docker.StackEntry) {
 	l().Infof("StacksView.setStacks: Updating display with %d stacks", len(stacks))
 
+	// Preserve filter query and cursor position
+	oldQuery := m.List.Query
+	oldMode := m.List.Mode
+	oldCursor := m.List.Cursor
+
 	m.List.Items = stacks
-	m.List.Filtered = stacks
+
+	// Restore filter query and mode
+	m.List.Query = oldQuery
+	m.List.Mode = oldMode
+
+	// Re-apply filter to update filtered list
+	if oldQuery != "" {
+		m.List.ApplyFilter()
+	} else {
+		m.List.Filtered = stacks
+	}
+
+	// Restore cursor position if still valid
+	if oldCursor < len(m.List.Filtered) {
+		m.List.Cursor = oldCursor
+	} else if len(m.List.Filtered) > 0 {
+		m.List.Cursor = len(m.List.Filtered) - 1
+	} else {
+		m.List.Cursor = 0
+	}
+
+	// If cursor is at 0 (initial state), ensure YOffset is also 0
+	if m.List.Cursor == 0 {
+		m.List.Viewport.YOffset = 0
+	}
 
 	m.setRenderItem()
 
+	// Note: We don't call SetContent here because the View() method uses
+	// VisibleContent() to render only the visible portion. Calling SetContent
+	// with View() would cause conflicting YOffset adjustments.
 	if m.ready {
-		m.List.Viewport.SetContent(m.List.View())
-		l().Info("StacksView.setStacks: Viewport content updated")
+		l().Info("StacksView.setStacks: Content ready for rendering")
 	} else {
-		l().Warn("StacksView.setStacks: View not ready yet, skipping viewport update")
+		l().Warn("StacksView.setStacks: View not ready yet")
 	}
 }
 

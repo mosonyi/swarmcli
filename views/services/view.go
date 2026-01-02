@@ -2,7 +2,6 @@ package servicesview
 
 import (
 	"fmt"
-	"strings"
 	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
@@ -15,9 +14,6 @@ func (m *Model) View() string {
 	if width <= 0 {
 		width = 80
 	}
-
-	// Add 4 to make frame full terminal width (app reduces viewport by 4 in normal mode)
-	frameWidth := width + 4
 
 	// The header column widths are computed further down using the same
 	// effective-width logic as the renderer; see that computation below.
@@ -154,16 +150,6 @@ func (m *Model) View() string {
 		footer = ui.StatusBarStyle.Render("Filter: " + m.List.Query)
 	}
 
-	// Compute header/footer line counts
-	headerLines := 0
-	if header != "" {
-		headerLines = 1
-	}
-	footerLines := 0
-	if footer != "" {
-		footerLines = len(strings.Split(footer, "\n"))
-	}
-
 	// Compose footer (status bar + optional filter line)
 	if footer != "" {
 		footer = statusBar + "\n" + footer
@@ -171,48 +157,28 @@ func (m *Model) View() string {
 		footer = statusBar
 	}
 
-	// Reserve two lines from the viewport height for surrounding UI (helpbar/systeminfo)
-	frameHeight := m.List.Viewport.Height - 2
-	if frameHeight <= 0 {
-		if m.height > 0 {
-			frameHeight = m.height - 4
-		}
-		if frameHeight <= 0 {
-			frameHeight = 20
-		}
-	}
+	frame := ui.ComputeFrameDimensions(
+		m.List.Viewport.Width,
+		m.List.Viewport.Height,
+		m.width,
+		m.height,
+		header,
+		footer,
+	)
 
-	desiredContentLines := frameHeight - 2 - headerLines - footerLines
-	if desiredContentLines < 0 {
-		desiredContentLines = 0
-	}
+	// Use VisibleContent to get only the visible portion based on cursor position
+	// This ensures proper scrolling and that the cursor is always visible
+	// VisibleContent already returns exactly desiredContentLines, so we use
+	// RenderFramedBox instead of RenderFramedBoxHeight to avoid double-padding
+	content := m.List.VisibleContent(frame.DesiredContentLines)
 
-	// Render exactly the number of lines that will be displayed without
-	// mutating viewport height each render to avoid frame jitter.
-	content := m.List.VisibleContent(desiredContentLines)
-
-	contentLines := strings.Split(content, "\n")
-	// Trim trailing empty lines
-	for len(contentLines) > 0 && contentLines[len(contentLines)-1] == "" {
-		contentLines = contentLines[:len(contentLines)-1]
-	}
-	// Pad or trim to desired length
-	if len(contentLines) < desiredContentLines {
-		for i := 0; i < desiredContentLines-len(contentLines); i++ {
-			contentLines = append(contentLines, "")
-		}
-	} else if len(contentLines) > desiredContentLines {
-		contentLines = contentLines[:desiredContentLines]
-	}
-	paddedContent := strings.Join(contentLines, "\n")
-
-	framed := ui.RenderFramedBoxHeight(m.title, header, paddedContent, footer, frameWidth, frameHeight)
+	framed := ui.RenderFramedBox(m.title, header, content, footer, frame.FrameWidth)
 
 	if m.confirmDialog.Visible {
-		framed = ui.OverlayCentered(framed, m.confirmDialog.View(), frameWidth, m.List.Viewport.Height)
+		framed = ui.OverlayCentered(framed, m.confirmDialog.View(), frame.FrameWidth, frame.FrameHeight)
 	}
 	if m.loading.Visible() {
-		framed = ui.OverlayCentered(framed, m.loading.View(), frameWidth, m.List.Viewport.Height)
+		framed = ui.OverlayCentered(framed, m.loading.View(), frame.FrameWidth, frame.FrameHeight)
 	}
 
 	return framed

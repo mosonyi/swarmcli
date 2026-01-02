@@ -3,7 +3,6 @@ package configsview
 import (
 	"context"
 	"fmt"
-	"strings"
 	"swarmcli/docker"
 	"swarmcli/ui"
 	"swarmcli/ui/components/errordialog"
@@ -107,7 +106,6 @@ func (m *Model) View() string {
 	header := renderConfigsHeader(m.configsList.Items, width)
 
 	// Fixme: https://github.com/mosonyi/swarmcli/issues/141
-	var contentLines []string
 	nameCol := m.colNameWidth
 	idCol := m.colIdWidth
 	if nameCol <= 0 {
@@ -133,85 +131,41 @@ func (m *Model) View() string {
 	var content string
 	footer := m.renderConfigsFooter()
 
-	// Compute frameHeight similarly to stacks view: reserve two lines from
-	// the viewport height for surrounding UI and fall back to model height
-	// minus reserved lines when viewport hasn't been initialized yet.
-	frameHeight := m.configsList.Viewport.Height - 2
-	if frameHeight <= 0 {
-		if m.height > 0 {
-			frameHeight = m.height - 4
-		}
-		if frameHeight <= 0 {
-			frameHeight = 20
-		}
-	}
+	frame := ui.ComputeFrameDimensions(
+		m.configsList.Viewport.Width,
+		m.configsList.Viewport.Height,
+		m.width,
+		m.height,
+		header,
+		footer,
+	)
 
-	// Header occupies one line when present
-	headerLines := 0
-	if header != "" {
-		headerLines = 1
-	}
+	// Use VisibleContent to get only the visible portion based on cursor position
+	// This ensures proper scrolling and that the cursor is always visible
+	// VisibleContent already returns exactly desiredContentLines, so we use
+	// RenderFramedBox instead of RenderFramedBoxHeight to avoid double-padding
+	content = m.configsList.VisibleContent(frame.DesiredContentLines)
 
-	// Footer lines
-	footerLines := 0
-	if footer != "" {
-		footerLines = len(strings.Split(footer, "\n"))
-	}
-
-	// Desired content lines inside the box (not counting borders)
-	desiredContentLines := frameHeight - 2 - headerLines - footerLines
-	if desiredContentLines < 0 {
-		desiredContentLines = 0
-	}
-
-	// Determine content before trimming/padding by computing desired lines
-	// and asking the FilterableList to render that exact slice.
-	content = m.configsList.VisibleContent(desiredContentLines)
-	contentLines = strings.Split(content, "\n")
-	// Trim trailing empty lines for stable calculation
-	for len(contentLines) > 0 && contentLines[len(contentLines)-1] == "" {
-		contentLines = contentLines[:len(contentLines)-1]
-	}
-
-	// Pad or trim content to desired length
-	if len(contentLines) < desiredContentLines {
-		for i := 0; i < desiredContentLines-len(contentLines); i++ {
-			contentLines = append(contentLines, "")
-		}
-	} else if len(contentLines) > desiredContentLines {
-		contentLines = contentLines[:desiredContentLines]
-	}
-
-	paddedContent := strings.Join(contentLines, "\n")
-
-	// Apply overlays to padded content BEFORE framing
+	// Apply overlays to content BEFORE framing
 	if m.fileBrowserActive {
 		fileBrowserDialog := ui.RenderFileBrowserDialog("Select File", m.fileBrowserPath, m.fileBrowserFiles, m.fileBrowserCursor)
-		paddedContent = ui.OverlayCentered(paddedContent, fileBrowserDialog, width, 0)
+		content = ui.OverlayCentered(content, fileBrowserDialog, width, 0)
 	} else if m.createDialogActive {
 		createDialog := m.renderCreateDialog()
-		paddedContent = ui.OverlayCentered(paddedContent, createDialog, width, 0)
+		content = ui.OverlayCentered(content, createDialog, width, 0)
 	} else if m.confirmDialog.Visible {
 		dialogView := ui.RenderConfirmDialog(m.confirmDialog.Message)
-		paddedContent = ui.OverlayCentered(paddedContent, dialogView, width, 0)
+		content = ui.OverlayCentered(content, dialogView, width, 0)
 	} else if m.errorDialogActive {
 		errorDialog := errordialog.Render(fmt.Sprintf("%v", m.err))
-		paddedContent = ui.OverlayCentered(paddedContent, errorDialog, width, 0)
+		content = ui.OverlayCentered(content, errorDialog, width, 0)
 	} else if m.state == stateLoading || m.loadingView.Visible() {
 		loadingView := m.loadingView.View()
-		paddedContent = ui.OverlayCentered(paddedContent, loadingView, width, 0)
+		content = ui.OverlayCentered(content, loadingView, width, 0)
 	}
-
-	// Use viewport width for frame width (fallback to model width), add 4
-	// to make frame full terminal width (app reduces viewport by 4 in normal mode)
-	frameWidth := m.configsList.Viewport.Width
-	if frameWidth <= 0 {
-		frameWidth = m.width
-	}
-	frameWidth = frameWidth + 4
 
 	title := fmt.Sprintf("Docker Configs (%d)", len(m.configsList.Filtered))
-	view := ui.RenderFramedBoxHeight(title, header, paddedContent, footer, frameWidth, frameHeight)
+	view := ui.RenderFramedBox(title, header, content, footer, frame.FrameWidth)
 
 	return view
 }
@@ -427,38 +381,24 @@ func (m *Model) renderUsedByView() string {
 	}
 
 	header := m.renderUsedByHeader()
-	content := m.usedByList.View()
 	footer := m.renderUsedByFooter()
 
-	// Pad content to fill viewport height
-	height := m.usedByList.Viewport.Height
-	if height <= 0 {
-		if m.height > 0 {
-			height = m.height - 2
-		}
-		if height <= 0 {
-			height = 20
-		}
-	}
-	contentLines := strings.Split(content, "\n")
-	availableLines := height - 4
-	if availableLines < 0 {
-		availableLines = 0
-	}
-	for len(contentLines) < availableLines {
-		contentLines = append(contentLines, "")
-	}
-	paddedContent := strings.Join(contentLines, "\n")
+	// Compute frame dimensions to get the exact number of content lines needed
+	frame := ui.ComputeFrameDimensions(
+		m.usedByList.Viewport.Width,
+		m.usedByList.Viewport.Height,
+		m.width,
+		m.height,
+		header,
+		footer,
+	)
 
-	// Add 4 to make frame full terminal width (app reduces viewport by 4 in normal mode)
-	frameWidth := m.usedByList.Viewport.Width + 4
+	// Use VisibleContent to get only the visible portion based on cursor position
+	// This ensures proper scrolling and that the cursor is always visible
+	content := m.usedByList.VisibleContent(frame.DesiredContentLines)
 
 	title := fmt.Sprintf("Config: %s - Used By Stacks (%d)", m.usedByConfigName, len(m.usedByList.Filtered))
-	frameHeight := height - 2
-	if frameHeight < 0 {
-		frameHeight = 0
-	}
-	return ui.RenderFramedBoxHeight(title, header, paddedContent, footer, frameWidth, frameHeight)
+	return ui.RenderFramedBox(title, header, content, footer, frame.FrameWidth)
 }
 
 func (m *Model) renderUsedByHeader() string {

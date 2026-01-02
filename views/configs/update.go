@@ -56,6 +56,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// msg.Height is already adjusted by the app to account for the
 		// systeminfo header; avoid subtracting extra lines here.
 		m.configsList.Viewport.Height = msg.Height
+		// On first resize, reset YOffset to 0; on subsequent resizes, only reset if cursor is at top
+		if m.firstResize {
+			m.configsList.Viewport.YOffset = 0
+			m.firstResize = false
+		} else if m.configsList.Cursor == 0 {
+			m.configsList.Viewport.YOffset = 0
+		}
 		return nil
 
 	case configsLoadedMsg:

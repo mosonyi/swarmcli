@@ -1,177 +1,123 @@
 package stacksview
 
 import (
-        "fmt"
-        "strings"
-        "swarmcli/docker"
-        "swarmcli/ui"
-        filterlist "swarmcli/ui/components/filterable/list"
+	"fmt"
+	"swarmcli/docker"
+	"swarmcli/ui"
+	filterlist "swarmcli/ui/components/filterable/list"
 
-        "github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (m *Model) View() string {
-        if !m.Visible {
-                return ""
-        }
+	if !m.Visible {
+		return ""
+	}
 
-        title := fmt.Sprintf("Stacks on Node (Total: %d)", len(m.List.Items))
+	title := fmt.Sprintf("Stacks on Node (Total: %d)", len(m.List.Items))
 
-        // Compute five percentage-based column widths so columns start at
-        // 0%, 20%, 40%, 60%, 80% of the available content width.
-        width := m.List.Viewport.Width
-        if width <= 0 {
-                width = m.width
-        }
-        if width <= 0 {
-                width = 80
-        }
-        contentWidth := width
-        base := contentWidth / 5
-        colWidths := make([]int, 5)
-        for i := 0; i < 5; i++ {
-                colWidths[i] = base
-        }
-        rem := contentWidth - base*5
-        for i := 0; i < rem && i < 5; i++ {
-                colWidths[i]++
-        }
+	// Compute three percentage-based column widths so columns start at
+	// 0%, 33%, 66% of the available content width.
+	width := m.List.Viewport.Width
+	if width <= 0 {
+		width = m.width
+	}
+	if width <= 0 {
+		width = 80
+	}
+	contentWidth := width
 
-        // Build header using frame header style so it appears on the first
-        // line inside the framed box and aligns with rows below.
-        headerLine := fmt.Sprintf("%-*s%-*s%-*s%-*s%-*s",
-                colWidths[0], "  STACK",
-                colWidths[1], "SERVICES",
-                colWidths[2], "NODES",
-                colWidths[3], "",
-                colWidths[4], "",
-        )
-        header := ui.FrameHeaderStyle.Render(headerLine)
+	// Calculate column widths: each column gets 33% of width
+	colWidths := make([]int, 3)
+	colWidths[0] = (contentWidth * 33) / 100
+	colWidths[1] = (contentWidth * 33) / 100
+	colWidths[2] = contentWidth - colWidths[0] - colWidths[1] // Remaining width for last column
 
-        // Footer: cursor + optional search query
-        status := fmt.Sprintf("Stack %d of %d", m.List.Cursor+1, len(m.List.Filtered))
-        statusBar := ui.StatusBarStyle.Render(status)
+	// Build header using frame header style so it appears on the first
+	// line inside the framed box and aligns with rows below.
+	headerLine := fmt.Sprintf("%-*s%-*s%-*s",
+		colWidths[0], "  STACK",
+		colWidths[1], "SERVICES",
+		colWidths[2], "NODES",
+	)
+	header := ui.FrameHeaderStyle.Render(headerLine)
 
-        var footer string
-        if m.List.Mode == filterlist.ModeSearching {
-                footer = ui.StatusBarStyle.Render("Filter (type then Enter): " + m.List.Query)
-        } else if m.List.Query != "" {
-                footer = ui.StatusBarStyle.Render("Filter: " + m.List.Query)
-        }
+	// Footer: cursor + optional search query
+	status := fmt.Sprintf("Stack %d of %d", m.List.Cursor+1, len(m.List.Filtered))
+	statusBar := ui.StatusBarStyle.Render(status)
 
-        if footer != "" {
-                footer = statusBar + "\n" + footer
-        } else {
-                footer = statusBar
-        }
+	var footer string
+	if m.List.Mode == filterlist.ModeSearching {
+		footer = ui.StatusBarStyle.Render("Filter (type then Enter): " + m.List.Query)
+	} else if m.List.Query != "" {
+		footer = ui.StatusBarStyle.Render("Filter: " + m.List.Query)
+	}
 
-        // Set RenderItem to format rows using the same colWidths so the
-        // header and rows align exactly.
-        m.List.RenderItem = func(s docker.StackEntry, selected bool, _ int) string {
-                // First column: current marker + name (we don't have a marker here but keep spacing)
-                nameMax := colWidths[0] - 2
-                if nameMax < 0 {
-                        nameMax = 0
-                }
-                name := s.Name
-                if len(name) > nameMax {
-                        if nameMax > 3 {
-                                name = name[:nameMax-3] + "..."
-                        } else {
-                                name = name[:nameMax]
-                        }
-                }
-                first := fmt.Sprintf("  %s", name)
+	if footer != "" {
+		footer = statusBar + "\n" + footer
+	} else {
+		footer = statusBar
+	}
 
-                svcStr := fmt.Sprintf("%d", s.ServiceCount)
-                svcMax := colWidths[1]
-                if len(svcStr) > svcMax {
-                        svcStr = svcStr[:svcMax]
-                }
+	// Set RenderItem to format rows using the same colWidths so the
+	// header and rows align exactly.
+	m.List.RenderItem = func(s docker.StackEntry, selected bool, _ int) string {
+		// First column: current marker + name (we don't have a marker here but keep spacing)
+		nameMax := colWidths[0] - 2
+		if nameMax < 0 {
+			nameMax = 0
+		}
+		name := s.Name
+		if len(name) > nameMax {
+			if nameMax > 3 {
+				name = name[:nameMax-3] + "..."
+			} else {
+				name = name[:nameMax]
+			}
+		}
+		first := fmt.Sprintf("  %s", name)
 
-                nodeStr := fmt.Sprintf("%d", s.NodeCount)
-                nodeMax := colWidths[2]
-                if len(nodeStr) > nodeMax {
-                        nodeStr = nodeStr[:nodeMax]
-                }
+		svcStr := fmt.Sprintf("%d", s.ServiceCount)
+		svcMax := colWidths[1]
+		if len(svcStr) > svcMax {
+			svcStr = svcStr[:svcMax]
+		}
 
-                // Empty placeholders for remaining columns
-                col4 := ""
-                col5 := ""
+		nodeStr := fmt.Sprintf("%d", s.NodeCount)
+		nodeMax := colWidths[2]
+		if len(nodeStr) > nodeMax {
+			nodeStr = nodeStr[:nodeMax]
+		}
 
-                line := fmt.Sprintf("%-*s%-*s%-*s%-*s%-*s",
-                        colWidths[0], first,
-                        colWidths[1], svcStr,
-                        colWidths[2], nodeStr,
-                        colWidths[3], col4,
-                        colWidths[4], col5,
-                )
-                if selected {
-                        selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("63")).
-Bold(true)                                                                                                                                         return selStyle.Render(line)
-                }
-                return lipgloss.NewStyle().Foreground(lipgloss.Color("117")).Render(line)
-        }
+		line := fmt.Sprintf("%-*s%-*s%-*s",
+			colWidths[0], first,
+			colWidths[1], svcStr,
+			colWidths[2], nodeStr,
+		)
+		if selected {
+			selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("63")).Bold(true)
+			return selStyle.Render(line)
+		}
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Render(line)
+	}
 
-        // Content rendered by the FilterableList
-        content := m.List.View()
+	// Compute consistent frame sizing using shared helper (stacks is template)
+	frame := ui.ComputeFrameDimensions(
+		m.List.Viewport.Width,
+		m.List.Viewport.Height,
+		m.width,
+		m.height,
+		header,
+		footer,
+	)
 
-        // Add 4 to make frame full terminal width (app reduces viewport by 4 in normal mode)
-        frameWidth := m.List.Viewport.Width
-        if frameWidth <= 0 {
-                // Fallback to model width if viewport hasn't been initialized yet
-                frameWidth = m.width
-        }
-        frameWidth = frameWidth + 4
+	// Use VisibleContent to get only the visible portion based on cursor position
+	// This ensures proper scrolling and that the cursor is always visible
+	// VisibleContent already returns exactly desiredContentLines, so we use
+	// RenderFramedBox instead of RenderFramedBoxHeight to avoid double-padding
+	content := m.List.VisibleContent(frame.DesiredContentLines)
 
-        // Compute frameHeight from viewport (treat Viewport.Height as the total
-        // frame height like `configs` view does). Then compute desired inner
-        // content lines = frameHeight - borders - header - footer, and pad/trim
-        // content to that length.
-        // Use the adjusted viewport height directly; the framing helper
-        // will account for borders. Do not subtract extra rows here.
-        // Reserve two lines from the viewport height for surrounding UI (helpbar/systeminfo)
-        frameHeight := m.List.Viewport.Height - 2
-        if frameHeight <= 0 {
-                // Fallback to model height minus reserved lines if viewport not initialized
-                if m.height > 0 {
-                        frameHeight = m.height - 4
-                }
-                if frameHeight <= 0 {
-                        frameHeight = 20
-                }
-        }
+	framed := ui.RenderFramedBox(title, header, content, footer, frame.FrameWidth)
 
-        // Header occupies one line when present (styled header renders single line)
-        headerLines := 0
-        if header != "" {
-                headerLines = 1
-        }
-        footerLines := 0
-        if footer != "" {
-                footerLines = len(strings.Split(footer, "\n"))
-        }
-
-        desiredContentLines := frameHeight - 2 - headerLines - footerLines
-        if desiredContentLines < 0 {
-                desiredContentLines = 0
-        }
-
-        contentLines := strings.Split(content, "\n")
-        // Trim trailing empty lines
-        for len(contentLines) > 0 && contentLines[len(contentLines)-1] == "" {
-                contentLines = contentLines[:len(contentLines)-1]
-        }
-        if len(contentLines) < desiredContentLines {
-                for i := 0; i < desiredContentLines-len(contentLines); i++ {
-                        contentLines = append(contentLines, "")
-                }
-        } else if len(contentLines) > desiredContentLines {
-                contentLines = contentLines[:desiredContentLines]
-        }
-        paddedContent := strings.Join(contentLines, "\n")
-
-        framed := ui.RenderFramedBoxHeight(title, header, paddedContent, footer, frameWidth, frameHeight)
-
-        return framed
+	return framed
 }

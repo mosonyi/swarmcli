@@ -16,6 +16,7 @@ type Model struct {
 	List         filterlist.FilterableList[docker.NodeEntry]
 	Visible      bool
 	ready        bool
+	firstResize  bool // tracks if we've received the first window size
 	width        int
 	height       int
 	colWidths    map[string]int
@@ -34,10 +35,11 @@ func New(width, height int) *Model {
 	}
 
 	return &Model{
-		List:    list,
-		Visible: false,
-		width:   width,
-		height:  height,
+		List:        list,
+		Visible:     false,
+		firstResize: true,
+		width:       width,
+		height:      height,
 	}
 }
 

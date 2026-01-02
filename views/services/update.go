@@ -31,7 +31,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		m.SetContent(msg)
 		m.Visible = true
-		m.List.Viewport.SetContent(m.List.View())
+		// Reset cursor and YOffset when loading new data
+		m.List.Cursor = 0
+		m.List.Viewport.YOffset = 0
 		// Continue polling
 		return tickCmd()
 
@@ -47,8 +49,15 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case tea.WindowSizeMsg:
 		m.List.Viewport.Width = msg.Width
 		m.List.Viewport.Height = msg.Height
+		m.loading.SetSize(msg.Width+4, msg.Height)
 		m.ready = true
-		m.List.Viewport.SetContent(m.List.View())
+		// On first resize, reset YOffset to 0; on subsequent resizes, only reset if cursor is at top
+		if m.firstResize {
+			m.List.Viewport.YOffset = 0
+			m.firstResize = false
+		} else if m.List.Cursor == 0 {
+			m.List.Viewport.YOffset = 0
+		}
 		return nil
 	case confirmdialog.ResultMsg:
 		m.confirmDialog.Visible = false

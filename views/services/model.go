@@ -29,6 +29,7 @@ type Model struct {
 	Visible      bool
 	title        string
 	ready        bool
+	firstResize  bool // tracks if we've received the first window size
 	width        int
 	height       int
 	lastSnapshot uint64 // hash of last snapshot for change detection
@@ -62,6 +63,7 @@ func New(width, height int) *Model {
 	return &Model{
 		List:          list,
 		Visible:       false,
+		firstResize:   true,
 		width:         width,
 		height:        height,
 		confirmDialog: confirmdialog.New(width, height),
