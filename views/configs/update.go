@@ -414,6 +414,15 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 
 		// --- normal mode ---
+		if msg.Type == tea.KeyEsc && m.configsList.Query != "" {
+			m.configsList.Query = ""
+			m.configsList.Mode = filterlist.ModeNormal
+			m.configsList.ApplyFilter()
+			m.configsList.Cursor = 0
+			m.configsList.Viewport.GotoTop()
+			return nil
+		}
+
 		// Handle specific keys in switch, then navigation keys
 		switch msg.String() {
 		case "ctrl+d":
@@ -919,6 +928,14 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyMsg) tea.Cmd {
 func (m *Model) handleUsedByViewKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc":
+		if m.usedByList.Query != "" {
+			m.usedByList.Query = ""
+			m.usedByList.Mode = filterlist.ModeNormal
+			m.usedByList.ApplyFilter()
+			m.usedByList.Cursor = 0
+			m.usedByList.Viewport.GotoTop()
+			return nil
+		}
 		// Go back to configs view
 		m.usedByViewActive = false
 		m.usedByList.Items = nil

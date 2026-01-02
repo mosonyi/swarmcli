@@ -112,6 +112,15 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 
 		// --- normal mode ---
+		if msg.Type == tea.KeyEsc && m.List.Query != "" {
+			m.List.Query = ""
+			m.List.Mode = filterlist.ModeNormal
+			m.List.ApplyFilter()
+			m.List.Cursor = 0
+			m.List.Viewport.GotoTop()
+			return nil
+		}
+
 		m.List.HandleKey(msg) // still handle up/down/pgup/pgdown
 
 		switch msg.String() {

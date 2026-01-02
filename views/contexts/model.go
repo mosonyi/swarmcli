@@ -341,6 +341,11 @@ func (m *Model) OnExit() tea.Cmd {
 	return nil
 }
 
+// HasActiveFilter reports whether a filter query is active.
+func (m *Model) HasActiveFilter() bool {
+	return m.List.Query != ""
+}
+
 // updateCreateFocus updates focus state for create dialog inputs
 func (m *Model) updateCreateFocus() {
 	m.createNameInput.Blur()

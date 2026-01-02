@@ -115,6 +115,11 @@ func New(width, height int) *Model {
 
 func (m *Model) Name() string { return ViewName }
 
+// HasActiveFilter reports whether a filter query is active.
+func (m *Model) HasActiveFilter() bool {
+	return m.configsList.Query != ""
+}
+
 func (m *Model) Init() tea.Cmd {
 	l().Info("ConfigsView: Init() called - starting ticker and loading configs")
 	return tea.Batch(tickCmd(), m.spinnerTickCmd(), LoadConfigs())

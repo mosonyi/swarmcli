@@ -138,3 +138,8 @@ func (m *Model) OnEnter() tea.Cmd {
 func (m *Model) OnExit() tea.Cmd {
 	return nil
 }
+
+// HasActiveFilter reports whether a filter query is active.
+func (m *Model) HasActiveFilter() bool {
+	return m.List.Query != ""
+}
