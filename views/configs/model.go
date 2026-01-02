@@ -120,6 +120,14 @@ func (m *Model) HasActiveFilter() bool {
 	return m.configsList.Query != ""
 }
 
+// IsSearching reports whether the configs or UsedBy list is in search mode.
+func (m *Model) IsSearching() bool {
+	if m.usedByViewActive {
+		return m.usedByList.Mode == filterlist.ModeSearching
+	}
+	return m.configsList.Mode == filterlist.ModeSearching
+}
+
 func (m *Model) Init() tea.Cmd {
 	l().Info("ConfigsView: Init() called - starting ticker and loading configs")
 	return tea.Batch(tickCmd(), m.spinnerTickCmd(), LoadConfigs())

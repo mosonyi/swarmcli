@@ -346,6 +346,11 @@ func (m *Model) HasActiveFilter() bool {
 	return m.List.Query != ""
 }
 
+// IsSearching reports whether the list is currently in search mode.
+func (m *Model) IsSearching() bool {
+	return m.List.Mode == filterlist.ModeSearching
+}
+
 // updateCreateFocus updates focus state for create dialog inputs
 func (m *Model) updateCreateFocus() {
 	m.createNameInput.Blur()

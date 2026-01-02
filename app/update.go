@@ -268,6 +268,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	// Check if current view is in fullscreen or search mode before handling global esc
 	if msg.Type == tea.KeyEsc || msg.String() == "esc" {
+		// If a view is actively searching/filtering, let it handle ESC (and other keys)
+		if searchView, ok := m.currentView.(interface{ IsSearching() bool }); ok {
+			if searchView.IsSearching() {
+				cmd := m.currentView.Update(msg)
+				return m, cmd
+			}
+		}
+
 		// Check if stacks view has an active filter
 		if stacksView, ok := m.currentView.(interface {
 			HasActiveFilter() bool
@@ -341,6 +349,13 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Global quit handler
 	if msg.Type == tea.KeyCtrlC || msg.String() == "q" {
+		// Allow views in search mode to consume the key (so typing 'q' in a search query doesn't exit)
+		if searchView, ok := m.currentView.(interface{ IsSearching() bool }); ok {
+			if searchView.IsSearching() {
+				cmd := m.currentView.Update(msg)
+				return m, cmd
+			}
+		}
 		cmd := m.goBack()
 		return m, cmd
 	}

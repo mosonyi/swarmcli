@@ -145,3 +145,8 @@ func (m *Model) OnExit() tea.Cmd  { return nil }
 func (m *Model) HasActiveFilter() bool {
 	return m.List.Query != ""
 }
+
+// IsSearching reports whether the list is currently in search mode.
+func (m *Model) IsSearching() bool {
+	return m.List.Mode == filterlist.ModeSearching
+}
