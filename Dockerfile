@@ -1,26 +1,22 @@
 # syntax=docker/dockerfile:1
 FROM golang:1.25
 
-# Set working directory
 WORKDIR /app
 
-# Install Docker CLI from Debian repos to avoid docker.com 404s
+# Install Docker from official Docker repository
 RUN apt-get update && \
-    apt-get install -y \
-        ca-certificates \
-        curl \
-        gnupg \
-        docker.io \
-        docker-buildx-plugin \
-        docker-compose-plugin && \
+    apt-get install -y ca-certificates curl gnupg && \
+    install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc && \
+    chmod a+r /etc/apt/keyrings/docker.asc && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list && \
+    apt-get update && \
+    apt-get install -y docker-ce-cli docker-buildx-plugin docker-compose-plugin && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy go.mod and go.sum separately
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source
 COPY . .
 
-# Default command (optional, override with `docker run`)
 CMD ["bash"]
