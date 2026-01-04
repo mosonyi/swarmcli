@@ -34,11 +34,13 @@ type Model struct {
 func InitialModel() *Model {
 	// Use larger initial dimensions that will be adjusted by first WindowSizeMsg
 	// This avoids the loading view appearing too small on the first render
-	vp := viewport.New(200, 50)
+	terminalWidth, terminalHeight := 200, 50
+
+	vp := viewport.New(terminalWidth, terminalHeight)
 	// Start viewport below the system info header (original default)
 	vp.YPosition = 5
 
-	loading := loadingview.New(200, 50, true, map[string]string{
+	loading := loadingview.New(terminalWidth, terminalHeight, true, map[string]string{
 		"title":   "Initializing",
 		"header":  "Fetching cluster info",
 		"message": "Loading Swarm nodes and stacks...",
@@ -50,8 +52,8 @@ func InitialModel() *Model {
 		systemInfo:     systeminfoview.New(version),
 		viewStack:      viewstack.Stack{},
 		commandInput:   cmdBar(),
-		terminalWidth:  200,
-		terminalHeight: 50,
+		terminalWidth:  terminalWidth,
+		terminalHeight: terminalHeight,
 	}
 }
 
