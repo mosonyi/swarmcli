@@ -2,7 +2,10 @@ package ui
 
 import "strings"
 
-const horizontalPadding = 4
+const (
+	horizontalPadding = 4
+	verticalPadding   = 2
+)
 
 // FrameSpec captures the calculated dimensions for a framed view.
 type FrameSpec struct {
@@ -20,7 +23,7 @@ type FrameSpec struct {
 //
 // Behavior aligns with stacks view: add 4 columns for frame padding, use the
 // already-adjusted viewport height directly, and compute the inner content
-// lines as frameHeight - borders - header - footer (never negative).
+// lines as frameHeight - vertical padding - header - footer (never negative).
 func ComputeFrameDimensions(viewportWidth, viewportHeight, fallbackWidth, fallbackHeight int, header, footer string) FrameSpec {
 	frameWidth := viewportWidth
 	if frameWidth <= 0 {
@@ -49,7 +52,7 @@ func ComputeFrameDimensions(viewportWidth, viewportHeight, fallbackWidth, fallba
 		footerLines = len(strings.Split(footer, "\n"))
 	}
 
-	desiredContentLines := frameHeight - 2 - headerLines - footerLines
+	desiredContentLines := frameHeight - verticalPadding - headerLines - footerLines
 	if desiredContentLines < 0 {
 		desiredContentLines = 0
 	}
