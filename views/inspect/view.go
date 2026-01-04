@@ -47,7 +47,7 @@ func (m *Model) View() string {
 	)
 
 	// Get viewport content and truncate to fit the frame
-	viewportContent := ui.TrimContentToLines(m.viewport.View(), frame.DesiredContentLines)
+	viewportContent := ui.TrimOrPadContentToLines(m.viewport.View(), frame.DesiredContentLines)
 
 	// ---- Render framed box ----
 	content := ui.RenderFramedBox(

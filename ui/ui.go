@@ -167,10 +167,10 @@ func RenderFramedBoxHeight(title, header, content, footer string, width, frameHe
 	return RenderFramedBox(title, header, paddedContent, footer, width)
 }
 
-// TrimContentToLines returns content limited to exactly `lines` rows,
+// TrimOrPadContentToLines returns content limited to exactly `lines` rows,
 // padding with empty lines when shorter. Useful when framing viewport
 // content to a fixed height.
-func TrimContentToLines(content string, lines int) string {
+func TrimOrPadContentToLines(content string, lines int) string {
 	if lines < 1 {
 		lines = 1
 	}
