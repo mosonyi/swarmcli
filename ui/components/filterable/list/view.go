@@ -37,6 +37,9 @@ func (f *FilterableList[T]) View() string {
 		lines[i] = f.RenderItem(item, i == f.Cursor, f.colWidth)
 	}
 
+	// Ensure cursor is visible before setting content
+	f.ensureCursorVisible()
+
 	content := strings.Join(lines, "\n")
 	// Only update viewport content here
 	f.Viewport.SetContent(content)

@@ -20,6 +20,7 @@ type Model struct {
 	configsList  filterlist.FilterableList[configItem]
 	width        int
 	height       int
+	firstResize  bool   // tracks if we've received the first window size
 	lastSnapshot uint64 // hash of last snapshot for change detection
 	visible      bool   // tracks if view is currently active
 
@@ -102,6 +103,7 @@ func New(width, height int) *Model {
 		configsList:     list,
 		width:           width,
 		height:          height,
+		firstResize:     true,
 		state:           stateLoading,
 		visible:         true,
 		confirmDialog:   confirmdialog.New(0, 0),
@@ -112,6 +114,19 @@ func New(width, height int) *Model {
 }
 
 func (m *Model) Name() string { return ViewName }
+
+// HasActiveFilter reports whether a filter query is active.
+func (m *Model) HasActiveFilter() bool {
+	return m.configsList.Query != ""
+}
+
+// IsSearching reports whether the configs or UsedBy list is in search mode.
+func (m *Model) IsSearching() bool {
+	if m.usedByViewActive {
+		return m.usedByList.Mode == filterlist.ModeSearching
+	}
+	return m.configsList.Mode == filterlist.ModeSearching
+}
 
 func (m *Model) Init() tea.Cmd {
 	l().Info("ConfigsView: Init() called - starting ticker and loading configs")

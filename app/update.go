@@ -205,10 +205,9 @@ func (m *Model) updateForResize(msg tea.WindowSizeMsg) tea.Cmd {
 		usableWidth = msg.Width
 		usableHeight = msg.Height - 2 // Just for top/bottom borders
 	} else {
-		// Normal mode: pass the full terminal height to the viewport. The
-		// per-view resize handler (`handleViewResize`) will subtract the
-		// systeminfo height (header), so the final view height becomes
-		// terminalHeight - systeminfoview.Height (i.e. max - 6).
+		// Normal mode:
+		// - Width: subtract 4 for frame borders/padding
+		// - Height: pass full height, handleViewResize will subtract systeminfo header
 		usableWidth = msg.Width - 4
 		usableHeight = msg.Height
 		// If command input is visible, reserve 3 lines so the main view is
@@ -240,8 +239,8 @@ func handleViewResize(view view.View, width, height int, isFullscreen bool) tea.
 		// In fullscreen, subtract 1 for title line
 		adjustedHeight = height - 1
 	} else {
-		// Normal mode: subtract systeminfo height
-		adjustedHeight = height - systeminfoview.Height
+		// Normal mode: subtract systeminfo height (6) + breadcrumb (1) = 7 lines total
+		adjustedHeight = height - 7
 	}
 
 	var adjustedMsg = tea.WindowSizeMsg{
@@ -269,6 +268,24 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	// Check if current view is in fullscreen or search mode before handling global esc
 	if msg.Type == tea.KeyEsc || msg.String() == "esc" {
+		// If a view is actively searching/filtering, let it handle ESC (and other keys)
+		if searchView, ok := m.currentView.(interface{ IsSearching() bool }); ok {
+			if searchView.IsSearching() {
+				cmd := m.currentView.Update(msg)
+				return m, cmd
+			}
+		}
+
+		// Check if stacks view has an active filter
+		if stacksView, ok := m.currentView.(interface {
+			HasActiveFilter() bool
+		}); ok {
+			if stacksView.HasActiveFilter() {
+				// Let the view handle esc to clear the filter
+				cmd := m.currentView.Update(msg)
+				return m, cmd
+			}
+		}
 		// Check if logs view has dialog open
 		if logsView, ok := m.currentView.(interface {
 			GetNodeSelectVisible() bool
@@ -320,13 +337,25 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		}
-		// Otherwise, go back as normal
+		// Otherwise, go back - but don't quit from the root stacks view with ESC
+		// ESC should only go back through the navigation stack, not exit the app
+		if m.viewStack.Len() == 0 {
+			// At root view (stacks), ESC does nothing - only 'q' or Ctrl+C exits
+			return m, nil
+		}
 		cmd := m.goBack()
 		return m, cmd
 	}
 
 	// Global quit handler
 	if msg.Type == tea.KeyCtrlC || msg.String() == "q" {
+		// Allow views in search mode to consume the key (so typing 'q' in a search query doesn't exit)
+		if searchView, ok := m.currentView.(interface{ IsSearching() bool }); ok {
+			if searchView.IsSearching() {
+				cmd := m.currentView.Update(msg)
+				return m, cmd
+			}
+		}
 		cmd := m.goBack()
 		return m, cmd
 	}

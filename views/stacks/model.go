@@ -18,6 +18,7 @@ type Model struct {
 	Visible          bool
 	nodeID           string
 	ready            bool
+	firstResize      bool // tracks if we've received the first window size
 	width            int
 	height           int
 	lastSnapshot     uint64 // hash of last snapshot for change detection
@@ -27,6 +28,7 @@ type Model struct {
 func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
+	vp.YOffset = 0
 
 	list := filterlist.FilterableList[docker.StackEntry]{
 		Viewport: vp,
@@ -37,10 +39,11 @@ func New(width, height int) *Model {
 	}
 
 	return &Model{
-		List:    list,
-		Visible: false,
-		width:   width,
-		height:  height,
+		List:        list,
+		Visible:     false,
+		firstResize: true,
+		width:       width,
+		height:      height,
 	}
 }
 
@@ -138,3 +141,12 @@ func CheckStacksCmd(lastHash uint64, nodeID string) tea.Cmd {
 
 func (m *Model) OnEnter() tea.Cmd { return nil }
 func (m *Model) OnExit() tea.Cmd  { return nil }
+
+func (m *Model) HasActiveFilter() bool {
+	return m.List.Query != ""
+}
+
+// IsSearching reports whether the list is currently in search mode.
+func (m *Model) IsSearching() bool {
+	return m.List.Mode == filterlist.ModeSearching
+}

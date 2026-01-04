@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	"time"
 
@@ -271,6 +272,16 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case tea.KeyMsg:
+		// Clear active filter with ESC (consistent with stacks view)
+		if m.List.Mode != filterlist.ModeSearching && msg.Type == tea.KeyEsc && m.List.Query != "" {
+			m.List.Query = ""
+			m.List.Mode = filterlist.ModeNormal
+			m.List.ApplyFilter()
+			m.List.Cursor = 0
+			m.List.Viewport.GotoTop()
+			return nil
+		}
+
 		// Handle cert file browser if active (highest priority)
 		if m.certFileBrowserActive {
 			switch msg.String() {

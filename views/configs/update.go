@@ -56,6 +56,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// msg.Height is already adjusted by the app to account for the
 		// systeminfo header; avoid subtracting extra lines here.
 		m.configsList.Viewport.Height = msg.Height
+		// On first resize, reset YOffset to 0; on subsequent resizes, only reset if cursor is at top
+		if m.firstResize {
+			m.configsList.Viewport.YOffset = 0
+			m.firstResize = false
+		} else if m.configsList.Cursor == 0 {
+			m.configsList.Viewport.YOffset = 0
+		}
 		return nil
 
 	case configsLoadedMsg:
@@ -407,6 +414,15 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 
 		// --- normal mode ---
+		if msg.Type == tea.KeyEsc && m.configsList.Query != "" {
+			m.configsList.Query = ""
+			m.configsList.Mode = filterlist.ModeNormal
+			m.configsList.ApplyFilter()
+			m.configsList.Cursor = 0
+			m.configsList.Viewport.GotoTop()
+			return nil
+		}
+
 		// Handle specific keys in switch, then navigation keys
 		switch msg.String() {
 		case "ctrl+d":
@@ -584,23 +600,27 @@ func (m *Model) setRenderItem() {
 		createdText := truncateWithEllipsis(createdStr, colWidths[3])
 		updatedText := truncateWithEllipsis(updatedStr, colWidths[4])
 
-		// Build columns and apply styles
+		// Build columns and apply styles; join with two-space separators
+		sepLen := 2
+		sep := strings.Repeat(" ", sepLen)
 		col0 := itemStyle.Render(fmt.Sprintf(" %-*s", colWidths[0]-1, nameText))
 		col1 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[1], idText))
 		col2 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[2], usedText))
 		col3 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[3], createdText))
 		col4 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[4], updatedText))
 
-		line := col0 + col1 + col2 + col3 + col4
+		line := col0 + sep + col1 + sep + col2 + sep + col3 + sep + col4
 
 		if selected {
 			selBg := lipgloss.Color("63")
-			// Keep leading space for first column when selected as well
-			col0 = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true).Render(fmt.Sprintf(" %-*s", colWidths[0]-1, nameText))
-			col1 = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true).Render(fmt.Sprintf("%-*s", colWidths[1], idText))
-			col2 = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true).Render(fmt.Sprintf("%-*s", colWidths[2], usedText))
-			col3 = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true).Render(fmt.Sprintf("%-*s", colWidths[3], createdText))
-			col4 = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true).Render(fmt.Sprintf("%-*s", colWidths[4], updatedText))
+			selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
+			// Render styled columns including separators so highlight is continuous
+			sepStr := strings.Repeat(" ", sepLen)
+			col0 = selStyle.Render(fmt.Sprintf(" %-*s", colWidths[0]-1, nameText) + sepStr)
+			col1 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[1], idText) + sepStr)
+			col2 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[2], usedText) + sepStr)
+			col3 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[3], createdText) + sepStr)
+			col4 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[4], updatedText))
 			line = col0 + col1 + col2 + col3 + col4
 		}
 		return line
@@ -908,6 +928,14 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyMsg) tea.Cmd {
 func (m *Model) handleUsedByViewKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc":
+		if m.usedByList.Query != "" {
+			m.usedByList.Query = ""
+			m.usedByList.Mode = filterlist.ModeNormal
+			m.usedByList.ApplyFilter()
+			m.usedByList.Cursor = 0
+			m.usedByList.Viewport.GotoTop()
+			return nil
+		}
 		// Go back to configs view
 		m.usedByViewActive = false
 		m.usedByList.Items = nil

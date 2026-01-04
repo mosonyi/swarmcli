@@ -10,12 +10,12 @@ import (
 // Styles (you can override these per-view if desired)
 var (
 	FrameTitleStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("81")).
-		Bold(true)
+			Foreground(lipgloss.Color("81")).
+			Bold(true)
 
 	FrameHeaderStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("75")).
-		Bold(true)
+				Foreground(lipgloss.Color("75")).
+				Bold(true)
 
 	FrameBorderColor = lipgloss.Color("117")
 )
@@ -165,6 +165,27 @@ func RenderFramedBoxHeight(title, header, content, footer string, width, frameHe
 
 	paddedContent := strings.Join(contentLines, "\n")
 	return RenderFramedBox(title, header, paddedContent, footer, width)
+}
+
+// TrimOrPadContentToLines returns content limited to exactly `lines` rows,
+// padding with empty lines when shorter. Useful when framing viewport
+// content to a fixed height.
+func TrimOrPadContentToLines(content string, lines int) string {
+	if lines < 1 {
+		lines = 1
+	}
+
+	parts := strings.Split(content, "\n")
+
+	if len(parts) > lines {
+		parts = parts[:lines]
+	}
+
+	for len(parts) < lines {
+		parts = append(parts, "")
+	}
+
+	return strings.Join(parts, "\n")
 }
 
 // padLine fits a line to width, preserving ANSI sequences

@@ -20,15 +20,31 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		l().Infof("NodesView: Received Msg with %d entries", len(msg.Entries))
 		// Update the hash with new data
 		var err error
-		m.lastSnapshot, err = hash.Compute(msg.Entries)
+		newHash, err := hash.Compute(msg.Entries)
 		if err != nil {
 			l().Errorf("NodesView: Error computing hash: %v", err)
 			return nil
 		}
+
+		// Only reset cursor on first load (when lastSnapshot is 0)
+		shouldResetCursor := m.lastSnapshot == 0
+		m.lastSnapshot = newHash
+
+		// Store current cursor position before updating content
+		oldCursor := m.List.Cursor
+		oldYOffset := m.List.Viewport.YOffset
+
 		m.SetContent(msg)
-		// Ensure viewport content is updated immediately so UI reflects changes
-		m.List.Viewport.SetContent(m.List.View())
-		m.List.Viewport.GotoTop()
+
+		// Restore cursor position unless it's the first load
+		if !shouldResetCursor {
+			// Make sure cursor is still valid after update
+			if oldCursor < len(m.List.Filtered) {
+				m.List.Cursor = oldCursor
+				m.List.Viewport.YOffset = oldYOffset
+			}
+		}
+
 		m.Visible = true
 		return tickCmd()
 
@@ -45,7 +61,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.List.Viewport.Width = msg.Width
 		m.List.Viewport.Height = msg.Height
 		m.ready = true
-		m.List.Viewport.SetContent(m.List.View())
+		// On first resize, reset YOffset to 0; on subsequent resizes, only reset if cursor is at top
+		if m.firstResize {
+			m.List.Viewport.YOffset = 0
+			m.firstResize = false
+		} else if m.List.Cursor == 0 {
+			m.List.Viewport.YOffset = 0
+		}
 		return nil
 
 	case tea.KeyMsg:
@@ -56,6 +78,15 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 
 		// --- normal mode ---
+		if msg.Type == tea.KeyEsc && m.List.Query != "" {
+			m.List.Query = ""
+			m.List.Mode = filterlist.ModeNormal
+			m.List.ApplyFilter()
+			m.List.Cursor = 0
+			m.List.Viewport.GotoTop()
+			return nil
+		}
+
 		m.List.HandleKey(msg) // still handle up/down/pgup/pgdown
 
 		// Enter triggers inspect / ps
@@ -94,7 +125,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.Visible = false
 		}
 
-		m.List.Viewport.SetContent(m.List.View())
 		return nil
 	}
 

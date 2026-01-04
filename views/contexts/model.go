@@ -204,7 +204,7 @@ func (m *Model) SetContexts(contexts []docker.ContextInfo) {
 		m.List.Viewport.Width = m.viewport.Width
 	}
 	if m.viewport.Height > 0 {
-		h := m.viewport.Height - 2
+		h := m.viewport.Height
 		if h <= 0 {
 			h = 20
 		}
@@ -339,6 +339,16 @@ func (m *Model) OnEnter() tea.Cmd {
 func (m *Model) OnExit() tea.Cmd {
 	m.Visible = false
 	return nil
+}
+
+// HasActiveFilter reports whether a filter query is active.
+func (m *Model) HasActiveFilter() bool {
+	return m.List.Query != ""
+}
+
+// IsSearching reports whether the list is currently in search mode.
+func (m *Model) IsSearching() bool {
+	return m.List.Mode == filterlist.ModeSearching
 }
 
 // updateCreateFocus updates focus state for create dialog inputs

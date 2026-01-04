@@ -16,6 +16,7 @@ type Model struct {
 	List         filterlist.FilterableList[docker.NodeEntry]
 	Visible      bool
 	ready        bool
+	firstResize  bool // tracks if we've received the first window size
 	width        int
 	height       int
 	colWidths    map[string]int
@@ -34,10 +35,11 @@ func New(width, height int) *Model {
 	}
 
 	return &Model{
-		List:    list,
-		Visible: false,
-		width:   width,
-		height:  height,
+		List:        list,
+		Visible:     false,
+		firstResize: true,
+		width:       width,
+		height:      height,
 	}
 }
 
@@ -122,4 +124,14 @@ func (m *Model) OnEnter() tea.Cmd {
 
 func (m *Model) OnExit() tea.Cmd {
 	return nil
+}
+
+// HasActiveFilter reports whether a filter query is active.
+func (m *Model) HasActiveFilter() bool {
+	return m.List.Query != ""
+}
+
+// IsSearching reports whether the list is currently in search mode.
+func (m *Model) IsSearching() bool {
+	return m.List.Mode == filterlist.ModeSearching
 }

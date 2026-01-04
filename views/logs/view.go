@@ -81,15 +81,17 @@ func (m *Model) View() string {
 	}
 
 	// ---- Normal mode: render framed box ----
-	// In normal mode, viewport.Width is terminalWidth - 4
-	// Always add back 4 to make frame full width
-	frameWidth := width
-	if !m.fullscreen {
-		frameWidth = width + 4
-	}
+	frame := ui.ComputeFrameDimensions(
+		width,             // viewport width (already minus 4 from app)
+		m.viewport.Height, // adjusted height from app
+		width,             // fallback width
+		m.viewport.Height, // fallback height (viewport stores last known height)
+		headerRendered,
+		"",
+	)
 
-	// Get viewport content
-	viewportContent := m.viewport.View()
+	// Get viewport content and truncate to fit the frame
+	viewportContent := ui.TrimOrPadContentToLines(m.viewport.View(), frame.DesiredContentLines)
 
 	// If dialog is visible, overlay it on the viewport content BEFORE framing
 	if m.getNodeSelectVisible() {
@@ -209,25 +211,12 @@ func (m *Model) View() string {
 		}
 	}
 
-	// Reserve two lines from the viewport height for surrounding UI (match other views)
-	frameHeight := m.viewport.Height - 2
-	if frameHeight <= 0 {
-		// Fall back to a reasonable default using the viewport height if available
-		if m.viewport.Height > 0 {
-			frameHeight = m.viewport.Height - 4
-		}
-		if frameHeight <= 0 {
-			frameHeight = 20
-		}
-	}
-
-	content := ui.RenderFramedBoxHeight(
+	content := ui.RenderFramedBox(
 		title,
 		headerRendered,
 		viewportContent,
 		"",
-		frameWidth,
-		frameHeight,
+		frame.FrameWidth,
 	)
 
 	return content

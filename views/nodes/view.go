@@ -70,36 +70,21 @@ func (m *Model) View() string {
 		footer = statusBar
 	}
 
-	// Compute frame width/height
-	frameWidth := m.List.Viewport.Width + 4
-	// Reserve two lines from the viewport height for surrounding UI
-	frameHeight := m.List.Viewport.Height - 2
-	if frameHeight <= 0 {
-		if m.height > 0 {
-			frameHeight = m.height - 4
-		}
-		if frameHeight <= 0 {
-			frameHeight = 20
-		}
-	}
-	// Determine how many inner content lines will be shown and render exactly
-	// that many lines without mutating the viewport height to avoid jitter.
-	headerLines := 0
-	if header != "" {
-		headerLines = 1
-	}
-	footerLines := 0
-	if footer != "" {
-		footerLines = len(strings.Split(footer, "\n"))
-	}
-	desiredContentLines := frameHeight - 2 - headerLines - footerLines
-	if desiredContentLines < 1 {
-		desiredContentLines = 1
+	frame := ui.ComputeFrameDimensions(
+		m.List.Viewport.Width,
+		m.List.Viewport.Height,
+		m.width,
+		m.height,
+		header,
+		footer,
+	)
+	if frame.DesiredContentLines < 1 {
+		frame.DesiredContentLines = 1
 	}
 
-	content := m.List.VisibleContent(desiredContentLines)
+	content := m.List.VisibleContent(frame.DesiredContentLines)
 
-	return ui.RenderFramedBoxHeight(title, header, content, footer, frameWidth, frameHeight)
+	return ui.RenderFramedBox(title, header, content, footer, frame.FrameWidth)
 }
 
 func plural(n int) string {

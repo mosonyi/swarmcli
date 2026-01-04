@@ -72,10 +72,9 @@ func (m *Model) View() string {
 	// size in sync with the containing viewport and compute padding
 	// so the framed box fills the area.
 	m.List.Viewport.Width = width
-	// Set the list viewport height to the frame height we'll use below
-	// Reserve 2 lines for the stackbar and bottom status line so the
-	// framed box fills the rest of the available area.
-	frameHeight := m.viewport.Height - 2
+	// Use the viewport height directly - it's already adjusted by the app
+	// for systeminfo header and breadcrumb
+	frameHeight := m.viewport.Height
 	if frameHeight <= 0 {
 		frameHeight = 20
 	}
@@ -205,63 +204,37 @@ func (m *Model) View() string {
 	}
 	frameWidth := width + 4
 
-	headerLines := 0
-	if headerRendered != "" {
-		headerLines = len(strings.Split(headerRendered, "\n"))
-	}
-	footerLines := 0
-
-	desiredContentLines := frameHeight - 2 - headerLines - footerLines
-	if desiredContentLines < 0 {
-		desiredContentLines = 0
-	}
-
-	contentLines := strings.Split(content, "\n")
-
-	for len(contentLines) > 0 && contentLines[len(contentLines)-1] == "" {
-		contentLines = contentLines[:len(contentLines)-1]
-	}
-	if len(contentLines) < desiredContentLines {
-		for i := 0; i < desiredContentLines-len(contentLines); i++ {
-			contentLines = append(contentLines, "")
-		}
-	} else if len(contentLines) > desiredContentLines {
-		contentLines = contentLines[:desiredContentLines]
-	}
-	paddedContent := strings.Join(contentLines, "\n")
-
 	// Overlay dialogs on content BEFORE framing
 	if m.certFileBrowserActive {
 		// Cert file browser has highest priority when open
 		certFileBrowserDialog := m.renderCertFileBrowserDialog()
-		paddedContent = ui.OverlayCentered(paddedContent, certFileBrowserDialog, width, 0)
+		content = ui.OverlayCentered(content, certFileBrowserDialog, width, 0)
 	} else if m.createDialogActive {
 		createDialog := m.renderCreateDialog()
-		paddedContent = ui.OverlayCentered(paddedContent, createDialog, width, 0)
+		content = ui.OverlayCentered(content, createDialog, width, 0)
 	} else if m.editDialogActive {
 		editDialog := m.renderEditDialog()
-		paddedContent = ui.OverlayCentered(paddedContent, editDialog, width, 0)
+		content = ui.OverlayCentered(content, editDialog, width, 0)
 	} else if m.errorDialogActive {
 		errorDialog := m.renderErrorDialog()
-		paddedContent = ui.OverlayCentered(paddedContent, errorDialog, width, 0)
+		content = ui.OverlayCentered(content, errorDialog, width, 0)
 	} else if m.fileBrowserActive {
 		fileBrowserDialog := ui.RenderFileBrowserDialog("Select .tar file", m.fileBrowserPath, m.fileBrowserFiles, m.fileBrowserCursor)
-		paddedContent = ui.OverlayCentered(paddedContent, fileBrowserDialog, width, 0)
+		content = ui.OverlayCentered(content, fileBrowserDialog, width, 0)
 	} else if m.importInputActive {
 		importDialog := m.renderImportDialog()
-		paddedContent = ui.OverlayCentered(paddedContent, importDialog, width, 0)
+		content = ui.OverlayCentered(content, importDialog, width, 0)
 	} else if m.confirmDialog.Visible {
 		dialogView := ui.RenderConfirmDialog(m.confirmDialog.Message)
-		paddedContent = ui.OverlayCentered(paddedContent, dialogView, width, 0)
+		content = ui.OverlayCentered(content, dialogView, width, 0)
 	}
 
-	rendered := ui.RenderFramedBoxHeight(
+	rendered := ui.RenderFramedBox(
 		title,
 		headerRendered,
-		paddedContent,
+		content,
 		"",
 		frameWidth,
-		frameHeight,
 	)
 
 	return rendered

@@ -37,28 +37,25 @@ func (m *Model) View() string {
 
 	headerRendered := ui.FrameHeaderStyle.Render(header)
 
-	// Add 4 to make frame full terminal width (app reduces viewport by 4 in normal mode)
-	frameWidth := width + 4
+	frame := ui.ComputeFrameDimensions(
+		width,
+		m.viewport.Height,
+		width,
+		m.height,
+		headerRendered,
+		"",
+	)
 
-	// Reserve two lines from the viewport height for surrounding UI (helpbar/systeminfo)
-	frameHeight := m.viewport.Height - 2
-	if frameHeight <= 0 {
-		if m.height > 0 {
-			frameHeight = m.height - 4
-		}
-		if frameHeight <= 0 {
-			frameHeight = 20
-		}
-	}
+	// Get viewport content and truncate to fit the frame
+	viewportContent := ui.TrimOrPadContentToLines(m.viewport.View(), frame.DesiredContentLines)
 
 	// ---- Render framed box ----
-	content := ui.RenderFramedBoxHeight(
+	content := ui.RenderFramedBox(
 		title,
 		headerRendered,
-		m.viewport.View(),
+		viewportContent,
 		"",
-		frameWidth,
-		frameHeight,
+		frame.FrameWidth,
 	)
 
 	return content
