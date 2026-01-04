@@ -2,6 +2,8 @@ package ui
 
 import "strings"
 
+const horizontalPadding = 4
+
 // FrameSpec captures the calculated dimensions for a framed view.
 type FrameSpec struct {
 	FrameWidth          int
@@ -28,6 +30,7 @@ func ComputeFrameDimensions(viewportWidth, viewportHeight, fallbackWidth, fallba
 		frameWidth = 80
 	}
 	frameWidth += 4
+	frameWidth += horizontalPadding
 
 	frameHeight := viewportHeight
 	if frameHeight <= 0 {
