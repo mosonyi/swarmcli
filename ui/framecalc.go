@@ -32,7 +32,6 @@ func ComputeFrameDimensions(viewportWidth, viewportHeight, fallbackWidth, fallba
 	if frameWidth <= 0 {
 		frameWidth = 80
 	}
-	frameWidth += 4
 	frameWidth += horizontalPadding
 
 	frameHeight := viewportHeight
