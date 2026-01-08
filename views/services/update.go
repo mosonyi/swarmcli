@@ -31,9 +31,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		m.SetContent(msg)
 		m.Visible = true
-		// Reset cursor and YOffset when loading new data
-		m.List.Cursor = 0
-		m.List.Viewport.YOffset = 0
 		// Continue polling
 		return tickCmd()
 
@@ -49,7 +46,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case tea.WindowSizeMsg:
 		m.List.Viewport.Width = msg.Width
 		m.List.Viewport.Height = msg.Height
-		m.loading.SetSize(msg.Width+4, msg.Height)
 		m.ready = true
 		// On first resize, reset YOffset to 0; on subsequent resizes, only reset if cursor is at top
 		if m.firstResize {
@@ -64,45 +60,37 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 		if msg.Confirmed && m.List.Cursor < len(m.List.Filtered) {
 			entry := m.List.Filtered[m.List.Cursor]
-			m.loading.SetVisible(true)
-			m.loadingViewMessage(entry.ServiceName)
-			l().Debugln("Starting restartServiceWithProgressCmd for", entry.ServiceName)
+			l().Debugln("Starting restart for", entry.ServiceName)
 
-			// create new channel for this operation
-			m.msgCh = make(chan tea.Msg)
-
-			return tea.Batch(
-				restartServiceWithProgressCmd(entry.ServiceName, m.msgCh),
-				m.listenForMessages(),
-			)
+			// Issue restart command that reports errors
+			return func() tea.Msg {
+				l().Infof("Executing restart for service: %s", entry.ServiceName)
+				if err := docker.RestartService(entry.ServiceName); err != nil {
+					l().Errorf("Failed to restart service %s: %v", entry.ServiceName, err)
+					return RestartErrorMsg{
+						ServiceName: entry.ServiceName,
+						Error:       err,
+					}
+				}
+				l().Infof("Successfully restarted service: %s", entry.ServiceName)
+				// Force immediate snapshot refresh
+				if _, err := docker.RefreshSnapshot(); err != nil {
+					l().Warnf("Failed to refresh snapshot: %v", err)
+				}
+				return refreshServicesCmd(m.nodeID, m.stackName, m.filterType)()
+			}
 		}
 		return nil
 
-	case serviceProgressMsg:
-		l().Debugf("[UI] Received progress: %d/%d\n", msg.Progress.Replaced, msg.Progress.Total)
-
-		m.loadingViewMessage(fmt.Sprintf(
-			"Progress: %d/%d tasks replaced...",
-			msg.Progress.Replaced, msg.Progress.Total,
-		))
-
-		if msg.Progress.Replaced == msg.Progress.Total && msg.Progress.Total > 0 {
-			l().Debugln("[UI] Restart finished")
-			m.loading.SetVisible(false)
-			return tea.Batch(
-				refreshServicesCmd(m.nodeID, m.stackName, m.filterType),
-			)
-		}
-
-		return m.listenForMessages()
+	case RestartErrorMsg:
+		// Show error in a confirm dialog (reusing it as an error display)
+		m.confirmDialog.Visible = true
+		m.confirmDialog.Message = fmt.Sprintf("Failed to restart %s:\n%v", msg.ServiceName, msg.Error)
+		return nil
 
 	case tea.KeyMsg:
 		if m.confirmDialog.Visible {
 			return m.confirmDialog.Update(msg)
-		}
-
-		if m.loading.Visible() {
-			return nil
 		}
 
 		// --- if in search mode, handle all keys via FilterableList ---
@@ -193,7 +181,7 @@ func (m *Model) SetContent(msg Msg) {
 
 	if m.ready {
 		m.List.Viewport.SetContent(m.List.View())
-		m.List.Viewport.GotoTop()
+		// Preserve cursor position on refresh, don't call GotoTop
 	}
 }
 

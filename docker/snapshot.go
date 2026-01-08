@@ -45,7 +45,7 @@ var (
 )
 
 // cacheTTL controls how long we reuse the snapshot before refreshing.
-const cacheTTL = time.Minute
+const cacheTTL = 10 * time.Second
 
 // GetSnapshot returns the cached snapshot if it's still valid.
 func GetSnapshot() *SwarmSnapshot {

@@ -14,6 +14,11 @@
     "type=bind,source=${localWorkspaceFolder}/.devcontainer/certs/corporate-proxy.crt,target=/etc/ssl/certs/corporate-proxy.crt",
     "type=bind,source=${localWorkspaceFolder}/.devcontainer/shared/.docker,target=/home/vscode/.docker"
   ],
+  // Clear DISPLAY / WAYLAND variables and set XDG_RUNTIME_DIR to /tmp
+  // to prevent the Dev Containers extension from auto-forwarding
+  // the host Wayland socket (which can cause Docker to fail when
+  // the host socket path does not exist). If GUI forwarding is
+  // needed later, remove or adjust these entries accordingly.
   "remoteEnv": {
     "DISPLAY": "",
     "WAYLAND_DISPLAY": "",
@@ -43,6 +48,6 @@
     "https_proxy": "${localEnv:HTTPS_PROXY}",
     "no_proxy": "${localEnv:NO_PROXY}"
   },
-  "postCreateCommand": "sudo update-ca-certificates && go mod tidy && DOCKER_GID=$(stat -c '%g' /var/run/docker.sock) && (getent group $DOCKER_GID || sudo groupadd -g $DOCKER_GID dockerhost) && sudo usermod -aG $DOCKER_GID vscode && sudo chmod 666 /var/run/docker.sock",
+  "postCreateCommand": "[ -s /etc/ssl/certs/corporate-proxy.crt ] && sudo update-ca-certificates || echo 'no corporate cert' && go mod tidy && DOCKER_GID=$(stat -c '%g' /var/run/docker.sock) && (getent group $DOCKER_GID || sudo groupadd -g $DOCKER_GID dockerhost) && sudo usermod -aG $DOCKER_GID vscode && sudo chmod 666 /var/run/docker.sock",
   "remoteUser": "vscode"
 }

@@ -68,15 +68,18 @@ func scaleServiceCommon(ctx context.Context, c *client.Client, svc *swarm.Servic
 
 // restartServiceCommon increments ForceUpdate to trigger a rolling restart.
 func restartServiceCommon(ctx context.Context, c *client.Client, svc *swarm.Service) error {
-	if svc.Spec.Mode.Replicated == nil {
-		return fmt.Errorf("service %s is not in replicated mode (global not supported)", svc.Spec.Name)
-	}
 	svc.Spec.TaskTemplate.ForceUpdate++
 	if err := updateService(ctx, c, svc); err != nil {
 		return fmt.Errorf("forcing service update for %s: %w", svc.Spec.Name, err)
 	}
-	l().Infof("🔁 Service %s restarted (replicas: %d)\n",
-		svc.Spec.Name, *svc.Spec.Mode.Replicated.Replicas)
+
+	// Log with mode-specific info
+	if svc.Spec.Mode.Replicated != nil {
+		l().Infof("🔁 Service %s restarted (replicas: %d)\n",
+			svc.Spec.Name, *svc.Spec.Mode.Replicated.Replicas)
+	} else {
+		l().Infof("🔁 Service %s restarted (global mode)\n", svc.Spec.Name)
+	}
 	return nil
 }
 
