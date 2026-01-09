@@ -154,7 +154,7 @@ func (m *Model) SetContent(msg Msg) {
 func (m *Model) setRenderItem() {
 	// Still need to call this for filterable list internals
 	m.List.ComputeAndSetColWidth(func(n docker.NodeEntry) string {
-		return n.Hostname
+		return n.ID
 	}, 15)
 
 	// Use bright white for content and reserve leading space in first column
@@ -166,7 +166,7 @@ func (m *Model) setRenderItem() {
 		if width <= 0 {
 			width = 80
 		}
-		cols := 6
+		cols := 8
 		starts := make([]int, cols)
 		for i := 0; i < cols; i++ {
 			starts[i] = (i * width) / cols
@@ -187,29 +187,69 @@ func (m *Model) setRenderItem() {
 			manager = "yes"
 		}
 		labelsStr := formatLabels(n.Labels)
+		// Truncate ID so it fits the formatted field width (we render with
+		// a leading space and field width `colWidths[0]-1`). Ensure the
+		// final string length is <= colWidths[0]-1. If we need an ellipsis,
+		// reserve 3 chars for it and trim the core accordingly.
+		idStr := n.ID
+		// safeWidth is the maximum length we can print for the ID (excluding the leading space)
+		safeWidth := 0
+		if colWidths[0] > 0 {
+			safeWidth = colWidths[0] - 1
+		}
+		if safeWidth < 0 {
+			safeWidth = 0
+		}
+		if len(idStr) > safeWidth {
+			// If we can show at least 5 chars, show core + "..." and leave 1
+			// extra char to avoid colliding with the next column: core + "..." so total == safeWidth
+			if safeWidth > 4 {
+				core := safeWidth - 4
+				if core < 0 {
+					core = 0
+				}
+				if core > len(idStr) {
+					core = len(idStr)
+				}
+				idStr = idStr[:core] + "..."
+			} else if safeWidth > 0 {
+				// No room for ellipsis, just trim to fit
+				if safeWidth > len(idStr) {
+					// already fits, no-op
+				} else {
+					idStr = idStr[:safeWidth]
+				}
+			} else {
+				idStr = ""
+			}
+		}
 		// Use the pre-calculated column widths instead of the single colWidth
 		if selected {
 			selBg := lipgloss.Color("63")
 			selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
 			// Preserve leading space for hostname when selected
-			return selStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s",
-				colWidths[0]-1, n.Hostname,
-				colWidths[1], n.Role,
-				colWidths[2], n.State,
-				colWidths[3], manager,
-				colWidths[4], n.Addr,
-				colWidths[5], labelsStr,
+			return selStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s",
+				colWidths[0]-1, idStr,
+				colWidths[1], n.Hostname,
+				colWidths[2], n.Role,
+				colWidths[3], n.State,
+				colWidths[4], manager,
+				colWidths[5], n.Version,
+				colWidths[6], n.Addr,
+				colWidths[7], labelsStr,
 			))
 		}
 
 		// Ensure the first column has a leading space to align with header
-		return itemStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s",
-			colWidths[0]-1, n.Hostname,
-			colWidths[1], n.Role,
-			colWidths[2], n.State,
-			colWidths[3], manager,
-			colWidths[4], n.Addr,
-			colWidths[5], labelsStr,
+		return itemStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s",
+			colWidths[0]-1, idStr,
+			colWidths[1], n.Hostname,
+			colWidths[2], n.Role,
+			colWidths[3], n.State,
+			colWidths[4], manager,
+			colWidths[5], n.Version,
+			colWidths[6], n.Addr,
+			colWidths[7], labelsStr,
 		))
 	}
 }

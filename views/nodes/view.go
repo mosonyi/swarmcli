@@ -23,8 +23,8 @@ func (m *Model) View() string {
 	}
 
 	title := fmt.Sprintf("Nodes (%d total, %d manager%s)", total, managers, plural(managers))
-	// Compute proportional column widths (6 equal partitions) so header aligns with items
-	labels := []string{"HOSTNAME", "ROLE", "STATE", "MANAGER", "ADDRESS", "LABELS"}
+	// Compute proportional column widths (8 equal partitions) so header aligns with items
+	labels := []string{"ID", "HOSTNAME", "ROLE", "STATE", "MANAGER", "VERSION", "ADDRESS", "LABELS"}
 	width := m.List.Viewport.Width
 	if width <= 0 {
 		if m.width > 0 {
@@ -33,7 +33,7 @@ func (m *Model) View() string {
 			width = 80
 		}
 	}
-	cols := 6
+	cols := 8
 	starts := make([]int, cols)
 	for i := 0; i < cols; i++ {
 		starts[i] = (i * width) / cols
@@ -97,15 +97,20 @@ func plural(n int) string {
 // calcColumnWidths determines the best width per column based on the longest cell.
 func calcColumnWidths(entries []docker.NodeEntry) map[string]int {
 	widths := map[string]int{
+		"ID":       len("ID"),
 		"Hostname": len("HOSTNAME"),
 		"Role":     len("ROLE"),
 		"State":    len("STATE"),
 		"Manager":  len("MANAGER"),
+		"Version":  len("VERSION"),
 		"Addr":     len("ADDRESS"),
 		"Labels":   len("LABELS"),
 	}
 
 	for _, e := range entries {
+		if len(e.ID) > widths["ID"] {
+			widths["ID"] = len(e.ID)
+		}
 		if len(e.Hostname) > widths["Hostname"] {
 			widths["Hostname"] = len(e.Hostname)
 		}
@@ -121,6 +126,9 @@ func calcColumnWidths(entries []docker.NodeEntry) map[string]int {
 		}
 		if len(manager) > widths["Manager"] {
 			widths["Manager"] = len(manager)
+		}
+		if len(e.Version) > widths["Version"] {
+			widths["Version"] = len(e.Version)
 		}
 		if len(e.Addr) > widths["Addr"] {
 			widths["Addr"] = len(e.Addr)

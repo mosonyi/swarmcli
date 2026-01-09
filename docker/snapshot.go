@@ -13,6 +13,7 @@ import (
 
 type NodeEntry struct {
 	ID       string
+	Version  string
 	Hostname string
 	Role     string
 	State    string
@@ -150,8 +151,13 @@ func GetOrRefreshSnapshot() (*SwarmSnapshot, error) {
 func (s SwarmSnapshot) ToNodeEntries() []NodeEntry {
 	nodes := make([]NodeEntry, len(s.Nodes))
 	for i, n := range s.Nodes {
+		ver := "-"
+		if n.Description.Engine.EngineVersion != "" {
+			ver = n.Description.Engine.EngineVersion
+		}
 		nodes[i] = NodeEntry{
 			ID:       n.ID,
+			Version:  ver,
 			Hostname: n.Description.Hostname,
 			Role:     string(n.Spec.Role),
 			State:    string(n.Status.State),
