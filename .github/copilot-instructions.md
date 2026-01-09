@@ -46,9 +46,3 @@ If unsure, inspect these files first
 - [test-setup/testenv.sh](test-setup/testenv.sh)
 - [views/configs/view.go](views/configs/view.go)
 - [utils/log/logger.go](utils/log/logger.go)
-
-Questions for the maintainer
-- Are there preferred code style or linting rules (pre-commit hooks) that should be encoded for agents?
-- Should agents open PRs targeting a specific branch and include changelog entries for user-visible behavior changes?
-
-If you'd like, I can iterate this file with more examples (small patch PR template, typical unit test patterns, or a short list of quick `grep` commands to find view/message/update pairs).
