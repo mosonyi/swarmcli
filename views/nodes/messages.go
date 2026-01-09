@@ -20,3 +20,15 @@ type DemoteErrorMsg struct {
 	NodeID string
 	Error  error
 }
+
+// PromoteErrorMsg reports an error occurred while attempting to promote a node.
+type PromoteErrorMsg struct {
+	NodeID string
+	Error  error
+}
+
+// DemoteSuccessMsg indicates a node was successfully demoted.
+type DemoteSuccessMsg struct{}
+
+// PromoteSuccessMsg indicates a node was successfully promoted.
+type PromoteSuccessMsg struct{}

@@ -3,6 +3,7 @@ package nodesview
 import (
 	"context"
 	"fmt"
+	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
@@ -15,25 +16,67 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// getFreshNodeState retrieves the current node state with a forced refresh
+func getFreshNodeState(nodeID string) *docker.NodeEntry {
+	// Force a synchronous refresh to get the absolute latest state
+	snap, err := docker.RefreshSnapshot()
+	if err != nil {
+		l().Warnf("Failed to refresh snapshot: %v", err)
+		snap = docker.GetSnapshot()
+		if snap == nil {
+			return nil
+		}
+	}
+	entries := snap.ToNodeEntries()
+	for _, entry := range entries {
+		if entry.ID == nodeID {
+			return &entry
+		}
+	}
+	return nil
+}
+
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case confirmdialog.ResultMsg:
-		m.confirmDialog.Visible = false
+		if !msg.Confirmed {
+			// User cancelled, just close the dialog
+			m.confirmDialog.Visible = false
+			return nil
+		}
 
-		if msg.Confirmed && m.List.Cursor < len(m.List.Filtered) {
+		if m.List.Cursor < len(m.List.Filtered) {
 			node := m.List.Filtered[m.List.Cursor]
-			// Run demote in background
-			return func() tea.Msg {
-				if err := docker.DemoteNode(context.Background(), node.ID); err != nil {
-					return DemoteErrorMsg{NodeID: node.ID, Error: err}
+			// Check which action to perform based on message content
+			if strings.Contains(m.confirmDialog.Message, "Demote") {
+				// Run demote, keeping dialog visible during operation
+				return func() tea.Msg {
+					if err := docker.DemoteNode(context.Background(), node.ID); err != nil {
+						return DemoteErrorMsg{NodeID: node.ID, Error: err}
+					}
+					// Force refresh
+					if _, err := docker.RefreshSnapshot(); err != nil {
+						l().Warnf("Failed to refresh snapshot: %v", err)
+					}
+					// Return a message that will close dialog and refresh list
+					return DemoteSuccessMsg{}
 				}
-				// Force refresh
-				if _, err := docker.RefreshSnapshot(); err != nil {
-					l().Warnf("Failed to refresh snapshot: %v", err)
+			} else if strings.Contains(m.confirmDialog.Message, "Promote") {
+				// Run promote, keeping dialog visible during operation
+				return func() tea.Msg {
+					if err := docker.PromoteNode(context.Background(), node.ID); err != nil {
+						return PromoteErrorMsg{NodeID: node.ID, Error: err}
+					}
+					// Force refresh
+					if _, err := docker.RefreshSnapshot(); err != nil {
+						l().Warnf("Failed to refresh snapshot: %v", err)
+					}
+					// Return a message that will close dialog and refresh list
+					return PromoteSuccessMsg{}
 				}
-				return LoadNodesCmd()()
 			}
 		}
+		m.confirmDialog.Visible = false
 		return nil
 
 	case DemoteErrorMsg:
@@ -42,6 +85,23 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.confirmDialog.ErrorMode = true
 		m.confirmDialog.Message = fmt.Sprintf("Failed to demote %s:\n%v", msg.NodeID, msg.Error)
 		return nil
+
+	case PromoteErrorMsg:
+		// Reuse confirm dialog to display error
+		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = true
+		m.confirmDialog.Message = fmt.Sprintf("Failed to promote %s:\n%v", msg.NodeID, msg.Error)
+		return nil
+
+	case DemoteSuccessMsg:
+		// Close dialog and reload nodes with fresh data
+		m.confirmDialog.Visible = false
+		return LoadNodesCmd()
+
+	case PromoteSuccessMsg:
+		// Close dialog and reload nodes with fresh data
+		m.confirmDialog.Visible = false
+		return LoadNodesCmd()
 
 	case Msg:
 		l().Infof("NodesView: Received Msg with %d entries", len(msg.Entries))
@@ -155,6 +215,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		case "D":
 			if m.List.Cursor < len(m.List.Filtered) {
 				node := m.List.Filtered[m.List.Cursor]
+				// Get fresh node state from snapshot to avoid stale data
+				freshNode := getFreshNodeState(node.ID)
+				if freshNode != nil {
+					node = *freshNode
+				}
 				if node.Manager {
 					m.confirmDialog.Visible = true
 					m.confirmDialog.ErrorMode = false
@@ -164,6 +229,25 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					m.confirmDialog.Visible = true
 					m.confirmDialog.ErrorMode = true
 					m.confirmDialog.Message = fmt.Sprintf("Node %q is not a manager", node.Hostname)
+				}
+			}
+		case "P":
+			if m.List.Cursor < len(m.List.Filtered) {
+				node := m.List.Filtered[m.List.Cursor]
+				// Get fresh node state from snapshot to avoid stale data
+				freshNode := getFreshNodeState(node.ID)
+				if freshNode != nil {
+					node = *freshNode
+				}
+				if !node.Manager {
+					m.confirmDialog.Visible = true
+					m.confirmDialog.ErrorMode = false
+					m.confirmDialog.Message = fmt.Sprintf("Promote node %q?", node.Hostname)
+				} else {
+					// Already a manager; show error dialog
+					m.confirmDialog.Visible = true
+					m.confirmDialog.ErrorMode = true
+					m.confirmDialog.Message = fmt.Sprintf("Node %q is already a manager", node.Hostname)
 				}
 			}
 		case "q":

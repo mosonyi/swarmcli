@@ -50,3 +50,28 @@ func DemoteNode(ctx context.Context, nodeID string) error {
 	}
 	return nil
 }
+
+// PromoteNode sets the node role to manager (promotes a worker).
+func PromoteNode(ctx context.Context, nodeID string) error {
+	c, err := GetClient()
+	if err != nil {
+		return err
+	}
+	defer closeCli(c)
+
+	// Fetch current node to get the version and current spec
+	node, _, err := c.NodeInspectWithRaw(ctx, nodeID)
+	if err != nil {
+		return fmt.Errorf("inspect node: %w", err)
+	}
+
+	// Modify spec to set manager role
+	spec := node.Spec
+	spec.Role = swarm.NodeRoleManager
+
+	// Perform update using the node's current version index
+	if err := c.NodeUpdate(ctx, nodeID, node.Version, spec); err != nil {
+		return fmt.Errorf("promote node: %w", err)
+	}
+	return nil
+}
