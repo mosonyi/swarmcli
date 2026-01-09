@@ -8,7 +8,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-
 func refreshServicesCmd(nodeID, stackName string, filterType FilterType) tea.Cmd {
 	return func() tea.Msg {
 		// Explicit user-initiated refresh: perform synchronous refresh but keep it defensive.
