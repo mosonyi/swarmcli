@@ -86,9 +86,6 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	}
 }
 
-
-
-
 func (m *Model) OnEnter() tea.Cmd {
 	return nil
 }

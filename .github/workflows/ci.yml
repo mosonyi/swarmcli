@@ -7,7 +7,25 @@ on:
     branches: [ main ]
 
 jobs:
-  lint-and-build:
+  fmt:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run go fmt
+        run: |
+          gofmt -w .
+          git diff --exit-code
+
+  lint:
     runs-on: ubuntu-latest
 
     steps:
@@ -28,8 +46,21 @@ jobs:
     - name: Run lint
       run: golangci-lint run ./... --build-tags=integration
 
-    - name: Build CLI
-      run: go build -v -o swarmcli .
+  build:
+    runs-on: ubuntu-latest
 
-    - name: Build Docker Image
-      run : docker build -t swarmcli-dev .
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build CLI
+        run: go build -v -o swarmcli .
+
+      - name: Build Docker Image
+        run : docker build -t swarmcli-dev .
