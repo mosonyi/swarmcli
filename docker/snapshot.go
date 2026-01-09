@@ -61,6 +61,14 @@ func SetSnapshot(s *SwarmSnapshot) {
 	snapshot = s
 }
 
+// InvalidateSnapshot clears the cached snapshot, forcing a fresh fetch on next access.
+// This should be called after a Docker context switch.
+func InvalidateSnapshot() {
+	snapshotMu.Lock()
+	defer snapshotMu.Unlock()
+	snapshot = nil
+}
+
 // RefreshSnapshot fetches all swarm data (nodes, services, tasks) at once
 // and updates the global cache.
 func RefreshSnapshot() (*SwarmSnapshot, error) {

@@ -38,7 +38,7 @@ func (m *Model) View() string {
 	headerLine := fmt.Sprintf("%-*s%-*s%-*s",
 		colWidths[0], "  STACK",
 		colWidths[1], "SERVICES",
-		colWidths[2], "NODES",
+		colWidths[2], "TASKS",
 	)
 	header := ui.FrameHeaderStyle.Render(headerLine)
 
