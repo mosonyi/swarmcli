@@ -12,6 +12,7 @@ import (
 	nodesview "swarmcli/views/nodes"
 	servicesview "swarmcli/views/services"
 	stacksview "swarmcli/views/stacks"
+	tasksview "swarmcli/views/tasks"
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -102,6 +103,7 @@ func Init() {
 			nodeID, _ = payload.(string)
 		}
 		model := stacksview.New(w, h)
+		model.Visible = true
 		return model, tea.Batch(model.Init(), stacksview.LoadStacksCmd(nodeID))
 	})
 
@@ -134,5 +136,11 @@ func Init() {
 				StackName:  stackName,
 			}
 		}
+	})
+
+	registerView(tasksview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
+		stackName, _ := payload.(string)
+		model := tasksview.New(w, h, stackName)
+		return model, model.OnEnter()
 	})
 }

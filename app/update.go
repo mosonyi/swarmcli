@@ -154,12 +154,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case contextsview.ContextChangedNotification:
-		// Context has changed, replace contexts view with stacks view (don't add to history)
-		// and refresh system info
-		cmd := m.replaceView(stacksview.ViewName, nil)
+		// Context has changed - show loading view then navigate to stacks
+		// Invalidate snapshot cache so stacks load fresh data for new context
+		docker.InvalidateSnapshot()
+		cmd := m.replaceView(loadingview.ViewName, map[string]string{
+			"title":   "Loading",
+			"header":  "Fetching cluster info",
+			"message": "Loading Swarm nodes and stacks...",
+		})
 		return m, tea.Batch(
 			systeminfoview.LoadStatus(),
 			cmd,
+			// Load snapshot and navigate to stacks when ready
+			loadSnapshotAndNavigateToStacksCmd(),
 		)
 
 	case loadingview.ErrorDismissedMsg:

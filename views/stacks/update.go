@@ -84,7 +84,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 		m.List.HandleKey(msg) // still handle up/down/pgup/pgdown
 
-		// Enter triggers navigation
+		// Enter triggers navigation to services
 		if msg.String() == "i" || msg.String() == "enter" {
 			if m.List.Cursor < len(m.List.Filtered) {
 				selected := m.List.Filtered[m.List.Cursor]
@@ -96,6 +96,20 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				}
 			}
 		}
+
+		// 'p' shows tasks for selected stack
+		if msg.String() == "p" {
+			if m.List.Cursor < len(m.List.Filtered) {
+				selected := m.List.Filtered[m.List.Cursor]
+				return func() tea.Msg {
+					return view.NavigateToMsg{
+						ViewName: "tasks",
+						Payload:  selected.Name,
+					}
+				}
+			}
+		}
+
 		return nil
 	}
 

@@ -66,11 +66,12 @@ func New(width, height int, visible bool, payload any) *Model {
 	return &Model{width: width, height: height, title: title, header: header, message: message, spinner: 0, visible: visible, isError: isError}
 }
 
-func (m *Model) Visible() bool     { return m.visible }
-func (m *Model) SetVisible(v bool) { m.visible = v }
-func (m *Model) SetSize(w, h int)  { m.width = w; m.height = h }
-func (m *Model) Init() tea.Cmd     { return m.spinnerTickCmd() }
-func (m *Model) Name() string      { return ViewName }
+func (m *Model) Visible() bool        { return m.visible }
+func (m *Model) SetVisible(v bool)    { m.visible = v }
+func (m *Model) GetSpinnerFrame() int { return m.spinner }
+func (m *Model) SetSize(w, h int)     { m.width = w; m.height = h }
+func (m *Model) Init() tea.Cmd        { return m.spinnerTickCmd() }
+func (m *Model) Name() string         { return ViewName }
 
 func (m *Model) spinnerTickCmd() tea.Cmd {
 	return tea.Tick(80*time.Millisecond, func(t time.Time) tea.Msg {
