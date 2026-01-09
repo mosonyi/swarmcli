@@ -84,7 +84,13 @@ func (m *Model) View() string {
 
 	content := m.List.VisibleContent(frame.DesiredContentLines)
 
-	return ui.RenderFramedBox(title, header, content, footer, frame.FrameWidth)
+	framed := ui.RenderFramedBox(title, header, content, footer, frame.FrameWidth)
+
+	if m.confirmDialog.Visible {
+		framed = ui.OverlayCentered(framed, m.confirmDialog.View(), frame.FrameWidth, frame.FrameHeight)
+	}
+
+	return framed
 }
 
 func plural(n int) string {

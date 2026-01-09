@@ -6,6 +6,7 @@ import (
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
+	"swarmcli/views/confirmdialog"
 	inspectview "swarmcli/views/inspect"
 	servicesview "swarmcli/views/services"
 	"swarmcli/views/view"
@@ -16,6 +17,32 @@ import (
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
+	case confirmdialog.ResultMsg:
+		m.confirmDialog.Visible = false
+
+		if msg.Confirmed && m.List.Cursor < len(m.List.Filtered) {
+			node := m.List.Filtered[m.List.Cursor]
+			// Run demote in background
+			return func() tea.Msg {
+				if err := docker.DemoteNode(context.Background(), node.ID); err != nil {
+					return DemoteErrorMsg{NodeID: node.ID, Error: err}
+				}
+				// Force refresh
+				if _, err := docker.RefreshSnapshot(); err != nil {
+					l().Warnf("Failed to refresh snapshot: %v", err)
+				}
+				return LoadNodesCmd()()
+			}
+		}
+		return nil
+
+	case DemoteErrorMsg:
+		// Reuse confirm dialog to display error
+		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = true
+		m.confirmDialog.Message = fmt.Sprintf("Failed to demote %s:\n%v", msg.NodeID, msg.Error)
+		return nil
+
 	case Msg:
 		l().Infof("NodesView: Received Msg with %d entries", len(msg.Entries))
 		// Update the hash with new data
@@ -71,6 +98,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case tea.KeyMsg:
+		if m.confirmDialog.Visible {
+			return m.confirmDialog.Update(msg)
+		}
+
 		// --- if in search mode, handle all keys via FilterableList ---
 		if m.List.Mode == filterlist.ModeSearching {
 			m.List.HandleKey(msg)
@@ -119,6 +150,20 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 							"hostname": node.Hostname,
 						},
 					}
+				}
+			}
+		case "D":
+			if m.List.Cursor < len(m.List.Filtered) {
+				node := m.List.Filtered[m.List.Cursor]
+				if node.Manager {
+					m.confirmDialog.Visible = true
+					m.confirmDialog.ErrorMode = false
+					m.confirmDialog.Message = fmt.Sprintf("Demote node %q?", node.Hostname)
+				} else {
+					// Not a manager; show error dialog
+					m.confirmDialog.Visible = true
+					m.confirmDialog.ErrorMode = true
+					m.confirmDialog.Message = fmt.Sprintf("Node %q is not a manager", node.Hostname)
 				}
 			}
 		case "q":

@@ -25,3 +25,28 @@ func GetNodeIDToHostnameMapFromDocker() (map[string]string, error) {
 	}
 	return m, nil
 }
+
+// DemoteNode sets the node role to worker (demotes a manager).
+func DemoteNode(ctx context.Context, nodeID string) error {
+	c, err := GetClient()
+	if err != nil {
+		return err
+	}
+	defer closeCli(c)
+
+	// Fetch current node to get the version and current spec
+	node, _, err := c.NodeInspectWithRaw(ctx, nodeID)
+	if err != nil {
+		return fmt.Errorf("inspect node: %w", err)
+	}
+
+	// Modify spec to set worker role
+	spec := node.Spec
+	spec.Role = swarm.NodeRoleWorker
+
+	// Perform update using the node's current version index
+	if err := c.NodeUpdate(ctx, nodeID, node.Version, spec); err != nil {
+		return fmt.Errorf("demote node: %w", err)
+	}
+	return nil
+}

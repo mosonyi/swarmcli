@@ -5,6 +5,7 @@ import (
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
+	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	"time"
 
@@ -13,14 +14,16 @@ import (
 )
 
 type Model struct {
-	List         filterlist.FilterableList[docker.NodeEntry]
-	Visible      bool
-	ready        bool
-	firstResize  bool // tracks if we've received the first window size
-	width        int
-	height       int
-	colWidths    map[string]int
-	lastSnapshot uint64 // Hash of last node state for change detection
+	List              filterlist.FilterableList[docker.NodeEntry]
+	Visible           bool
+	ready             bool
+	firstResize       bool // tracks if we've received the first window size
+	width             int
+	height            int
+	colWidths         map[string]int
+	lastSnapshot      uint64 // Hash of last node state for change detection
+	confirmDialog     *confirmdialog.Model
+	errorDialogActive bool
 }
 
 func New(width, height int) *Model {
@@ -35,11 +38,12 @@ func New(width, height int) *Model {
 	}
 
 	return &Model{
-		List:        list,
-		Visible:     false,
-		firstResize: true,
-		width:       width,
-		height:      height,
+		List:          list,
+		Visible:       false,
+		firstResize:   true,
+		width:         width,
+		height:        height,
+		confirmDialog: confirmdialog.New(width, height),
 	}
 }
 
@@ -61,9 +65,15 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "i", Desc: "Inspect"},
 		{Key: "p", Desc: "ps"},
+		{Key: "Shift+D", Desc: "Demote node"},
 		{Key: "↑/↓", Desc: "Navigate"},
 		{Key: "q", Desc: "Close"},
 	}
+}
+
+// HasActiveDialog reports whether a dialog is currently visible.
+func (m *Model) HasActiveDialog() bool {
+	return m.confirmDialog.Visible || m.errorDialogActive
 }
 
 func LoadNodes() []docker.NodeEntry {
