@@ -1,13 +1,11 @@
 package servicesview
 
 import (
-	"fmt"
 	"strings"
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
-	loadingview "swarmcli/views/loading"
 	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -43,15 +41,11 @@ type Model struct {
 	nodeID     string
 	stackName  string
 
-	msgCh chan tea.Msg
-
 	confirmDialog *confirmdialog.Model
-	loading       *loadingview.Model
 }
 
 func New(width, height int) *Model {
 	vp := viewport.New(width, height)
-	ld := loadingview.New(width, height, false, "Please wait...")
 
 	list := filterlist.FilterableList[docker.ServiceEntry]{
 		Viewport: vp,
@@ -67,8 +61,6 @@ func New(width, height int) *Model {
 		width:         width,
 		height:        height,
 		confirmDialog: confirmdialog.New(width, height),
-		loading:       ld,
-		msgCh:         make(chan tea.Msg),
 	}
 }
 
@@ -94,42 +86,8 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	}
 }
 
-func (m *Model) loadingViewMessage(serviceName string) {
-	m.loading = loadingview.New(
-		m.List.Viewport.Width,
-		m.List.Viewport.Height,
-		true,
-		map[string]string{
-			"title":   "Restarting service",
-			"message": fmt.Sprintf("Restarting %s, please wait...", serviceName),
-		},
-	)
-}
 
-func sendMsg(ch chan tea.Msg, msg tea.Msg) {
-	// Block briefly until UI consumes, to avoid drop storm at the end
-	select {
-	case ch <- msg:
-	case <-time.After(200 * time.Millisecond):
-		l().Infof("[sendMsg] timeout waiting to deliver progress update")
-	}
-}
 
-func (m *Model) listenForMessages() tea.Cmd {
-	if m.msgCh == nil {
-		l().Debugf("[listenForMessages] no message channel, skipping")
-		return nil
-	}
-
-	return func() tea.Msg {
-		msg, ok := <-m.msgCh
-		if !ok {
-			l().Debugf("[listenForMessages] channel closed — stopping listener")
-			return nil
-		}
-		return msg
-	}
-}
 
 func (m *Model) OnEnter() tea.Cmd {
 	return nil
@@ -147,4 +105,9 @@ func (m *Model) HasActiveFilter() bool {
 // IsSearching reports whether the list is currently in search mode.
 func (m *Model) IsSearching() bool {
 	return m.List.Mode == filterlist.ModeSearching
+}
+
+// HasActiveDialog reports whether a dialog is currently visible.
+func (m *Model) HasActiveDialog() bool {
+	return m.confirmDialog.Visible
 }
