@@ -17,9 +17,9 @@ func (m *Model) View() string {
 
 	// The header column widths are computed further down using the same
 	// effective-width logic as the renderer; see that computation below.
-	cols := 6
+	cols := 9
 
-	labels := []string{" SERVICE", "STACK", "REPLICAS", "STATUS", "CREATED", "UPDATED"}
+	labels := []string{" SERVICE", "STACK", "REPLICAS", "STATUS", "MODE", "IMAGE", "PORTS", "CREATED", "UPDATED"}
 	// Compute header column widths using the same effective-width logic
 	// (columns widths exclude two-space separators) so the header aligns
 	// exactly with the data columns.
@@ -36,15 +36,21 @@ func (m *Model) View() string {
 		hw := lipgloss.Width(labels[i])
 		floor := 6
 		switch i {
-		case 0:
+		case 0: // SERVICE
 			floor = 10
-		case 1:
+		case 1: // STACK
 			floor = 10
-		case 2:
+		case 2: // REPLICAS
 			floor = 8
-		case 3:
+		case 3: // STATUS
 			floor = 8
-		case 4, 5:
+		case 4: // MODE
+			floor = 10
+		case 5: // IMAGE
+			floor = 15
+		case 6: // PORTS
+			floor = 8
+		case 7, 8: // CREATED, UPDATED
 			floor = 8
 		}
 		if hw > floor {

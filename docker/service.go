@@ -297,6 +297,9 @@ type ServiceEntry struct {
 	ReplicasOnNode int
 	ReplicasTotal  int
 	Status         string
+	Mode           string
+	Image          string
+	Ports          string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
@@ -328,6 +331,9 @@ func LoadNodeServices(nodeID string) []ServiceEntry {
 			ReplicasOnNode: onNode,
 			ReplicasTotal:  desired,
 			Status:         getServiceStatus(svc),
+			Mode:           getServiceMode(svc),
+			Image:          getServiceImage(svc),
+			Ports:          getServicePorts(svc),
 			CreatedAt:      svc.CreatedAt,
 			UpdatedAt:      svc.UpdatedAt,
 		})
@@ -362,6 +368,9 @@ func LoadStackServices(stackName string) []ServiceEntry {
 			ReplicasOnNode: onNode,
 			ReplicasTotal:  desired,
 			Status:         getServiceStatus(svc),
+			Mode:           getServiceMode(svc),
+			Image:          getServiceImage(svc),
+			Ports:          getServicePorts(svc),
 			CreatedAt:      svc.CreatedAt,
 			UpdatedAt:      svc.UpdatedAt,
 		})

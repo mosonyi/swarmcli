@@ -109,12 +109,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case RestartErrorMsg:
 		// Show error in a confirm dialog (reusing it as an error display)
 		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = true
 		m.confirmDialog.Message = fmt.Sprintf("Failed to restart %s:\n%v", msg.ServiceName, msg.Error)
 		return nil
 
 	case ScaleErrorMsg:
 		// Show error in a confirm dialog (reusing it as an error display)
 		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = true
 		m.confirmDialog.Message = fmt.Sprintf("Failed to scale %s:\n%v", msg.ServiceName, msg.Error)
 		return nil
 
@@ -172,6 +174,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			if m.List.Cursor < len(m.List.Filtered) {
 				entry := m.List.Filtered[m.List.Cursor]
 				m.confirmDialog.Visible = true
+				m.confirmDialog.ErrorMode = false
 				m.confirmDialog.Message = fmt.Sprintf("Restart service %q?", entry.ServiceName)
 			}
 		case "l":
@@ -233,7 +236,7 @@ func (m *Model) setRenderItem() {
 			width = 80
 		}
 
-		cols := 6
+		cols := 9
 		sepLen := 2
 		sepTotal := sepLen * (cols - 1)
 		// Effective width available for columns (excluding separators)
@@ -244,21 +247,27 @@ func (m *Model) setRenderItem() {
 		colWidths := make([]int, cols)
 
 		// Headers and sensible minimums
-		headers := []string{" SERVICE", "STACK", "REPLICAS", "STATUS", "CREATED", "UPDATED"}
+		headers := []string{" SERVICE", "STACK", "REPLICAS", "STATUS", "MODE", "IMAGE", "PORTS", "CREATED", "UPDATED"}
 		minCols := make([]int, cols)
 		for i := 0; i < cols; i++ {
 			hw := lipgloss.Width(headers[i])
 			floor := 6
 			switch i {
-			case 0:
+			case 0: // SERVICE
 				floor = 10
-			case 1:
+			case 1: // STACK
 				floor = 10
-			case 2:
+			case 2: // REPLICAS
 				floor = 8
-			case 3:
+			case 3: // STATUS
 				floor = 8
-			case 4, 5:
+			case 4: // MODE
+				floor = 10
+			case 5: // IMAGE
+				floor = 15
+			case 6: // PORTS
+				floor = 8
+			case 7, 8: // CREATED, UPDATED
 				floor = 8
 			}
 			if hw > floor {
@@ -357,7 +366,10 @@ func (m *Model) setRenderItem() {
 		serviceName := truncateWithEllipsis(e.ServiceName, svcTruncWidth)
 		stackName := truncateWithEllipsis(e.StackName, colWidths[1]-1)
 		statusText := truncateWithEllipsis(e.Status, colWidths[3]-1)
-		created := truncateWithEllipsis(formatRelativeTime(e.CreatedAt), colWidths[4]-1)
+		modeText := truncateWithEllipsis(e.Mode, colWidths[4]-1)
+		imageText := truncateWithEllipsis(e.Image, colWidths[5]-1)
+		portsText := truncateWithEllipsis(e.Ports, colWidths[6]-1)
+		created := truncateWithEllipsis(formatRelativeTime(e.CreatedAt), colWidths[7]-1)
 		updated := truncateWithEllipsis(formatRelativeTime(e.UpdatedAt), colWidths[lastIdx])
 
 		itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
@@ -382,12 +394,15 @@ func (m *Model) setRenderItem() {
 		statusStyle := lipgloss.NewStyle().Foreground(statusColor)
 		col3 := statusStyle.Render(fmt.Sprintf("%-*s", colWidths[3]-1, statusText))
 
-		col4 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[4]-1, created))
-		col5 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[5], updated))
+		col4 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[4]-1, modeText))
+		col5 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[5]-1, imageText))
+		col6 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[6]-1, portsText))
+		col7 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[7]-1, created))
+		col8 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[8], updated))
 
 		// Join with two-space separators for readability
 		sep := strings.Repeat(" ", sepLen)
-		line := col0 + sep + col1 + sep + col2 + sep + col3 + sep + col4 + sep + col5
+		line := col0 + sep + col1 + sep + col2 + sep + col3 + sep + col4 + sep + col5 + sep + col6 + sep + col7 + sep + col8
 
 		if selected {
 			selBg := lipgloss.Color("63")
@@ -402,9 +417,12 @@ func (m *Model) setRenderItem() {
 			col1 = selBase.Render(fmt.Sprintf("%-*s", colWidths[1]-1, stackName) + sepStr)
 			col2 = selRep.Render(fmt.Sprintf("%-*s", colWidths[2]-1, replicasText) + sepStr)
 			col3 = selStatus.Render(fmt.Sprintf("%-*s", colWidths[3]-1, statusText) + sepStr)
-			col4 = selBase.Render(fmt.Sprintf("%-*s", colWidths[4]-1, created) + sepStr)
-			col5 = selBase.Render(fmt.Sprintf("%-*s", colWidths[5], updated))
-			line = col0 + col1 + col2 + col3 + col4 + col5
+			col4 = selBase.Render(fmt.Sprintf("%-*s", colWidths[4]-1, modeText) + sepStr)
+			col5 = selBase.Render(fmt.Sprintf("%-*s", colWidths[5]-1, imageText) + sepStr)
+			col6 = selBase.Render(fmt.Sprintf("%-*s", colWidths[6]-1, portsText) + sepStr)
+			col7 = selBase.Render(fmt.Sprintf("%-*s", colWidths[7]-1, created) + sepStr)
+			col8 = selBase.Render(fmt.Sprintf("%-*s", colWidths[8], updated))
+			line = col0 + col1 + col2 + col3 + col4 + col5 + col6 + col7 + col8
 		}
 		return line
 	}
