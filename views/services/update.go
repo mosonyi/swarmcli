@@ -10,6 +10,7 @@ import (
 	"swarmcli/views/confirmdialog"
 	inspectview "swarmcli/views/inspect"
 	logsview "swarmcli/views/logs"
+	"swarmcli/views/scaledialog"
 	"swarmcli/views/view"
 	"time"
 
@@ -22,6 +23,21 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case Msg:
 		l().Infof("ServicesView: Received Msg with %d entries", len(msg.Entries))
+
+		// If we're viewing a specific stack or node and all services are gone, go back to stacks view
+		// This handles cases where:
+		// - All services in a stack are deleted (stack no longer exists)
+		// - All services on a node are removed
+		// The stacks view will automatically refresh since we already called RefreshSnapshot
+		// Use Replace=true to clear navigation history so ESC doesn't come back here
+		if len(msg.Entries) == 0 && (msg.FilterType == StackFilter || msg.FilterType == NodeFilter) {
+			l().Info("ServicesView: No services remaining in filtered view, navigating back to stacks")
+			m.Visible = false
+			return func() tea.Msg {
+				return view.NavigateToMsg{ViewName: "stacks", Payload: nil, Replace: true}
+			}
+		}
+
 		// Update the hash with new data
 		var err error
 		m.lastSnapshot, err = hash.Compute(msg.Entries)
@@ -55,24 +71,20 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.List.Viewport.YOffset = 0
 		}
 		return nil
-	case confirmdialog.ResultMsg:
-		m.confirmDialog.Visible = false
-
+	case scaledialog.ResultMsg:
+		m.scaleDialog.Visible = false
 		if msg.Confirmed && m.List.Cursor < len(m.List.Filtered) {
 			entry := m.List.Filtered[m.List.Cursor]
-			l().Debugln("Starting restart for", entry.ServiceName)
-
-			// Issue restart command that reports errors
+			l().Infof("Scaling service %s to %d replicas", entry.ServiceName, msg.Replicas)
 			return func() tea.Msg {
-				l().Infof("Executing restart for service: %s", entry.ServiceName)
-				if err := docker.RestartService(entry.ServiceName); err != nil {
-					l().Errorf("Failed to restart service %s: %v", entry.ServiceName, err)
-					return RestartErrorMsg{
+				if err := docker.ScaleService(entry.ServiceID, msg.Replicas); err != nil {
+					l().Errorf("Failed to scale service %s: %v", entry.ServiceName, err)
+					return ScaleErrorMsg{
 						ServiceName: entry.ServiceName,
 						Error:       err,
 					}
 				}
-				l().Infof("Successfully restarted service: %s", entry.ServiceName)
+				l().Infof("Successfully scaled service %s to %d replicas", entry.ServiceName, msg.Replicas)
 				// Force immediate snapshot refresh
 				if _, err := docker.RefreshSnapshot(); err != nil {
 					l().Warnf("Failed to refresh snapshot: %v", err)
@@ -82,15 +94,108 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		return nil
 
+	case confirmdialog.ResultMsg:
+		m.confirmDialog.Visible = false
+
+		if msg.Confirmed && m.List.Cursor < len(m.List.Filtered) {
+			entry := m.List.Filtered[m.List.Cursor]
+
+			switch m.pendingAction {
+			case "remove":
+				l().Debugln("Starting remove for", entry.ServiceName)
+				return func() tea.Msg {
+					l().Infof("Executing remove for service: %s", entry.ServiceName)
+					if err := docker.RemoveService(entry.ServiceName); err != nil {
+						l().Errorf("Failed to remove service %s: %v", entry.ServiceName, err)
+						return RemoveErrorMsg{
+							ServiceName: entry.ServiceName,
+							Error:       err,
+						}
+					}
+					l().Infof("Successfully removed service: %s", entry.ServiceName)
+					// Force immediate snapshot refresh
+					if _, err := docker.RefreshSnapshot(); err != nil {
+						l().Warnf("Failed to refresh snapshot: %v", err)
+					}
+					return refreshServicesCmd(m.nodeID, m.stackName, m.filterType)()
+				}
+			case "rollback":
+				l().Debugln("Starting rollback for", entry.ServiceName)
+				return func() tea.Msg {
+					l().Infof("Executing rollback for service: %s", entry.ServiceName)
+					if err := docker.RollbackService(entry.ServiceName); err != nil {
+						l().Errorf("Failed to rollback service %s: %v", entry.ServiceName, err)
+						return RollbackErrorMsg{
+							ServiceName: entry.ServiceName,
+							Error:       err,
+						}
+					}
+					l().Infof("Successfully rolled back service: %s", entry.ServiceName)
+					// Force immediate snapshot refresh
+					if _, err := docker.RefreshSnapshot(); err != nil {
+						l().Warnf("Failed to refresh snapshot: %v", err)
+					}
+					return refreshServicesCmd(m.nodeID, m.stackName, m.filterType)()
+				}
+			default:
+				// Default to restart
+				l().Debugln("Starting restart for", entry.ServiceName)
+				return func() tea.Msg {
+					l().Infof("Executing restart for service: %s", entry.ServiceName)
+					if err := docker.RestartService(entry.ServiceName); err != nil {
+						l().Errorf("Failed to restart service %s: %v", entry.ServiceName, err)
+						return RestartErrorMsg{
+							ServiceName: entry.ServiceName,
+							Error:       err,
+						}
+					}
+					l().Infof("Successfully restarted service: %s", entry.ServiceName)
+					// Force immediate snapshot refresh
+					if _, err := docker.RefreshSnapshot(); err != nil {
+						l().Warnf("Failed to refresh snapshot: %v", err)
+					}
+					return refreshServicesCmd(m.nodeID, m.stackName, m.filterType)()
+				}
+			}
+		}
+		m.pendingAction = ""
+		return nil
+
 	case RestartErrorMsg:
 		// Show error in a confirm dialog (reusing it as an error display)
 		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = true
 		m.confirmDialog.Message = fmt.Sprintf("Failed to restart %s:\n%v", msg.ServiceName, msg.Error)
+		return nil
+
+	case ScaleErrorMsg:
+		// Show error in a confirm dialog (reusing it as an error display)
+		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = true
+		m.confirmDialog.Message = fmt.Sprintf("Failed to scale %s:\n%v", msg.ServiceName, msg.Error)
+		return nil
+
+	case RemoveErrorMsg:
+		// Show error in a confirm dialog (reusing it as an error display)
+		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = true
+		m.confirmDialog.Message = fmt.Sprintf("Failed to remove %s:\n%v", msg.ServiceName, msg.Error)
+		return nil
+
+	case RollbackErrorMsg:
+		// Show error in a confirm dialog (reusing it as an error display)
+		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = true
+		m.confirmDialog.Message = fmt.Sprintf("Failed to rollback %s:\n%v", msg.ServiceName, msg.Error)
 		return nil
 
 	case tea.KeyMsg:
 		if m.confirmDialog.Visible {
 			return m.confirmDialog.Update(msg)
+		}
+
+		if m.scaleDialog.Visible {
+			return m.scaleDialog.Update(msg)
 		}
 
 		// --- if in search mode, handle all keys via FilterableList ---
@@ -112,6 +217,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.List.HandleKey(msg) // still handle up/down/pgup/pgdown
 
 		switch msg.String() {
+		case "s":
+			if m.List.Cursor < len(m.List.Filtered) {
+				entry := m.List.Filtered[m.List.Cursor]
+				m.scaleDialog.Show(entry.ServiceName, uint64(entry.ReplicasTotal))
+			}
 		case "i":
 			if m.List.Cursor < len(m.List.Filtered) {
 				entry := m.List.Filtered[m.List.Cursor]
@@ -132,8 +242,26 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		case "r":
 			if m.List.Cursor < len(m.List.Filtered) {
 				entry := m.List.Filtered[m.List.Cursor]
+				m.pendingAction = "restart"
 				m.confirmDialog.Visible = true
+				m.confirmDialog.ErrorMode = false
 				m.confirmDialog.Message = fmt.Sprintf("Restart service %q?", entry.ServiceName)
+			}
+		case "ctrl+d":
+			if m.List.Cursor < len(m.List.Filtered) {
+				entry := m.List.Filtered[m.List.Cursor]
+				m.pendingAction = "remove"
+				m.confirmDialog.Visible = true
+				m.confirmDialog.ErrorMode = false
+				m.confirmDialog.Message = fmt.Sprintf("Remove service %q?\n\nThis action cannot be undone!", entry.ServiceName)
+			}
+		case "ctrl+r":
+			if m.List.Cursor < len(m.List.Filtered) {
+				entry := m.List.Filtered[m.List.Cursor]
+				m.pendingAction = "rollback"
+				m.confirmDialog.Visible = true
+				m.confirmDialog.ErrorMode = false
+				m.confirmDialog.Message = fmt.Sprintf("Rollback service %q to previous configuration?", entry.ServiceName)
 			}
 		case "l":
 			if m.List.Cursor < len(m.List.Filtered) {
@@ -194,7 +322,7 @@ func (m *Model) setRenderItem() {
 			width = 80
 		}
 
-		cols := 6
+		cols := 9
 		sepLen := 2
 		sepTotal := sepLen * (cols - 1)
 		// Effective width available for columns (excluding separators)
@@ -205,21 +333,27 @@ func (m *Model) setRenderItem() {
 		colWidths := make([]int, cols)
 
 		// Headers and sensible minimums
-		headers := []string{" SERVICE", "STACK", "REPLICAS", "STATUS", "CREATED", "UPDATED"}
+		headers := []string{" SERVICE", "STACK", "REPLICAS", "STATUS", "MODE", "IMAGE", "PORTS", "CREATED", "UPDATED"}
 		minCols := make([]int, cols)
 		for i := 0; i < cols; i++ {
 			hw := lipgloss.Width(headers[i])
 			floor := 6
 			switch i {
-			case 0:
+			case 0: // SERVICE
 				floor = 10
-			case 1:
+			case 1: // STACK
 				floor = 10
-			case 2:
+			case 2: // REPLICAS
 				floor = 8
-			case 3:
+			case 3: // STATUS
 				floor = 8
-			case 4, 5:
+			case 4: // MODE
+				floor = 10
+			case 5: // IMAGE
+				floor = 15
+			case 6: // PORTS
+				floor = 8
+			case 7, 8: // CREATED, UPDATED
 				floor = 8
 			}
 			if hw > floor {
@@ -318,7 +452,10 @@ func (m *Model) setRenderItem() {
 		serviceName := truncateWithEllipsis(e.ServiceName, svcTruncWidth)
 		stackName := truncateWithEllipsis(e.StackName, colWidths[1]-1)
 		statusText := truncateWithEllipsis(e.Status, colWidths[3]-1)
-		created := truncateWithEllipsis(formatRelativeTime(e.CreatedAt), colWidths[4]-1)
+		modeText := truncateWithEllipsis(e.Mode, colWidths[4]-1)
+		imageText := truncateWithEllipsis(e.Image, colWidths[5]-1)
+		portsText := truncateWithEllipsis(e.Ports, colWidths[6]-1)
+		created := truncateWithEllipsis(formatRelativeTime(e.CreatedAt), colWidths[7]-1)
 		updated := truncateWithEllipsis(formatRelativeTime(e.UpdatedAt), colWidths[lastIdx])
 
 		itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
@@ -343,12 +480,15 @@ func (m *Model) setRenderItem() {
 		statusStyle := lipgloss.NewStyle().Foreground(statusColor)
 		col3 := statusStyle.Render(fmt.Sprintf("%-*s", colWidths[3]-1, statusText))
 
-		col4 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[4]-1, created))
-		col5 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[5], updated))
+		col4 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[4]-1, modeText))
+		col5 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[5]-1, imageText))
+		col6 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[6]-1, portsText))
+		col7 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[7]-1, created))
+		col8 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[8], updated))
 
 		// Join with two-space separators for readability
 		sep := strings.Repeat(" ", sepLen)
-		line := col0 + sep + col1 + sep + col2 + sep + col3 + sep + col4 + sep + col5
+		line := col0 + sep + col1 + sep + col2 + sep + col3 + sep + col4 + sep + col5 + sep + col6 + sep + col7 + sep + col8
 
 		if selected {
 			selBg := lipgloss.Color("63")
@@ -363,9 +503,12 @@ func (m *Model) setRenderItem() {
 			col1 = selBase.Render(fmt.Sprintf("%-*s", colWidths[1]-1, stackName) + sepStr)
 			col2 = selRep.Render(fmt.Sprintf("%-*s", colWidths[2]-1, replicasText) + sepStr)
 			col3 = selStatus.Render(fmt.Sprintf("%-*s", colWidths[3]-1, statusText) + sepStr)
-			col4 = selBase.Render(fmt.Sprintf("%-*s", colWidths[4]-1, created) + sepStr)
-			col5 = selBase.Render(fmt.Sprintf("%-*s", colWidths[5], updated))
-			line = col0 + col1 + col2 + col3 + col4 + col5
+			col4 = selBase.Render(fmt.Sprintf("%-*s", colWidths[4]-1, modeText) + sepStr)
+			col5 = selBase.Render(fmt.Sprintf("%-*s", colWidths[5]-1, imageText) + sepStr)
+			col6 = selBase.Render(fmt.Sprintf("%-*s", colWidths[6]-1, portsText) + sepStr)
+			col7 = selBase.Render(fmt.Sprintf("%-*s", colWidths[7]-1, created) + sepStr)
+			col8 = selBase.Render(fmt.Sprintf("%-*s", colWidths[8], updated))
+			line = col0 + col1 + col2 + col3 + col4 + col5 + col6 + col7 + col8
 		}
 		return line
 	}

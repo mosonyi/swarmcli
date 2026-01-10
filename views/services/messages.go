@@ -23,3 +23,21 @@ type RestartErrorMsg struct {
 	ServiceName string
 	Error       error
 }
+
+// ScaleErrorMsg is sent when a service scale operation fails
+type ScaleErrorMsg struct {
+	ServiceName string
+	Error       error
+}
+
+// RemoveErrorMsg is sent when a service remove operation fails
+type RemoveErrorMsg struct {
+	ServiceName string
+	Error       error
+}
+
+// RollbackErrorMsg is sent when a service rollback operation fails
+type RollbackErrorMsg struct {
+	ServiceName string
+	Error       error
+}

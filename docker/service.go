@@ -136,6 +136,65 @@ func RestartService(serviceName string) error {
 	return restartServiceCommon(ctx, c, svc)
 }
 
+// RemoveService removes a service by name.
+func RemoveService(serviceName string) error {
+	c, err := GetClient()
+	if err != nil {
+		return fmt.Errorf("docker client: %w", err)
+	}
+	defer closeCli(c)
+
+	ctx := context.Background()
+	svc, err := findServiceByName(ctx, c, serviceName)
+	if err != nil {
+		return err
+	}
+
+	if err := c.ServiceRemove(ctx, svc.ID); err != nil {
+		return fmt.Errorf("removing service %s: %w", serviceName, err)
+	}
+
+	l().Infof("🗑️  Service %s removed\n", serviceName)
+	return nil
+}
+
+// RollbackService rolls back a service to its previous configuration.
+func RollbackService(serviceName string) error {
+	c, err := GetClient()
+	if err != nil {
+		return fmt.Errorf("docker client: %w", err)
+	}
+	defer closeCli(c)
+
+	ctx := context.Background()
+	svc, err := findServiceByName(ctx, c, serviceName)
+	if err != nil {
+		return err
+	}
+
+	// Check if there's a previous spec to rollback to
+	if svc.PreviousSpec == nil {
+		return fmt.Errorf("service %s has no previous configuration to rollback to", serviceName)
+	}
+
+	// Perform rollback by setting the previous spec as the current spec
+	svc.Spec = *svc.PreviousSpec
+	resp, err := c.ServiceUpdate(ctx, svc.ID, svc.Version, svc.Spec, swarm.ServiceUpdateOptions{
+		RegistryAuthFrom: types.RegistryAuthFromSpec,
+		Rollback:         "previous",
+	})
+	if err != nil {
+		return fmt.Errorf("rolling back service %s: %w", serviceName, err)
+	}
+
+	for _, w := range resp.Warnings {
+		l().Warnf("⚠️  Warning for service %s: %s\n", serviceName, w)
+	}
+
+	l().Infof("⏪ Service %s rolled back\n", serviceName)
+	return nil
+}
+
 type ProgressUpdate struct {
 	Replaced int
 	Running  int
@@ -297,6 +356,9 @@ type ServiceEntry struct {
 	ReplicasOnNode int
 	ReplicasTotal  int
 	Status         string
+	Mode           string
+	Image          string
+	Ports          string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
@@ -328,6 +390,9 @@ func LoadNodeServices(nodeID string) []ServiceEntry {
 			ReplicasOnNode: onNode,
 			ReplicasTotal:  desired,
 			Status:         getServiceStatus(svc),
+			Mode:           getServiceMode(svc),
+			Image:          getServiceImage(svc),
+			Ports:          getServicePorts(svc),
 			CreatedAt:      svc.CreatedAt,
 			UpdatedAt:      svc.UpdatedAt,
 		})
@@ -362,6 +427,9 @@ func LoadStackServices(stackName string) []ServiceEntry {
 			ReplicasOnNode: onNode,
 			ReplicasTotal:  desired,
 			Status:         getServiceStatus(svc),
+			Mode:           getServiceMode(svc),
+			Image:          getServiceImage(svc),
+			Ports:          getServicePorts(svc),
 			CreatedAt:      svc.CreatedAt,
 			UpdatedAt:      svc.UpdatedAt,
 		})

@@ -6,6 +6,7 @@ import (
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
+	"swarmcli/views/scaledialog"
 	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -42,6 +43,10 @@ type Model struct {
 	stackName  string
 
 	confirmDialog *confirmdialog.Model
+	scaleDialog   *scaledialog.Model
+
+	// Track what action is pending confirmation
+	pendingAction string // "restart" or "remove"
 }
 
 func New(width, height int) *Model {
@@ -61,6 +66,7 @@ func New(width, height int) *Model {
 		width:         width,
 		height:        height,
 		confirmDialog: confirmdialog.New(width, height),
+		scaleDialog:   scaledialog.New(width, height),
 	}
 }
 
@@ -80,7 +86,10 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "i", Desc: "Inspect"},
 		{Key: "↑/↓", Desc: "Navigate"},
+		{Key: "s", Desc: "Scale service"},
 		{Key: "r", Desc: "Restart service"},
+		{Key: "ctrl+r", Desc: "Rollback service"},
+		{Key: "ctrl+d", Desc: "Remove service"},
 		{Key: "l", Desc: "View logs"},
 		{Key: "q", Desc: "Close"},
 	}
@@ -106,5 +115,5 @@ func (m *Model) IsSearching() bool {
 
 // HasActiveDialog reports whether a dialog is currently visible.
 func (m *Model) HasActiveDialog() bool {
-	return m.confirmDialog.Visible
+	return m.confirmDialog.Visible || m.scaleDialog.Visible
 }
