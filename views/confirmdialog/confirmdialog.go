@@ -11,10 +11,11 @@ import (
 type ResultMsg struct{ Confirmed bool }
 
 type Model struct {
-	Visible bool
-	Message string
-	Width   int
-	Height  int
+	Visible   bool
+	Message   string
+	Width     int
+	Height    int
+	ErrorMode bool // If true, shows "Close" instead of "Yes/No"
 }
 
 func New(width, height int) *Model { return &Model{Width: width, Height: height} }
@@ -27,12 +28,22 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		if !m.Visible {
 			return nil
 		}
-		switch msg.String() {
-		case "y", "Y":
-			m.Visible = false
-			return func() tea.Msg { return ResultMsg{Confirmed: true} }
-		case "n", "N", "esc":
-			return func() tea.Msg { return ResultMsg{Confirmed: false} }
+		if m.ErrorMode {
+			// In error mode, any key closes the dialog
+			switch msg.String() {
+			case "enter", "esc", " ":
+				m.Visible = false
+				return func() tea.Msg { return ResultMsg{Confirmed: false} }
+			}
+		} else {
+			// In confirm mode, y/n keys
+			switch msg.String() {
+			case "y", "Y":
+				m.Visible = false
+				return func() tea.Msg { return ResultMsg{Confirmed: true} }
+			case "n", "N", "esc":
+				return func() tea.Msg { return ResultMsg{Confirmed: false} }
+			}
 		}
 	}
 	return nil
@@ -80,12 +91,21 @@ func (m *Model) View() string {
 
 	// Build content
 	var lines []string
-	lines = append(lines, titleStyle.Render(" Confirm Action "))
+	if m.ErrorMode {
+		lines = append(lines, titleStyle.Render(" Error "))
+	} else {
+		lines = append(lines, titleStyle.Render(" Confirm Action "))
+	}
 	lines = append(lines, messageStyle.Render(m.Message))
 
-	helpText := fmt.Sprintf("%s Yes • %s No",
-		keyStyle.Render("<y>"),
-		keyStyle.Render("<n/Esc>"))
+	var helpText string
+	if m.ErrorMode {
+		helpText = fmt.Sprintf("%s Close", keyStyle.Render("<Enter/Esc>"))
+	} else {
+		helpText = fmt.Sprintf("%s Yes • %s No",
+			keyStyle.Render("<y>"),
+			keyStyle.Render("<n/Esc>"))
+	}
 	lines = append(lines, helpStyle.Render(helpText))
 
 	content := strings.Join(lines, "\n")

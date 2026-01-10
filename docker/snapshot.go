@@ -12,13 +12,15 @@ import (
 )
 
 type NodeEntry struct {
-	ID       string
-	Hostname string
-	Role     string
-	State    string
-	Manager  bool
-	Addr     string
-	Labels   map[string]string
+	ID           string
+	Version      string
+	Hostname     string
+	Role         string
+	State        string
+	Availability string
+	Manager      bool
+	Addr         string
+	Labels       map[string]string
 }
 
 // StackEntry is a lightweight representation of a Docker stack,
@@ -150,14 +152,24 @@ func GetOrRefreshSnapshot() (*SwarmSnapshot, error) {
 func (s SwarmSnapshot) ToNodeEntries() []NodeEntry {
 	nodes := make([]NodeEntry, len(s.Nodes))
 	for i, n := range s.Nodes {
+		ver := "-"
+		if n.Description.Engine.EngineVersion != "" {
+			ver = n.Description.Engine.EngineVersion
+		}
+		avail := string(n.Spec.Availability)
+		if avail == "" {
+			avail = "active"
+		}
 		nodes[i] = NodeEntry{
-			ID:       n.ID,
-			Hostname: n.Description.Hostname,
-			Role:     string(n.Spec.Role),
-			State:    string(n.Status.State),
-			Manager:  n.ManagerStatus != nil,
-			Addr:     n.Status.Addr,
-			Labels:   n.Spec.Labels,
+			ID:           n.ID,
+			Version:      ver,
+			Hostname:     n.Description.Hostname,
+			Role:         string(n.Spec.Role),
+			State:        string(n.Status.State),
+			Availability: avail,
+			Manager:      n.ManagerStatus != nil,
+			Addr:         n.Status.Addr,
+			Labels:       n.Spec.Labels,
 		}
 	}
 

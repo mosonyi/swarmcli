@@ -5,6 +5,7 @@ import (
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
+	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	"time"
 
@@ -13,14 +14,27 @@ import (
 )
 
 type Model struct {
-	List         filterlist.FilterableList[docker.NodeEntry]
-	Visible      bool
-	ready        bool
-	firstResize  bool // tracks if we've received the first window size
-	width        int
-	height       int
-	colWidths    map[string]int
-	lastSnapshot uint64 // Hash of last node state for change detection
+	List                  filterlist.FilterableList[docker.NodeEntry]
+	Visible               bool
+	ready                 bool
+	firstResize           bool // tracks if we've received the first window size
+	width                 int
+	height                int
+	colWidths             map[string]int
+	lastSnapshot          uint64 // Hash of last node state for change detection
+	confirmDialog         *confirmdialog.Model
+	errorDialogActive     bool
+	labelsScrollOffset    int      // Horizontal scroll offset for labels column
+	availabilityDialog    bool     // Whether availability selection dialog is visible
+	availabilityNodeID    string   // Node ID for availability change
+	availabilitySelection int      // Currently selected option (0=active, 1=pause, 2=drain)
+	labelInputDialog      bool     // Whether label input dialog is visible
+	labelInputNodeID      string   // Node ID for label add
+	labelInputValue       string   // Current input value for label (key=value format)
+	labelRemoveDialog     bool     // Whether label remove dialog is visible
+	labelRemoveNodeID     string   // Node ID for label remove
+	labelRemoveSelection  int      // Currently selected label to remove
+	labelRemoveLabels     []string // List of "key=value" strings
 }
 
 func New(width, height int) *Model {
@@ -35,11 +49,12 @@ func New(width, height int) *Model {
 	}
 
 	return &Model{
-		List:        list,
-		Visible:     false,
-		firstResize: true,
-		width:       width,
-		height:      height,
+		List:          list,
+		Visible:       false,
+		firstResize:   true,
+		width:         width,
+		height:        height,
+		confirmDialog: confirmdialog.New(width, height),
 	}
 }
 
@@ -61,9 +76,20 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "i", Desc: "Inspect"},
 		{Key: "p", Desc: "ps"},
+		{Key: "a", Desc: "Availability"},
+		{Key: "Ctrl+L", Desc: "Add label"},
+		{Key: "Ctrl+R", Desc: "Remove label"},
+		{Key: "Shift+D", Desc: "Demote node"},
+		{Key: "Shift+P", Desc: "Promote node"},
+		{Key: "Ctrl+D", Desc: "Remove node"},
 		{Key: "↑/↓", Desc: "Navigate"},
 		{Key: "q", Desc: "Close"},
 	}
+}
+
+// HasActiveDialog reports whether a dialog is currently visible.
+func (m *Model) HasActiveDialog() bool {
+	return m.confirmDialog.Visible || m.errorDialogActive || m.availabilityDialog || m.labelInputDialog || m.labelRemoveDialog
 }
 
 func LoadNodes() []docker.NodeEntry {
