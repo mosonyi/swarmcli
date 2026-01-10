@@ -23,6 +23,21 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case Msg:
 		l().Infof("ServicesView: Received Msg with %d entries", len(msg.Entries))
+
+		// If we're viewing a specific stack or node and all services are gone, go back to stacks view
+		// This handles cases where:
+		// - All services in a stack are deleted (stack no longer exists)
+		// - All services on a node are removed
+		// The stacks view will automatically refresh since we already called RefreshSnapshot
+		// Use Replace=true to clear navigation history so ESC doesn't come back here
+		if len(msg.Entries) == 0 && (msg.FilterType == StackFilter || msg.FilterType == NodeFilter) {
+			l().Info("ServicesView: No services remaining in filtered view, navigating back to stacks")
+			m.Visible = false
+			return func() tea.Msg {
+				return view.NavigateToMsg{ViewName: "stacks", Payload: nil, Replace: true}
+			}
+		}
+
 		// Update the hash with new data
 		var err error
 		m.lastSnapshot, err = hash.Compute(msg.Entries)
@@ -84,26 +99,66 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 		if msg.Confirmed && m.List.Cursor < len(m.List.Filtered) {
 			entry := m.List.Filtered[m.List.Cursor]
-			l().Debugln("Starting restart for", entry.ServiceName)
 
-			// Issue restart command that reports errors
-			return func() tea.Msg {
-				l().Infof("Executing restart for service: %s", entry.ServiceName)
-				if err := docker.RestartService(entry.ServiceName); err != nil {
-					l().Errorf("Failed to restart service %s: %v", entry.ServiceName, err)
-					return RestartErrorMsg{
-						ServiceName: entry.ServiceName,
-						Error:       err,
+			switch m.pendingAction {
+			case "remove":
+				l().Debugln("Starting remove for", entry.ServiceName)
+				return func() tea.Msg {
+					l().Infof("Executing remove for service: %s", entry.ServiceName)
+					if err := docker.RemoveService(entry.ServiceName); err != nil {
+						l().Errorf("Failed to remove service %s: %v", entry.ServiceName, err)
+						return RemoveErrorMsg{
+							ServiceName: entry.ServiceName,
+							Error:       err,
+						}
 					}
+					l().Infof("Successfully removed service: %s", entry.ServiceName)
+					// Force immediate snapshot refresh
+					if _, err := docker.RefreshSnapshot(); err != nil {
+						l().Warnf("Failed to refresh snapshot: %v", err)
+					}
+					return refreshServicesCmd(m.nodeID, m.stackName, m.filterType)()
 				}
-				l().Infof("Successfully restarted service: %s", entry.ServiceName)
-				// Force immediate snapshot refresh
-				if _, err := docker.RefreshSnapshot(); err != nil {
-					l().Warnf("Failed to refresh snapshot: %v", err)
+			case "rollback":
+				l().Debugln("Starting rollback for", entry.ServiceName)
+				return func() tea.Msg {
+					l().Infof("Executing rollback for service: %s", entry.ServiceName)
+					if err := docker.RollbackService(entry.ServiceName); err != nil {
+						l().Errorf("Failed to rollback service %s: %v", entry.ServiceName, err)
+						return RollbackErrorMsg{
+							ServiceName: entry.ServiceName,
+							Error:       err,
+						}
+					}
+					l().Infof("Successfully rolled back service: %s", entry.ServiceName)
+					// Force immediate snapshot refresh
+					if _, err := docker.RefreshSnapshot(); err != nil {
+						l().Warnf("Failed to refresh snapshot: %v", err)
+					}
+					return refreshServicesCmd(m.nodeID, m.stackName, m.filterType)()
 				}
-				return refreshServicesCmd(m.nodeID, m.stackName, m.filterType)()
+			default:
+				// Default to restart
+				l().Debugln("Starting restart for", entry.ServiceName)
+				return func() tea.Msg {
+					l().Infof("Executing restart for service: %s", entry.ServiceName)
+					if err := docker.RestartService(entry.ServiceName); err != nil {
+						l().Errorf("Failed to restart service %s: %v", entry.ServiceName, err)
+						return RestartErrorMsg{
+							ServiceName: entry.ServiceName,
+							Error:       err,
+						}
+					}
+					l().Infof("Successfully restarted service: %s", entry.ServiceName)
+					// Force immediate snapshot refresh
+					if _, err := docker.RefreshSnapshot(); err != nil {
+						l().Warnf("Failed to refresh snapshot: %v", err)
+					}
+					return refreshServicesCmd(m.nodeID, m.stackName, m.filterType)()
+				}
 			}
 		}
+		m.pendingAction = ""
 		return nil
 
 	case RestartErrorMsg:
@@ -118,6 +173,20 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.confirmDialog.Visible = true
 		m.confirmDialog.ErrorMode = true
 		m.confirmDialog.Message = fmt.Sprintf("Failed to scale %s:\n%v", msg.ServiceName, msg.Error)
+		return nil
+
+	case RemoveErrorMsg:
+		// Show error in a confirm dialog (reusing it as an error display)
+		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = true
+		m.confirmDialog.Message = fmt.Sprintf("Failed to remove %s:\n%v", msg.ServiceName, msg.Error)
+		return nil
+
+	case RollbackErrorMsg:
+		// Show error in a confirm dialog (reusing it as an error display)
+		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = true
+		m.confirmDialog.Message = fmt.Sprintf("Failed to rollback %s:\n%v", msg.ServiceName, msg.Error)
 		return nil
 
 	case tea.KeyMsg:
@@ -173,9 +242,26 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		case "r":
 			if m.List.Cursor < len(m.List.Filtered) {
 				entry := m.List.Filtered[m.List.Cursor]
+				m.pendingAction = "restart"
 				m.confirmDialog.Visible = true
 				m.confirmDialog.ErrorMode = false
 				m.confirmDialog.Message = fmt.Sprintf("Restart service %q?", entry.ServiceName)
+			}
+		case "ctrl+d":
+			if m.List.Cursor < len(m.List.Filtered) {
+				entry := m.List.Filtered[m.List.Cursor]
+				m.pendingAction = "remove"
+				m.confirmDialog.Visible = true
+				m.confirmDialog.ErrorMode = false
+				m.confirmDialog.Message = fmt.Sprintf("Remove service %q?\n\nThis action cannot be undone!", entry.ServiceName)
+			}
+		case "ctrl+r":
+			if m.List.Cursor < len(m.List.Filtered) {
+				entry := m.List.Filtered[m.List.Cursor]
+				m.pendingAction = "rollback"
+				m.confirmDialog.Visible = true
+				m.confirmDialog.ErrorMode = false
+				m.confirmDialog.Message = fmt.Sprintf("Rollback service %q to previous configuration?", entry.ServiceName)
 			}
 		case "l":
 			if m.List.Cursor < len(m.List.Filtered) {

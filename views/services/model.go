@@ -44,6 +44,9 @@ type Model struct {
 
 	confirmDialog *confirmdialog.Model
 	scaleDialog   *scaledialog.Model
+
+	// Track what action is pending confirmation
+	pendingAction string // "restart" or "remove"
 }
 
 func New(width, height int) *Model {
@@ -85,6 +88,8 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "↑/↓", Desc: "Navigate"},
 		{Key: "s", Desc: "Scale service"},
 		{Key: "r", Desc: "Restart service"},
+		{Key: "ctrl+r", Desc: "Rollback service"},
+		{Key: "ctrl+d", Desc: "Remove service"},
 		{Key: "l", Desc: "View logs"},
 		{Key: "q", Desc: "Close"},
 	}
