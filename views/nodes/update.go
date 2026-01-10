@@ -3,6 +3,7 @@ package nodesview
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
@@ -14,6 +15,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/docker/docker/api/types/swarm"
 )
 
 // getFreshNodeState retrieves the current node state with a forced refresh
@@ -128,6 +130,42 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.confirmDialog.Visible = false
 		return LoadNodesCmd()
 
+	case SetAvailabilityErrorMsg:
+		// Show error in confirm dialog
+		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = true
+		m.confirmDialog.Message = fmt.Sprintf("Failed to set availability:\n%v", msg.Error)
+		return nil
+
+	case SetAvailabilitySuccessMsg:
+		// Close dialog and reload nodes
+		m.availabilityDialog = false
+		return LoadNodesCmd()
+
+	case AddLabelErrorMsg:
+		// Show error in confirm dialog
+		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = true
+		m.confirmDialog.Message = fmt.Sprintf("Failed to add label:\n%v", msg.Error)
+		return nil
+
+	case AddLabelSuccessMsg:
+		// Close dialog and reload nodes
+		m.labelInputDialog = false
+		return LoadNodesCmd()
+
+	case RemoveLabelErrorMsg:
+		// Show error in confirm dialog
+		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = true
+		m.confirmDialog.Message = fmt.Sprintf("Failed to remove label:\n%v", msg.Error)
+		return nil
+
+	case RemoveLabelSuccessMsg:
+		// Close dialog and reload nodes
+		m.labelRemoveDialog = false
+		return LoadNodesCmd()
+
 	case Msg:
 		l().Infof("NodesView: Received Msg with %d entries", len(msg.Entries))
 		// Update the hash with new data
@@ -183,6 +221,18 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case tea.KeyMsg:
+		if m.labelInputDialog {
+			return m.handleLabelInputDialogKey(msg)
+		}
+
+		if m.labelRemoveDialog {
+			return m.handleLabelRemoveDialogKey(msg)
+		}
+
+		if m.availabilityDialog {
+			return m.handleAvailabilityDialogKey(msg)
+		}
+
 		if m.confirmDialog.Visible {
 			return m.confirmDialog.Update(msg)
 		}
@@ -309,6 +359,41 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					m.confirmDialog.Message = fmt.Sprintf("Node %q is already a manager", node.Hostname)
 				}
 			}
+		case "a":
+			if m.List.Cursor < len(m.List.Filtered) {
+				node := m.List.Filtered[m.List.Cursor]
+				m.availabilityDialog = true
+				m.availabilityNodeID = node.ID
+				m.availabilitySelection = 0
+			}
+		case "ctrl+l":
+			if m.List.Cursor < len(m.List.Filtered) {
+				node := m.List.Filtered[m.List.Cursor]
+				m.labelInputDialog = true
+				m.labelInputNodeID = node.ID
+				m.labelInputValue = ""
+			}
+		case "ctrl+r":
+			if m.List.Cursor < len(m.List.Filtered) {
+				node := m.List.Filtered[m.List.Cursor]
+				if len(node.Labels) == 0 {
+					m.confirmDialog.Visible = true
+					m.confirmDialog.ErrorMode = true
+					m.confirmDialog.Message = "Node has no labels to remove"
+				} else {
+					// Build label list as "key=value" strings
+					labels := make([]string, 0, len(node.Labels))
+					for k, v := range node.Labels {
+						labels = append(labels, k+"="+v)
+					}
+					// Sort for consistent display
+					sort.Strings(labels)
+					m.labelRemoveDialog = true
+					m.labelRemoveNodeID = node.ID
+					m.labelRemoveSelection = 0
+					m.labelRemoveLabels = labels
+				}
+			}
 		case "ctrl+d":
 			if m.List.Cursor < len(m.List.Filtered) {
 				node := m.List.Filtered[m.List.Cursor]
@@ -361,7 +446,7 @@ func (m *Model) setRenderItem() {
 		if width <= 0 {
 			width = 80
 		}
-		cols := 8
+		cols := 9
 		starts := make([]int, cols)
 		for i := 0; i < cols; i++ {
 			starts[i] = (i * width) / cols
@@ -423,28 +508,179 @@ func (m *Model) setRenderItem() {
 			selBg := lipgloss.Color("63")
 			selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
 			// Preserve leading space for hostname when selected
-			return selStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s",
+			return selStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s",
 				colWidths[0]-1, idStr,
 				colWidths[1], n.Hostname,
 				colWidths[2], n.Role,
 				colWidths[3], n.State,
-				colWidths[4], manager,
-				colWidths[5], n.Version,
-				colWidths[6], n.Addr,
-				colWidths[7], labelsStr,
+				colWidths[4], n.Availability,
+				colWidths[5], manager,
+				colWidths[6], n.Version,
+				colWidths[7], n.Addr,
+				colWidths[8], labelsStr,
 			))
 		}
 
 		// Ensure the first column has a leading space to align with header
-		return itemStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s",
+		return itemStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s",
 			colWidths[0]-1, idStr,
 			colWidths[1], n.Hostname,
 			colWidths[2], n.Role,
 			colWidths[3], n.State,
-			colWidths[4], manager,
-			colWidths[5], n.Version,
-			colWidths[6], n.Addr,
-			colWidths[7], labelsStr,
+			colWidths[4], n.Availability,
+			colWidths[5], manager,
+			colWidths[6], n.Version,
+			colWidths[7], n.Addr,
+			colWidths[8], labelsStr,
 		))
 	}
+}
+
+// handleAvailabilityDialogKey handles key presses when availability dialog is visible
+func (m *Model) handleAvailabilityDialogKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "up", "k":
+		if m.availabilitySelection > 0 {
+			m.availabilitySelection--
+		}
+	case "down", "j":
+		if m.availabilitySelection < 2 {
+			m.availabilitySelection++
+		}
+	case "1", "a":
+		m.availabilitySelection = 0
+	case "2", "p":
+		m.availabilitySelection = 1
+	case "3", "d":
+		m.availabilitySelection = 2
+	case "enter":
+		// Apply the selected availability
+		availability := []string{"active", "pause", "drain"}[m.availabilitySelection]
+		nodeID := m.availabilityNodeID
+		m.availabilityDialog = false
+		return func() tea.Msg {
+			var avail swarm.NodeAvailability
+			switch availability {
+			case "active":
+				avail = swarm.NodeAvailabilityActive
+			case "pause":
+				avail = swarm.NodeAvailabilityPause
+			case "drain":
+				avail = swarm.NodeAvailabilityDrain
+			}
+			if err := docker.SetNodeAvailability(context.Background(), nodeID, avail); err != nil {
+				return SetAvailabilityErrorMsg{NodeID: nodeID, Error: err}
+			}
+			// Force refresh
+			if _, err := docker.RefreshSnapshot(); err != nil {
+				l().Warnf("Failed to refresh snapshot: %v", err)
+			}
+			return SetAvailabilitySuccessMsg{}
+		}
+	case "esc", "q":
+		m.availabilityDialog = false
+	}
+	return nil
+}
+
+// handleLabelInputDialogKey handles key presses when label input dialog is visible
+func (m *Model) handleLabelInputDialogKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.labelInputDialog = false
+		m.labelInputValue = ""
+		return nil
+	case tea.KeyEnter:
+		// Parse and apply the label
+		input := strings.TrimSpace(m.labelInputValue)
+		if input == "" {
+			m.labelInputDialog = false
+			return nil
+		}
+
+		// Parse key=value format
+		parts := strings.SplitN(input, "=", 2)
+		if len(parts) != 2 {
+			m.confirmDialog.Visible = true
+			m.confirmDialog.ErrorMode = true
+			m.confirmDialog.Message = "Invalid format. Use: key=value"
+			m.labelInputDialog = false
+			return nil
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		if key == "" {
+			m.confirmDialog.Visible = true
+			m.confirmDialog.ErrorMode = true
+			m.confirmDialog.Message = "Label key cannot be empty"
+			m.labelInputDialog = false
+			return nil
+		}
+
+		nodeID := m.labelInputNodeID
+		m.labelInputDialog = false
+		m.labelInputValue = ""
+
+		return func() tea.Msg {
+			if err := docker.AddNodeLabel(context.Background(), nodeID, key, value); err != nil {
+				return AddLabelErrorMsg{NodeID: nodeID, Error: err}
+			}
+			// Force refresh
+			if _, err := docker.RefreshSnapshot(); err != nil {
+				l().Warnf("Failed to refresh snapshot: %v", err)
+			}
+			return AddLabelSuccessMsg{}
+		}
+	case tea.KeyBackspace:
+		if len(m.labelInputValue) > 0 {
+			m.labelInputValue = m.labelInputValue[:len(m.labelInputValue)-1]
+		}
+	case tea.KeyRunes:
+		m.labelInputValue += string(msg.Runes)
+	}
+	return nil
+}
+
+// handleLabelRemoveDialogKey handles key presses when label remove dialog is visible
+func (m *Model) handleLabelRemoveDialogKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "up", "k":
+		if m.labelRemoveSelection > 0 {
+			m.labelRemoveSelection--
+		}
+	case "down", "j":
+		if m.labelRemoveSelection < len(m.labelRemoveLabels)-1 {
+			m.labelRemoveSelection++
+		}
+	case "enter":
+		// Parse selected label and remove it
+		if m.labelRemoveSelection < len(m.labelRemoveLabels) {
+			selected := m.labelRemoveLabels[m.labelRemoveSelection]
+			// Extract key from "key=value"
+			parts := strings.SplitN(selected, "=", 2)
+			if len(parts) < 1 {
+				m.labelRemoveDialog = false
+				return nil
+			}
+			key := parts[0]
+			nodeID := m.labelRemoveNodeID
+			m.labelRemoveDialog = false
+
+			return func() tea.Msg {
+				if err := docker.RemoveNodeLabel(context.Background(), nodeID, key); err != nil {
+					return RemoveLabelErrorMsg{NodeID: nodeID, Error: err}
+				}
+				// Force refresh
+				if _, err := docker.RefreshSnapshot(); err != nil {
+					l().Warnf("Failed to refresh snapshot: %v", err)
+				}
+				return RemoveLabelSuccessMsg{}
+			}
+		}
+	case "esc", "q":
+		m.labelRemoveDialog = false
+	}
+	return nil
 }
