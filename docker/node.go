@@ -75,3 +75,18 @@ func PromoteNode(ctx context.Context, nodeID string) error {
 	}
 	return nil
 }
+
+// RemoveNode removes a node from the swarm.
+func RemoveNode(ctx context.Context, nodeID string, force bool) error {
+	c, err := GetClient()
+	if err != nil {
+		return err
+	}
+	defer closeCli(c)
+
+	opts := swarm.NodeRemoveOptions{Force: force}
+	if err := c.NodeRemove(ctx, nodeID, opts); err != nil {
+		return fmt.Errorf("remove node: %w", err)
+	}
+	return nil
+}

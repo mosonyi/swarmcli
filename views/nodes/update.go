@@ -74,6 +74,19 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					// Return a message that will close dialog and refresh list
 					return PromoteSuccessMsg{}
 				}
+			} else if strings.Contains(m.confirmDialog.Message, "Remove") {
+				// Run remove with force=true, keeping dialog visible during operation
+				return func() tea.Msg {
+					if err := docker.RemoveNode(context.Background(), node.ID, true); err != nil {
+						return RemoveErrorMsg{NodeID: node.ID, Error: err}
+					}
+					// Force refresh
+					if _, err := docker.RefreshSnapshot(); err != nil {
+						l().Warnf("Failed to refresh snapshot: %v", err)
+					}
+					// Return a message that will close dialog and refresh list
+					return RemoveSuccessMsg{}
+				}
 			}
 		}
 		m.confirmDialog.Visible = false
@@ -99,6 +112,18 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return LoadNodesCmd()
 
 	case PromoteSuccessMsg:
+		// Close dialog and reload nodes with fresh data
+		m.confirmDialog.Visible = false
+		return LoadNodesCmd()
+
+	case RemoveErrorMsg:
+		// Reuse confirm dialog to display error
+		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = true
+		m.confirmDialog.Message = fmt.Sprintf("Failed to remove %s:\n%v", msg.NodeID, msg.Error)
+		return nil
+
+	case RemoveSuccessMsg:
 		// Close dialog and reload nodes with fresh data
 		m.confirmDialog.Visible = false
 		return LoadNodesCmd()
@@ -178,7 +203,41 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 
+		// Handle left/right for labels scrolling
+		switch msg.String() {
+		case "left":
+			if m.labelsScrollOffset > 0 {
+				m.labelsScrollOffset -= 5
+				if m.labelsScrollOffset < 0 {
+					m.labelsScrollOffset = 0
+				}
+				m.setRenderItem() // Re-render with new offset
+				m.List.Viewport.SetContent(m.List.View())
+			}
+			return nil
+		case "right":
+			if m.List.Cursor < len(m.List.Filtered) {
+				node := m.List.Filtered[m.List.Cursor]
+				labelsStr := formatLabels(node.Labels)
+				// Allow scrolling if labels are longer than visible width
+				if len(labelsStr) > m.labelsScrollOffset+20 {
+					m.labelsScrollOffset += 5
+					m.setRenderItem() // Re-render with new offset
+					m.List.Viewport.SetContent(m.List.View())
+				}
+			}
+			return nil
+		}
+
+		oldCursor := m.List.Cursor
 		m.List.HandleKey(msg) // still handle up/down/pgup/pgdown
+
+		// Reset scroll offset on cursor movement
+		if m.List.Cursor != oldCursor {
+			m.labelsScrollOffset = 0
+			m.setRenderItem()
+			m.List.Viewport.SetContent(m.List.View())
+		}
 
 		// Enter triggers inspect / ps
 		switch msg.String() {
@@ -250,6 +309,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					m.confirmDialog.Message = fmt.Sprintf("Node %q is already a manager", node.Hostname)
 				}
 			}
+		case "ctrl+d":
+			if m.List.Cursor < len(m.List.Filtered) {
+				node := m.List.Filtered[m.List.Cursor]
+				m.confirmDialog.Visible = true
+				m.confirmDialog.ErrorMode = false
+				m.confirmDialog.Message = fmt.Sprintf("Remove node %q from swarm?\nWarning: This action cannot be undone.", node.Hostname)
+			}
 		case "q":
 			m.Visible = false
 		}
@@ -315,7 +381,7 @@ func (m *Model) setRenderItem() {
 		if n.Manager {
 			manager = "yes"
 		}
-		labelsStr := formatLabels(n.Labels)
+		labelsStr := formatLabelsWithScroll(n.Labels, m.labelsScrollOffset, colWidths[7])
 		// Truncate ID so it fits the formatted field width (we render with
 		// a leading space and field width `colWidths[0]-1`). Ensure the
 		// final string length is <= colWidths[0]-1. If we need an ellipsis,

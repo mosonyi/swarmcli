@@ -14,16 +14,17 @@ import (
 )
 
 type Model struct {
-	List              filterlist.FilterableList[docker.NodeEntry]
-	Visible           bool
-	ready             bool
-	firstResize       bool // tracks if we've received the first window size
-	width             int
-	height            int
-	colWidths         map[string]int
-	lastSnapshot      uint64 // Hash of last node state for change detection
-	confirmDialog     *confirmdialog.Model
-	errorDialogActive bool
+	List               filterlist.FilterableList[docker.NodeEntry]
+	Visible            bool
+	ready              bool
+	firstResize        bool // tracks if we've received the first window size
+	width              int
+	height             int
+	colWidths          map[string]int
+	lastSnapshot       uint64 // Hash of last node state for change detection
+	confirmDialog      *confirmdialog.Model
+	errorDialogActive  bool
+	labelsScrollOffset int // Horizontal scroll offset for labels column
 }
 
 func New(width, height int) *Model {
@@ -67,6 +68,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "p", Desc: "ps"},
 		{Key: "Shift+D", Desc: "Demote node"},
 		{Key: "Shift+P", Desc: "Promote node"},
+		{Key: "Ctrl+D", Desc: "Remove node"},
 		{Key: "↑/↓", Desc: "Navigate"},
 		{Key: "q", Desc: "Close"},
 	}

@@ -32,3 +32,12 @@ type DemoteSuccessMsg struct{}
 
 // PromoteSuccessMsg indicates a node was successfully promoted.
 type PromoteSuccessMsg struct{}
+
+// RemoveErrorMsg reports an error occurred while attempting to remove a node.
+type RemoveErrorMsg struct {
+	NodeID string
+	Error  error
+}
+
+// RemoveSuccessMsg indicates a node was successfully removed.
+type RemoveSuccessMsg struct{}

@@ -163,3 +163,28 @@ func formatLabels(labels map[string]string) string {
 	sort.Strings(parts)
 	return strings.Join(parts, ",")
 }
+
+// formatLabelsWithScroll formats labels with horizontal scroll offset and truncation indicator
+func formatLabelsWithScroll(labels map[string]string, offset int, maxWidth int) string {
+	full := formatLabels(labels)
+	if full == "-" {
+		return full
+	}
+
+	// Apply scroll offset
+	if offset > len(full) {
+		offset = len(full)
+	}
+	visible := full[offset:]
+
+	// Truncate if needed and add > indicator
+	if len(visible) > maxWidth {
+		if maxWidth > 1 {
+			visible = visible[:maxWidth-1] + ">"
+		} else {
+			visible = ">"
+		}
+	}
+
+	return visible
+}
