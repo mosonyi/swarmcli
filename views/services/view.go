@@ -178,5 +178,9 @@ func (m *Model) View() string {
 		framed = ui.OverlayCentered(framed, m.confirmDialog.View(), frame.FrameWidth, frame.FrameHeight)
 	}
 
+	if m.scaleDialog.Visible {
+		framed = ui.OverlayCentered(framed, m.scaleDialog.View(), frame.FrameWidth, frame.FrameHeight)
+	}
+
 	return framed
 }

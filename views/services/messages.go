@@ -23,3 +23,9 @@ type RestartErrorMsg struct {
 	ServiceName string
 	Error       error
 }
+
+// ScaleErrorMsg is sent when a service scale operation fails
+type ScaleErrorMsg struct {
+	ServiceName string
+	Error       error
+}

@@ -10,6 +10,7 @@ import (
 	"swarmcli/views/confirmdialog"
 	inspectview "swarmcli/views/inspect"
 	logsview "swarmcli/views/logs"
+	"swarmcli/views/scaledialog"
 	"swarmcli/views/view"
 	"time"
 
@@ -55,6 +56,29 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.List.Viewport.YOffset = 0
 		}
 		return nil
+	case scaledialog.ResultMsg:
+		m.scaleDialog.Visible = false
+		if msg.Confirmed && m.List.Cursor < len(m.List.Filtered) {
+			entry := m.List.Filtered[m.List.Cursor]
+			l().Infof("Scaling service %s to %d replicas", entry.ServiceName, msg.Replicas)
+			return func() tea.Msg {
+				if err := docker.ScaleService(entry.ServiceID, msg.Replicas); err != nil {
+					l().Errorf("Failed to scale service %s: %v", entry.ServiceName, err)
+					return ScaleErrorMsg{
+						ServiceName: entry.ServiceName,
+						Error:       err,
+					}
+				}
+				l().Infof("Successfully scaled service %s to %d replicas", entry.ServiceName, msg.Replicas)
+				// Force immediate snapshot refresh
+				if _, err := docker.RefreshSnapshot(); err != nil {
+					l().Warnf("Failed to refresh snapshot: %v", err)
+				}
+				return refreshServicesCmd(m.nodeID, m.stackName, m.filterType)()
+			}
+		}
+		return nil
+
 	case confirmdialog.ResultMsg:
 		m.confirmDialog.Visible = false
 
@@ -88,9 +112,19 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.confirmDialog.Message = fmt.Sprintf("Failed to restart %s:\n%v", msg.ServiceName, msg.Error)
 		return nil
 
+	case ScaleErrorMsg:
+		// Show error in a confirm dialog (reusing it as an error display)
+		m.confirmDialog.Visible = true
+		m.confirmDialog.Message = fmt.Sprintf("Failed to scale %s:\n%v", msg.ServiceName, msg.Error)
+		return nil
+
 	case tea.KeyMsg:
 		if m.confirmDialog.Visible {
 			return m.confirmDialog.Update(msg)
+		}
+
+		if m.scaleDialog.Visible {
+			return m.scaleDialog.Update(msg)
 		}
 
 		// --- if in search mode, handle all keys via FilterableList ---
@@ -112,6 +146,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.List.HandleKey(msg) // still handle up/down/pgup/pgdown
 
 		switch msg.String() {
+		case "s":
+			if m.List.Cursor < len(m.List.Filtered) {
+				entry := m.List.Filtered[m.List.Cursor]
+				m.scaleDialog.Show(entry.ServiceName, uint64(entry.ReplicasTotal))
+			}
 		case "i":
 			if m.List.Cursor < len(m.List.Filtered) {
 				entry := m.List.Filtered[m.List.Cursor]
