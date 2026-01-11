@@ -46,7 +46,14 @@ type Model struct {
 	scaleDialog   *scaledialog.Model
 
 	// Track what action is pending confirmation
-	pendingAction string // "restart" or "remove"
+	pendingAction string // "restart", "remove", or "rollback"
+
+	// Track which services have their tasks expanded
+	expandedServices map[string]bool               // service ID -> expanded
+	serviceTasks     map[string][]docker.TaskEntry // cached tasks per service
+
+	// Track task navigation: -1 means service row is selected, >= 0 means task at that index
+	selectedTaskIndex int
 }
 
 func New(width, height int) *Model {
@@ -60,13 +67,16 @@ func New(width, height int) *Model {
 	}
 
 	return &Model{
-		List:          list,
-		Visible:       false,
-		firstResize:   true,
-		width:         width,
-		height:        height,
-		confirmDialog: confirmdialog.New(width, height),
-		scaleDialog:   scaledialog.New(width, height),
+		List:              list,
+		Visible:           false,
+		firstResize:       true,
+		width:             width,
+		height:            height,
+		confirmDialog:     confirmdialog.New(width, height),
+		scaleDialog:       scaledialog.New(width, height),
+		expandedServices:  make(map[string]bool),
+		serviceTasks:      make(map[string][]docker.TaskEntry),
+		selectedTaskIndex: -1,
 	}
 }
 
@@ -86,6 +96,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "i", Desc: "Inspect"},
 		{Key: "↑/↓", Desc: "Navigate"},
+		{Key: "p", Desc: "Show/hide tasks"},
 		{Key: "s", Desc: "Scale service"},
 		{Key: "r", Desc: "Restart service"},
 		{Key: "ctrl+r", Desc: "Rollback service"},

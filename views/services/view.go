@@ -172,6 +172,45 @@ func (m *Model) View() string {
 		footer,
 	)
 
+	// Adjust viewport offset for task navigation before calling VisibleContent
+	if m.selectedTaskIndex >= 0 && m.List.Cursor < len(m.List.Filtered) {
+		entry := m.List.Filtered[m.List.Cursor]
+		if m.expandedServices[entry.ServiceID] {
+			// Skip VisibleContent's offset adjustment - we'll manage it manually
+			m.List.SkipOffsetAdjustment = true
+
+			// Calculate the line offset for the selected task
+			lineOffset := 0
+			for i := 0; i < m.List.Cursor; i++ {
+				e := m.List.Filtered[i]
+				lineOffset++ // service row
+				if m.expandedServices[e.ServiceID] {
+					tasks := m.serviceTasks[e.ServiceID]
+					if len(tasks) > 0 {
+						lineOffset += 1 + len(tasks) // header + task rows
+					} else {
+						lineOffset += 1 // "no tasks" row
+					}
+				}
+			}
+			// Add service row + header + selected task
+			lineOffset += 2 + m.selectedTaskIndex
+
+			// Ensure the task line is visible
+			if lineOffset < m.List.Viewport.YOffset {
+				m.List.Viewport.YOffset = lineOffset
+			} else if lineOffset >= m.List.Viewport.YOffset+frame.DesiredContentLines {
+				m.List.Viewport.YOffset = lineOffset - frame.DesiredContentLines + 1
+				if m.List.Viewport.YOffset < 0 {
+					m.List.Viewport.YOffset = 0
+				}
+			}
+		}
+	} else {
+		// Not in task navigation - let VisibleContent handle offset
+		m.List.SkipOffsetAdjustment = false
+	}
+
 	// Use VisibleContent to get only the visible portion based on cursor position
 	// This ensures proper scrolling and that the cursor is always visible
 	// VisibleContent already returns exactly desiredContentLines, so we use

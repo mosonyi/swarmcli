@@ -59,6 +59,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// Continue polling even if not visible
 		return tickCmd()
 
+	case TasksLoadedMsg:
+		// Store loaded tasks - view will automatically re-render
+		m.serviceTasks[msg.ServiceID] = msg.Tasks
+		m.setRenderItem()
+		return nil
+
 	case tea.WindowSizeMsg:
 		m.List.Viewport.Width = msg.Width
 		m.List.Viewport.Height = msg.Height
@@ -211,16 +217,101 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.List.ApplyFilter()
 			m.List.Cursor = 0
 			m.List.Viewport.GotoTop()
+			m.selectedTaskIndex = -1
 			return nil
 		}
 
-		m.List.HandleKey(msg) // still handle up/down/pgup/pgdown
+		// Handle task navigation for expanded services
+		if m.List.Cursor < len(m.List.Filtered) {
+			entry := m.List.Filtered[m.List.Cursor]
+			if m.expandedServices[entry.ServiceID] {
+				tasks := m.serviceTasks[entry.ServiceID]
+				switch msg.String() {
+				case "down":
+					if m.selectedTaskIndex < len(tasks)-1 {
+						// Move down within tasks or from service to first task
+						m.selectedTaskIndex++
+						m.setRenderItem()
+						return nil
+					} else if m.selectedTaskIndex == len(tasks)-1 {
+						// At last task, move to next service
+						m.selectedTaskIndex = -1
+						m.List.HandleKey(msg)
+						return nil
+					}
+					// If selectedTaskIndex == -1, fall through to normal handling
+				case "up":
+					if m.selectedTaskIndex > 0 {
+						// Move up within tasks
+						m.selectedTaskIndex--
+						m.setRenderItem()
+						return nil
+					} else if m.selectedTaskIndex == 0 {
+						// At first task, move back to service row
+						m.selectedTaskIndex = -1
+						m.setRenderItem()
+						return nil
+					}
+					// If selectedTaskIndex == -1, fall through to normal handling
+				}
+			} else if msg.String() == "up" && m.selectedTaskIndex == -1 && m.List.Cursor > 0 {
+				// At a service row, check if previous service has expanded tasks
+				prevEntry := m.List.Filtered[m.List.Cursor-1]
+				if m.expandedServices[prevEntry.ServiceID] {
+					prevTasks := m.serviceTasks[prevEntry.ServiceID]
+					if len(prevTasks) > 0 {
+						// Move to last task of previous service
+						m.List.Cursor--
+						m.selectedTaskIndex = len(prevTasks) - 1
+						m.setRenderItem()
+						return nil
+					}
+				}
+			}
+		}
+
+		// Store old cursor to detect changes
+		oldCursor := m.List.Cursor
+		m.List.HandleKey(msg) // handle up/down/pgup/pgdown
+
+		// Reset task selection when moving to different service
+		if oldCursor != m.List.Cursor {
+			m.selectedTaskIndex = -1
+		}
 
 		switch msg.String() {
 		case "s":
 			if m.List.Cursor < len(m.List.Filtered) {
 				entry := m.List.Filtered[m.List.Cursor]
 				m.scaleDialog.Show(entry.ServiceName, uint64(entry.ReplicasTotal))
+			}
+		case "p":
+			// Toggle tasks expansion for selected service
+			if m.List.Cursor < len(m.List.Filtered) {
+				entry := m.List.Filtered[m.List.Cursor]
+				// Toggle expansion state
+				m.expandedServices[entry.ServiceID] = !m.expandedServices[entry.ServiceID]
+
+				// If expanding, fetch tasks
+				if m.expandedServices[entry.ServiceID] {
+					return func() tea.Msg {
+						tasks, err := docker.GetTasksForService(entry.ServiceID)
+						if err != nil {
+							l().Errorf("Failed to fetch tasks for service %s: %v", entry.ServiceName, err)
+							// Still toggle to show empty state
+							tasks = []docker.TaskEntry{}
+						}
+						return TasksLoadedMsg{
+							ServiceID: entry.ServiceID,
+							Tasks:     tasks,
+						}
+					}
+				} else {
+					// Collapsing - remove cached tasks and let view re-render
+					delete(m.serviceTasks, entry.ServiceID)
+					m.selectedTaskIndex = -1
+					m.setRenderItem()
+				}
 			}
 		case "i":
 			if m.List.Cursor < len(m.List.Filtered) {
@@ -490,8 +581,9 @@ func (m *Model) setRenderItem() {
 		sep := strings.Repeat(" ", sepLen)
 		line := col0 + sep + col1 + sep + col2 + sep + col3 + sep + col4 + sep + col5 + sep + col6 + sep + col7 + sep + col8
 
-		if selected {
-			selBg := lipgloss.Color("63")
+		if selected && m.selectedTaskIndex == -1 {
+			// Only highlight service row if no task is selected
+			selBg := lipgloss.Color("25") // Lighter blue
 			selBase := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
 			selRep := lipgloss.NewStyle().Foreground(replicasColor).Background(selBg).Bold(true)
 			selStatus := lipgloss.NewStyle().Foreground(statusColor).Background(selBg).Bold(true)
@@ -510,6 +602,45 @@ func (m *Model) setRenderItem() {
 			col8 = selBase.Render(fmt.Sprintf("%-*s", colWidths[8], updated))
 			line = col0 + col1 + col2 + col3 + col4 + col5 + col6 + col7 + col8
 		}
+
+		// Check if service is expanded and add task rows
+		if m.expandedServices[e.ServiceID] {
+			tasks := m.serviceTasks[e.ServiceID]
+			if len(tasks) > 0 {
+				// Add task header
+				taskHeaderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Italic(true)
+				taskHeader := taskHeaderStyle.Render("   NAME                    NODE          DESIRED STATE  CURRENT STATE")
+				line += "\n" + taskHeader
+
+				// Add each task as a row
+				for taskIdx, task := range tasks {
+					taskName := truncateWithEllipsis(task.Name, 22)
+					taskNode := truncateWithEllipsis(task.NodeName, 12)
+					taskDesired := truncateWithEllipsis(task.DesiredState, 13)
+					taskCurrent := truncateWithEllipsis(task.CurrentState, 50)
+
+					// Check if this task is selected
+					taskSelected := selected && m.selectedTaskIndex == taskIdx
+					var taskLine string
+					if taskSelected {
+						// Lighter highlight for task rows
+						taskSelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("24")).Bold(true)
+						taskLine = taskSelStyle.Render(fmt.Sprintf("   %-22s  %-12s  %-13s  %s",
+							taskName, taskNode, taskDesired, taskCurrent))
+					} else {
+						taskStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
+						taskLine = taskStyle.Render(fmt.Sprintf("   %-22s  %-12s  %-13s  %s",
+							taskName, taskNode, taskDesired, taskCurrent))
+					}
+					line += "\n" + taskLine
+				}
+			} else {
+				// Show "no tasks" message
+				noTasksStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Italic(true)
+				line += "\n" + noTasksStyle.Render("   (no tasks)")
+			}
+		}
+
 		return line
 	}
 }

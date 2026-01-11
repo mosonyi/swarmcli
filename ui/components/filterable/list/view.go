@@ -47,15 +47,47 @@ func (f *FilterableList[T]) View() string {
 }
 
 // ensureCursorVisible keeps the cursor in the visible viewport range
+// This now accounts for multi-line items
 func (f *FilterableList[T]) ensureCursorVisible() {
 	h := f.Viewport.Height
 	if h < 1 {
 		h = 1
 	}
-	if f.Cursor < f.Viewport.YOffset {
-		f.Viewport.YOffset = f.Cursor
-	} else if f.Cursor >= f.Viewport.YOffset+h {
-		f.Viewport.YOffset = f.Cursor - h + 1
+
+	// Count lines for each item to find cursor position in lines
+	renderedItems := make([]string, len(f.Filtered))
+	itemLineCounts := make([]int, len(f.Filtered))
+	for i := range f.Filtered {
+		if f.RenderItem != nil {
+			renderedItems[i] = f.RenderItem(f.Filtered[i], i == f.Cursor, f.colWidth)
+		} else {
+			renderedItems[i] = fmt.Sprintf("%v", f.Filtered[i])
+		}
+		if renderedItems[i] == "" {
+			itemLineCounts[i] = 1
+		} else {
+			itemLineCounts[i] = strings.Count(renderedItems[i], "\n") + 1
+		}
+	}
+
+	// Calculate line offset for cursor item
+	cursorLineStart := 0
+	for i := 0; i < f.Cursor && i < len(itemLineCounts); i++ {
+		cursorLineStart += itemLineCounts[i]
+	}
+	cursorLineEnd := cursorLineStart
+	if f.Cursor < len(itemLineCounts) {
+		cursorLineEnd = cursorLineStart + itemLineCounts[f.Cursor] - 1
+	}
+
+	// Adjust viewport offset to keep cursor visible
+	if cursorLineStart < f.Viewport.YOffset {
+		f.Viewport.YOffset = cursorLineStart
+	} else if cursorLineEnd >= f.Viewport.YOffset+h {
+		f.Viewport.YOffset = cursorLineEnd - h + 1
+		if f.Viewport.YOffset < 0 {
+			f.Viewport.YOffset = 0
+		}
 	}
 }
 

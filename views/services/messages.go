@@ -41,3 +41,9 @@ type RollbackErrorMsg struct {
 	ServiceName string
 	Error       error
 }
+
+// TasksLoadedMsg is sent when tasks for a service are loaded
+type TasksLoadedMsg struct {
+	ServiceID string
+	Tasks     []docker.TaskEntry
+}
