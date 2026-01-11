@@ -22,7 +22,10 @@ type FilterableList[T any] struct {
 	// Match function for filtering
 	Match func(item T, query string) bool
 
-	// When true, VisibleContent won't adjust YOffset (for manual navigation like task scrolling)
+	// SkipOffsetAdjustment disables automatic viewport scrolling in VisibleContent.
+	// When false (default): VisibleContent automatically adjusts YOffset to keep the cursor visible.
+	// When true: The caller manually controls YOffset, useful for sub-item navigation (e.g., tasks within a service)
+	// where the cursor position doesn't reflect the actual line being viewed.
 	SkipOffsetAdjustment bool
 
 	colWidth int
