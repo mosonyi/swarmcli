@@ -122,6 +122,90 @@ func sortTasksByServiceAndTime(tasks []TaskEntry) {
 	}
 }
 
+// GetTasksForService returns all tasks for a specific service ID from the cached snapshot.
+func GetTasksForService(serviceID string) ([]TaskEntry, error) {
+	snap := GetSnapshot()
+	if snap == nil {
+		return nil, fmt.Errorf("no snapshot available")
+	}
+
+	var tasks []TaskEntry
+
+	// Build nodes map for hostname lookup
+	nodesMap := make(map[string]string)
+	for _, node := range snap.Nodes {
+		nodesMap[node.ID] = node.Description.Hostname
+	}
+
+	// Filter tasks for this service and sort by created time
+	for _, task := range snap.Tasks {
+		if task.ServiceID == serviceID {
+			nodeName := nodesMap[task.NodeID]
+			if nodeName == "" {
+				nodeName = task.NodeID[:12]
+			}
+
+			// Extract image name (without registry/tag details for cleaner display)
+			imageParts := strings.Split(task.Spec.ContainerSpec.Image, "@")
+			image := imageParts[0]
+			if strings.Contains(image, ":") {
+				image = strings.Split(image, ":")[0] + ":" + strings.Split(strings.Split(image, ":")[1], "@")[0]
+			}
+
+			// Format current state with timestamp
+			currentState := string(task.Status.State)
+			if !task.Status.Timestamp.IsZero() {
+				duration := time.Since(task.Status.Timestamp)
+				currentState = fmt.Sprintf("%s %s", currentState, formatTaskDuration(duration))
+			}
+
+			// Get error message if any
+			errorMsg := ""
+			if task.Status.Err != "" {
+				errorMsg = task.Status.Err
+				// Truncate long error messages
+				if len(errorMsg) > 50 {
+					errorMsg = errorMsg[:47] + "…"
+				}
+			}
+
+			// Get service name from snapshot
+			var serviceName string
+			for _, svc := range snap.Services {
+				if svc.ID == serviceID {
+					serviceName = svc.Spec.Name
+					break
+				}
+			}
+
+			tasks = append(tasks, TaskEntry{
+				ID:           task.ID[:12],
+				Name:         fmt.Sprintf("%s.%d", serviceName, task.Slot),
+				ServiceName:  serviceName,
+				Image:        image,
+				NodeName:     nodeName,
+				DesiredState: string(task.DesiredState),
+				CurrentState: currentState,
+				Error:        errorMsg,
+				Ports:        "", // Ports are typically on service level, not task level
+				CreatedAt:    task.CreatedAt,
+				UpdatedAt:    task.UpdatedAt,
+			})
+		}
+	}
+
+	// Sort tasks by created time (newest first)
+	for i := 0; i < len(tasks); i++ {
+		for j := i + 1; j < len(tasks); j++ {
+			if tasks[i].CreatedAt.Before(tasks[j].CreatedAt) {
+				tasks[i], tasks[j] = tasks[j], tasks[i]
+			}
+		}
+	}
+
+	return tasks, nil
+}
+
 func formatTaskDuration(d time.Duration) string {
 	if d < time.Minute {
 		return fmt.Sprintf("%d seconds ago", int(d.Seconds()))

@@ -6,6 +6,7 @@ import (
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
+	"swarmcli/views/scaledialog"
 	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -42,6 +43,17 @@ type Model struct {
 	stackName  string
 
 	confirmDialog *confirmdialog.Model
+	scaleDialog   *scaledialog.Model
+
+	// Track what action is pending confirmation
+	pendingAction string // "restart", "remove", "rollback", or "empty-stack"
+
+	// Track which services have their tasks expanded
+	expandedServices map[string]bool               // service ID -> expanded
+	serviceTasks     map[string][]docker.TaskEntry // cached tasks per service
+
+	// Track task navigation: -1 means service row is selected, >= 0 means task at that index
+	selectedTaskIndex int
 }
 
 func New(width, height int) *Model {
@@ -55,12 +67,16 @@ func New(width, height int) *Model {
 	}
 
 	return &Model{
-		List:          list,
-		Visible:       false,
-		firstResize:   true,
-		width:         width,
-		height:        height,
-		confirmDialog: confirmdialog.New(width, height),
+		List:              list,
+		Visible:           false,
+		firstResize:       true,
+		width:             width,
+		height:            height,
+		confirmDialog:     confirmdialog.New(width, height),
+		scaleDialog:       scaledialog.New(width, height),
+		expandedServices:  make(map[string]bool),
+		serviceTasks:      make(map[string][]docker.TaskEntry),
+		selectedTaskIndex: -1,
 	}
 }
 
@@ -80,7 +96,11 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "i", Desc: "Inspect"},
 		{Key: "↑/↓", Desc: "Navigate"},
+		{Key: "p", Desc: "Show/hide tasks"},
+		{Key: "s", Desc: "Scale service"},
 		{Key: "r", Desc: "Restart service"},
+		{Key: "ctrl+r", Desc: "Rollback service"},
+		{Key: "ctrl+d", Desc: "Remove service"},
 		{Key: "l", Desc: "View logs"},
 		{Key: "q", Desc: "Close"},
 	}
@@ -106,5 +126,5 @@ func (m *Model) IsSearching() bool {
 
 // HasActiveDialog reports whether a dialog is currently visible.
 func (m *Model) HasActiveDialog() bool {
-	return m.confirmDialog.Visible
+	return m.confirmDialog.Visible || m.scaleDialog.Visible
 }

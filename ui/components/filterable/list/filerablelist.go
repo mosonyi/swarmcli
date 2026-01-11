@@ -1,6 +1,7 @@
 package filterlist
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -21,6 +22,12 @@ type FilterableList[T any] struct {
 	// Match function for filtering
 	Match func(item T, query string) bool
 
+	// SkipOffsetAdjustment disables automatic viewport scrolling in VisibleContent.
+	// When false (default): VisibleContent automatically adjusts YOffset to keep the cursor visible.
+	// When true: The caller manually controls YOffset, useful for sub-item navigation (e.g., tasks within a service)
+	// where the cursor position doesn't reflect the actual line being viewed.
+	SkipOffsetAdjustment bool
+
 	colWidth int
 }
 
@@ -31,6 +38,14 @@ const (
 	ModeSearching
 )
 
+// countLines returns the number of lines in a string (1 + number of newlines)
+func countLines(s string) int {
+	if s == "" {
+		return 1
+	}
+	return strings.Count(s, "\n") + 1
+}
+
 // VisibleContent returns a string containing exactly `lines` rows of
 // rendered items starting at the current viewport Y offset. It will adjust
 // the internal Y offset to ensure the cursor is visible within the given
@@ -39,13 +54,6 @@ const (
 func (f *FilterableList[T]) VisibleContent(lines int) string {
 	if lines < 1 {
 		lines = 1
-	}
-
-	// Ensure cursor visible within the provided height
-	if f.Cursor < f.Viewport.YOffset {
-		f.Viewport.YOffset = f.Cursor
-	} else if f.Cursor >= f.Viewport.YOffset+lines {
-		f.Viewport.YOffset = f.Cursor - lines + 1
 	}
 
 	// If no items or filtered empty, return appropriate placeholder
@@ -68,18 +76,71 @@ func (f *FilterableList[T]) VisibleContent(lines int) string {
 		return strings.Join(parts, "\n")
 	}
 
-	out := make([]string, lines)
-	for i := 0; i < lines; i++ {
-		idx := f.Viewport.YOffset + i
-		if idx < 0 || idx >= len(f.Filtered) {
-			out[i] = ""
-			continue
-		}
+	// Pre-render all items to know their line counts
+	renderedItems := make([]string, len(f.Filtered))
+	itemLineCounts := make([]int, len(f.Filtered))
+	totalLines := 0
+	for i := range f.Filtered {
 		if f.RenderItem != nil {
-			out[i] = f.RenderItem(f.Filtered[idx], idx == f.Cursor, f.colWidth)
+			renderedItems[i] = f.RenderItem(f.Filtered[i], i == f.Cursor, f.colWidth)
 		} else {
-			out[i] = ""
+			renderedItems[i] = fmt.Sprintf("%v", f.Filtered[i])
+		}
+		itemLineCounts[i] = countLines(renderedItems[i])
+		totalLines += itemLineCounts[i]
+	}
+
+	// Find which item contains the cursor and ensure it's visible
+	// Calculate line offset for cursor item
+	cursorLineStart := 0
+	for i := 0; i < f.Cursor && i < len(itemLineCounts); i++ {
+		cursorLineStart += itemLineCounts[i]
+	}
+	cursorLineEnd := cursorLineStart + itemLineCounts[f.Cursor] - 1
+
+	// Adjust viewport offset to keep cursor visible (unless manually managed)
+	if !f.SkipOffsetAdjustment {
+		// If cursor item is taller than viewport, prioritize showing the start
+		if cursorLineStart < f.Viewport.YOffset {
+			// Cursor item starts above viewport - scroll up to show it
+			f.Viewport.YOffset = cursorLineStart
+		} else if itemLineCounts[f.Cursor] > lines {
+			// Cursor item is taller than viewport - show from its start to prevent oscillation
+			if f.Viewport.YOffset > cursorLineStart {
+				f.Viewport.YOffset = cursorLineStart
+			}
+		} else if cursorLineEnd >= f.Viewport.YOffset+lines {
+			// Cursor item ends below viewport - scroll down to show it
+			f.Viewport.YOffset = cursorLineEnd - lines + 1
+			if f.Viewport.YOffset < 0 {
+				f.Viewport.YOffset = 0
+			}
 		}
 	}
-	return strings.Join(out, "\n")
+
+	// Collect lines for display, starting from YOffset
+	var result []string
+	currentLine := 0
+	for i := 0; i < len(renderedItems); i++ {
+		itemLines := strings.Split(renderedItems[i], "\n")
+		for _, line := range itemLines {
+			if currentLine >= f.Viewport.YOffset && len(result) < lines {
+				result = append(result, line)
+			}
+			currentLine++
+			if len(result) >= lines {
+				break
+			}
+		}
+		if len(result) >= lines {
+			break
+		}
+	}
+
+	// Pad with empty lines if needed
+	for len(result) < lines {
+		result = append(result, "")
+	}
+
+	return strings.Join(result, "\n")
 }
