@@ -46,7 +46,7 @@ type Model struct {
 	scaleDialog   *scaledialog.Model
 
 	// Track what action is pending confirmation
-	pendingAction string // "restart", "remove", or "rollback"
+	pendingAction string // "restart", "remove", "rollback", or "empty-stack"
 
 	// Track which services have their tasks expanded
 	expandedServices map[string]bool               // service ID -> expanded

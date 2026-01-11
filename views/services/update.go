@@ -24,18 +24,24 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case Msg:
 		l().Infof("ServicesView: Received Msg with %d entries", len(msg.Entries))
 
-		// If we're viewing a specific stack or node and all services are gone, go back to stacks view
+		// If we're viewing a specific stack or node and all services are gone, show message
 		// This handles cases where:
 		// - All services in a stack are deleted (stack no longer exists)
 		// - All services on a node are removed
-		// The stacks view will automatically refresh since we already called RefreshSnapshot
-		// Use Replace=true to clear navigation history so ESC doesn't come back here
 		if len(msg.Entries) == 0 && (msg.FilterType == StackFilter || msg.FilterType == NodeFilter) {
-			l().Info("ServicesView: No services remaining in filtered view, navigating back to stacks")
-			m.Visible = false
-			return func() tea.Msg {
-				return view.NavigateToMsg{ViewName: "stacks", Payload: nil, Replace: true}
+			l().Info("ServicesView: No services remaining in filtered view, showing dialog")
+			m.pendingAction = "empty-stack"
+			m.confirmDialog.Visible = true
+			m.confirmDialog.ErrorMode = true
+			var target string
+			if msg.FilterType == StackFilter {
+				target = "Stack"
+			} else {
+				target = "Node"
 			}
+			m.confirmDialog.Message = fmt.Sprintf("%s no longer has services, returning to stacks view.\n\nPress Enter to continue.", target)
+			// Don't update content or set visible - just show the dialog
+			return nil
 		}
 
 		// Update the hash with new data
@@ -164,6 +170,16 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				}
 			}
 		}
+
+		// Handle empty-stack navigation
+		if m.pendingAction == "empty-stack" {
+			m.pendingAction = ""
+			m.Visible = false
+			return func() tea.Msg {
+				return view.NavigateToMsg{ViewName: "stacks", Payload: nil, Replace: true}
+			}
+		}
+
 		m.pendingAction = ""
 		return nil
 
