@@ -477,7 +477,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		case "?":
 			return func() tea.Msg {
 				return view.NavigateToMsg{
-					ViewName: "help",
+					ViewName: view.NameHelp,
 					Payload:  GetSecretsHelpContent(),
 				}
 			}
@@ -992,7 +992,7 @@ func (m *Model) handleUsedByViewKey(msg tea.KeyMsg) tea.Cmd {
 		m.usedBySecretName = ""
 		return func() tea.Msg {
 			payload := map[string]interface{}{"stackName": selectedStack}
-			return view.NavigateToMsg{ViewName: "services", Payload: payload, Replace: false}
+			return view.NavigateToMsg{ViewName: view.NameServices, Payload: payload, Replace: false}
 		}
 
 	default:

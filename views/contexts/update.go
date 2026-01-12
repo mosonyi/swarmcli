@@ -715,7 +715,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		case "?":
 			return func() tea.Msg {
 				return view.NavigateToMsg{
-					ViewName: "help",
+					ViewName: view.NameHelp,
 					Payload:  GetContextsHelpContent(),
 				}
 			}

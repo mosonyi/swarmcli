@@ -494,7 +494,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		case "?":
 			return func() tea.Msg {
 				return view.NavigateToMsg{
-					ViewName: "help",
+					ViewName: view.NameHelp,
 					Payload:  GetConfigsHelpContent(),
 				}
 			}
@@ -964,7 +964,7 @@ func (m *Model) handleUsedByViewKey(msg tea.KeyMsg) tea.Cmd {
 			// Send a generic navigation message with a payload for services view.
 			// Use Replace=false to indicate this should be pushed onto the view stack.
 			payload := map[string]interface{}{"stackName": selectedStack}
-			return view.NavigateToMsg{ViewName: "services", Payload: payload, Replace: false}
+			return view.NavigateToMsg{ViewName: view.NameServices, Payload: payload, Replace: false}
 		}
 
 	default:

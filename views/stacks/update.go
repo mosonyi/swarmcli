@@ -89,7 +89,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		if msg.String() == "?" {
 			return func() tea.Msg {
 				return view.NavigateToMsg{
-					ViewName: "help",
+					ViewName: view.NameHelp,
 					Payload:  GetStacksHelpContent(),
 				}
 			}
@@ -114,7 +114,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				selected := m.List.Filtered[m.List.Cursor]
 				return func() tea.Msg {
 					return view.NavigateToMsg{
-						ViewName: "tasks",
+						ViewName: view.NameTasks,
 						Payload:  selected.Name,
 					}
 				}
