@@ -9,6 +9,7 @@ import (
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
+	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"
 	servicesview "swarmcli/views/services"
 	"swarmcli/views/view"
@@ -319,6 +320,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 							"hostname": node.Hostname,
 						},
 					}
+				}
+			}
+		case "?":
+			return func() tea.Msg {
+				return view.NavigateToMsg{
+					ViewName: "help",
+					Payload:  GetNodesHelpContent(),
 				}
 			}
 		case "D":
@@ -683,4 +691,42 @@ func (m *Model) handleLabelRemoveDialogKey(msg tea.KeyMsg) tea.Cmd {
 		m.labelRemoveDialog = false
 	}
 	return nil
+}
+
+// GetNodesHelpContent returns categorized help for the nodes view
+func GetNodesHelpContent() []helpview.HelpCategory {
+	return []helpview.HelpCategory{
+		{
+			Title: "General",
+			Items: []helpview.HelpItem{
+				{Keys: "<i>", Description: "Inspect node"},
+				{Keys: "<p>", Description: "Show services on node"},
+				{Keys: "<a>", Description: "Change availability"},
+				{Keys: "<ctrl+l>", Description: "Add label to node"},
+				{Keys: "<ctrl+r>", Description: "Remove label from node"},
+				{Keys: "<shift+p>", Description: "Promote to manager"},
+				{Keys: "<shift+d>", Description: "Demote to worker"},
+				{Keys: "<ctrl+d>", Description: "Remove node"},
+				{Keys: "</>", Description: "Filter"},
+			},
+		},
+		{
+			Title: "View",
+			Items: []helpview.HelpItem{
+				{Keys: "shift+h", Description: "Order by Hostname (todo)"},
+				{Keys: "shift+s", Description: "Order by Status (todo)"},
+				{Keys: "shift+a", Description: "Order by Availability (todo)"},
+				{Keys: "shift+r", Description: "Order by Role (todo)"},
+			},
+		},
+		{
+			Title: "Navigation",
+			Items: []helpview.HelpItem{
+				{Keys: "<↑/↓>", Description: "Navigate"},
+				{Keys: "<pgup>", Description: "Page up"},
+				{Keys: "<pgdown>", Description: "Page down"},
+				{Keys: "<q>", Description: "Back to stacks"},
+			},
+		},
+	}
 }

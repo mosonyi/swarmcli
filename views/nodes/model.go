@@ -83,6 +83,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "Shift+P", Desc: "Promote node"},
 		{Key: "Ctrl+D", Desc: "Remove node"},
 		{Key: "↑/↓", Desc: "Navigate"},
+		{Key: "?", Desc: "Help"},
 		{Key: "q", Desc: "Close"},
 	}
 }
