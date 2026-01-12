@@ -1,12 +1,17 @@
 package docker
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/client"
 )
@@ -508,4 +513,184 @@ func getServiceStatus(svc swarm.Service) string {
 		}
 	}
 	return "active"
+}
+
+// GetServiceLogs fetches and returns the logs from a service
+func GetServiceLogs(ctx context.Context, serviceID string) (string, error) {
+	client, err := GetClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to get docker client: %w", err)
+	}
+
+	logOptions := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     false,
+		Timestamps: false,
+	}
+
+	reader, err := client.ServiceLogs(ctx, serviceID, logOptions)
+	if err != nil {
+		return "", fmt.Errorf("failed to get service logs: %w", err)
+	}
+	defer func() {
+		_ = reader.Close()
+	}()
+
+	logs, err := io.ReadAll(reader)
+	if err != nil {
+		return "", fmt.Errorf("failed to read service logs: %w", err)
+	}
+
+	result := stripDockerLogHeaders(logs)
+	// Log for debugging
+	l().Infof("GetServiceLogs: raw=%d bytes, cleaned=%d bytes", len(logs), len(result))
+	return result, nil
+}
+
+// stripDockerLogHeaders decodes Docker's multiplexed log stream.
+//
+// Docker uses an 8-byte header per frame:
+//
+//	[stream(1)][0][0][0][size(4, big-endian)] + payload
+//
+// IMPORTANT: This is NOT line-based. The header bytes can legitimately contain
+// '\n', so splitting on newlines can drop content for certain payload sizes.
+func stripDockerLogHeaders(logs []byte) string {
+	if len(logs) == 0 {
+		return ""
+	}
+
+	// If it doesn't look like a multiplexed stream, return as-is.
+	if len(logs) < 8 {
+		return string(logs)
+	}
+	stream := logs[0]
+	isMultiplexed := (logs[1] == 0 && logs[2] == 0 && logs[3] == 0) && (stream == 0 || stream == 1 || stream == 2)
+	if !isMultiplexed {
+		return string(logs)
+	}
+
+	var out bytes.Buffer
+	pos := 0
+	for len(logs)-pos >= 8 {
+		h := logs[pos : pos+8]
+		sz := int(binary.BigEndian.Uint32(h[4:8]))
+		pos += 8
+		if sz < 0 || len(logs)-pos < sz {
+			// Not a valid frame; fallback to raw to avoid returning empty.
+			return string(logs)
+		}
+		out.Write(logs[pos : pos+sz])
+		pos += sz
+	}
+
+	return out.String()
+}
+
+// CreateSecretRevealService creates a temporary service spec to reveal a secret
+func CreateSecretRevealService(serviceName, secretID, secretName string) swarm.ServiceSpec {
+	return CreateSecretRevealServiceWithImage(serviceName, "alpine:latest", secretID, secretName)
+}
+
+// CreateSecretRevealServiceWithImage creates a temporary service spec to reveal a secret.
+// imageOverride is mainly intended for debugging error-handling paths.
+func CreateSecretRevealServiceWithImage(serviceName, imageOverride, secretID, secretName string) swarm.ServiceSpec {
+	image := imageOverride
+	if image == "" {
+		image = "alpine:latest"
+	}
+	return swarm.ServiceSpec{
+		Annotations: swarm.Annotations{
+			Name: serviceName,
+			Labels: map[string]string{
+				"swarmcli.temporary": "true",
+				"swarmcli.purpose":   "reveal-secret",
+			},
+		},
+		TaskTemplate: swarm.TaskSpec{
+			ContainerSpec: &swarm.ContainerSpec{
+				Image:   image,
+				Command: []string{"sh", "-c", fmt.Sprintf("cat /run/secrets/%s && sleep 10", secretName)},
+				Secrets: []*swarm.SecretReference{
+					{
+						SecretID:   secretID,
+						SecretName: secretName,
+						File: &swarm.SecretReferenceFileTarget{
+							Name: secretName,
+							UID:  "0",
+							GID:  "0",
+							Mode: 0444,
+						},
+					},
+				},
+			},
+			RestartPolicy: &swarm.RestartPolicy{
+				Condition: swarm.RestartPolicyConditionNone,
+			},
+		},
+		Mode: swarm.ServiceMode{
+			Replicated: &swarm.ReplicatedService{
+				Replicas: func() *uint64 { r := uint64(1); return &r }(),
+			},
+		},
+	}
+}
+
+// GetServiceTaskDiagnostics returns a human-readable summary of tasks for a service.
+// This is useful when a service produces no logs (e.g., image pull errors).
+func GetServiceTaskDiagnostics(ctx context.Context, serviceID string) (string, error) {
+	cli, err := GetClient()
+	if err != nil {
+		return "", fmt.Errorf("docker client: %w", err)
+	}
+	defer closeCli(cli)
+
+	tasks, err := cli.TaskList(ctx, swarm.TaskListOptions{})
+	if err != nil {
+		return "", fmt.Errorf("listing tasks: %w", err)
+	}
+
+	lines := make([]string, 0, 4)
+	for _, t := range tasks {
+		if t.ServiceID != serviceID {
+			continue
+		}
+		errStr := strings.TrimSpace(t.Status.Err)
+		msgStr := strings.TrimSpace(t.Status.Message)
+		id := t.ID
+		if len(id) > 12 {
+			id = id[:12]
+		}
+		line := fmt.Sprintf(
+			"task=%s slot=%d desired=%s state=%s err=%q msg=%q",
+			id,
+			t.Slot,
+			t.DesiredState,
+			t.Status.State,
+			errStr,
+			msgStr,
+		)
+		lines = append(lines, line)
+	}
+
+	if len(lines) == 0 {
+		return "(no tasks found for service)", nil
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
+// CreateService creates a service with the given spec and returns the service ID
+func CreateService(ctx context.Context, spec swarm.ServiceSpec) (string, error) {
+	client, err := GetClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to get Docker client: %w", err)
+	}
+
+	resp, err := client.ServiceCreate(ctx, spec, swarm.ServiceCreateOptions{})
+	if err != nil {
+		return "", fmt.Errorf("failed to create service: %w", err)
+	}
+
+	return resp.ID, nil
 }
