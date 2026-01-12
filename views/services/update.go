@@ -8,6 +8,7 @@ import (
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
+	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"
 	logsview "swarmcli/views/logs"
 	"swarmcli/views/scaledialog"
@@ -353,6 +354,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				m.confirmDialog.Visible = true
 				m.confirmDialog.ErrorMode = false
 				m.confirmDialog.Message = fmt.Sprintf("Restart service %q?", entry.ServiceName)
+			}
+		case "?":
+			return func() tea.Msg {
+				return view.NavigateToMsg{
+					ViewName: "help",
+					Payload:  GetServicesHelpContent(),
+				}
 			}
 		case "ctrl+d":
 			if m.List.Cursor < len(m.List.Filtered) {
@@ -740,3 +748,41 @@ func getStatusColor(status string) lipgloss.Color {
 		return lipgloss.Color("15") // white
 	}
 }
+
+// GetServicesHelpContent returns categorized help for the services view
+func GetServicesHelpContent() []helpview.HelpCategory {
+	return []helpview.HelpCategory{
+		{
+			Title: "General",
+			Items: []helpview.HelpItem{
+				{Keys: "<i>", Description: "Inspect service"},
+				{Keys: "<p>", Description: "Show/hide tasks"},
+				{Keys: "<l>", Description: "View logs"},
+				{Keys: "<s>", Description: "Scale service"},
+				{Keys: "<r>", Description: "Restart service"},
+				{Keys: "<ctrl+r>", Description: "Rollback service"},
+				{Keys: "<ctrl+d>", Description: "Remove service"},
+				{Keys: "</>", Description: "Filter"},
+			},
+		},
+		{
+			Title: "View",
+			Items: []helpview.HelpItem{
+				{Keys: "shift+n", Description: "Order by Name (todo)"},
+				{Keys: "shift+m", Description: "Order by Mode (todo)"},
+				{Keys: "shift+r", Description: "Order by Replicas (todo)"},
+				{Keys: "shift+i", Description: "Order by Image (todo)"},
+			},
+		},
+		{
+			Title: "Navigation",
+			Items: []helpview.HelpItem{
+				{Keys: "<↑/↓>", Description: "Navigate"},
+				{Keys: "<pgup>", Description: "Page up"},
+				{Keys: "<pgdown>", Description: "Page down"},
+				{Keys: "<q>", Description: "Back to stacks"},
+			},
+		},
+	}
+}
+

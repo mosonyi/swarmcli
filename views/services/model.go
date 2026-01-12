@@ -102,6 +102,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "ctrl+r", Desc: "Rollback service"},
 		{Key: "ctrl+d", Desc: "Remove service"},
 		{Key: "l", Desc: "View logs"},
+		{Key: "?", Desc: "Help"},
 		{Key: "q", Desc: "Close"},
 	}
 }
