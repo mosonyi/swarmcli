@@ -17,8 +17,14 @@ func (m *Model) View() string {
 
 	systemInfo := m.systemInfo.View()
 
+	// Build global help - exclude "?" when already in help view
+	globalHelp := []helpbar.HelpEntry{{Key: "?", Desc: "Help"}}
+	if m.currentView.Name() == "help" {
+		globalHelp = []helpbar.HelpEntry{}
+	}
+
 	help := helpbar.New(m.viewport.Width, systeminfoview.Height).
-		WithGlobalHelp([]helpbar.HelpEntry{{Key: "?", Desc: "Help"}}).
+		WithGlobalHelp(globalHelp).
 		WithViewHelp(m.currentView.ShortHelpItems()).
 		View(systemInfo)
 
