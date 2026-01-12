@@ -8,6 +8,8 @@ import (
 	"strings"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
+	helpview "swarmcli/views/help"
+	"swarmcli/views/view"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -710,6 +712,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			return InspectContextCmd(ctx.Name)
 
+		case "?":
+			return func() tea.Msg {
+				return view.NavigateToMsg{
+					ViewName: "help",
+					Payload:  GetContextsHelpContent(),
+				}
+			}
+
 		case "x":
 			// Export selected context
 			ctx, ok := m.GetSelectedContext()
@@ -788,4 +798,39 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	}
 
 	return nil
+}
+
+// GetContextsHelpContent returns categorized help for the contexts view
+func GetContextsHelpContent() []helpview.HelpCategory {
+	return []helpview.HelpCategory{
+		{
+			Title: "General",
+			Items: []helpview.HelpItem{
+				{Keys: "<enter>", Description: "Switch to context"},
+				{Keys: "<i>", Description: "Inspect context"},
+				{Keys: "<c>", Description: "Create new context"},
+				{Keys: "<e>", Description: "Edit context description"},
+				{Keys: "<x>", Description: "Export context"},
+				{Keys: "<m>", Description: "Import context from file"},
+				{Keys: "<d>", Description: "Delete context"},
+				{Keys: "</>", Description: "Filter"},
+			},
+		},
+		{
+			Title: "View",
+			Items: []helpview.HelpItem{
+				{Keys: "shift+n", Description: "Order by Name (todo)"},
+				{Keys: "shift+e", Description: "Order by Endpoint (todo)"},
+			},
+		},
+		{
+			Title: "Navigation",
+			Items: []helpview.HelpItem{
+				{Keys: "<↑/↓>", Description: "Navigate"},
+				{Keys: "<pgup>", Description: "Page up"},
+				{Keys: "<pgdown>", Description: "Page down"},
+				{Keys: "<esc>", Description: "Back to stacks"},
+			},
+		},
+	}
 }
