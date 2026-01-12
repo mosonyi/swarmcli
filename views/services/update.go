@@ -768,10 +768,10 @@ func GetServicesHelpContent() []helpview.HelpCategory {
 		{
 			Title: "View",
 			Items: []helpview.HelpItem{
-				{Keys: "shift+n", Description: "Order by Name (todo)"},
-				{Keys: "shift+m", Description: "Order by Mode (todo)"},
-				{Keys: "shift+r", Description: "Order by Replicas (todo)"},
-				{Keys: "shift+i", Description: "Order by Image (todo)"},
+				{Keys: "<shift+n>", Description: "Order by Name (todo)"},
+				{Keys: "<shift+m>", Description: "Order by Mode (todo)"},
+				{Keys: "<shift+r>", Description: "Order by Replicas (todo)"},
+				{Keys: "<shift+i>", Description: "Order by Image (todo)"},
 			},
 		},
 		{

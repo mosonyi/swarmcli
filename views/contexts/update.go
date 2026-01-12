@@ -819,8 +819,8 @@ func GetContextsHelpContent() []helpview.HelpCategory {
 		{
 			Title: "View",
 			Items: []helpview.HelpItem{
-				{Keys: "shift+n", Description: "Order by Name (todo)"},
-				{Keys: "shift+e", Description: "Order by Endpoint (todo)"},
+				{Keys: "<shift+n>", Description: "Order by Name (todo)"},
+				{Keys: "<shift+e>", Description: "Order by Endpoint (todo)"},
 			},
 		},
 		{

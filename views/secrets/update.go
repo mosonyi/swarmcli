@@ -1055,9 +1055,9 @@ func GetSecretsHelpContent() []helpview.HelpCategory {
 		{
 			Title: "View",
 			Items: []helpview.HelpItem{
-				{Keys: "shift+n", Description: "Order by Name (todo)"},
-				{Keys: "shift+c", Description: "Order by Created (todo)"},
-				{Keys: "shift+u", Description: "Order by Updated (todo)"},
+				{Keys: "<shift+n>", Description: "Order by Name (todo)"},
+				{Keys: "<shift+c>", Description: "Order by Created (todo)"},
+				{Keys: "<shift+u>", Description: "Order by Updated (todo)"},
 			},
 		},
 		{

@@ -713,10 +713,10 @@ func GetNodesHelpContent() []helpview.HelpCategory {
 		{
 			Title: "View",
 			Items: []helpview.HelpItem{
-				{Keys: "shift+h", Description: "Order by Hostname (todo)"},
-				{Keys: "shift+s", Description: "Order by Status (todo)"},
-				{Keys: "shift+a", Description: "Order by Availability (todo)"},
-				{Keys: "shift+r", Description: "Order by Role (todo)"},
+				{Keys: "<shift+h>", Description: "Order by Hostname (todo)"},
+				{Keys: "<shift+s>", Description: "Order by Status (todo)"},
+				{Keys: "<shift+a>", Description: "Order by Availability (todo)"},
+				{Keys: "<shift+r>", Description: "Order by Role (todo)"},
 			},
 		},
 		{

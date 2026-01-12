@@ -244,9 +244,9 @@ func GetStacksHelpContent() []helpview.HelpCategory {
 		{
 			Title: "View",
 			Items: []helpview.HelpItem{
-				{Keys: "shift+s", Description: "Order by Stack name (todo)"},
-				{Keys: "shift+e", Description: "Order by Services name (todo)"},
-				{Keys: "shift+t", Description: "Order by Tasks name (todo)"},
+				{Keys: "<shift+s>", Description: "Order by Stack name (todo)"},
+				{Keys: "<shift+e>", Description: "Order by Services name (todo)"},
+				{Keys: "<shift+t>", Description: "Order by Tasks name (todo)"},
 			},
 		},
 		{
