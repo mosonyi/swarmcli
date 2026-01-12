@@ -10,6 +10,8 @@ import (
 	loadingview "swarmcli/views/loading"
 	logsview "swarmcli/views/logs"
 	nodesview "swarmcli/views/nodes"
+	revealsecretview "swarmcli/views/revealsecret"
+	secretsview "swarmcli/views/secrets"
 	servicesview "swarmcli/views/services"
 	stacksview "swarmcli/views/stacks"
 	tasksview "swarmcli/views/tasks"
@@ -71,6 +73,11 @@ func Init() {
 		return model, model.Init()
 	})
 
+	registerView(secretsview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
+		model := secretsview.New(w, h)
+		return model, model.Init()
+	})
+
 	registerView(inspectview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
 		data, _ := payload.(map[string]interface{})
 		title, _ := data["title"].(string)
@@ -79,6 +86,15 @@ func Init() {
 
 		v := inspectview.New(w, h, raw)
 		return v, inspectview.LoadInspectItem(title, jsonStr)
+	})
+
+	registerView(revealsecretview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
+		data, _ := payload.(map[string]interface{})
+		secretName, _ := data["secretName"].(string)
+
+		v := revealsecretview.New(w, h)
+		v.SetSecretName(secretName)
+		return v, tea.Batch(v.Init(), revealsecretview.LoadSecret(secretName))
 	})
 
 	registerView(nodesview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {

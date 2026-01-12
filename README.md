@@ -92,7 +92,18 @@ $ go run .
 # Development
 $ SWARMCLI_ENV=dev go run .
 # → writes pretty logs to ~/.local/state/swarmcli/app-debug.log
+
+# Optional: control verbosity
+$ LOG_LEVEL=debug SWARMCLI_ENV=dev go run .
 ```
+
+### Environment variables
+
+- `SWARMCLI_ENV`: `dev` enables pretty debug logs (default is `prod`).
+- `LOG_LEVEL`: `debug`, `info`, `warn`, `error`, …
+- `SWARMCLI_REVEAL_IMAGE`: image used for the temporary service behind **Secrets → Reveal** (`x`).
+  - Default: `alpine:latest`
+  - Useful to test error handling: `SWARMCLI_REVEAL_IMAGE=alpine:this-tag-does-not-exist`
 
 Colorize log tails. Not perfect but simple:
 ```bash
