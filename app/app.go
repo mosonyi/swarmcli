@@ -59,6 +59,11 @@ func Init() {
 		return loadingview.New(w, h, true, payload), nil
 	})
 	registerView(helpview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
+		// Check if detailed help with categories
+		if categories, ok := payload.([]helpview.HelpCategory); ok {
+			return helpview.NewDetailed(w, h, categories), nil
+		}
+		// Legacy command list help
 		cmds, _ := payload.([]helpview.CommandInfo)
 		return helpview.New(w, h, cmds), nil
 	})

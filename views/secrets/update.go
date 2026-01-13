@@ -10,6 +10,7 @@ import (
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
+	helpview "swarmcli/views/help"
 	loading "swarmcli/views/loading"
 	view "swarmcli/views/view"
 
@@ -472,6 +473,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			sec := m.selectedSecret()
 			l().Infof("Inspect key pressed for secret: %s", sec)
 			return inspectSecretCmd(m.selectedSecret())
+
+		case "?":
+			return func() tea.Msg {
+				return view.NavigateToMsg{
+					ViewName: view.NameHelp,
+					Payload:  GetSecretsHelpContent(),
+				}
+			}
 
 		default:
 			// Let FilterableList handle navigation keys (up/down/pgup/pgdown)
@@ -983,7 +992,7 @@ func (m *Model) handleUsedByViewKey(msg tea.KeyMsg) tea.Cmd {
 		m.usedBySecretName = ""
 		return func() tea.Msg {
 			payload := map[string]interface{}{"stackName": selectedStack}
-			return view.NavigateToMsg{ViewName: "services", Payload: payload, Replace: false}
+			return view.NavigateToMsg{ViewName: view.NameServices, Payload: payload, Replace: false}
 		}
 
 	default:
@@ -1027,4 +1036,38 @@ func (m *Model) handleRevealDialogKey(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 	return nil
+}
+
+// GetSecretsHelpContent returns categorized help for the secrets view
+func GetSecretsHelpContent() []helpview.HelpCategory {
+	return []helpview.HelpCategory{
+		{
+			Title: "General",
+			Items: []helpview.HelpItem{
+				{Keys: "<n>", Description: "Create new secret"},
+				{Keys: "<i>", Description: "Inspect secret (YAML)"},
+				{Keys: "<x>", Description: "Reveal secret content"},
+				{Keys: "<u>", Description: "Show Used By"},
+				{Keys: "<ctrl+d>", Description: "Delete secret"},
+				{Keys: "</>", Description: "Filter"},
+			},
+		},
+		{
+			Title: "View",
+			Items: []helpview.HelpItem{
+				{Keys: "<shift+n>", Description: "Order by Name (todo)"},
+				{Keys: "<shift+c>", Description: "Order by Created (todo)"},
+				{Keys: "<shift+u>", Description: "Order by Updated (todo)"},
+			},
+		},
+		{
+			Title: "Navigation",
+			Items: []helpview.HelpItem{
+				{Keys: "<↑/↓>", Description: "Navigate"},
+				{Keys: "<pgup>", Description: "Page up"},
+				{Keys: "<pgdown>", Description: "Page down"},
+				{Keys: "<esc/q>", Description: "Back to stacks"},
+			},
+		},
+	}
 }

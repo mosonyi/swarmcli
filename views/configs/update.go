@@ -11,6 +11,7 @@ import (
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
+	helpview "swarmcli/views/help"
 	view "swarmcli/views/view"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -490,6 +491,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			cfg := m.selectedConfig()
 			l().Infof("Inspect key pressed for config: %s", cfg)
 			return inspectConfigCmd(m.selectedConfig())
+		case "?":
+			return func() tea.Msg {
+				return view.NavigateToMsg{
+					ViewName: view.NameHelp,
+					Payload:  GetConfigsHelpContent(),
+				}
+			}
 		case "enter":
 			cfg := m.selectedConfig()
 			l().Infof("Inspect key pressed for config: %s", cfg)
@@ -956,7 +964,7 @@ func (m *Model) handleUsedByViewKey(msg tea.KeyMsg) tea.Cmd {
 			// Send a generic navigation message with a payload for services view.
 			// Use Replace=false to indicate this should be pushed onto the view stack.
 			payload := map[string]interface{}{"stackName": selectedStack}
-			return view.NavigateToMsg{ViewName: "services", Payload: payload, Replace: false}
+			return view.NavigateToMsg{ViewName: view.NameServices, Payload: payload, Replace: false}
 		}
 
 	default:
@@ -967,5 +975,41 @@ func (m *Model) handleUsedByViewKey(msg tea.KeyMsg) tea.Cmd {
 			m.usedByList.HandleKey(msg)
 		}
 		return nil
+	}
+}
+
+// GetConfigsHelpContent returns categorized help for the configs view
+func GetConfigsHelpContent() []helpview.HelpCategory {
+	return []helpview.HelpCategory{
+		{
+			Title: "General",
+			Items: []helpview.HelpItem{
+				{Keys: "<n>", Description: "Create new config"},
+				{Keys: "<c>", Description: "Clone config"},
+				{Keys: "<i>", Description: "Inspect config (YAML)"},
+				{Keys: "<enter>", Description: "View config data"},
+				{Keys: "<u>", Description: "Show Used By"},
+				{Keys: "<e>", Description: "Edit & Rotate config"},
+				{Keys: "<ctrl+d>", Description: "Delete config"},
+				{Keys: "</>", Description: "Filter"},
+			},
+		},
+		{
+			Title: "View",
+			Items: []helpview.HelpItem{
+				{Keys: "<shift+n>", Description: "Order by Name (todo)"},
+				{Keys: "<shift+c>", Description: "Order by Created (todo)"},
+				{Keys: "<shift+u>", Description: "Order by Updated (todo)"},
+			},
+		},
+		{
+			Title: "Navigation",
+			Items: []helpview.HelpItem{
+				{Keys: "<↑/↓>", Description: "Navigate"},
+				{Keys: "<pgup>", Description: "Page up"},
+				{Keys: "<pgdown>", Description: "Page down"},
+				{Keys: "<esc/q>", Description: "Back to stacks"},
+			},
+		},
 	}
 }

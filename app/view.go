@@ -4,6 +4,7 @@ import (
 	"swarmcli/ui"
 	"swarmcli/views/helpbar"
 	systeminfoview "swarmcli/views/systeminfo"
+	"swarmcli/views/view"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -17,8 +18,14 @@ func (m *Model) View() string {
 
 	systemInfo := m.systemInfo.View()
 
+	// Build global help - exclude "?" when already in help view
+	globalHelp := []helpbar.HelpEntry{{Key: "?", Desc: "Help"}}
+	if m.currentView.Name() == view.NameHelp {
+		globalHelp = []helpbar.HelpEntry{}
+	}
+
 	help := helpbar.New(m.viewport.Width, systeminfoview.Height).
-		WithGlobalHelp([]helpbar.HelpEntry{{Key: "?", Desc: "Help"}}).
+		WithGlobalHelp(globalHelp).
 		WithViewHelp(m.currentView.ShortHelpItems()).
 		View(systemInfo)
 

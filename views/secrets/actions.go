@@ -138,7 +138,7 @@ func pushRevealViewCmd(name string) tea.Cmd {
 	return func() tea.Msg {
 		// Push a reveal view that will fetch the secret content
 		return view.NavigateToMsg{
-			ViewName: "reveal-secret",
+			ViewName: view.NameRevealSecret,
 			Payload: map[string]interface{}{
 				"secretName": name,
 			},

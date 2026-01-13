@@ -5,6 +5,7 @@ import (
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
+	helpview "swarmcli/views/help"
 	servicesview "swarmcli/views/services"
 	"swarmcli/views/view"
 
@@ -84,6 +85,16 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 		m.List.HandleKey(msg) // still handle up/down/pgup/pgdown
 
+		// Show help screen
+		if msg.String() == "?" {
+			return func() tea.Msg {
+				return view.NavigateToMsg{
+					ViewName: view.NameHelp,
+					Payload:  GetStacksHelpContent(),
+				}
+			}
+		}
+
 		// Enter triggers navigation to services
 		if msg.String() == "i" || msg.String() == "enter" {
 			if m.List.Cursor < len(m.List.Filtered) {
@@ -103,7 +114,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				selected := m.List.Filtered[m.List.Cursor]
 				return func() tea.Msg {
 					return view.NavigateToMsg{
-						ViewName: "tasks",
+						ViewName: view.NameTasks,
 						Payload:  selected.Name,
 					}
 				}
@@ -216,5 +227,36 @@ func (m *Model) setRenderItem() {
 			return nameCol + svcCol
 		}
 		return itemStyle.Render(line)
+	}
+}
+
+// GetStacksHelpContent returns categorized help for the stacks view
+func GetStacksHelpContent() []helpview.HelpCategory {
+	return []helpview.HelpCategory{
+		{
+			Title: "General",
+			Items: []helpview.HelpItem{
+				{Keys: "<i/enter>", Description: "Show services for Stack"},
+				{Keys: "<p>", Description: "Show tasks for Stack"},
+				{Keys: "</>", Description: "Filter"},
+			},
+		},
+		{
+			Title: "View",
+			Items: []helpview.HelpItem{
+				{Keys: "<shift+s>", Description: "Order by Stack name (todo)"},
+				{Keys: "<shift+e>", Description: "Order by Services name (todo)"},
+				{Keys: "<shift+t>", Description: "Order by Tasks name (todo)"},
+			},
+		},
+		{
+			Title: "Navigation",
+			Items: []helpview.HelpItem{
+				{Keys: "<↑/↓>", Description: "Navigate"},
+				{Keys: "<pgup>", Description: "Page up"},
+				{Keys: "<pgdown>", Description: "Page down"},
+				{Keys: "<q>", Description: "Quit"},
+			},
+		},
 	}
 }
