@@ -36,6 +36,9 @@ type (
 	configCreateErrorMsg struct {
 		err error
 	}
+	editorContentMsg struct {
+		Content string
+	}
 	editorContentReadyMsg struct {
 		Name string
 		Data []byte

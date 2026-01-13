@@ -19,6 +19,34 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// parseLabels parses a comma-separated list of key=value pairs into a map
+// Example: "a=b,c=d" -> map[string]string{"a": "b", "c": "d"}
+func parseLabels(input string) (map[string]string, error) {
+	labels := make(map[string]string)
+	if strings.TrimSpace(input) == "" {
+		return labels, nil
+	}
+
+	pairs := strings.Split(input, ",")
+	for _, pair := range pairs {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid label format: %q (expected key=value)", pair)
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		if key == "" {
+			return nil, fmt.Errorf("label key cannot be empty in: %q", pair)
+		}
+		labels[key] = value
+	}
+	return labels, nil
+}
+
 // usedStatusUpdatedMsg carries a map of config ID -> used boolean
 type usedStatusUpdatedMsg map[string]bool
 
@@ -113,6 +141,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				ID:        cfg.Config.ID,
 				CreatedAt: cfg.Config.CreatedAt,
 				UpdatedAt: cfg.Config.UpdatedAt,
+				Labels:    cfg.Config.Spec.Labels,
 				Used:      used,
 				UsedKnown: known,
 			}
@@ -185,6 +214,16 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case configCreatedMsg:
 		l().Infof("Config created successfully: %s", msg.Config.Spec.Name)
 		return loadConfigsCmd()
+
+	case editorContentMsg:
+		l().Infof("Editor content received: %d bytes", len(msg.Content))
+		m.createConfigData = msg.Content
+		// Return to create dialog with inline content
+		m.createDialogActive = true
+		m.createDialogStep = "details-inline"
+		m.createInputFocus = 0
+		m.createNameInput.Focus()
+		return nil
 
 	case editorContentReadyMsg:
 		if msg.Err != nil {
@@ -337,7 +376,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case createConfigMsg:
 		l().Infof("Opening editor to create config: %s", msg.Name)
-		return createConfigInEditorCmd(msg.Name, []byte(m.createConfigData))
+		m.createDialogActive = false
+		m.createNameInput.Blur()
+		m.createLabelsInput.Blur()
+		return openEditorForContentCmd(m.createConfigData)
 
 	case errorMsg:
 		l().Errorf("Error occurred: %v", msg)
@@ -450,12 +492,38 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			l().Infof("UsedBy key pressed for config: %s", cfgName)
 			return getUsedByStacksCmd(cfgName)
+
+		case "left":
+			if m.labelsScrollOffset > 0 {
+				m.labelsScrollOffset -= 5
+				if m.labelsScrollOffset < 0 {
+					m.labelsScrollOffset = 0
+				}
+				m.setRenderItem()
+				m.configsList.Viewport.SetContent(m.configsList.View())
+			}
+			return nil
+
+		case "right":
+			if m.configsList.Cursor < len(m.configsList.Filtered) {
+				cfg := m.configsList.Filtered[m.configsList.Cursor]
+				labelsStr := formatLabels(cfg.Labels)
+				// Allow scrolling if labels are longer than visible width
+				if len(labelsStr) > m.labelsScrollOffset+20 {
+					m.labelsScrollOffset += 5
+					m.setRenderItem()
+					m.configsList.Viewport.SetContent(m.configsList.View())
+				}
+			}
+			return nil
+
 		case "n":
 			l().Info("Create key pressed")
 			m.createDialogActive = true
 			m.createDialogStep = "source"
 			m.createConfigSource = "file" // default
 			m.createNameInput.SetValue("")
+			m.createLabelsInput.SetValue("")
 			m.createConfigData = ""
 			m.createDialogError = ""
 			return nil
@@ -530,8 +598,8 @@ func (m *Model) setRenderItem() {
 			width = 80
 		}
 
-		// Columns: NAME | ID | USED | CREATED | UPDATED
-		cols := 5
+		// Columns: NAME | ID | USED | LABELS | CREATED | UPDATED
+		cols := 6
 		starts := make([]int, cols)
 		for i := 0; i < cols; i++ {
 			starts[i] = (i * width) / cols
@@ -551,11 +619,11 @@ func (m *Model) setRenderItem() {
 		// Ensure CREATED and UPDATED columns have at least 19 chars
 		minTime := 19
 		// current sum of last two
-		cur := colWidths[3] + colWidths[4]
+		cur := colWidths[4] + colWidths[5]
 		if cur < 2*minTime {
 			deficit := 2*minTime - cur
 			// steal space from earlier cols (prefer NAME then ID)
-			for i := 1; i >= 0 && deficit > 0; i-- {
+			for i := 2; i >= 0 && deficit > 0; i-- {
 				take := deficit
 				if colWidths[i] > take+5 { // leave minimum 5 for each
 					colWidths[i] -= take
@@ -569,11 +637,11 @@ func (m *Model) setRenderItem() {
 				}
 			}
 			// recompute last two to have minTime each if possible
-			if colWidths[3] < minTime {
-				colWidths[3] = minTime
-			}
 			if colWidths[4] < minTime {
 				colWidths[4] = minTime
+			}
+			if colWidths[5] < minTime {
+				colWidths[5] = minTime
 			}
 		}
 
@@ -607,31 +675,36 @@ func (m *Model) setRenderItem() {
 		}
 		createdText := truncateWithEllipsis(createdStr, colWidths[3])
 		updatedText := truncateWithEllipsis(updatedStr, colWidths[4])
+		// Format labels with scroll (sorted and in last column)
+		// Reserve 1 char for space before frame end
+		maxLabelsWidth := colWidths[5] - 1
+		if maxLabelsWidth < 1 {
+			maxLabelsWidth = 1
+		}
+		labelsText := formatLabelsWithScroll(cfg.Labels, m.labelsScrollOffset, maxLabelsWidth)
 
-		// Build columns and apply styles; join with two-space separators
-		sepLen := 2
-		sep := strings.Repeat(" ", sepLen)
-		col0 := itemStyle.Render(fmt.Sprintf(" %-*s", colWidths[0]-1, nameText))
-		col1 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[1], idText))
-		col2 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[2], usedText))
-		col3 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[3], createdText))
-		col4 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[4], updatedText))
-
-		line := col0 + sep + col1 + sep + col2 + sep + col3 + sep + col4
-
+		// Render all columns in one format string (no explicit separators, like secrets view)
 		if selected {
 			selBg := lipgloss.Color("63")
 			selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
-			// Render styled columns including separators so highlight is continuous
-			sepStr := strings.Repeat(" ", sepLen)
-			col0 = selStyle.Render(fmt.Sprintf(" %-*s", colWidths[0]-1, nameText) + sepStr)
-			col1 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[1], idText) + sepStr)
-			col2 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[2], usedText) + sepStr)
-			col3 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[3], createdText) + sepStr)
-			col4 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[4], updatedText))
-			line = col0 + col1 + col2 + col3 + col4
+			return selStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s",
+				colWidths[0]-1, nameText,
+				colWidths[1], idText,
+				colWidths[2], usedText,
+				colWidths[3], createdText,
+				colWidths[4], updatedText,
+				colWidths[5], labelsText,
+			))
 		}
-		return line
+
+		return itemStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s",
+			colWidths[0]-1, nameText,
+			colWidths[1], idText,
+			colWidths[2], usedText,
+			colWidths[3], createdText,
+			colWidths[4], updatedText,
+			colWidths[5], labelsText,
+		))
 	}
 }
 
@@ -676,9 +749,11 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 			m.createInputFocus = 0
 			m.createNameInput.SetValue("")
 			m.createFileInput.SetValue("")
+			m.createLabelsInput.SetValue("")
 			m.createConfigData = ""
 			m.createNameInput.Focus()
 			m.createFileInput.Blur()
+			m.createLabelsInput.Blur()
 			return nil
 		}
 
@@ -689,6 +764,7 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 			m.createDialogError = ""
 			m.createNameInput.Blur()
 			m.createFileInput.Blur()
+			m.createLabelsInput.Blur()
 			m.createConfigPath = ""
 			m.createInputFocus = 0
 			return nil
@@ -747,19 +823,29 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 				m.createDialogError = "Please enter or select a file path"
 				return nil
 			}
+			// Parse labels
+			labels, err := parseLabels(m.createLabelsInput.Value())
+			if err != nil {
+				m.createDialogError = fmt.Sprintf("Invalid labels: %v", err)
+				return nil
+			}
 			// All valid, create config
 			m.createDialogActive = false
 			m.createDialogError = ""
 			m.createNameInput.Blur()
 			m.createFileInput.Blur()
-			return createConfigFromFileCmd(m.createNameInput.Value(), filePath)
+			m.createLabelsInput.Blur()
+			return createConfigFromFileCmd(m.createNameInput.Value(), filePath, labels)
 		default:
 			// Pass keys to the focused textinput
 			var cmd tea.Cmd
-			if m.createInputFocus == 0 {
+			switch m.createInputFocus {
+			case 0:
 				m.createNameInput, cmd = m.createNameInput.Update(msg)
-			} else {
+			case 1:
 				m.createFileInput, cmd = m.createFileInput.Update(msg)
+			case 2:
+				m.createLabelsInput, cmd = m.createLabelsInput.Update(msg)
 			}
 			// Clear error when user types
 			if m.createDialogError != "" {
@@ -773,41 +859,54 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 			m.createDialogActive = false
 			m.createDialogError = ""
 			m.createNameInput.Blur()
+			m.createLabelsInput.Blur()
 			m.createConfigData = ""
 			m.createInputFocus = 0
 			return nil
 		case "tab", "shift+tab":
-			// Toggle focus between name and content
-			if m.createInputFocus == 0 {
-				m.createInputFocus = 1
-				m.createNameInput.Blur()
+			// Toggle focus between name, content, and labels
+			if msg.String() == "tab" {
+				m.createInputFocus = (m.createInputFocus + 1) % 3
 			} else {
-				m.createInputFocus = 0
+				m.createInputFocus = (m.createInputFocus + 2) % 3
+			}
+			switch m.createInputFocus {
+			case 0:
 				m.createNameInput.Focus()
+				m.createLabelsInput.Blur()
+			case 2:
+				m.createNameInput.Blur()
+				m.createLabelsInput.Focus()
+			default:
+				m.createNameInput.Blur()
+				m.createLabelsInput.Blur()
 			}
 			return nil
 		case "e", "E":
-			// Only open editor when focused on content field
-			if m.createInputFocus == 1 {
-				if m.createNameInput.Value() == "" {
-					m.createDialogError = "Please enter a config name first"
-					return nil
-				}
-				if err := validateConfigName(m.createNameInput.Value()); err != nil {
-					m.createDialogError = err.Error()
-					return nil
-				}
+			switch m.createInputFocus {
+			case 1:
+				// Open editor for content - don't require name to be set yet
 				m.createDialogActive = false
 				m.createNameInput.Blur()
-				return createConfigInEditorCmd(m.createNameInput.Value(), []byte(m.createConfigData))
+				m.createLabelsInput.Blur()
+				return openEditorForContentCmd(m.createConfigData)
+			case 0:
+				var cmd tea.Cmd
+				m.createNameInput, cmd = m.createNameInput.Update(msg)
+				if m.createDialogError != "" {
+					m.createDialogError = ""
+				}
+				return cmd
+			case 2:
+				var cmd tea.Cmd
+				m.createLabelsInput, cmd = m.createLabelsInput.Update(msg)
+				if m.createDialogError != "" {
+					m.createDialogError = ""
+				}
+				return cmd
+			default:
+				return nil
 			}
-			// Otherwise let textinput handle it (typing 'e')
-			var cmd tea.Cmd
-			m.createNameInput, cmd = m.createNameInput.Update(msg)
-			if m.createDialogError != "" {
-				m.createDialogError = ""
-			}
-			return cmd
 		case "enter":
 			// If there's an error, clear it and stay in editing mode
 			if m.createDialogError != "" {
@@ -828,23 +927,32 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 				m.createDialogError = "Please add content in editor (press Tab then E)"
 				return nil
 			}
+			// Parse labels
+			labels, err := parseLabels(m.createLabelsInput.Value())
+			if err != nil {
+				m.createDialogError = fmt.Sprintf("Invalid labels: %v", err)
+				return nil
+			}
 			// All valid, create config with existing data
 			m.createDialogActive = false
 			m.createDialogError = ""
 			m.createNameInput.Blur()
-			return createConfigInEditorCmd(m.createNameInput.Value(), []byte(m.createConfigData))
+			m.createLabelsInput.Blur()
+			return createConfigFromContentCmd(m.createNameInput.Value(), []byte(m.createConfigData), labels)
 		default:
-			// Pass keys to name input only when focused on it
-			if m.createInputFocus == 0 {
-				var cmd tea.Cmd
+			// Pass keys to the focused textinput
+			var cmd tea.Cmd
+			switch m.createInputFocus {
+			case 0:
 				m.createNameInput, cmd = m.createNameInput.Update(msg)
-				// Clear error when user types
-				if m.createDialogError != "" {
-					m.createDialogError = ""
-				}
-				return cmd
+			case 2:
+				m.createLabelsInput, cmd = m.createLabelsInput.Update(msg)
 			}
-			return nil
+			// Clear error when user types
+			if m.createDialogError != "" {
+				m.createDialogError = ""
+			}
+			return cmd
 		}
 	}
 
@@ -915,11 +1023,23 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyMsg) tea.Cmd {
 		name := m.createNameInput.Value()
 		if name != "" {
 			if err := validateConfigName(name); err == nil {
+				// Parse labels
+				labels, err := parseLabels(m.createLabelsInput.Value())
+				if err != nil {
+					// Return to dialog with error
+					m.createDialogActive = true
+					m.createDialogStep = "details-file"
+					m.createDialogError = fmt.Sprintf("Invalid labels: %v", err)
+					m.createInputFocus = 2
+					m.createLabelsInput.Focus()
+					return nil
+				}
 				m.createDialogActive = false
 				m.createDialogError = ""
 				m.createNameInput.Blur()
 				m.createFileInput.Blur()
-				return createConfigFromFileCmd(name, selected)
+				m.createLabelsInput.Blur()
+				return createConfigFromFileCmd(name, selected, labels)
 			}
 		}
 

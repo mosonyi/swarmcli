@@ -3,6 +3,8 @@ package configsview
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"swarmcli/docker"
 	"swarmcli/ui"
 	"swarmcli/ui/components/errordialog"
@@ -47,6 +49,7 @@ type configItem struct {
 	ID        string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	Labels    map[string]string
 	Used      bool // true if used by any service
 	UsedKnown bool // true if Used has been computed (false => loading/unknown)
 }
@@ -85,6 +88,7 @@ func configItemFromSwarm(ctx context.Context, c swarm.Config) configItem {
 		ID:        c.ID,
 		CreatedAt: c.CreatedAt,
 		UpdatedAt: c.UpdatedAt,
+		Labels:    c.Spec.Labels,
 		Used:      used,
 		UsedKnown: true,
 	}
@@ -172,14 +176,12 @@ func (m *Model) View() string {
 
 func renderConfigsHeader(items []configItem, width int) string {
 	if len(items) == 0 {
-		return "NAME         ID                 CONFIG USED      CREATED AT             UPDATED AT"
+		return "NAME         ID                 CONFIG USED    LABELS             CREATED AT             UPDATED AT"
 	}
-	// Compute proportional widths using the same logic as the row renderer
 	if width <= 0 {
 		width = 80
 	}
-	cols := 5
-	sepLen := 2
+	cols := 6
 	starts := make([]int, cols)
 	for i := 0; i < cols; i++ {
 		starts[i] = (i * width) / cols
@@ -198,10 +200,10 @@ func renderConfigsHeader(items []configItem, width int) string {
 
 	// Ensure CREATED and UPDATED columns have at least 19 chars
 	minTime := 19
-	cur := colWidths[3] + colWidths[4]
+	cur := colWidths[4] + colWidths[5]
 	if cur < 2*minTime {
 		deficit := 2*minTime - cur
-		for i := 1; i >= 0 && deficit > 0; i-- {
+		for i := 2; i >= 0 && deficit > 0; i-- {
 			take := deficit
 			if colWidths[i] > take+5 {
 				colWidths[i] -= take
@@ -214,11 +216,11 @@ func renderConfigsHeader(items []configItem, width int) string {
 				}
 			}
 		}
-		if colWidths[3] < minTime {
-			colWidths[3] = minTime
-		}
 		if colWidths[4] < minTime {
 			colWidths[4] = minTime
+		}
+		if colWidths[5] < minTime {
+			colWidths[5] = minTime
 		}
 	}
 
@@ -226,17 +228,9 @@ func renderConfigsHeader(items []configItem, width int) string {
 		colWidths[2] = 1
 	}
 
-	// Add separators back for header rendering
-	headerRenderWidths := make([]int, cols)
-	for i := 0; i < cols; i++ {
-		if i < cols-1 {
-			headerRenderWidths[i] = colWidths[i] + sepLen
-		} else {
-			headerRenderWidths[i] = colWidths[i]
-		}
-	}
-	labels := []string{" NAME", "ID", "CONFIG USED", "CREATED AT", "UPDATED AT"}
-	return ui.RenderColumnHeader(labels, headerRenderWidths)
+	// Prefix first label with a leading space to match item alignment
+	labels := []string{" NAME", "ID", "CONFIG USED", "CREATED AT", "UPDATED AT", "LABELS"}
+	return ui.RenderColumnHeader(labels, colWidths)
 }
 func (m *Model) renderConfigsFooter() string {
 	status := fmt.Sprintf("Config %d of %d", m.configsList.Cursor+1, len(m.configsList.Filtered))
@@ -309,6 +303,10 @@ func (m *Model) renderCreateDialog() string {
 		lines = append(lines, dialogItemStyle.Render(fileLine))
 		lines = append(lines, dialogItemStyle.Render(""))
 
+		// Show labels input
+		lines = append(lines, dialogItemStyle.Render(m.createLabelsInput.View()))
+		lines = append(lines, dialogItemStyle.Render(""))
+
 		// Change help text based on error state
 		var helpText string
 		if m.createDialogError != "" {
@@ -351,6 +349,10 @@ func (m *Model) renderCreateDialog() string {
 			editorStatus += "  " + dialogKeyStyle.Render("[e: Edit]")
 		}
 		lines = append(lines, dialogItemStyle.Render(editorStatus))
+		lines = append(lines, dialogItemStyle.Render(""))
+
+		// Show labels input
+		lines = append(lines, dialogItemStyle.Render(m.createLabelsInput.View()))
 		lines = append(lines, dialogItemStyle.Render(""))
 
 		// Change help text based on error state
@@ -451,4 +453,50 @@ func (m *Model) renderUsedByFooter() string {
 		return statusBar + "\n" + footer
 	}
 	return statusBar
+}
+
+// formatLabels formats labels map to sorted key=value string
+func formatLabels(labels map[string]string) string {
+	if len(labels) == 0 {
+		return "-"
+	}
+
+	var parts []string
+	for k, v := range labels {
+		// Skip internal swarmcli labels
+		if !strings.HasPrefix(k, "swarmcli.") {
+			parts = append(parts, fmt.Sprintf("%s=%s", k, v))
+		}
+	}
+	// Sort for consistent display
+	sort.Strings(parts)
+	if len(parts) == 0 {
+		return "-"
+	}
+	return strings.Join(parts, ",")
+}
+
+// formatLabelsWithScroll formats labels with horizontal scroll offset and truncation indicator
+func formatLabelsWithScroll(labels map[string]string, offset int, maxWidth int) string {
+	full := formatLabels(labels)
+	if full == "-" {
+		return full
+	}
+
+	// Apply scroll offset
+	if offset > len(full) {
+		offset = len(full)
+	}
+	visible := full[offset:]
+
+	// Truncate if needed and add > indicator
+	if len(visible) > maxWidth {
+		if maxWidth > 1 {
+			visible = visible[:maxWidth-1] + ">"
+		} else {
+			visible = ">"
+		}
+	}
+
+	return visible
 }

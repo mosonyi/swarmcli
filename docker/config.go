@@ -173,14 +173,20 @@ func CreateConfigVersion(ctx context.Context, baseConfig swarm.Config, newData [
 }
 
 // CreateConfig creates a new config with the given name and data
-func CreateConfig(ctx context.Context, name string, data []byte) (swarm.Config, error) {
+func CreateConfig(ctx context.Context, name string, data []byte, labels map[string]string) (swarm.Config, error) {
 	l().Infof("[CreateConfig] Creating new config %q (size=%d bytes)", name, len(data))
+
+	// Merge user labels with swarmcli metadata
+	allLabels := make(map[string]string)
+	for k, v := range labels {
+		allLabels[k] = v
+	}
+	allLabels["swarmcli.created"] = time.Now().UTC().Format(time.RFC3339)
+
 	spec := swarm.ConfigSpec{
 		Annotations: swarm.Annotations{
-			Name: name,
-			Labels: map[string]string{
-				"swarmcli.created": time.Now().UTC().Format(time.RFC3339),
-			},
+			Name:   name,
+			Labels: allLabels,
 		},
 		Data: data,
 	}
