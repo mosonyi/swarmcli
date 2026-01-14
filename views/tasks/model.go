@@ -8,13 +8,24 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+type SortField int
+
+const (
+	SortByName SortField = iota
+	SortByService
+	SortByNode
+	SortByState
+)
+
 type Model struct {
-	viewport  viewport.Model
-	visible   bool
-	stackName string
-	tasks     []docker.TaskEntry
-	width     int
-	height    int
+	viewport      viewport.Model
+	visible       bool
+	stackName     string
+	tasks         []docker.TaskEntry
+	width         int
+	height        int
+	sortField     SortField
+	sortAscending bool // true for ascending, false for descending
 }
 
 func New(width, height int, stackName string) *Model {
@@ -22,11 +33,13 @@ func New(width, height int, stackName string) *Model {
 	vp.SetContent("")
 
 	return &Model{
-		viewport:  vp,
-		visible:   true,
-		stackName: stackName,
-		width:     width,
-		height:    height,
+		viewport:      vp,
+		visible:       true,
+		stackName:     stackName,
+		width:         width,
+		height:        height,
+		sortField:     SortByName,
+		sortAscending: true,
 	}
 }
 
@@ -51,6 +64,10 @@ func (m *Model) OnExit() tea.Cmd {
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "↑/↓", Desc: "Scroll"},
+		{Key: "shift+n", Desc: "Sort by Name"},
+		{Key: "shift+s", Desc: "Sort by Service"},
+		{Key: "shift+d", Desc: "Sort by Node"},
+		{Key: "shift+t", Desc: "Sort by State"},
 		{Key: "Esc", Desc: "Back"},
 	}
 }

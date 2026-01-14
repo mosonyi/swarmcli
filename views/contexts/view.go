@@ -7,6 +7,7 @@ import (
 	"swarmcli/docker"
 	"swarmcli/ui"
 	"swarmcli/ui/components/errordialog"
+	"swarmcli/ui/components/sorting"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -191,11 +192,46 @@ func (m *Model) View() string {
 
 		// Header: reserve two leading spaces so the NAME label lines up
 		// with the name text that starts after the current marker and a space.
+		nameLbl := "  NAME"
+		statusLbl := "TLS"
+		descLbl := "DESCRIPTION"
+		endpointLbl := "ENDPOINT"
+
+		// Add sort indicators
+		if m.sortField == SortByName {
+			arrow := sorting.SortArrow(sorting.Ascending)
+			if !m.sortAscending {
+				arrow = sorting.SortArrow(sorting.Descending)
+			}
+			nameLbl = fmt.Sprintf("  NAME %s", arrow)
+		}
+		if m.sortField == SortByStatus {
+			arrow := sorting.SortArrow(sorting.Ascending)
+			if !m.sortAscending {
+				arrow = sorting.SortArrow(sorting.Descending)
+			}
+			statusLbl = fmt.Sprintf("TLS %s", arrow)
+		}
+		if m.sortField == SortByDescription {
+			arrow := sorting.SortArrow(sorting.Ascending)
+			if !m.sortAscending {
+				arrow = sorting.SortArrow(sorting.Descending)
+			}
+			descLbl = fmt.Sprintf("DESCRIPTION %s", arrow)
+		}
+		if m.sortField == SortByEndpoint {
+			arrow := sorting.SortArrow(sorting.Ascending)
+			if !m.sortAscending {
+				arrow = sorting.SortArrow(sorting.Descending)
+			}
+			endpointLbl = fmt.Sprintf("ENDPOINT %s", arrow)
+		}
+
 		headerLine := fmt.Sprintf("%-*s%-*s%-*s%-*s%-*s",
-			colWidths[0], "  NAME",
-			colWidths[1], "TLS",
-			colWidths[2], "DESCRIPTION",
-			colWidths[3], "ENDPOINT",
+			colWidths[0], nameLbl,
+			colWidths[1], statusLbl,
+			colWidths[2], descLbl,
+			colWidths[3], endpointLbl,
 			colWidths[4], "ERROR",
 		)
 		headerRendered = ui.FrameHeaderStyle.Render(headerLine)

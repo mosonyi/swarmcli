@@ -16,13 +16,26 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+type SortField int
+
+const (
+	SortByName SortField = iota
+	SortByID
+	SortByUsed
+	SortByCreated
+	SortByUpdated
+	SortByLabels
+)
+
 type Model struct {
-	secretsList  filterlist.FilterableList[secretItem]
-	width        int
-	height       int
-	firstResize  bool   // tracks if we've received the first window size
-	lastSnapshot uint64 // hash of last snapshot for change detection
-	visible      bool   // tracks if view is currently active
+	secretsList   filterlist.FilterableList[secretItem]
+	width         int
+	height        int
+	firstResize   bool   // tracks if we've received the first window size
+	lastSnapshot  uint64 // hash of last snapshot for change detection
+	visible       bool   // tracks if view is currently active
+	sortField     SortField
+	sortAscending bool // true for ascending, false for descending
 
 	state state
 	err   error
@@ -136,6 +149,8 @@ func New(width, height int) *Model {
 		createLabelsInput:  labelsInput,
 		createEncodeSecret: true, // Default to encoding
 		revealViewport:     revealVp,
+		sortField:          SortByName,
+		sortAscending:      true,
 	}
 }
 

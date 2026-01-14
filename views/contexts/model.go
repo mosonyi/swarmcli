@@ -15,12 +15,24 @@ import (
 	filterlist "swarmcli/ui/components/filterable/list"
 )
 
+type SortField int
+
+const (
+	SortByName SortField = iota
+	SortByStatus
+	SortByDescription
+	SortByEndpoint
+)
+
 type Model struct {
 	Visible  bool
 	viewport viewport.Model
 	ready    bool
 
 	List filterlist.FilterableList[docker.ContextInfo]
+
+	sortField     SortField
+	sortAscending bool // true for ascending, false for descending
 
 	contexts              []docker.ContextInfo
 	cursor                int
@@ -133,6 +145,8 @@ func New() *Model {
 		createKeyInput:   createKeyInput,
 		editDescInput:    editDescInput,
 		List:             list,
+		sortField:        SortByName,
+		sortAscending:    true,
 	}
 }
 
@@ -211,6 +225,7 @@ func (m *Model) SetContexts(contexts []docker.ContextInfo) {
 		m.List.Viewport.Height = h
 	}
 	m.List.ApplyFilter()
+	m.applySorting()
 	// Update the internal viewport content immediately so parent view
 	// that uses the viewport's content (e.g., during initial render)
 	// doesn't keep showing the loading placeholder.

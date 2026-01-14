@@ -16,13 +16,26 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+type SortField int
+
+const (
+	SortByName SortField = iota
+	SortByID
+	SortByUsed
+	SortByCreated
+	SortByUpdated
+	SortByLabels
+)
+
 type Model struct {
-	configsList  filterlist.FilterableList[configItem]
-	width        int
-	height       int
-	firstResize  bool   // tracks if we've received the first window size
-	lastSnapshot uint64 // hash of last snapshot for change detection
-	visible      bool   // tracks if view is currently active
+	configsList   filterlist.FilterableList[configItem]
+	width         int
+	height        int
+	firstResize   bool   // tracks if we've received the first window size
+	lastSnapshot  uint64 // hash of last snapshot for change detection
+	visible       bool   // tracks if view is currently active
+	sortField     SortField
+	sortAscending bool // true for ascending, false for descending
 
 	state state
 	err   error
@@ -122,6 +135,8 @@ func New(width, height int) *Model {
 		createNameInput:   nameInput,
 		createFileInput:   fileInput,
 		createLabelsInput: labelsInput,
+		sortField:         SortByName,
+		sortAscending:     true,
 	}
 }
 

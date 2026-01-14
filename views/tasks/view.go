@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"swarmcli/ui"
+	"swarmcli/ui/components/sorting"
 )
 
 func (m *Model) View() string {
@@ -41,6 +42,36 @@ func (m *Model) renderTasks() string {
 	colWidths[5] = width - colWidths[0] - colWidths[1] - colWidths[2] - colWidths[3] - colWidths[4]
 
 	headerLabels := []string{"  ID", "NAME", "IMAGE", "NODE", "STATE", "STATUS"}
+
+	// Add sort indicators to labels
+	if m.sortField == SortByName {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		headerLabels[1] = fmt.Sprintf("NAME %s", arrow)
+	}
+	if m.sortField == SortByService {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		headerLabels[0] = fmt.Sprintf("  ID %s", arrow)
+	}
+	if m.sortField == SortByNode {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		headerLabels[3] = fmt.Sprintf("NODE %s", arrow)
+	}
+	if m.sortField == SortByState {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		headerLabels[4] = fmt.Sprintf("STATE %s", arrow)
+	}
 
 	headerLine := fmt.Sprintf("%-*s%-*s%-*s%-*s%-*s%-*s",
 		colWidths[0], headerLabels[0],

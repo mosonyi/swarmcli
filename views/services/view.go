@@ -5,6 +5,7 @@ import (
 	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
+	"swarmcli/ui/components/sorting"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -20,6 +21,50 @@ func (m *Model) View() string {
 	cols := 9
 
 	labels := []string{" SERVICE", "STACK", "REPLICAS", "STATUS", "MODE", "IMAGE", "PORTS", "CREATED", "UPDATED"}
+
+	// Add sort indicators to labels
+	if m.sortField == SortByName {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		labels[0] = fmt.Sprintf(" SERVICE %s", arrow)
+	}
+	if m.sortField == SortByStatus {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		labels[3] = fmt.Sprintf("STATUS %s", arrow)
+	}
+	if m.sortField == SortByImage {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		labels[5] = fmt.Sprintf("IMAGE %s", arrow)
+	}
+	if m.sortField == SortByPorts {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		labels[6] = fmt.Sprintf("PORTS %s", arrow)
+	}
+	if m.sortField == SortByCreated {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		labels[7] = fmt.Sprintf("CREATED %s", arrow)
+	}
+	if m.sortField == SortByUpdated {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		labels[8] = fmt.Sprintf("UPDATED %s", arrow)
+	}
 	// Compute header column widths using the same effective-width logic
 	// (columns widths exclude two-space separators) so the header aligns
 	// exactly with the data columns.
@@ -50,8 +95,12 @@ func (m *Model) View() string {
 			floor = 15
 		case 6: // PORTS
 			floor = 8
-		case 7, 8: // CREATED, UPDATED
+		case 7, 8: // CREATED, UPDATED - need extra space for sort arrows
 			floor = 8
+			// If this column has a sort arrow, ensure we have room for it
+			if (i == 7 && m.sortField == SortByCreated) || (i == 8 && m.sortField == SortByUpdated) {
+				floor = 10
+			}
 		}
 		if hw > floor {
 			minCols[i] = hw

@@ -7,6 +7,7 @@ import (
 	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
+	"swarmcli/ui/components/sorting"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -27,6 +28,57 @@ func (m *Model) View() string {
 	title := fmt.Sprintf("Nodes (%d total, %d manager%s)", total, managers, plural(managers))
 	// Compute proportional column widths (9 equal partitions) so header aligns with items
 	labels := []string{"ID", "HOSTNAME", "ROLE", "STATE", "Availability", "MANAGER", "VERSION", "ADDRESS", "LABELS"}
+
+	// Add sort indicators to labels
+	if m.sortField == SortByHostname {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		labels[1] = fmt.Sprintf("HOSTNAME %s", arrow)
+	}
+	if m.sortField == SortByRole {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		labels[2] = fmt.Sprintf("ROLE %s", arrow)
+	}
+	if m.sortField == SortByState {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		labels[3] = fmt.Sprintf("STATE %s", arrow)
+	}
+	if m.sortField == SortByAvailability {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		labels[4] = fmt.Sprintf("Availability %s", arrow)
+	}
+	if m.sortField == SortByVersion {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		labels[6] = fmt.Sprintf("VERSION %s", arrow)
+	}
+	if m.sortField == SortByAddress {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		labels[7] = fmt.Sprintf("ADDRESS %s", arrow)
+	}
+	if m.sortField == SortByLabels {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		labels[8] = fmt.Sprintf("LABELS %s", arrow)
+	}
 	width := m.List.Viewport.Width
 	if width <= 0 {
 		if m.width > 0 {

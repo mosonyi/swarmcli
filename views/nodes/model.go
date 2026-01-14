@@ -13,6 +13,18 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+type SortField int
+
+const (
+	SortByHostname SortField = iota
+	SortByState
+	SortByAvailability
+	SortByRole
+	SortByVersion
+	SortByAddress
+	SortByLabels
+)
+
 type Model struct {
 	List                  filterlist.FilterableList[docker.NodeEntry]
 	Visible               bool
@@ -20,6 +32,8 @@ type Model struct {
 	firstResize           bool // tracks if we've received the first window size
 	width                 int
 	height                int
+	sortField             SortField
+	sortAscending         bool // true for ascending, false for descending
 	colWidths             map[string]int
 	lastSnapshot          uint64 // Hash of last node state for change detection
 	confirmDialog         *confirmdialog.Model
@@ -55,6 +69,8 @@ func New(width, height int) *Model {
 		width:         width,
 		height:        height,
 		confirmDialog: confirmdialog.New(width, height),
+		sortField:     SortByHostname,
+		sortAscending: true,
 	}
 }
 
@@ -79,8 +95,8 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "a", Desc: "Availability"},
 		{Key: "Ctrl+L", Desc: "Add label"},
 		{Key: "Ctrl+R", Desc: "Remove label"},
-		{Key: "Shift+D", Desc: "Demote node"},
-		{Key: "Shift+P", Desc: "Promote node"},
+		{Key: "Ctrl+T", Desc: "Demote node"},
+		{Key: "Ctrl+O", Desc: "Promote node"},
 		{Key: "Ctrl+D", Desc: "Remove node"},
 		{Key: "↑/↓", Desc: "Navigate"},
 		{Key: "?", Desc: "Help"},
