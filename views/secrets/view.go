@@ -9,6 +9,7 @@ import (
 	"swarmcli/ui"
 	"swarmcli/ui/components/errordialog"
 	filterlist "swarmcli/ui/components/filterable/list"
+	"swarmcli/ui/components/sorting"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -112,7 +113,7 @@ func (m *Model) View() string {
 		width = m.width
 	}
 
-	header := renderSecretsHeader(m.secretsList.Items, width)
+	header := m.renderSecretsHeader(m.secretsList.Items, width)
 
 	// column width calculations are handled in setRenderItem
 	nameCol := m.colNameWidth
@@ -170,9 +171,9 @@ func (m *Model) View() string {
 	return view
 }
 
-func renderSecretsHeader(items []secretItem, width int) string {
+func (m *Model) renderSecretsHeader(items []secretItem, width int) string {
 	if len(items) == 0 {
-		return "NAME         ID                 SECRET USED    LABELS             CREATED AT             UPDATED AT"
+		return "NAME         ID                 SECRET USED    CREATED AT             UPDATED AT             LABELS"
 	}
 	if width <= 0 {
 		width = 80
@@ -196,7 +197,7 @@ func renderSecretsHeader(items []secretItem, width int) string {
 
 	// Ensure CREATED and UPDATED columns have at least 19 chars
 	minTime := 19
-	cur := colWidths[4] + colWidths[5]
+	cur := colWidths[3] + colWidths[4]
 	if cur < 2*minTime {
 		deficit := 2*minTime - cur
 		for i := 2; i >= 0 && deficit > 0; i-- {
@@ -212,11 +213,11 @@ func renderSecretsHeader(items []secretItem, width int) string {
 				}
 			}
 		}
+		if colWidths[3] < minTime {
+			colWidths[3] = minTime
+		}
 		if colWidths[4] < minTime {
 			colWidths[4] = minTime
-		}
-		if colWidths[5] < minTime {
-			colWidths[5] = minTime
 		}
 	}
 
@@ -226,6 +227,33 @@ func renderSecretsHeader(items []secretItem, width int) string {
 
 	// Prefix first label with a leading space to match item alignment
 	labels := []string{" NAME", "ID", "SECRET USED", "CREATED AT", "UPDATED AT", "LABELS"}
+
+	// Add sort indicators
+	arrow := func() string {
+		if m.sortAscending {
+			return sorting.SortArrow(sorting.Ascending)
+		}
+		return sorting.SortArrow(sorting.Descending)
+	}
+	if m.sortField == SortByName {
+		labels[0] = fmt.Sprintf(" NAME %s", arrow())
+	}
+	if m.sortField == SortByID {
+		labels[1] = fmt.Sprintf("ID %s", arrow())
+	}
+	if m.sortField == SortByUsed {
+		labels[2] = fmt.Sprintf("SECRET USED %s", arrow())
+	}
+	if m.sortField == SortByCreated {
+		labels[3] = fmt.Sprintf("CREATED AT %s", arrow())
+	}
+	if m.sortField == SortByUpdated {
+		labels[4] = fmt.Sprintf("UPDATED AT %s", arrow())
+	}
+	if m.sortField == SortByLabels {
+		labels[5] = fmt.Sprintf("LABELS %s", arrow())
+	}
+
 	return ui.RenderColumnHeader(labels, colWidths)
 }
 

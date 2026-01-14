@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
@@ -720,6 +721,46 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				}
 			}
 
+		case "N":
+			if m.sortField == SortByName {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByName
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+
+		case "D":
+			if m.sortField == SortByDescription {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByDescription
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+
+		case "E":
+			if m.sortField == SortByEndpoint {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByEndpoint
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+
+		case "S":
+			if m.sortField == SortByStatus {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByStatus
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+
 		case "x":
 			// Export selected context
 			ctx, ok := m.GetSelectedContext()
@@ -819,8 +860,10 @@ func GetContextsHelpContent() []helpview.HelpCategory {
 		{
 			Title: "View",
 			Items: []helpview.HelpItem{
-				{Keys: "<shift+n>", Description: "Order by Name (todo)"},
-				{Keys: "<shift+e>", Description: "Order by Endpoint (todo)"},
+				{Keys: "<shift+n>", Description: "Order by Name"},
+				{Keys: "<shift+d>", Description: "Order by Description"},
+				{Keys: "<shift+e>", Description: "Order by Endpoint"},
+				{Keys: "<shift+s>", Description: "Order by Status"},
 			},
 		},
 		{
@@ -833,4 +876,69 @@ func GetContextsHelpContent() []helpview.HelpCategory {
 			},
 		},
 	}
+}
+
+// applySorting applies the current sort configuration to the filtered list
+func (m *Model) applySorting() {
+	if len(m.List.Filtered) == 0 {
+		return
+	}
+
+	// Remember cursor position
+	cursorName := ""
+	if m.List.Cursor < len(m.List.Filtered) {
+		cursorName = m.List.Filtered[m.List.Cursor].Name
+	}
+
+	// Sort the filtered list
+	switch m.sortField {
+	case SortByName:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.List.Filtered[i].Name < m.List.Filtered[j].Name
+			}
+			return m.List.Filtered[i].Name > m.List.Filtered[j].Name
+		})
+	case SortByDescription:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.List.Filtered[i].Description < m.List.Filtered[j].Description
+			}
+			return m.List.Filtered[i].Description > m.List.Filtered[j].Description
+		})
+	case SortByStatus:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			// Sort by current status (true/false)
+			if m.sortAscending {
+				if m.List.Filtered[i].Current == m.List.Filtered[j].Current {
+					return m.List.Filtered[i].Name < m.List.Filtered[j].Name
+				}
+				return m.List.Filtered[i].Current
+			}
+			if m.List.Filtered[i].Current == m.List.Filtered[j].Current {
+				return m.List.Filtered[i].Name > m.List.Filtered[j].Name
+			}
+			return m.List.Filtered[i].Current
+		})
+	case SortByEndpoint:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.List.Filtered[i].DockerHost < m.List.Filtered[j].DockerHost
+			}
+			return m.List.Filtered[i].DockerHost > m.List.Filtered[j].DockerHost
+		})
+	}
+
+	// Restore cursor position
+	if cursorName != "" {
+		for i, c := range m.List.Filtered {
+			if c.Name == cursorName {
+				m.List.Cursor = i
+				return
+			}
+		}
+	}
+
+	m.List.Cursor = 0
+	m.List.Viewport.GotoTop()
 }

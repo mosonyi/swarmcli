@@ -13,6 +13,14 @@ import (
 	filterlist "swarmcli/ui/components/filterable/list"
 )
 
+type SortField int
+
+const (
+	SortByName SortField = iota
+	SortByServices
+	SortByTasks
+)
+
 type Model struct {
 	List             filterlist.FilterableList[docker.StackEntry]
 	Visible          bool
@@ -23,6 +31,8 @@ type Model struct {
 	height           int
 	lastSnapshot     uint64 // hash of last snapshot for change detection
 	DelayInitialLoad bool   // when true, delay the first LoadStacksCmd by 3s
+	sortField        SortField
+	sortAscending    bool // true for ascending, false for descending
 }
 
 func New(width, height int) *Model {
@@ -39,11 +49,13 @@ func New(width, height int) *Model {
 	}
 
 	return &Model{
-		List:        list,
-		Visible:     false,
-		firstResize: true,
-		width:       width,
-		height:      height,
+		List:          list,
+		Visible:       false,
+		firstResize:   true,
+		width:         width,
+		height:        height,
+		sortField:     SortByName,
+		sortAscending: true,
 	}
 }
 

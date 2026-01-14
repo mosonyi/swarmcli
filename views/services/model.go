@@ -23,6 +23,17 @@ const (
 	AllFilter
 )
 
+type SortField int
+
+const (
+	SortByName SortField = iota
+	SortByStatus
+	SortByImage
+	SortByPorts
+	SortByCreated
+	SortByUpdated
+)
+
 type Model struct {
 	List         filterlist.FilterableList[docker.ServiceEntry]
 	Visible      bool
@@ -54,6 +65,10 @@ type Model struct {
 
 	// Track task navigation: -1 means service row is selected, >= 0 means task at that index
 	selectedTaskIndex int
+
+	// Sorting
+	sortField     SortField
+	sortAscending bool // true for ascending, false for descending
 }
 
 func New(width, height int) *Model {
@@ -77,6 +92,8 @@ func New(width, height int) *Model {
 		expandedServices:  make(map[string]bool),
 		serviceTasks:      make(map[string][]docker.TaskEntry),
 		selectedTaskIndex: -1,
+		sortField:         SortByName,
+		sortAscending:     true,
 	}
 }
 

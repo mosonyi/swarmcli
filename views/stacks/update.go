@@ -2,6 +2,7 @@ package stacksview
 
 import (
 	"fmt"
+	"sort"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
@@ -121,6 +122,48 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 		}
 
+		// Sort by Stack name (Shift+S)
+		if msg.String() == "S" {
+			if m.sortField == SortByName {
+				// Toggle ascending/descending
+				m.sortAscending = !m.sortAscending
+			} else {
+				// Switch to this field and reset to ascending
+				m.sortField = SortByName
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+		}
+
+		// Sort by Services (Shift+E)
+		if msg.String() == "E" {
+			if m.sortField == SortByServices {
+				// Toggle ascending/descending
+				m.sortAscending = !m.sortAscending
+			} else {
+				// Switch to this field and reset to ascending
+				m.sortField = SortByServices
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+		}
+
+		// Sort by Tasks (Shift+T)
+		if msg.String() == "T" {
+			if m.sortField == SortByTasks {
+				// Toggle ascending/descending
+				m.sortAscending = !m.sortAscending
+			} else {
+				// Switch to this field and reset to ascending
+				m.sortField = SortByTasks
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+		}
+
 		return nil
 	}
 
@@ -149,6 +192,9 @@ func (m *Model) setStacks(stacks []docker.StackEntry) {
 	} else {
 		m.List.Filtered = stacks
 	}
+
+	// Reapply sorting to maintain sort order after data refresh
+	m.applySorting()
 
 	// Restore cursor position if still valid
 	if oldCursor < len(m.List.Filtered) {
@@ -244,9 +290,9 @@ func GetStacksHelpContent() []helpview.HelpCategory {
 		{
 			Title: "View",
 			Items: []helpview.HelpItem{
-				{Keys: "<shift+s>", Description: "Order by Stack name (todo)"},
-				{Keys: "<shift+e>", Description: "Order by Services name (todo)"},
-				{Keys: "<shift+t>", Description: "Order by Tasks name (todo)"},
+				{Keys: "<shift+s>", Description: "Order by Stack name"},
+				{Keys: "<shift+e>", Description: "Order by Services"},
+				{Keys: "<shift+t>", Description: "Order by Tasks"},
 			},
 		},
 		{
@@ -259,4 +305,56 @@ func GetStacksHelpContent() []helpview.HelpCategory {
 			},
 		},
 	}
+}
+
+// applySorting applies the current sort configuration to the filtered list
+func (m *Model) applySorting() {
+	if len(m.List.Filtered) == 0 {
+		return
+	}
+
+	// Remember cursor position
+	cursorStack := ""
+	if m.List.Cursor < len(m.List.Filtered) {
+		cursorStack = m.List.Filtered[m.List.Cursor].Name
+	}
+
+	// Sort the filtered list
+	switch m.sortField {
+	case SortByName:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.List.Filtered[i].Name < m.List.Filtered[j].Name
+			}
+			return m.List.Filtered[i].Name > m.List.Filtered[j].Name
+		})
+	case SortByServices:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.List.Filtered[i].ServiceCount < m.List.Filtered[j].ServiceCount
+			}
+			return m.List.Filtered[i].ServiceCount > m.List.Filtered[j].ServiceCount
+		})
+	case SortByTasks:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.List.Filtered[i].NodeCount < m.List.Filtered[j].NodeCount
+			}
+			return m.List.Filtered[i].NodeCount > m.List.Filtered[j].NodeCount
+		})
+	}
+
+	// Restore cursor position to previously selected item
+	if cursorStack != "" {
+		for i, s := range m.List.Filtered {
+			if s.Name == cursorStack {
+				m.List.Cursor = i
+				return
+			}
+		}
+	}
+
+	// If previous item not found, reset cursor to 0
+	m.List.Cursor = 0
+	m.List.Viewport.GotoTop()
 }

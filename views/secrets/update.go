@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/ui"
@@ -146,6 +147,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.secretsList.Items = items
 		m.setRenderItem()
 		m.secretsList.ApplyFilter()
+		m.applySorting()
 
 		m.state = stateReady
 		l().Info("SecretsView: Secret list updated (used status pending)")
@@ -482,6 +484,72 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				}
 			}
 
+		case "N":
+			if m.sortField == SortByName {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByName
+				m.sortAscending = true
+			}
+			m.applySorting()
+			m.secretsList.Viewport.SetContent(m.secretsList.View())
+			return nil
+
+		case "I":
+			if m.sortField == SortByID {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByID
+				m.sortAscending = true
+			}
+			m.applySorting()
+			m.secretsList.Viewport.SetContent(m.secretsList.View())
+			return nil
+
+		case "U":
+			if m.sortField == SortByUsed {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByUsed
+				m.sortAscending = true
+			}
+			m.applySorting()
+			m.secretsList.Viewport.SetContent(m.secretsList.View())
+			return nil
+
+		case "C":
+			if m.sortField == SortByCreated {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByCreated
+				m.sortAscending = true
+			}
+			m.applySorting()
+			m.secretsList.Viewport.SetContent(m.secretsList.View())
+			return nil
+
+		case "D":
+			if m.sortField == SortByUpdated {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByUpdated
+				m.sortAscending = true
+			}
+			m.applySorting()
+			m.secretsList.Viewport.SetContent(m.secretsList.View())
+			return nil
+
+		case "L":
+			if m.sortField == SortByLabels {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByLabels
+				m.sortAscending = true
+			}
+			m.applySorting()
+			m.secretsList.Viewport.SetContent(m.secretsList.View())
+			return nil
+
 		default:
 			// Let FilterableList handle navigation keys (up/down/pgup/pgdown)
 			oldCursor := m.secretsList.Cursor
@@ -534,7 +602,7 @@ func (m *Model) setRenderItem() {
 
 		// Ensure CREATED and UPDATED columns have at least 19 chars
 		minTime := 19
-		cur := colWidths[4] + colWidths[5]
+		cur := colWidths[3] + colWidths[4]
 		if cur < 2*minTime {
 			deficit := 2*minTime - cur
 			for i := 2; i >= 0 && deficit > 0; i-- {
@@ -550,11 +618,11 @@ func (m *Model) setRenderItem() {
 					}
 				}
 			}
+			if colWidths[3] < minTime {
+				colWidths[3] = minTime
+			}
 			if colWidths[4] < minTime {
 				colWidths[4] = minTime
-			}
-			if colWidths[5] < minTime {
-				colWidths[5] = minTime
 			}
 		}
 
@@ -1055,9 +1123,12 @@ func GetSecretsHelpContent() []helpview.HelpCategory {
 		{
 			Title: "View",
 			Items: []helpview.HelpItem{
-				{Keys: "<shift+n>", Description: "Order by Name (todo)"},
-				{Keys: "<shift+c>", Description: "Order by Created (todo)"},
-				{Keys: "<shift+u>", Description: "Order by Updated (todo)"},
+				{Keys: "<shift+n>", Description: "Order by Name"},
+				{Keys: "<shift+i>", Description: "Order by ID"},
+				{Keys: "<shift+u>", Description: "Order by Used"},
+				{Keys: "<shift+c>", Description: "Order by Created"},
+				{Keys: "<shift+d>", Description: "Order by Updated"},
+				{Keys: "<shift+l>", Description: "Order by Labels"},
 			},
 		},
 		{
@@ -1070,4 +1141,84 @@ func GetSecretsHelpContent() []helpview.HelpCategory {
 			},
 		},
 	}
+}
+
+// applySorting applies the current sort configuration to the filtered list
+func (m *Model) applySorting() {
+	if len(m.secretsList.Filtered) == 0 {
+		return
+	}
+
+	// Remember cursor position
+	cursorID := ""
+	if m.secretsList.Cursor < len(m.secretsList.Filtered) {
+		cursorID = m.secretsList.Filtered[m.secretsList.Cursor].ID
+	}
+
+	// Sort the filtered list
+	switch m.sortField {
+	case SortByName:
+		sort.Slice(m.secretsList.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.secretsList.Filtered[i].Name < m.secretsList.Filtered[j].Name
+			}
+			return m.secretsList.Filtered[i].Name > m.secretsList.Filtered[j].Name
+		})
+	case SortByID:
+		sort.Slice(m.secretsList.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.secretsList.Filtered[i].ID < m.secretsList.Filtered[j].ID
+			}
+			return m.secretsList.Filtered[i].ID > m.secretsList.Filtered[j].ID
+		})
+	case SortByUsed:
+		sort.Slice(m.secretsList.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				if m.secretsList.Filtered[i].Used == m.secretsList.Filtered[j].Used {
+					return m.secretsList.Filtered[i].Name < m.secretsList.Filtered[j].Name
+				}
+				return !m.secretsList.Filtered[i].Used && m.secretsList.Filtered[j].Used
+			}
+			if m.secretsList.Filtered[i].Used == m.secretsList.Filtered[j].Used {
+				return m.secretsList.Filtered[i].Name < m.secretsList.Filtered[j].Name
+			}
+			return m.secretsList.Filtered[i].Used && !m.secretsList.Filtered[j].Used
+		})
+	case SortByCreated:
+		sort.Slice(m.secretsList.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.secretsList.Filtered[i].CreatedAt.Before(m.secretsList.Filtered[j].CreatedAt)
+			}
+			return m.secretsList.Filtered[i].CreatedAt.After(m.secretsList.Filtered[j].CreatedAt)
+		})
+	case SortByUpdated:
+		sort.Slice(m.secretsList.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.secretsList.Filtered[i].UpdatedAt.Before(m.secretsList.Filtered[j].UpdatedAt)
+			}
+			return m.secretsList.Filtered[i].UpdatedAt.After(m.secretsList.Filtered[j].UpdatedAt)
+		})
+	case SortByLabels:
+		sort.Slice(m.secretsList.Filtered, func(i, j int) bool {
+			iLabels := formatLabels(m.secretsList.Filtered[i].Labels)
+			jLabels := formatLabels(m.secretsList.Filtered[j].Labels)
+			if m.sortAscending {
+				return iLabels < jLabels
+			}
+			return iLabels > jLabels
+		})
+	}
+
+	// Restore cursor position
+	if cursorID != "" {
+		for i, s := range m.secretsList.Filtered {
+			if s.ID == cursorID {
+				m.secretsList.Cursor = i
+				return
+			}
+		}
+	}
+
+	m.secretsList.Cursor = 0
+	m.secretsList.Viewport.GotoTop()
 }

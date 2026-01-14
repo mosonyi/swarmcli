@@ -5,6 +5,7 @@ import (
 	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
+	"swarmcli/ui/components/sorting"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -35,10 +36,37 @@ func (m *Model) View() string {
 
 	// Build header using frame header style so it appears on the first
 	// line inside the framed box and aligns with rows below.
+	stackLabel := "  STACK"
+	if m.sortField == SortByName {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		stackLabel = fmt.Sprintf("  STACK %s", arrow)
+	}
+
+	servicesLabel := "SERVICES"
+	if m.sortField == SortByServices {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		servicesLabel = fmt.Sprintf("SERVICES %s", arrow)
+	}
+
+	tasksLabel := "TASKS"
+	if m.sortField == SortByTasks {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		tasksLabel = fmt.Sprintf("TASKS %s", arrow)
+	}
+
 	headerLine := fmt.Sprintf("%-*s%-*s%-*s",
-		colWidths[0], "  STACK",
-		colWidths[1], "SERVICES",
-		colWidths[2], "TASKS",
+		colWidths[0], stackLabel,
+		colWidths[1], servicesLabel,
+		colWidths[2], tasksLabel,
 	)
 	header := ui.FrameHeaderStyle.Render(headerLine)
 

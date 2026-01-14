@@ -329,7 +329,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					Payload:  GetNodesHelpContent(),
 				}
 			}
-		case "D":
+		case "ctrl+t":
 			if m.List.Cursor < len(m.List.Filtered) {
 				node := m.List.Filtered[m.List.Cursor]
 				// Get fresh node state from snapshot to avoid stale data
@@ -348,7 +348,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					m.confirmDialog.Message = fmt.Sprintf("Node %q is not a manager", node.Hostname)
 				}
 			}
-		case "P":
+		case "ctrl+o":
 			if m.List.Cursor < len(m.List.Filtered) {
 				node := m.List.Filtered[m.List.Cursor]
 				// Get fresh node state from snapshot to avoid stale data
@@ -367,6 +367,83 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					m.confirmDialog.Message = fmt.Sprintf("Node %q is already a manager", node.Hostname)
 				}
 			}
+
+		// Sort by Hostname (Shift+H)
+		case "H":
+			if m.sortField == SortByHostname {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByHostname
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+
+		// Sort by State (Shift+S)
+		case "S":
+			if m.sortField == SortByState {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByState
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+
+		// Sort by Availability (Shift+A)
+		case "A":
+			if m.sortField == SortByAvailability {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByAvailability
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+
+		// Sort by Role (Shift+R)
+		case "R":
+			if m.sortField == SortByRole {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByRole
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+
+		// Sort by Version (Shift+V)
+		case "V":
+			if m.sortField == SortByVersion {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByVersion
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+
+		// Sort by Address (Shift+D)
+		case "D":
+			if m.sortField == SortByAddress {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByAddress
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+
+		// Sort by Labels (Shift+L)
+		case "L":
+			if m.sortField == SortByLabels {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByLabels
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
 		case "a":
 			if m.List.Cursor < len(m.List.Filtered) {
 				node := m.List.Filtered[m.List.Cursor]
@@ -426,6 +503,7 @@ func (m *Model) SetContent(msg Msg) {
 
 	m.List.Items = msg.Entries
 	m.List.ApplyFilter()
+	m.applySorting()
 
 	// Calculate column widths for all columns
 	m.colWidths = calcColumnWidths(msg.Entries)
@@ -704,8 +782,8 @@ func GetNodesHelpContent() []helpview.HelpCategory {
 				{Keys: "<a>", Description: "Change availability"},
 				{Keys: "<ctrl+l>", Description: "Add label to node"},
 				{Keys: "<ctrl+r>", Description: "Remove label from node"},
-				{Keys: "<shift+p>", Description: "Promote to manager"},
-				{Keys: "<shift+d>", Description: "Demote to worker"},
+				{Keys: "<ctrl+o>", Description: "Promote to manager"},
+				{Keys: "<ctrl+t>", Description: "Demote to worker"},
 				{Keys: "<ctrl+d>", Description: "Remove node"},
 				{Keys: "</>", Description: "Filter"},
 			},
@@ -713,10 +791,13 @@ func GetNodesHelpContent() []helpview.HelpCategory {
 		{
 			Title: "View",
 			Items: []helpview.HelpItem{
-				{Keys: "<shift+h>", Description: "Order by Hostname (todo)"},
-				{Keys: "<shift+s>", Description: "Order by Status (todo)"},
-				{Keys: "<shift+a>", Description: "Order by Availability (todo)"},
-				{Keys: "<shift+r>", Description: "Order by Role (todo)"},
+				{Keys: "<shift+h>", Description: "Order by Hostname"},
+				{Keys: "<shift+r>", Description: "Order by Role"},
+				{Keys: "<shift+s>", Description: "Order by State"},
+				{Keys: "<shift+a>", Description: "Order by Availability"},
+				{Keys: "<shift+v>", Description: "Order by Version"},
+				{Keys: "<shift+d>", Description: "Order by Address"},
+				{Keys: "<shift+l>", Description: "Order by Labels"},
 			},
 		},
 		{
@@ -729,4 +810,93 @@ func GetNodesHelpContent() []helpview.HelpCategory {
 			},
 		},
 	}
+}
+
+// applySorting applies the current sort configuration to the filtered list
+func (m *Model) applySorting() {
+	if len(m.List.Filtered) == 0 {
+		return
+	}
+
+	// Remember cursor position
+	cursorID := ""
+	if m.List.Cursor < len(m.List.Filtered) {
+		cursorID = m.List.Filtered[m.List.Cursor].ID
+	}
+
+	// Sort the filtered list
+	switch m.sortField {
+	case SortByHostname:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.List.Filtered[i].Hostname < m.List.Filtered[j].Hostname
+			}
+			return m.List.Filtered[i].Hostname > m.List.Filtered[j].Hostname
+		})
+	case SortByState:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.List.Filtered[i].State < m.List.Filtered[j].State
+			}
+			return m.List.Filtered[i].State > m.List.Filtered[j].State
+		})
+	case SortByAvailability:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.List.Filtered[i].Availability < m.List.Filtered[j].Availability
+			}
+			return m.List.Filtered[i].Availability > m.List.Filtered[j].Availability
+		})
+	case SortByRole:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			roleI := "worker"
+			if m.List.Filtered[i].Manager {
+				roleI = "manager"
+			}
+			roleJ := "worker"
+			if m.List.Filtered[j].Manager {
+				roleJ = "manager"
+			}
+			if m.sortAscending {
+				return roleI < roleJ
+			}
+			return roleI > roleJ
+		})
+	case SortByVersion:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.List.Filtered[i].Version < m.List.Filtered[j].Version
+			}
+			return m.List.Filtered[i].Version > m.List.Filtered[j].Version
+		})
+	case SortByAddress:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.List.Filtered[i].Addr < m.List.Filtered[j].Addr
+			}
+			return m.List.Filtered[i].Addr > m.List.Filtered[j].Addr
+		})
+	case SortByLabels:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			labelsI := formatLabels(m.List.Filtered[i].Labels)
+			labelsJ := formatLabels(m.List.Filtered[j].Labels)
+			if m.sortAscending {
+				return labelsI < labelsJ
+			}
+			return labelsI > labelsJ
+		})
+	}
+
+	// Restore cursor position
+	if cursorID != "" {
+		for i, n := range m.List.Filtered {
+			if n.ID == cursorID {
+				m.List.Cursor = i
+				return
+			}
+		}
+	}
+
+	m.List.Cursor = 0
+	m.List.Viewport.GotoTop()
 }

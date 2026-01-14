@@ -3,6 +3,7 @@ package servicesview
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
@@ -397,6 +398,72 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			// ESC should also go back to stacks view
 			m.Visible = false
 			return func() tea.Msg { return view.NavigateToMsg{ViewName: view.NameStacks, Payload: nil} }
+
+		// Sort by Name (Shift+N)
+		case "N":
+			if m.sortField == SortByName {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByName
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+
+		// Sort by Status (Shift+S)
+		case "S":
+			if m.sortField == SortByStatus {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByStatus
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+
+		// Sort by Image (Shift+I)
+		case "I":
+			if m.sortField == SortByImage {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByImage
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+
+		// Sort by Ports (Shift+P)
+		case "P":
+			if m.sortField == SortByPorts {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByPorts
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+
+		// Sort by Created (Shift+C)
+		case "C":
+			if m.sortField == SortByCreated {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByCreated
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
+
+		// Sort by Updated (Shift+U)
+		case "U":
+			if m.sortField == SortByUpdated {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByUpdated
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
 		}
 
 		m.List.Viewport.SetContent(m.List.View())
@@ -415,6 +482,9 @@ func (m *Model) SetContent(msg Msg) {
 
 	m.List.Items = msg.Entries
 	m.List.ApplyFilter()
+
+	// Reapply sorting to maintain sort order after data refresh
+	m.applySorting()
 
 	m.filterType = msg.FilterType
 	m.nodeID = msg.NodeID
@@ -468,8 +538,12 @@ func (m *Model) setRenderItem() {
 				floor = 15
 			case 6: // PORTS
 				floor = 8
-			case 7, 8: // CREATED, UPDATED
+			case 7, 8: // CREATED, UPDATED - need extra space for sort arrows
 				floor = 8
+				// If this column has a sort arrow, ensure we have room for it
+				if (i == 7 && m.sortField == SortByCreated) || (i == 8 && m.sortField == SortByUpdated) {
+					floor = 10
+				}
 			}
 			if hw > floor {
 				minCols[i] = hw
@@ -768,10 +842,12 @@ func GetServicesHelpContent() []helpview.HelpCategory {
 		{
 			Title: "View",
 			Items: []helpview.HelpItem{
-				{Keys: "<shift+n>", Description: "Order by Name (todo)"},
-				{Keys: "<shift+m>", Description: "Order by Mode (todo)"},
-				{Keys: "<shift+r>", Description: "Order by Replicas (todo)"},
-				{Keys: "<shift+i>", Description: "Order by Image (todo)"},
+				{Keys: "<shift+n>", Description: "Order by Name"},
+				{Keys: "<shift+s>", Description: "Order by Status"},
+				{Keys: "<shift+i>", Description: "Order by Image"},
+				{Keys: "<shift+p>", Description: "Order by Ports"},
+				{Keys: "<shift+c>", Description: "Order by Created"},
+				{Keys: "<shift+u>", Description: "Order by Updated"},
 			},
 		},
 		{
@@ -784,4 +860,77 @@ func GetServicesHelpContent() []helpview.HelpCategory {
 			},
 		},
 	}
+}
+
+// applySorting applies the current sort configuration to the filtered list
+func (m *Model) applySorting() {
+	if len(m.List.Filtered) == 0 {
+		return
+	}
+
+	// Remember cursor position
+	cursorService := ""
+	if m.List.Cursor < len(m.List.Filtered) {
+		cursorService = m.List.Filtered[m.List.Cursor].ServiceName
+	}
+
+	// Sort the filtered list
+	switch m.sortField {
+	case SortByName:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.List.Filtered[i].ServiceName < m.List.Filtered[j].ServiceName
+			}
+			return m.List.Filtered[i].ServiceName > m.List.Filtered[j].ServiceName
+		})
+	case SortByStatus:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.List.Filtered[i].Status < m.List.Filtered[j].Status
+			}
+			return m.List.Filtered[i].Status > m.List.Filtered[j].Status
+		})
+	case SortByImage:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.List.Filtered[i].Image < m.List.Filtered[j].Image
+			}
+			return m.List.Filtered[i].Image > m.List.Filtered[j].Image
+		})
+	case SortByPorts:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.List.Filtered[i].Ports < m.List.Filtered[j].Ports
+			}
+			return m.List.Filtered[i].Ports > m.List.Filtered[j].Ports
+		})
+	case SortByCreated:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.List.Filtered[i].CreatedAt.Before(m.List.Filtered[j].CreatedAt)
+			}
+			return m.List.Filtered[i].CreatedAt.After(m.List.Filtered[j].CreatedAt)
+		})
+	case SortByUpdated:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.List.Filtered[i].UpdatedAt.Before(m.List.Filtered[j].UpdatedAt)
+			}
+			return m.List.Filtered[i].UpdatedAt.After(m.List.Filtered[j].UpdatedAt)
+		})
+	}
+
+	// Restore cursor position to previously selected item
+	if cursorService != "" {
+		for i, s := range m.List.Filtered {
+			if s.ServiceName == cursorService {
+				m.List.Cursor = i
+				return
+			}
+		}
+	}
+
+	// If previous item not found, reset cursor to 0
+	m.List.Cursor = 0
+	m.List.Viewport.GotoTop()
 }

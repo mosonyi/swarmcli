@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
@@ -149,6 +150,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.configsList.Items = items
 		m.setRenderItem()
 		m.configsList.ApplyFilter()
+		m.applySorting()
 
 		m.state = stateReady
 		l().Info("ConfigsView: Config list updated (used status pending)")
@@ -570,6 +572,72 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			cfg := m.selectedConfig()
 			l().Infof("Inspect key pressed for config: %s", cfg)
 			return inspectRawConfigCmd(m.selectedConfig())
+
+		case "N":
+			if m.sortField == SortByName {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByName
+				m.sortAscending = true
+			}
+			m.applySorting()
+			m.configsList.Viewport.SetContent(m.configsList.View())
+			return nil
+
+		case "I":
+			if m.sortField == SortByID {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByID
+				m.sortAscending = true
+			}
+			m.applySorting()
+			m.configsList.Viewport.SetContent(m.configsList.View())
+			return nil
+
+		case "U":
+			if m.sortField == SortByUsed {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByUsed
+				m.sortAscending = true
+			}
+			m.applySorting()
+			m.configsList.Viewport.SetContent(m.configsList.View())
+			return nil
+
+		case "C":
+			if m.sortField == SortByCreated {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByCreated
+				m.sortAscending = true
+			}
+			m.applySorting()
+			m.configsList.Viewport.SetContent(m.configsList.View())
+			return nil
+
+		case "D":
+			if m.sortField == SortByUpdated {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByUpdated
+				m.sortAscending = true
+			}
+			m.applySorting()
+			m.configsList.Viewport.SetContent(m.configsList.View())
+			return nil
+
+		case "L":
+			if m.sortField == SortByLabels {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByLabels
+				m.sortAscending = true
+			}
+			m.applySorting()
+			m.configsList.Viewport.SetContent(m.configsList.View())
+			return nil
 		default:
 			// Let FilterableList handle navigation keys (up/down/pgup/pgdown)
 			m.configsList.HandleKey(msg)
@@ -618,8 +686,8 @@ func (m *Model) setRenderItem() {
 
 		// Ensure CREATED and UPDATED columns have at least 19 chars
 		minTime := 19
-		// current sum of last two
-		cur := colWidths[4] + colWidths[5]
+		// current sum of created + updated columns
+		cur := colWidths[3] + colWidths[4]
 		if cur < 2*minTime {
 			deficit := 2*minTime - cur
 			// steal space from earlier cols (prefer NAME then ID)
@@ -637,11 +705,11 @@ func (m *Model) setRenderItem() {
 				}
 			}
 			// recompute last two to have minTime each if possible
+			if colWidths[3] < minTime {
+				colWidths[3] = minTime
+			}
 			if colWidths[4] < minTime {
 				colWidths[4] = minTime
-			}
-			if colWidths[5] < minTime {
-				colWidths[5] = minTime
 			}
 		}
 
@@ -1117,9 +1185,12 @@ func GetConfigsHelpContent() []helpview.HelpCategory {
 		{
 			Title: "View",
 			Items: []helpview.HelpItem{
-				{Keys: "<shift+n>", Description: "Order by Name (todo)"},
-				{Keys: "<shift+c>", Description: "Order by Created (todo)"},
-				{Keys: "<shift+u>", Description: "Order by Updated (todo)"},
+				{Keys: "<shift+n>", Description: "Order by Name"},
+				{Keys: "<shift+i>", Description: "Order by ID"},
+				{Keys: "<shift+u>", Description: "Order by Config Used"},
+				{Keys: "<shift+c>", Description: "Order by Created"},
+				{Keys: "<shift+d>", Description: "Order by Updated"},
+				{Keys: "<shift+l>", Description: "Order by Labels"},
 			},
 		},
 		{
@@ -1132,4 +1203,85 @@ func GetConfigsHelpContent() []helpview.HelpCategory {
 			},
 		},
 	}
+}
+
+// applySorting applies the current sort configuration to the filtered list
+func (m *Model) applySorting() {
+	if len(m.configsList.Filtered) == 0 {
+		return
+	}
+
+	// Remember cursor position
+	cursorID := ""
+	if m.configsList.Cursor < len(m.configsList.Filtered) {
+		cursorID = m.configsList.Filtered[m.configsList.Cursor].ID
+	}
+
+	// Sort the filtered list
+	switch m.sortField {
+	case SortByName:
+		sort.Slice(m.configsList.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.configsList.Filtered[i].Name < m.configsList.Filtered[j].Name
+			}
+			return m.configsList.Filtered[i].Name > m.configsList.Filtered[j].Name
+		})
+	case SortByID:
+		sort.Slice(m.configsList.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.configsList.Filtered[i].ID < m.configsList.Filtered[j].ID
+			}
+			return m.configsList.Filtered[i].ID > m.configsList.Filtered[j].ID
+		})
+	case SortByUsed:
+		sort.Slice(m.configsList.Filtered, func(i, j int) bool {
+			// Unknown values treated as false but keep stable ordering via name
+			if m.sortAscending {
+				if m.configsList.Filtered[i].Used == m.configsList.Filtered[j].Used {
+					return m.configsList.Filtered[i].Name < m.configsList.Filtered[j].Name
+				}
+				return !m.configsList.Filtered[i].Used && m.configsList.Filtered[j].Used
+			}
+			if m.configsList.Filtered[i].Used == m.configsList.Filtered[j].Used {
+				return m.configsList.Filtered[i].Name < m.configsList.Filtered[j].Name
+			}
+			return m.configsList.Filtered[i].Used && !m.configsList.Filtered[j].Used
+		})
+	case SortByCreated:
+		sort.Slice(m.configsList.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.configsList.Filtered[i].CreatedAt.Before(m.configsList.Filtered[j].CreatedAt)
+			}
+			return m.configsList.Filtered[i].CreatedAt.After(m.configsList.Filtered[j].CreatedAt)
+		})
+	case SortByUpdated:
+		sort.Slice(m.configsList.Filtered, func(i, j int) bool {
+			if m.sortAscending {
+				return m.configsList.Filtered[i].UpdatedAt.Before(m.configsList.Filtered[j].UpdatedAt)
+			}
+			return m.configsList.Filtered[i].UpdatedAt.After(m.configsList.Filtered[j].UpdatedAt)
+		})
+	case SortByLabels:
+		sort.Slice(m.configsList.Filtered, func(i, j int) bool {
+			iLabels := formatLabels(m.configsList.Filtered[i].Labels)
+			jLabels := formatLabels(m.configsList.Filtered[j].Labels)
+			if m.sortAscending {
+				return iLabels < jLabels
+			}
+			return iLabels > jLabels
+		})
+	}
+
+	// Restore cursor position
+	if cursorID != "" {
+		for i, c := range m.configsList.Filtered {
+			if c.ID == cursorID {
+				m.configsList.Cursor = i
+				return
+			}
+		}
+	}
+
+	m.configsList.Cursor = 0
+	m.configsList.Viewport.GotoTop()
 }

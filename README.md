@@ -50,12 +50,19 @@ If you believe in Docker Swarm and want to support its ecosystem, we’d love yo
 
 ---
 
+## ✅ Features
+
+- ✅ Service/task viewer with sorting and filtering
+- ✅ Node viewer with status monitoring
+- ✅ Container logs viewer
+- ✅ Swarm secrets and configs UI with create/edit/rotate
+- ✅ Docker context switching
+- ✅ Stack management and deployment
+
 ## 🔧 Coming Soon
 
-- Service/task viewer
-- Node status dashboard
-- Container logs and shell access
-- Swarm secrets and configs UI
+- Enhanced node status dashboard
+- Shell access to containers
 - Overlay network inspection
 
 ---
