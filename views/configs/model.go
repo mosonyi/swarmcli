@@ -40,9 +40,10 @@ type Model struct {
 	createDialogActive bool
 	createDialogStep   string // "source", "details-file", "details-inline"
 	createDialogError  string // error message to display
-	createInputFocus   int    // 0 = name, 1 = file path
+	createInputFocus   int    // 0 = name, 1 = file path, 2 = labels
 	createNameInput    textinput.Model
 	createFileInput    textinput.Model // For typing file path
+	createLabelsInput  textinput.Model // For typing labels (a=b,c=d)
 	createConfigSource string          // "file" or "inline"
 	createConfigPath   string          // selected file path from browser
 	createConfigData   string
@@ -62,6 +63,9 @@ type Model struct {
 
 	// Spinner for slow-used-status indicator
 	spinner int
+
+	// Horizontal scroll offset for labels column
+	labelsScrollOffset int
 }
 
 type state int
@@ -99,17 +103,25 @@ func New(width, height int) *Model {
 	fileInput.CharLimit = 512
 	fileInput.Width = 50
 
+	// Initialize labels input for create dialog
+	labelsInput := textinput.New()
+	labelsInput.Placeholder = "key1=value1,key2=value2"
+	labelsInput.Prompt = "Labels: "
+	labelsInput.CharLimit = 512
+	labelsInput.Width = 50
+
 	return &Model{
-		configsList:     list,
-		width:           width,
-		height:          height,
-		firstResize:     true,
-		state:           stateLoading,
-		visible:         true,
-		confirmDialog:   confirmdialog.New(0, 0),
-		loadingView:     loading.New(width, height, false, "Loading Docker configs..."),
-		createNameInput: nameInput,
-		createFileInput: fileInput,
+		configsList:       list,
+		width:             width,
+		height:            height,
+		firstResize:       true,
+		state:             stateLoading,
+		visible:           true,
+		confirmDialog:     confirmdialog.New(0, 0),
+		loadingView:       loading.New(width, height, false, "Loading Docker configs..."),
+		createNameInput:   nameInput,
+		createFileInput:   fileInput,
+		createLabelsInput: labelsInput,
 	}
 }
 

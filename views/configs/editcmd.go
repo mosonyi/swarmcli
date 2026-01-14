@@ -71,21 +71,11 @@ func editWithTempFileCmd(baseName string, initialData []byte, onDone func([]byte
 	})
 }
 
-// createConfigInEditorCmd creates a tmp file and opens the editor to create a new config.
-// If existingData is provided, it will be pre-populated in the editor.
-func createConfigInEditorCmd(name string, existingData []byte) tea.Cmd {
-	return editWithTempFileCmd(name, existingData,
+// openEditorForContentCmd opens the user's editor to edit config content and returns it to the create dialog.
+func openEditorForContentCmd(initialData string) tea.Cmd {
+	return editWithTempFileCmd("config", []byte(initialData),
 		func(newData []byte) tea.Msg {
-			// Create the new config
-			ctx := context.Background()
-			newCfg, err := docker.CreateConfig(ctx, name, newData)
-			if err != nil {
-				l().Infoln("CreateConfig error:", err)
-				// Return error with data so we can retry with corrected name
-				return editorContentReadyMsg{Name: name, Data: newData, Err: err}
-			}
-			l().Infoln("Created new config:", newCfg.Spec.Name)
-			return configCreatedMsg{Config: newCfg}
+			return editorContentMsg{Content: string(newData)}
 		},
 		func(err error) tea.Msg {
 			return configCreateErrorMsg{err}

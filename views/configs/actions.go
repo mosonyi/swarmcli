@@ -249,9 +249,9 @@ func loadFilesCmd(dirPath string) tea.Cmd {
 	}
 }
 
-func createConfigFromFileCmd(name, filePath string) tea.Cmd {
+func createConfigFromFileCmd(name, filePath string, labels map[string]string) tea.Cmd {
 	return func() tea.Msg {
-		l().Infof("Creating config %s from file %s", name, filePath)
+		l().Infof("Creating config %s from file %s (labels=%v)", name, filePath, labels)
 
 		// Read file content
 		data, err := os.ReadFile(filePath)
@@ -262,7 +262,7 @@ func createConfigFromFileCmd(name, filePath string) tea.Cmd {
 
 		// Create the config
 		ctx := context.Background()
-		newCfg, err := docker.CreateConfig(ctx, name, data)
+		newCfg, err := docker.CreateConfig(ctx, name, data, labels)
 		if err != nil {
 			l().Errorf("Failed to create config %s: %v", name, err)
 			// Return error with file path so we can retry with corrected name
@@ -270,6 +270,22 @@ func createConfigFromFileCmd(name, filePath string) tea.Cmd {
 		}
 
 		l().Infof("Successfully created config %s from file", name)
+		return configCreatedMsg{Config: newCfg}
+	}
+}
+
+func createConfigFromContentCmd(name string, content []byte, labels map[string]string) tea.Cmd {
+	return func() tea.Msg {
+		l().Infof("Creating config %s from inline content (labels=%v)", name, labels)
+
+		ctx := context.Background()
+		newCfg, err := docker.CreateConfig(ctx, name, content, labels)
+		if err != nil {
+			l().Errorf("Failed to create config %s: %v", name, err)
+			return configCreateErrorMsg{fmt.Errorf("failed to create config: %w", err)}
+		}
+
+		l().Infof("Successfully created config %s", name)
 		return configCreatedMsg{Config: newCfg}
 	}
 }
