@@ -268,7 +268,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			},
 		}
 
+		// Important: keep Items as a non-nil slice even when empty.
+		// This ensures FilterableList.VisibleContent uses its padded empty-state rendering.
 		m.usedByList.Items = msg.UsedBy
+		if m.usedByList.Items == nil {
+			m.usedByList.Items = []usedByItem{}
+		}
 		m.usedByList.Viewport.Width = vp.Width
 		m.usedByList.Viewport.Height = vp.Height
 		m.usedByList.ApplyFilter()
