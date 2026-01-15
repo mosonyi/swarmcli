@@ -58,12 +58,14 @@ If you believe in Docker Swarm and want to support its ecosystem, we’d love yo
 - ✅ Swarm secrets and configs UI with create/edit/rotate
 - ✅ Docker context switching
 - ✅ Stack management and deployment
+- ✅ Network viewer with inspect and used-by services
 
 ## 🔧 Coming Soon
 
 - Enhanced node status dashboard
 - Shell access to containers
 - Overlay network inspection
+- Network create and connect operations
 
 ---
 

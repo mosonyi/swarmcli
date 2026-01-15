@@ -36,6 +36,10 @@ func LoadServicesForView(filterType FilterType, nodeID, stackName string) (entri
 	case StackFilter:
 		entries = docker.LoadStackServices(stackName)
 		title = "Services in Stack: " + stackName
+	case NoStackFilter:
+		// docker marks services without a stack namespace as stack "-".
+		entries = docker.LoadStackServices("-")
+		title = "Services (no stack)"
 	default: // All services
 		entries = docker.LoadStackServices("")
 		title = "All Services"

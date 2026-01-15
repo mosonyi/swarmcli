@@ -486,6 +486,18 @@ func (m *Model) SetContent(msg Msg) {
 	// Reapply sorting to maintain sort order after data refresh
 	m.applySorting()
 
+	// If we were navigated here with a target service to select, select it now
+	// (after filtering/sorting so indices match what the user sees).
+	if m.pendingSelectServiceName != "" {
+		for i := range m.List.Filtered {
+			if m.List.Filtered[i].ServiceName == m.pendingSelectServiceName {
+				m.List.Cursor = i
+				break
+			}
+		}
+		m.pendingSelectServiceName = ""
+	}
+
 	m.filterType = msg.FilterType
 	m.nodeID = msg.NodeID
 	m.stackName = msg.StackName
