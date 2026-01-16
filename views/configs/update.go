@@ -366,7 +366,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			},
 		}
 
+		// Important: keep Items as a non-nil slice even when empty.
+		// If Items is nil, FilterableList.VisibleContent bypasses its padded empty-state,
+		// which can cause the framed view to render too few lines and visually "break"
+		// the header/frame.
 		m.usedByList.Items = msg.UsedBy
+		if m.usedByList.Items == nil {
+			m.usedByList.Items = []usedByItem{}
+		}
 		// Keep viewport sizes in sync
 		m.usedByList.Viewport.Width = vp.Width
 		m.usedByList.Viewport.Height = vp.Height

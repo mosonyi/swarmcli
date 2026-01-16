@@ -4,6 +4,7 @@ import (
 	_ "swarmcli/commands/command"
 	_ "swarmcli/commands/command/docker"
 	_ "swarmcli/commands/command/docker/config"
+	_ "swarmcli/commands/command/docker/network"
 	_ "swarmcli/commands/command/docker/node"
 	_ "swarmcli/commands/command/docker/secret"
 )

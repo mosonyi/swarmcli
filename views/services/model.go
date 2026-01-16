@@ -20,6 +20,7 @@ type FilterType int
 const (
 	NodeFilter FilterType = iota
 	StackFilter
+	NoStackFilter
 	AllFilter
 )
 
@@ -53,6 +54,9 @@ type Model struct {
 	nodeID     string
 	stackName  string
 
+	// Optional one-shot selection after navigation.
+	pendingSelectServiceName string
+
 	confirmDialog *confirmdialog.Model
 	scaleDialog   *scaledialog.Model
 
@@ -69,6 +73,10 @@ type Model struct {
 	// Sorting
 	sortField     SortField
 	sortAscending bool // true for ascending, false for descending
+}
+
+func (m *Model) SetPendingSelectServiceName(serviceName string) {
+	m.pendingSelectServiceName = serviceName
 }
 
 func New(width, height int) *Model {

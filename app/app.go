@@ -9,6 +9,7 @@ import (
 	inspectview "swarmcli/views/inspect"
 	loadingview "swarmcli/views/loading"
 	logsview "swarmcli/views/logs"
+	networksview "swarmcli/views/networks"
 	nodesview "swarmcli/views/nodes"
 	revealsecretview "swarmcli/views/revealsecret"
 	secretsview "swarmcli/views/secrets"
@@ -133,8 +134,11 @@ func Init() {
 
 		data, _ := payload.(map[string]interface{})
 
-		var filterType servicesview.FilterType
+		filterType := servicesview.AllFilter
 		var nodeID, stackName string
+		var serviceName string
+		var selectServiceName string
+		var noStack bool
 
 		if n, ok := data["nodeID"].(string); ok {
 			filterType = servicesview.NodeFilter
@@ -143,6 +147,26 @@ func Init() {
 		if s, ok := data["stackName"].(string); ok {
 			filterType = servicesview.StackFilter
 			stackName = s
+		}
+		if b, ok := data["noStack"].(bool); ok {
+			noStack = b
+		}
+		if noStack {
+			filterType = servicesview.NoStackFilter
+			stackName = ""
+			nodeID = ""
+		}
+		if s, ok := data["serviceName"].(string); ok {
+			serviceName = s
+		}
+		if s, ok := data["selectServiceName"].(string); ok {
+			selectServiceName = s
+		}
+		if serviceName != "" {
+			v.List.Query = serviceName
+		}
+		if selectServiceName != "" {
+			v.SetPendingSelectServiceName(selectServiceName)
 		}
 
 		entries, title := servicesview.LoadServicesForView(filterType, nodeID, stackName)
@@ -163,5 +187,10 @@ func Init() {
 		stackName, _ := payload.(string)
 		model := tasksview.New(w, h, stackName)
 		return model, model.OnEnter()
+	})
+
+	registerView(networksview.ViewName, func(w, h int, payload any) (view.View, tea.Cmd) {
+		model := networksview.New(w, h)
+		return model, model.Init()
 	})
 }
