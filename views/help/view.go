@@ -91,21 +91,24 @@ func (m *Model) renderCategorizedHelp() string {
 				styledDesc := descStyle.Render(item.Description)
 
 				// Combine and pad to column width
-				// We need to account for visual width without ANSI codes for padding
+				// Use lipgloss.Width for visual width calculation (handles Unicode properly)
 				plainText := fmt.Sprintf("%-*s %s", maxKeyWidth, item.Keys, item.Description)
-				if len(plainText) > colWidth {
+				plainTextWidth := lipgloss.Width(plainText)
+				
+				if plainTextWidth > colWidth {
 					// Truncate description if too long
 					descWidth := colWidth - maxKeyWidth - 1
 					if descWidth > 0 && len(item.Description) > descWidth {
 						styledDesc = descStyle.Render(item.Description[:descWidth-3] + "...")
 						plainText = fmt.Sprintf("%-*s %s", maxKeyWidth, item.Keys, item.Description[:descWidth-3]+"...")
+						plainTextWidth = lipgloss.Width(plainText)
 					}
 				}
 
 				// Now render styled version maintaining the same width
 				styledLine := styledKey + " " + styledDesc
 				// Add padding to match column width
-				paddingNeeded := colWidth - len(plainText)
+				paddingNeeded := colWidth - plainTextWidth
 				if paddingNeeded > 0 {
 					styledLine += strings.Repeat(" ", paddingNeeded)
 				}
