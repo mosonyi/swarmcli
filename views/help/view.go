@@ -94,7 +94,7 @@ func (m *Model) renderCategorizedHelp() string {
 				// Use lipgloss.Width for visual width calculation (handles Unicode properly)
 				plainText := fmt.Sprintf("%-*s %s", maxKeyWidth, item.Keys, item.Description)
 				plainTextWidth := lipgloss.Width(plainText)
-				
+
 				if plainTextWidth > colWidth {
 					// Truncate description if too long
 					descWidth := colWidth - maxKeyWidth - 1
