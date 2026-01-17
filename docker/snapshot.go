@@ -160,6 +160,8 @@ func (s SwarmSnapshot) ToNodeEntries() []NodeEntry {
 		if avail == "" {
 			avail = "active"
 		}
+		// A node is a manager if either ManagerStatus is populated OR the role is explicitly set to manager
+		isManager := n.ManagerStatus != nil || n.Spec.Role == swarm.NodeRoleManager
 		nodes[i] = NodeEntry{
 			ID:           n.ID,
 			Version:      ver,
@@ -167,7 +169,7 @@ func (s SwarmSnapshot) ToNodeEntries() []NodeEntry {
 			Role:         string(n.Spec.Role),
 			State:        string(n.Status.State),
 			Availability: avail,
-			Manager:      n.ManagerStatus != nil,
+			Manager:      isManager,
 			Addr:         n.Status.Addr,
 			Labels:       n.Spec.Labels,
 		}
