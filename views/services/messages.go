@@ -16,7 +16,7 @@ type Msg struct {
 
 type TickMsg time.Time
 
-const PollInterval = 5 * time.Second
+const PollInterval = 2 * time.Second
 
 // RestartErrorMsg is sent when a service restart fails
 type RestartErrorMsg struct {
