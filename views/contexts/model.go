@@ -185,33 +185,16 @@ func (m *Model) SetContexts(contexts []docker.ContextInfo) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Preserve cursor position if possible
-	oldCursor := m.cursor
+	// Remember the name of the currently selected context (if any)
+	var cursorName string
+	if m.List.Cursor >= 0 && m.List.Cursor < len(m.List.Filtered) {
+		cursorName = m.List.Filtered[m.List.Cursor].Name
+	}
+
 	m.contexts = contexts
-
-	// If this is the first load (cursor at 0 and contexts were empty), set to current
-	if oldCursor == 0 && len(contexts) > 0 {
-		for i, ctx := range contexts {
-			if ctx.Current {
-				m.cursor = i
-				break
-			}
-		}
-	}
-
-	// Otherwise keep cursor position, but validate bounds
-	if m.cursor >= len(m.contexts) {
-		m.cursor = len(m.contexts) - 1
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
 
 	// Update the FilterableList backing items and apply filter
 	m.List.Items = m.contexts
-	// Keep FilterableList cursor in sync with our cursor so keyboard navigation
-	// that manipulates m.cursor affects the list selection and visible offset.
-	m.List.Cursor = m.cursor
 	// Ensure the list viewport matches the current view size so the
 	// content fills the frame immediately when contexts arrive.
 	if m.viewport.Width > 0 {
@@ -230,37 +213,56 @@ func (m *Model) SetContexts(contexts []docker.ContextInfo) {
 	// that uses the viewport's content (e.g., during initial render)
 	// doesn't keep showing the loading placeholder.
 	m.List.Viewport.SetContent(m.List.View())
+
+	// Restore cursor to the context with the same name, if possible
+	found := false
+	if cursorName != "" {
+		for i, ctx := range m.List.Filtered {
+			if ctx.Name == cursorName {
+				m.List.Cursor = i
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		if len(m.List.Filtered) > 0 {
+			m.List.Cursor = 0
+		} else {
+			m.List.Cursor = 0
+		}
+	}
+	// Synchronize m.cursor from m.List.Cursor for legacy accessors
+	m.cursor = m.List.Cursor
 }
 
 func (m *Model) GetCursor() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.cursor
+	return m.List.Cursor
 }
 
 func (m *Model) MoveCursor(delta int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.cursor += delta
-	if m.cursor < 0 {
-		m.cursor = 0
+	m.List.Cursor += delta
+	if m.List.Cursor < 0 {
+		m.List.Cursor = 0
 	}
-	if m.cursor >= len(m.contexts) {
-		m.cursor = len(m.contexts) - 1
+	if m.List.Cursor >= len(m.contexts) {
+		m.List.Cursor = len(m.contexts) - 1
 	}
-	// Mirror to internal FilterableList cursor and ensure visible
-	if m.List.Cursor != m.cursor {
-		m.List.Cursor = m.cursor
-		// ApplyFilter will keep the cursor in-bounds and update viewport offset
-		m.List.ApplyFilter()
-	}
+	// ApplyFilter will keep the cursor in-bounds and update viewport offset
+	m.List.ApplyFilter()
+	// Synchronize m.cursor from m.List.Cursor for legacy accessors
+	m.cursor = m.List.Cursor
 }
 
 func (m *Model) GetSelectedContext() (docker.ContextInfo, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.cursor >= 0 && m.cursor < len(m.contexts) {
-		return m.contexts[m.cursor], true
+	if m.List.Cursor >= 0 && m.List.Cursor < len(m.contexts) {
+		return m.contexts[m.List.Cursor], true
 	}
 	return docker.ContextInfo{}, false
 }

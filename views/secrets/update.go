@@ -795,7 +795,8 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 				return nil
 			}
 		case "f", "F":
-			if m.createInputFocus == 1 {
+			switch m.createInputFocus {
+			case 1:
 				m.createDialogActive = false
 				m.fileBrowserActive = true
 				homeDir, _ := os.UserHomeDir()
@@ -803,8 +804,17 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 					homeDir = "/"
 				}
 				return loadFilesCmd(homeDir)
+			case 0:
+				var cmd tea.Cmd
+				m.createNameInput, cmd = m.createNameInput.Update(msg)
+				return cmd
+			case 2:
+				var cmd tea.Cmd
+				m.createLabelsInput, cmd = m.createLabelsInput.Update(msg)
+				return cmd
+			default:
+				return nil
 			}
-			// For other focus positions, fall through to default handler
 		case "enter":
 			if m.createDialogError != "" {
 				m.createDialogError = ""
@@ -911,13 +921,22 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 				m.createDialogActive = false
 				m.createNameInput.Blur()
 				return openEditorForContentCmd(m.createSecretData)
-			default:
+			case 0:
 				var cmd tea.Cmd
 				m.createNameInput, cmd = m.createNameInput.Update(msg)
 				if m.createDialogError != "" {
 					m.createDialogError = ""
 				}
 				return cmd
+			case 2:
+				var cmd tea.Cmd
+				m.createLabelsInput, cmd = m.createLabelsInput.Update(msg)
+				if m.createDialogError != "" {
+					m.createDialogError = ""
+				}
+				return cmd
+			default:
+				return nil
 			}
 		case "enter":
 			if m.createDialogError != "" {

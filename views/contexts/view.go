@@ -68,18 +68,23 @@ func (m *Model) View() string {
 	// We'll render the column header in the frame header slot so it
 	// appears directly under the top border and aligns with content.
 	headerRendered := ui.FrameHeaderStyle.Render(header)
+	footerRendered := ""
 
-	// Use FilterableList for the contexts content. Keep its viewport
-	// size in sync with the containing viewport and compute padding
-	// so the framed box fills the area.
+	// Compute consistent frame sizing (same helper/pattern as stacks/configs).
+	frame := ui.ComputeFrameDimensions(
+		m.viewport.Width,
+		m.viewport.Height,
+		m.viewport.Width,
+		m.viewport.Height,
+		headerRendered,
+		footerRendered,
+	)
+
+	// Use FilterableList for the contexts content. Keep its viewport size
+	// in sync with the inner content area (DesiredContentLines), otherwise
+	// the list can effectively scroll past the top and “hide” the first rows.
 	m.List.Viewport.Width = width
-	// Use the viewport height directly - it's already adjusted by the app
-	// for systeminfo header and breadcrumb
-	frameHeight := m.viewport.Height
-	if frameHeight <= 0 {
-		frameHeight = 20
-	}
-	m.List.Viewport.Height = frameHeight
+	m.List.Viewport.Height = frame.DesiredContentLines
 
 	// Compute column widths as five equal percentage chunks so columns
 	// start at 0%, 20%, 40%, 60% and 80% of the content width.
@@ -180,15 +185,13 @@ func (m *Model) View() string {
 	// "No items found." before the async load completes.
 	var content string
 	if m.IsLoading() {
-		// Show an explicit loading line inside the framed box so users
-		// see progress immediately instead of a blank area.
 		loadingLine := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("Loading contexts...")
-		m.List.Viewport.SetContent(loadingLine)
-		content = m.List.Viewport.View()
+		content = ui.TrimOrPadContentToLines(loadingLine, frame.DesiredContentLines)
 	} else {
 		// Column header displayed in the frame header slot. Build it here
 		// so it aligns exactly with the row layout.
-		listContent := m.List.View()
+		// VisibleContent returns exactly DesiredContentLines and keeps the cursor visible.
+		listContent := m.List.VisibleContent(frame.DesiredContentLines)
 
 		// Header: reserve two leading spaces so the NAME label lines up
 		// with the name text that starts after the current marker and a space.
@@ -238,7 +241,6 @@ func (m *Model) View() string {
 
 		content = listContent
 	}
-	frameWidth := width + 4
 
 	// Overlay dialogs on content BEFORE framing
 	if m.certFileBrowserActive {
@@ -269,8 +271,8 @@ func (m *Model) View() string {
 		title,
 		headerRendered,
 		content,
-		"",
-		frameWidth,
+		footerRendered,
+		frame.FrameWidth,
 	)
 
 	return rendered

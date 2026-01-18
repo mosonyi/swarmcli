@@ -18,24 +18,28 @@ func (m *Model) View() string {
 		return m.renderCategorizedHelp()
 	}
 
-	// Legacy simple help view
-	header := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#00d7ff")).
-		Render("Available Commands")
+	// Command help (":help") should render like every other view: full-width framed box.
+	header := ui.FrameHeaderStyle.Render("Available Commands")
+	footer := ui.StatusBarStyle.Render("Press <esc> to go back")
 
-	body := m.content
-	footer := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#808080")).
-		Render("[press q or esc to go back]")
-
-	return ui.BorderStyle.Render(
-		fmt.Sprintf("%s\n\n%s\n\n%s", header, body, footer),
+	frame := ui.ComputeFrameDimensions(
+		m.Viewable.Width,
+		m.Viewable.Height,
+		m.width,
+		m.height,
+		header,
+		footer,
 	)
+
+	viewportContent := ui.TrimOrPadContentToLines(m.Viewable.View(), frame.DesiredContentLines)
+	return ui.RenderFramedBox("Help", header, viewportContent, footer, frame.FrameWidth)
 }
 
 func (m *Model) renderCategorizedHelp() string {
 	width := m.Viewable.Width
+	if width <= 0 {
+		width = m.width
+	}
 	if width <= 0 {
 		width = 80
 	}
@@ -91,21 +95,24 @@ func (m *Model) renderCategorizedHelp() string {
 				styledDesc := descStyle.Render(item.Description)
 
 				// Combine and pad to column width
-				// We need to account for visual width without ANSI codes for padding
+				// Use lipgloss.Width for visual width calculation (handles Unicode properly)
 				plainText := fmt.Sprintf("%-*s %s", maxKeyWidth, item.Keys, item.Description)
-				if len(plainText) > colWidth {
+				plainTextWidth := lipgloss.Width(plainText)
+
+				if plainTextWidth > colWidth {
 					// Truncate description if too long
 					descWidth := colWidth - maxKeyWidth - 1
 					if descWidth > 0 && len(item.Description) > descWidth {
 						styledDesc = descStyle.Render(item.Description[:descWidth-3] + "...")
 						plainText = fmt.Sprintf("%-*s %s", maxKeyWidth, item.Keys, item.Description[:descWidth-3]+"...")
+						plainTextWidth = lipgloss.Width(plainText)
 					}
 				}
 
 				// Now render styled version maintaining the same width
 				styledLine := styledKey + " " + styledDesc
 				// Add padding to match column width
-				paddingNeeded := colWidth - len(plainText)
+				paddingNeeded := colWidth - plainTextWidth
 				if paddingNeeded > 0 {
 					styledLine += strings.Repeat(" ", paddingNeeded)
 				}
@@ -122,15 +129,15 @@ func (m *Model) renderCategorizedHelp() string {
 	// Combine header and content
 	fullContent := headerRow + "\n\n" + strings.Join(contentLines, "\n")
 
-	// Use same pattern as inspect
+	// Render with the shared frame sizing (same pattern as stacks/configs)
 	title := "Help"
 	header := ""
 	footer := ui.StatusBarStyle.Render("Press <esc> to go back")
 
 	frame := ui.ComputeFrameDimensions(
-		width,
+		m.Viewable.Width,
 		m.Viewable.Height,
-		width,
+		m.width,
 		m.height,
 		header,
 		footer,
