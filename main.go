@@ -9,7 +9,7 @@ import (
 
 // Version information, set by GoReleaser at build time
 var (
-	version = "v1.1.1"
+	version = "v1.2.0"
 	commit  = "none"
 	date    = "unknown"
 )
