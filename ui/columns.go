@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright © 2026 Eldara Tech
+
 package ui
 
 // DistributeColumns adjusts column widths to fit `totalWidth` after accounting
