@@ -24,6 +24,7 @@ type NodeEntry struct {
 	Manager      bool
 	Addr         string
 	Labels       map[string]string
+ 	ManagerStatus string // Leader, Reachable, Unreachable, or ""
 }
 
 // StackEntry is a lightweight representation of a Docker stack,
@@ -153,37 +154,47 @@ func GetOrRefreshSnapshot() (*SwarmSnapshot, error) {
 
 // ToNodeEntries converts the full nodes into display-friendly entries.
 func (s SwarmSnapshot) ToNodeEntries() []NodeEntry {
-	nodes := make([]NodeEntry, len(s.Nodes))
-	for i, n := range s.Nodes {
-		ver := "-"
-		if n.Description.Engine.EngineVersion != "" {
-			ver = n.Description.Engine.EngineVersion
-		}
-		avail := string(n.Spec.Availability)
-		if avail == "" {
-			avail = "active"
-		}
-		// A node is a manager if either ManagerStatus is populated OR the role is explicitly set to manager
-		isManager := n.ManagerStatus != nil || n.Spec.Role == swarm.NodeRoleManager
-		nodes[i] = NodeEntry{
-			ID:           n.ID,
-			Version:      ver,
-			Hostname:     n.Description.Hostname,
-			Role:         string(n.Spec.Role),
-			State:        string(n.Status.State),
-			Availability: avail,
-			Manager:      isManager,
-			Addr:         n.Status.Addr,
-			Labels:       n.Spec.Labels,
-		}
-	}
+       nodes := make([]NodeEntry, len(s.Nodes))
+       for i, n := range s.Nodes {
+	       ver := "-"
+	       if n.Description.Engine.EngineVersion != "" {
+		       ver = n.Description.Engine.EngineVersion
+	       }
+	       avail := string(n.Spec.Availability)
+	       if avail == "" {
+		       avail = "active"
+	       }
+	       // A node is a manager if either ManagerStatus is populated OR the role is explicitly set to manager
+	       isManager := n.ManagerStatus != nil || n.Spec.Role == swarm.NodeRoleManager
+	       managerStatus := ""
+		       if n.ManagerStatus != nil {
+			       if n.ManagerStatus.Leader {
+				       managerStatus = "Leader"
+			       } else {
+				       // Reachable/Unreachable
+				       managerStatus = string(n.ManagerStatus.Reachability)
+			       }
+		       }
+	       nodes[i] = NodeEntry{
+		       ID:           n.ID,
+		       Version:      ver,
+		       Hostname:     n.Description.Hostname,
+		       Role:         string(n.Spec.Role),
+		       State:        string(n.Status.State),
+		       Availability: avail,
+		       Manager:      isManager,
+		       Addr:         n.Status.Addr,
+		       Labels:       n.Spec.Labels,
+		       ManagerStatus: managerStatus,
+	       }
+       }
 
-	// 🔠 Sort alphabetically by hostname
-	sort.Slice(nodes, func(i, j int) bool {
-		return nodes[i].Hostname < nodes[j].Hostname
-	})
+       // 🔠 Sort alphabetically by hostname
+       sort.Slice(nodes, func(i, j int) bool {
+	       return nodes[i].Hostname < nodes[j].Hostname
+       })
 
-	return nodes
+       return nodes
 }
 
 // ToStackEntries aggregates services by stack name and produces StackEntry slices.

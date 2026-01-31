@@ -535,7 +535,7 @@ func (m *Model) setRenderItem() {
 		if width <= 0 {
 			width = 80
 		}
-		cols := 9
+		cols := 10
 		starts := make([]int, cols)
 		for i := 0; i < cols; i++ {
 			starts[i] = (i * width) / cols
@@ -555,7 +555,8 @@ func (m *Model) setRenderItem() {
 		if n.Manager {
 			manager = "yes"
 		}
-		labelsStr := formatLabelsWithScroll(n.Labels, m.labelsScrollOffset, colWidths[7])
+		mgrStatus := n.ManagerStatus
+		labelsStr := formatLabelsWithScroll(n.Labels, m.labelsScrollOffset, colWidths[9])
 		// Truncate ID so it fits the formatted field width (we render with
 		// a leading space and field width `colWidths[0]-1`). Ensure the
 		// final string length is <= colWidths[0]-1. If we need an ellipsis,
@@ -597,30 +598,32 @@ func (m *Model) setRenderItem() {
 			selBg := lipgloss.Color("63")
 			selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
 			// Preserve leading space for hostname when selected
-			return selStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s",
+			return selStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s",
 				colWidths[0]-1, idStr,
 				colWidths[1], n.Hostname,
 				colWidths[2], n.Role,
 				colWidths[3], n.State,
 				colWidths[4], n.Availability,
 				colWidths[5], manager,
-				colWidths[6], n.Version,
-				colWidths[7], n.Addr,
-				colWidths[8], labelsStr,
+				colWidths[6], mgrStatus,
+				colWidths[7], n.Version,
+				colWidths[8], n.Addr,
+				colWidths[9], labelsStr,
 			))
 		}
 
 		// Ensure the first column has a leading space to align with header
-		return itemStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s",
+		return itemStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s",
 			colWidths[0]-1, idStr,
 			colWidths[1], n.Hostname,
 			colWidths[2], n.Role,
 			colWidths[3], n.State,
 			colWidths[4], n.Availability,
 			colWidths[5], manager,
-			colWidths[6], n.Version,
-			colWidths[7], n.Addr,
-			colWidths[8], labelsStr,
+			colWidths[6], mgrStatus,
+			colWidths[7], n.Version,
+			colWidths[8], n.Addr,
+			colWidths[9], labelsStr,
 		))
 	}
 }

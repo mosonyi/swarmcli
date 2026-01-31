@@ -29,8 +29,8 @@ func (m *Model) View() string {
 	}
 
 	title := fmt.Sprintf("Nodes (%d total, %d manager%s)", total, managers, plural(managers))
-	// Compute proportional column widths (9 equal partitions) so header aligns with items
-	labels := []string{"ID", "HOSTNAME", "ROLE", "STATE", "Availability", "MANAGER", "VERSION", "ADDRESS", "LABELS"}
+	// Add Manager Status column
+	labels := []string{"ID", "HOSTNAME", "ROLE", "STATE", "Availability", "MANAGER", "MGR STATUS", "VERSION", "ADDRESS", "LABELS"}
 
 	// Add sort indicators to labels
 	if m.sortField == SortByHostname {
@@ -90,7 +90,7 @@ func (m *Model) View() string {
 			width = 80
 		}
 	}
-	cols := 9
+	cols := 10
 	starts := make([]int, cols)
 	for i := 0; i < cols; i++ {
 		starts[i] = (i * width) / cols
