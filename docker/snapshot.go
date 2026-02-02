@@ -15,15 +15,16 @@ import (
 )
 
 type NodeEntry struct {
-	ID           string
-	Version      string
-	Hostname     string
-	Role         string
-	State        string
-	Availability string
-	Manager      bool
-	Addr         string
-	Labels       map[string]string
+	ID            string
+	Version       string
+	Hostname      string
+	Role          string
+	State         string
+	Availability  string
+	Manager       bool
+	Addr          string
+	Labels        map[string]string
+	ManagerStatus string // Leader, Reachable, Unreachable, or ""
 }
 
 // StackEntry is a lightweight representation of a Docker stack,
@@ -165,16 +166,26 @@ func (s SwarmSnapshot) ToNodeEntries() []NodeEntry {
 		}
 		// A node is a manager if either ManagerStatus is populated OR the role is explicitly set to manager
 		isManager := n.ManagerStatus != nil || n.Spec.Role == swarm.NodeRoleManager
+		managerStatus := ""
+		if n.ManagerStatus != nil {
+			if n.ManagerStatus.Leader {
+				managerStatus = "Leader"
+			} else {
+				// Reachable/Unreachable
+				managerStatus = string(n.ManagerStatus.Reachability)
+			}
+		}
 		nodes[i] = NodeEntry{
-			ID:           n.ID,
-			Version:      ver,
-			Hostname:     n.Description.Hostname,
-			Role:         string(n.Spec.Role),
-			State:        string(n.Status.State),
-			Availability: avail,
-			Manager:      isManager,
-			Addr:         n.Status.Addr,
-			Labels:       n.Spec.Labels,
+			ID:            n.ID,
+			Version:       ver,
+			Hostname:      n.Description.Hostname,
+			Role:          string(n.Spec.Role),
+			State:         string(n.Status.State),
+			Availability:  avail,
+			Manager:       isManager,
+			Addr:          n.Status.Addr,
+			Labels:        n.Spec.Labels,
+			ManagerStatus: managerStatus,
 		}
 	}
 
