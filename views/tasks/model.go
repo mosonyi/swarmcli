@@ -49,7 +49,9 @@ func New(width, height int, stackName string) *Model {
 func (m *Model) Init() tea.Cmd {
 	return nil
 }
-
+func (m *Model) HasErrors() bool {
+	return false
+}
 func (m *Model) Name() string {
 	return ViewName
 }

@@ -4,6 +4,7 @@
 package main
 
 import (
+	"runtime/debug"
 	"swarmcli/app"
 	swarmlog "swarmcli/utils/log"
 
@@ -28,6 +29,9 @@ func main() {
 	p := tea.NewProgram(app.InitialModel(), tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {
+		// Log full stack trace to aid debugging panic-causes inside the TUI
+		swarmlog.L().Errorf("program exited with error: %v", err)
+		swarmlog.L().Errorf("stack trace:\n%s", string(debug.Stack()))
 		swarmlog.L().Fatal(err)
 	}
 }

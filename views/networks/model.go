@@ -335,3 +335,7 @@ func (m *Model) OnExit() tea.Cmd {
 	l().Info("NetworksView: OnExit() - view is no longer visible")
 	return nil
 }
+
+func (m *Model) HasErrors() bool {
+	return false
+}

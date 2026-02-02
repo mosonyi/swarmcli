@@ -65,6 +65,10 @@ func (m *Model) OnExit() tea.Cmd {
 	return nil
 }
 
+func (m *Model) HasErrors() bool {
+	return false
+}
+
 func (m *Model) SetSecretName(name string) {
 	m.secretName = name
 }

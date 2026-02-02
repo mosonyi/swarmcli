@@ -21,3 +21,16 @@ type RefreshErrorMsg struct {
 type TickMsg time.Time
 
 const PollInterval = 5 * time.Second
+
+// StackTasksLoadedMsg is sent when tasks for a stack are loaded
+type StackTasksLoadedMsg struct {
+	StackName string
+	Tasks     []docker.TaskEntry
+	Error     error
+}
+
+// RemoveErrorMsg is sent when stack removal fails
+type RemoveErrorMsg struct {
+	StackName string
+	Error     error
+}

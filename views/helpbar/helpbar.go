@@ -58,7 +58,7 @@ func (m *Model) SetMinColWidth(width int) *Model {
 	return m
 }
 
-func (m *Model) View(systemInfo string) string {
+func (m *Model) View(systemInfo string, hasError bool) string {
 	allHelp := append(m.globalHelp, m.viewHelp...)
 	if len(allHelp) == 0 {
 		return systemInfo
@@ -155,8 +155,12 @@ func (m *Model) View(systemInfo string) string {
 /_______  / \__/\  /  \______  /
         \/       \/          \/`
 
+	logoColor := lipgloss.Color("214") // yellow by default
+	if hasError {
+		logoColor = lipgloss.Color("9") // red when errors exist
+	}
 	logoStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("214")).
+		Foreground(logoColor).
 		Bold(true)
 
 	swcLogo := logoStyle.Render(logo)

@@ -36,6 +36,7 @@ const (
 	SortByPorts
 	SortByCreated
 	SortByUpdated
+	SortByError
 )
 
 type Model struct {
@@ -69,6 +70,12 @@ type Model struct {
 	// Track which services have their tasks expanded
 	expandedServices map[string]bool               // service ID -> expanded
 	serviceTasks     map[string][]docker.TaskEntry // cached tasks per service
+	// serviceHasError marks if a service has a running task with an error
+	serviceHasError map[string]bool
+	// serviceErrorText stores a representative error text per service
+	serviceErrorText map[string]string
+	// columnScrollOffset controls horizontal scroll for all columns
+	columnScrollOffset int
 
 	// Track task navigation: -1 means service row is selected, >= 0 means task at that index
 	selectedTaskIndex int
@@ -102,6 +109,8 @@ func New(width, height int) *Model {
 		scaleDialog:       scaledialog.New(width, height),
 		expandedServices:  make(map[string]bool),
 		serviceTasks:      make(map[string][]docker.TaskEntry),
+		serviceHasError:   make(map[string]bool),
+		serviceErrorText:  make(map[string]string),
 		selectedTaskIndex: -1,
 		sortField:         SortByName,
 		sortAscending:     true,
@@ -156,4 +165,15 @@ func (m *Model) IsSearching() bool {
 // HasActiveDialog reports whether a dialog is currently visible.
 func (m *Model) HasActiveDialog() bool {
 	return m.confirmDialog.Visible || m.scaleDialog.Visible
+}
+
+// HasErrors returns true if any service in the current filtered list has errors
+func (m *Model) HasErrors() bool {
+	// Only check errors for services that are actually in the current view
+	for _, svc := range m.List.Filtered {
+		if m.serviceHasError[svc.ServiceID] {
+			return true
+		}
+	}
+	return false
 }

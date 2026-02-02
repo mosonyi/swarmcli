@@ -27,10 +27,13 @@ func (m *Model) View() string {
 		globalHelp = []helpbar.HelpEntry{}
 	}
 
+	// Check if current view has errors for logo color
+	hasError := m.currentView.HasErrors()
+
 	help := helpbar.New(m.viewport.Width, systeminfoview.Height).
 		WithGlobalHelp(globalHelp).
 		WithViewHelp(m.currentView.ShortHelpItems()).
-		View(systemInfo)
+		View(systemInfo, hasError)
 
 	if m.commandInput.Visible() {
 		// Render a framed 3-line command box between the header and main view.

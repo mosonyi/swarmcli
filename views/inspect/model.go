@@ -95,6 +95,10 @@ func (m *Model) OnExit() tea.Cmd {
 	return nil
 }
 
+func (m *Model) HasErrors() bool {
+	return false
+}
+
 func ParseFormat(v any) Format {
 	switch x := v.(type) {
 	case Format:

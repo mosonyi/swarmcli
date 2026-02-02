@@ -248,6 +248,10 @@ func (m *Model) IsInUsedByView() bool {
 	return m.usedByViewActive
 }
 
+func (m *Model) HasErrors() bool {
+	return false
+}
+
 // validateConfigName validates a config name
 func validateConfigName(name string) error {
 	if name == "" {
