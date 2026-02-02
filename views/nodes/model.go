@@ -172,6 +172,10 @@ func (m *Model) OnExit() tea.Cmd {
 	return nil
 }
 
+func (m *Model) HasErrors() bool {
+	return false
+}
+
 // HasActiveFilter reports whether a filter query is active.
 func (m *Model) HasActiveFilter() bool {
 	return m.List.Query != ""

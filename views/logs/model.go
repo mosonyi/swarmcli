@@ -204,6 +204,10 @@ func (m *Model) OnExit() tea.Cmd {
 	return m.StopStreamingCmd()
 }
 
+func (m *Model) HasErrors() bool {
+	return false
+}
+
 // extractUniqueNodes returns a sorted list of nodes where the service has running tasks
 func (m *Model) extractUniqueNodes() []string {
 	snap := docker.GetSnapshot()

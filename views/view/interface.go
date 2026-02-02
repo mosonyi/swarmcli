@@ -20,4 +20,6 @@ type View interface {
 
 	OnEnter() tea.Cmd // Called when view becomes active
 	OnExit() tea.Cmd  // Called when view is removed/replaced
+
+	HasErrors() bool // Returns true if the view has any errors to display
 }

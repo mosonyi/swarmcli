@@ -260,6 +260,10 @@ func (m *Model) OnExit() tea.Cmd {
 	return nil
 }
 
+func (m *Model) HasErrors() bool {
+	return false
+}
+
 // validateSecretName validates a secret name
 func validateSecretName(name string) error {
 	if name == "" {

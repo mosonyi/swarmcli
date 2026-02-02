@@ -336,7 +336,9 @@ func (m *Model) HasActiveDialog() bool {
 func (m *Model) Init() tea.Cmd {
 	return nil
 }
-
+func (m *Model) HasErrors() bool {
+	return false
+}
 // Name returns the view name (part of View interface)
 func (m *Model) Name() string {
 	return ViewName

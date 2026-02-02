@@ -27,11 +27,8 @@ func (m *Model) View() string {
 		globalHelp = []helpbar.HelpEntry{}
 	}
 
-	// Check if current view has errors (for stacks view)
-	hasError := false
-	if stacksView, ok := m.currentView.(interface{ HasErrors() bool }); ok {
-		hasError = stacksView.HasErrors()
-	}
+	// Check if current view has errors for logo color
+	hasError := m.currentView.HasErrors()
 
 	help := helpbar.New(m.viewport.Width, systeminfoview.Height).
 		WithGlobalHelp(globalHelp).

@@ -223,3 +223,7 @@ func (m *Model) OnEnter() tea.Cmd {
 func (m *Model) OnExit() tea.Cmd {
 	return nil
 }
+
+func (m *Model) HasErrors() bool {
+	return false
+}
