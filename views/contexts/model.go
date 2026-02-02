@@ -339,6 +339,7 @@ func (m *Model) Init() tea.Cmd {
 func (m *Model) HasErrors() bool {
 	return false
 }
+
 // Name returns the view name (part of View interface)
 func (m *Model) Name() string {
 	return ViewName
