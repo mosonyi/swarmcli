@@ -5,12 +5,9 @@ package stacksview
 
 import (
 	"fmt"
-	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/ui/components/sorting"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 func (m *Model) View() string {
@@ -20,8 +17,8 @@ func (m *Model) View() string {
 
 	title := fmt.Sprintf("Stacks on Node (Total: %d)", len(m.List.Items))
 
-	// Compute three percentage-based column widths so columns start at
-	// 0%, 33%, 66% of the available content width.
+	// Compute four percentage-based column widths so columns start at
+	// 0%, 25%, 50%, 75% of the available content width.
 	width := m.List.Viewport.Width
 	if width <= 0 {
 		width = m.width
@@ -31,21 +28,23 @@ func (m *Model) View() string {
 	}
 	contentWidth := width
 
-	// Calculate column widths: each column gets 33% of width
-	colWidths := make([]int, 3)
-	colWidths[0] = (contentWidth * 33) / 100
-	colWidths[1] = (contentWidth * 33) / 100
-	colWidths[2] = contentWidth - colWidths[0] - colWidths[1] // Remaining width for last column
+	// Calculate column widths: allocate space for stack, services, tasks and error
+	// STACK: 25%, SERVICES: 10%, TASKS: 10%, ERROR: 55% (remainder)
+	colWidths := make([]int, 4)
+	colWidths[0] = (contentWidth * 25) / 100
+	colWidths[1] = (contentWidth * 10) / 100
+	colWidths[2] = (contentWidth * 10) / 100
+	colWidths[3] = contentWidth - colWidths[0] - colWidths[1] - colWidths[2]
 
 	// Build header using frame header style so it appears on the first
 	// line inside the framed box and aligns with rows below.
-	stackLabel := "  STACK"
+	stackLabel := " STACK"
 	if m.sortField == SortByName {
 		arrow := sorting.SortArrow(sorting.Ascending)
 		if !m.sortAscending {
 			arrow = sorting.SortArrow(sorting.Descending)
 		}
-		stackLabel = fmt.Sprintf("  STACK %s", arrow)
+		stackLabel = fmt.Sprintf(" STACK %s", arrow)
 	}
 
 	servicesLabel := "SERVICES"
@@ -66,10 +65,28 @@ func (m *Model) View() string {
 		tasksLabel = fmt.Sprintf("TASKS %s", arrow)
 	}
 
-	headerLine := fmt.Sprintf("%-*s%-*s%-*s",
+	// Add ERROR column after TASKS with count of stacks having errors
+	errorCount := 0
+	for _, hasErr := range m.stackHasError {
+		if hasErr {
+			errorCount++
+		}
+	}
+	var errorLabel string
+	if m.sortField == SortByError {
+		arrow := sorting.SortArrow(sorting.Ascending)
+		if !m.sortAscending {
+			arrow = sorting.SortArrow(sorting.Descending)
+		}
+		errorLabel = fmt.Sprintf("ERROR: %d %s", errorCount, arrow)
+	} else {
+		errorLabel = fmt.Sprintf("ERROR: %d", errorCount)
+	}
+	headerLine := fmt.Sprintf("%-*s%-*s%-*s%-*s",
 		colWidths[0], stackLabel,
 		colWidths[1], servicesLabel,
 		colWidths[2], tasksLabel,
+		colWidths[3], errorLabel,
 	)
 	header := ui.FrameHeaderStyle.Render(headerLine)
 
@@ -90,47 +107,8 @@ func (m *Model) View() string {
 		footer = statusBar
 	}
 
-	// Set RenderItem to format rows using the same colWidths so the
-	// header and rows align exactly.
-	m.List.RenderItem = func(s docker.StackEntry, selected bool, _ int) string {
-		// First column: current marker + name (we don't have a marker here but keep spacing)
-		nameMax := colWidths[0] - 2
-		if nameMax < 0 {
-			nameMax = 0
-		}
-		name := s.Name
-		if len(name) > nameMax {
-			if nameMax > 3 {
-				name = name[:nameMax-3] + "..."
-			} else {
-				name = name[:nameMax]
-			}
-		}
-		first := fmt.Sprintf("  %s", name)
-
-		svcStr := fmt.Sprintf("%d", s.ServiceCount)
-		svcMax := colWidths[1]
-		if len(svcStr) > svcMax {
-			svcStr = svcStr[:svcMax]
-		}
-
-		nodeStr := fmt.Sprintf("%d", s.NodeCount)
-		nodeMax := colWidths[2]
-		if len(nodeStr) > nodeMax {
-			nodeStr = nodeStr[:nodeMax]
-		}
-
-		line := fmt.Sprintf("%-*s%-*s%-*s",
-			colWidths[0], first,
-			colWidths[1], svcStr,
-			colWidths[2], nodeStr,
-		)
-		if selected {
-			selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("63")).Bold(true)
-			return selStyle.Render(line)
-		}
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Render(line)
-	}
+	// Ensure RenderItem can include expanded inline tasks
+	m.setRenderItem()
 
 	// Compute consistent frame sizing using shared helper (stacks is template)
 	frame := ui.ComputeFrameDimensions(
@@ -149,6 +127,10 @@ func (m *Model) View() string {
 	content := m.List.VisibleContent(frame.DesiredContentLines)
 
 	framed := ui.RenderFramedBox(title, header, content, footer, frame.FrameWidth)
+
+	if m.confirmDialog.Visible {
+		framed = ui.OverlayCentered(framed, m.confirmDialog.View(), frame.FrameWidth, frame.FrameHeight)
+	}
 
 	return framed
 }

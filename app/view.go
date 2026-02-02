@@ -27,10 +27,16 @@ func (m *Model) View() string {
 		globalHelp = []helpbar.HelpEntry{}
 	}
 
+	// Check if current view has errors (for stacks view)
+	hasError := false
+	if stacksView, ok := m.currentView.(interface{ HasErrors() bool }); ok {
+		hasError = stacksView.HasErrors()
+	}
+
 	help := helpbar.New(m.viewport.Width, systeminfoview.Height).
 		WithGlobalHelp(globalHelp).
 		WithViewHelp(m.currentView.ShortHelpItems()).
-		View(systemInfo)
+		View(systemInfo, hasError)
 
 	if m.commandInput.Visible() {
 		// Render a framed 3-line command box between the header and main view.

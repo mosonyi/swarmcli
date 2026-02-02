@@ -7,6 +7,7 @@ import (
 	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
+	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	"time"
 
@@ -22,6 +23,7 @@ const (
 	SortByName SortField = iota
 	SortByServices
 	SortByTasks
+	SortByError
 )
 
 type Model struct {
@@ -36,6 +38,23 @@ type Model struct {
 	DelayInitialLoad bool   // when true, delay the first LoadStacksCmd by 3s
 	sortField        SortField
 	sortAscending    bool // true for ascending, false for descending
+	userSetSort      bool // tracks if user manually changed sort (to avoid auto-switching)
+	// expandedStacks tracks which stacks are expanded to show tasks
+	expandedStacks map[string]bool
+	// stackTasks caches loaded tasks per stack
+	stackTasks map[string][]docker.TaskEntry
+	// stackHasError marks if a stack has at least one task error (checked from snapshot)
+	stackHasError map[string]bool
+	// stackErrorText stores a representative error text for the stack (first found)
+	stackErrorText map[string]string
+	// selectedTaskIndex when navigating tasks within an expanded stack
+	selectedTaskIndex int
+	// errorScrollOffset for horizontal scrolling of error messages
+	errorScrollOffset int
+	// confirmDialog for confirming destructive actions
+	confirmDialog *confirmdialog.Model
+	// pendingAction tracks what action is awaiting confirmation
+	pendingAction string
 }
 
 func New(width, height int) *Model {
@@ -52,13 +71,19 @@ func New(width, height int) *Model {
 	}
 
 	return &Model{
-		List:          list,
-		Visible:       false,
-		firstResize:   true,
-		width:         width,
-		height:        height,
-		sortField:     SortByName,
-		sortAscending: true,
+		List:              list,
+		Visible:           false,
+		firstResize:       true,
+		width:             width,
+		height:            height,
+		sortField:         SortByName,
+		sortAscending:     true,
+		expandedStacks:    make(map[string]bool),
+		stackTasks:        make(map[string][]docker.TaskEntry),
+		stackHasError:     make(map[string]bool),
+		stackErrorText:    make(map[string]string),
+		selectedTaskIndex: -1,
+		confirmDialog:     confirmdialog.New(width, height),
 	}
 }
 
@@ -78,6 +103,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "i/enter", Desc: "Services"},
 		{Key: "p", Desc: "Tasks"},
+		{Key: "ctrl+d", Desc: "Delete stack"},
 		{Key: "↑/↓", Desc: "Navigate"},
 		{Key: "pgup", Desc: "Page up"},
 		{Key: "pgdown", Desc: "Page down"},
@@ -166,4 +192,19 @@ func (m *Model) HasActiveFilter() bool {
 // IsSearching reports whether the list is currently in search mode.
 func (m *Model) IsSearching() bool {
 	return m.List.Mode == filterlist.ModeSearching
+}
+
+// HasActiveDialog reports whether a dialog is currently visible.
+func (m *Model) HasActiveDialog() bool {
+	return m.confirmDialog != nil && m.confirmDialog.Visible
+}
+
+// HasErrors returns true if any stack has errors
+func (m *Model) HasErrors() bool {
+	for _, hasErr := range m.stackHasError {
+		if hasErr {
+			return true
+		}
+	}
+	return false
 }

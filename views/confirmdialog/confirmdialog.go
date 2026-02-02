@@ -31,6 +31,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		if !m.Visible {
 			return nil
 		}
+		if msg.Type == tea.KeyEsc {
+			m.Visible = false
+			return func() tea.Msg { return ResultMsg{Confirmed: false} }
+		}
 		if m.ErrorMode {
 			// In error mode, any key closes the dialog
 			switch msg.String() {
@@ -45,6 +49,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				m.Visible = false
 				return func() tea.Msg { return ResultMsg{Confirmed: true} }
 			case "n", "N", "esc":
+				m.Visible = false
 				return func() tea.Msg { return ResultMsg{Confirmed: false} }
 			}
 		}

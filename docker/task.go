@@ -59,14 +59,26 @@ func GetTasksForStack(stackName string) ([]TaskEntry, error) {
 		if svc, ok := stackServices[task.ServiceID]; ok {
 			nodeName := nodesMap[task.NodeID]
 			if nodeName == "" {
-				nodeName = task.NodeID[:12]
+				if len(task.NodeID) >= 12 {
+					nodeName = task.NodeID[:12]
+				} else {
+					nodeName = task.NodeID
+				}
 			}
 
 			// Extract image name (without registry/tag details for cleaner display)
-			imageParts := strings.Split(task.Spec.ContainerSpec.Image, "@")
-			image := imageParts[0]
-			if strings.Contains(image, ":") {
-				image = strings.Split(image, ":")[0] + ":" + strings.Split(strings.Split(image, ":")[1], "@")[0]
+			image := ""
+			if task.Spec.ContainerSpec != nil {
+				imageParts := strings.Split(task.Spec.ContainerSpec.Image, "@")
+				if len(imageParts) > 0 {
+					image = imageParts[0]
+				}
+				if strings.Contains(image, ":") {
+					parts := strings.Split(image, ":")
+					if len(parts) > 1 {
+						image = parts[0] + ":" + strings.Split(parts[1], "@")[0]
+					}
+				}
 			}
 
 			// Format current state with timestamp
@@ -86,8 +98,12 @@ func GetTasksForStack(stackName string) ([]TaskEntry, error) {
 				}
 			}
 
+			id := task.ID
+			if len(id) > 12 {
+				id = id[:12]
+			}
 			tasks = append(tasks, TaskEntry{
-				ID:           task.ID[:12],
+				ID:           id,
 				Name:         fmt.Sprintf("%s.%d", svc.Spec.Name, task.Slot),
 				ServiceName:  svc.Spec.Name,
 				Image:        image,
@@ -145,14 +161,26 @@ func GetTasksForService(serviceID string) ([]TaskEntry, error) {
 		if task.ServiceID == serviceID {
 			nodeName := nodesMap[task.NodeID]
 			if nodeName == "" {
-				nodeName = task.NodeID[:12]
+				if len(task.NodeID) >= 12 {
+					nodeName = task.NodeID[:12]
+				} else {
+					nodeName = task.NodeID
+				}
 			}
 
 			// Extract image name (without registry/tag details for cleaner display)
-			imageParts := strings.Split(task.Spec.ContainerSpec.Image, "@")
-			image := imageParts[0]
-			if strings.Contains(image, ":") {
-				image = strings.Split(image, ":")[0] + ":" + strings.Split(strings.Split(image, ":")[1], "@")[0]
+			image := ""
+			if task.Spec.ContainerSpec != nil {
+				imageParts := strings.Split(task.Spec.ContainerSpec.Image, "@")
+				if len(imageParts) > 0 {
+					image = imageParts[0]
+				}
+				if strings.Contains(image, ":") {
+					parts := strings.Split(image, ":")
+					if len(parts) > 1 {
+						image = parts[0] + ":" + strings.Split(parts[1], "@")[0]
+					}
+				}
 			}
 
 			// Format current state with timestamp
@@ -176,13 +204,20 @@ func GetTasksForService(serviceID string) ([]TaskEntry, error) {
 			var serviceName string
 			for _, svc := range snap.Services {
 				if svc.ID == serviceID {
-					serviceName = svc.Spec.Name
+					// Guard against nil Spec (defensive)
+					if svc.Spec.Name != "" {
+						serviceName = svc.Spec.Name
+					}
 					break
 				}
 			}
 
+			id := task.ID
+			if len(id) > 12 {
+				id = id[:12]
+			}
 			tasks = append(tasks, TaskEntry{
-				ID:           task.ID[:12],
+				ID:           id,
 				Name:         fmt.Sprintf("%s.%d", serviceName, task.Slot),
 				ServiceName:  serviceName,
 				Image:        image,

@@ -6,9 +6,6 @@ package servicesview
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strings"
-	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
@@ -19,9 +16,27 @@ import (
 	"swarmcli/views/view"
 	"time"
 
+	"sort"
+	"strings"
+	hash "swarmcli/core/primitives/hash"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+// truncateWithEllipsis truncates a string to maxWidth, adding … if needed
+func truncateWithEllipsis(s string, maxWidth int) string {
+	if len(s) <= maxWidth {
+		return s
+	}
+	if maxWidth <= 1 {
+		return "…"
+	}
+	if maxWidth == 2 {
+		return s[:1] + "…"
+	}
+	return s[:maxWidth-1] + "…"
+}
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
@@ -231,6 +246,26 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 
+		// Handle left/right for column scrolling
+		switch msg.String() {
+		case "left":
+			if m.columnScrollOffset > 0 {
+				m.columnScrollOffset -= 5
+				if m.columnScrollOffset < 0 {
+					m.columnScrollOffset = 0
+				}
+				m.setRenderItem()
+				m.List.Viewport.SetContent(m.List.View())
+			}
+			return nil
+		case "right":
+			// Scroll right if any column has more content
+			m.columnScrollOffset += 5
+			m.setRenderItem()
+			m.List.Viewport.SetContent(m.List.View())
+			return nil
+		}
+
 		// --- normal mode ---
 		if msg.Type == tea.KeyEsc && m.List.Query != "" {
 			m.List.Query = ""
@@ -298,6 +333,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// Reset task selection when moving to different service
 		if oldCursor != m.List.Cursor {
 			m.selectedTaskIndex = -1
+			// Reset horizontal scroll when moving cursor
+			m.columnScrollOffset = 0
 		}
 
 		switch msg.String() {
@@ -467,6 +504,17 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			m.applySorting()
 			return nil
+
+		// Sort by Error (Shift+R)
+		case "R":
+			if m.sortField == SortByError {
+				m.sortAscending = !m.sortAscending
+			} else {
+				m.sortField = SortByError
+				m.sortAscending = true
+			}
+			m.applySorting()
+			return nil
 		}
 
 		m.List.Viewport.SetContent(m.List.View())
@@ -478,6 +526,23 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
+// formatErrorWithScroll formats error text with horizontal offset and truncation indicator
+func formatErrorWithScroll(full string, offset int, maxWidth int) string {
+	if full == "" {
+		return ""
+	}
+	if offset > len(full) {
+		offset = len(full)
+	}
+	visible := full[offset:]
+
+	// Truncate to maxWidth
+	if len(visible) > maxWidth {
+		visible = truncateWithEllipsis(visible, maxWidth)
+	}
+	return visible
+}
+
 func (m *Model) SetContent(msg Msg) {
 	l().Infof("ServicesView.SetContent: Updating display with %d services", len(msg.Entries))
 
@@ -485,6 +550,27 @@ func (m *Model) SetContent(msg Msg) {
 
 	m.List.Items = msg.Entries
 	m.List.ApplyFilter()
+
+	// Compute per-service error summary from cached snapshot so errors appear
+	// without expanding tasks. Reset maps first.
+	for k := range m.serviceHasError {
+		delete(m.serviceHasError, k)
+	}
+	for k := range m.serviceErrorText {
+		delete(m.serviceErrorText, k)
+	}
+	snap := docker.GetSnapshot()
+	if snap != nil {
+		for _, t := range snap.Tasks {
+			// Consider only tasks whose desired state is running and have an error
+			if string(t.DesiredState) == "running" && t.Status.Err != "" {
+				m.serviceHasError[t.ServiceID] = true
+				if m.serviceErrorText[t.ServiceID] == "" {
+					m.serviceErrorText[t.ServiceID] = t.Status.Err
+				}
+			}
+		}
+	}
 
 	// Reapply sorting to maintain sort order after data refresh
 	m.applySorting()
@@ -513,126 +599,94 @@ func (m *Model) SetContent(msg Msg) {
 	}
 }
 
+// computeColWidths centralizes column width calculation so header and rows
+// use the exact same sizes. Uses equal division like CONFIG view.
+func (m *Model) computeColWidths(width int) []int {
+	if width <= 0 {
+		width = 80
+	}
+	cols := 10
+	starts := make([]int, cols)
+	for i := 0; i < cols; i++ {
+		starts[i] = (i * width) / cols
+	}
+	colWidths := make([]int, cols)
+	for i := 0; i < cols; i++ {
+		if i == cols-1 {
+			colWidths[i] = width - starts[i]
+		} else {
+			colWidths[i] = starts[i+1] - starts[i]
+		}
+		if colWidths[i] < 1 {
+			colWidths[i] = 1
+		}
+	}
+
+	// Ensure STATUS and UPDATED columns have at least 10 chars
+	minStatus := 10
+	minUpdated := 10
+	cur := colWidths[3] + colWidths[8]
+	if cur < minStatus+minUpdated {
+		deficit := minStatus + minUpdated - cur
+		for i := 2; i >= 0 && deficit > 0; i-- {
+			take := deficit
+			if colWidths[i] > take+5 {
+				colWidths[i] -= take
+				deficit = 0
+			} else {
+				take = colWidths[i] - 5
+				if take > 0 {
+					colWidths[i] -= take
+					deficit -= take
+				}
+			}
+		}
+		if colWidths[3] < minStatus {
+			colWidths[3] = minStatus
+		}
+		if colWidths[8] < minUpdated {
+			colWidths[8] = minUpdated
+		}
+	}
+
+	if colWidths[2] < 1 {
+		colWidths[2] = 1
+	}
+	return colWidths
+}
+
+// buildHeaderLine creates a header string using the same formatting rules as
+// the row renderer so labels line up exactly with data columns.
+func (m *Model) buildHeaderLine(labels []string, colWidths []int) string {
+	hdrs := make([]string, len(labels))
+	copy(hdrs, labels)
+	if len(hdrs) > 0 && !strings.HasPrefix(hdrs[0], " ") {
+		hdrs[0] = " " + hdrs[0]
+	}
+	line := make([]byte, 0, 256)
+	pos := 0
+	for i, h := range hdrs {
+		for len(line) < pos {
+			line = append(line, ' ')
+		}
+		s := fmt.Sprintf("%-*s", colWidths[i], h)
+		line = append(line, []byte(s)...)
+		pos += colWidths[i]
+	}
+	return string(line)
+}
+
 func (m *Model) setRenderItem() {
-	// We'll compute column widths based on the longest service name then
-	// allocate the remaining space to the other columns.
+	// Use shared computation for column widths to keep header and rows in sync
 	m.List.RenderItem = func(e docker.ServiceEntry, selected bool, _ int) string {
 		width := m.List.Viewport.Width
 		if width <= 0 {
 			width = 80
 		}
 
-		cols := 9
-		sepLen := 2
-		sepTotal := sepLen * (cols - 1)
-		// Effective width available for columns (excluding separators)
-		effWidth := width - sepTotal
-		if effWidth < cols { // ensure sensible minimum
-			effWidth = width
-		}
-		colWidths := make([]int, cols)
-
-		// Headers and sensible minimums
-		headers := []string{" SERVICE", "STACK", "REPLICAS", "STATUS", "MODE", "IMAGE", "PORTS", "CREATED", "UPDATED"}
-		minCols := make([]int, cols)
-		for i := 0; i < cols; i++ {
-			hw := lipgloss.Width(headers[i])
-			floor := 6
-			switch i {
-			case 0: // SERVICE
-				floor = 10
-			case 1: // STACK
-				floor = 10
-			case 2: // REPLICAS
-				floor = 8
-			case 3: // STATUS
-				floor = 8
-			case 4: // MODE
-				floor = 10
-			case 5: // IMAGE
-				floor = 15
-			case 6: // PORTS
-				floor = 8
-			case 7, 8: // CREATED, UPDATED - need extra space for sort arrows
-				floor = 8
-				// If this column has a sort arrow, ensure we have room for it
-				if (i == 7 && m.sortField == SortByCreated) || (i == 8 && m.sortField == SortByUpdated) {
-					floor = 10
-				}
-			}
-			if hw > floor {
-				minCols[i] = hw
-			} else {
-				minCols[i] = floor
-			}
-		}
-
-		// Find longest service name visually among items (include header)
-		maxSvc := lipgloss.Width(headers[0])
-		for _, it := range m.List.Items {
-			if s, ok := any(it).(docker.ServiceEntry); ok {
-				if w := lipgloss.Width(s.ServiceName); w > maxSvc {
-					maxSvc = w
-				}
-			}
-		}
-		desiredSvc := maxSvc + 1 // reserve 1 for leading space
-
-		// Assign desired service width if possible, otherwise use proportional
-		// partitioning but ensure minimums.
-		nonServiceMinSum := 0
-		for i := 1; i < cols; i++ {
-			nonServiceMinSum += minCols[i]
-		}
-
-		if desiredSvc+nonServiceMinSum <= effWidth {
-			colWidths[0] = desiredSvc
-			// Start with minimums for remaining columns
-			for i := 1; i < cols; i++ {
-				colWidths[i] = minCols[i]
-			}
-			// Distribute leftover space equally among columns 1..5 (within effWidth)
-			sum := 0
-			for _, v := range colWidths {
-				sum += v
-			}
-			leftover := effWidth - sum
-			if leftover > 0 {
-				per := leftover / (cols - 1)
-				rem := leftover % (cols - 1)
-				for i := 1; i < cols; i++ {
-					add := per
-					if rem > 0 {
-						add++
-						rem--
-					}
-					colWidths[i] += add
-				}
-			}
-		} else {
-			// Proportional partition but respect minimums
-			// Partition across the effective width
-			base := effWidth / cols
-			for i := 0; i < cols; i++ {
-				colWidths[i] = base
-			}
-			for i := 0; i < cols; i++ {
-				if colWidths[i] < minCols[i] {
-					colWidths[i] = minCols[i]
-				}
-			}
-			// Adjust last column to ensure total equals effWidth
-			sum := 0
-			for _, v := range colWidths {
-				sum += v
-			}
-			if sum != effWidth {
-				colWidths[cols-1] += effWidth - sum
-				if colWidths[cols-1] < 1 {
-					colWidths[cols-1] = 1
-				}
-			}
-		}
+		colWidths := m.computeColWidths(width)
+		// sepLen := 2
+		// sep := strings.Repeat(" ", sepLen)
 
 		// Cache for header alignment
 		m.colServiceWidth = colWidths[0]
@@ -644,93 +698,111 @@ func (m *Model) setRenderItem() {
 			replicasText = "—"
 		}
 
-		// Truncate columns except the first (we try not to shorten first column
-		// but if it still doesn't fit due to small viewport, fall back to
-		// truncation there too).
-		lastIdx := len(colWidths) - 1
-		svcTruncWidth := colWidths[0]
-		// If we reserved a leading space in formatting, reduce by 1
-		if svcTruncWidth > 0 {
-			svcTruncWidth = svcTruncWidth - 1
+		// For selected row, apply scrolling only to columns that are actually truncated
+		var serviceName, stackName, statusText, modeText, imageText, portsText, created, updated, errText string
+
+		if selected {
+			// Check each column - only scroll if truncated
+			if len(e.ServiceName) > colWidths[0]-1 {
+				serviceName = formatErrorWithScroll(e.ServiceName, m.columnScrollOffset, colWidths[0]-1)
+			} else {
+				serviceName = truncateWithEllipsis(e.ServiceName, colWidths[0]-1)
+			}
+
+			if len(e.Image) > colWidths[5] {
+				imageText = formatErrorWithScroll(e.Image, m.columnScrollOffset, colWidths[5])
+			} else {
+				imageText = truncateWithEllipsis(e.Image, colWidths[5])
+			}
+
+			if len(e.Ports) > colWidths[6] {
+				l().Debugf("PORTS truncated: len=%d, colWidth=%d, value='%s'", len(e.Ports), colWidths[6], e.Ports)
+				portsText = formatErrorWithScroll(e.Ports, m.columnScrollOffset, colWidths[6])
+				l().Debugf("PORTS after formatErrorWithScroll: '%s'", portsText)
+			} else {
+				l().Debugf("PORTS fits: len=%d, colWidth=%d, value='%s'", len(e.Ports), colWidths[6], e.Ports)
+				portsText = truncateWithEllipsis(e.Ports, colWidths[6])
+				l().Debugf("PORTS after truncateWithEllipsis: '%s'", portsText)
+			}
+
+			errStr := m.serviceErrorText[e.ServiceID]
+			if len(errStr) > colWidths[9] {
+				errText = formatErrorWithScroll(errStr, m.columnScrollOffset, colWidths[9])
+			} else {
+				errText = truncateWithEllipsis(errStr, colWidths[9])
+			}
+
+			// These columns rarely need scrolling, just truncate
+			stackName = truncateWithEllipsis(e.StackName, colWidths[1])
+			statusText = truncateWithEllipsis(e.Status, colWidths[3])
+			modeText = truncateWithEllipsis(e.Mode, colWidths[4])
+			created = truncateWithEllipsis(formatRelativeTime(e.CreatedAt), colWidths[7])
+			updated = truncateWithEllipsis(formatRelativeTime(e.UpdatedAt), colWidths[8])
+		} else {
+			// For non-selected rows, just truncate normally
+			serviceName = truncateWithEllipsis(e.ServiceName, colWidths[0]-1)
+			stackName = truncateWithEllipsis(e.StackName, colWidths[1])
+			statusText = truncateWithEllipsis(e.Status, colWidths[3])
+			modeText = truncateWithEllipsis(e.Mode, colWidths[4])
+			imageText = truncateWithEllipsis(e.Image, colWidths[5])
+			portsText = truncateWithEllipsis(e.Ports, colWidths[6])
+			created = truncateWithEllipsis(formatRelativeTime(e.CreatedAt), colWidths[7])
+			updated = truncateWithEllipsis(formatRelativeTime(e.UpdatedAt), colWidths[8])
+			errText = truncateWithEllipsis(m.serviceErrorText[e.ServiceID], colWidths[9])
 		}
-		serviceName := truncateWithEllipsis(e.ServiceName, svcTruncWidth)
-		stackName := truncateWithEllipsis(e.StackName, colWidths[1]-1)
-		statusText := truncateWithEllipsis(e.Status, colWidths[3]-1)
-		modeText := truncateWithEllipsis(e.Mode, colWidths[4]-1)
-		imageText := truncateWithEllipsis(e.Image, colWidths[5]-1)
-		portsText := truncateWithEllipsis(e.Ports, colWidths[6]-1)
-		created := truncateWithEllipsis(formatRelativeTime(e.CreatedAt), colWidths[7]-1)
-		updated := truncateWithEllipsis(formatRelativeTime(e.UpdatedAt), colWidths[lastIdx])
 
 		itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
-		col0 := itemStyle.Render(fmt.Sprintf(" %-*s", colWidths[0]-1, serviceName))
-		col1 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[1]-1, stackName))
 
-		var replicasColor lipgloss.Color
-		switch {
-		case e.ReplicasTotal == 0:
-			replicasColor = lipgloss.Color("8")
-		case e.ReplicasOnNode == 0:
-			replicasColor = lipgloss.Color("9")
-		case e.ReplicasOnNode < e.ReplicasTotal:
-			replicasColor = lipgloss.Color("11")
-		default:
-			replicasColor = lipgloss.Color("10")
-		}
-		replicasStyle := lipgloss.NewStyle().Foreground(replicasColor)
-		col2 := replicasStyle.Render(fmt.Sprintf("%-*s", colWidths[2]-1, replicasText))
+		// Build format string with all columns at once (like CONFIG view)
+		formatStr := fmt.Sprintf(" %%-%ds%%-%ds%%-%ds%%-%ds%%-%ds%%-%ds%%-%ds%%-%ds%%-%ds%%-%ds",
+			colWidths[0]-1, colWidths[1], colWidths[2], colWidths[3], colWidths[4],
+			colWidths[5], colWidths[6], colWidths[7], colWidths[8], colWidths[9])
 
-		statusColor := getStatusColor(e.Status)
-		statusStyle := lipgloss.NewStyle().Foreground(statusColor)
-		col3 := statusStyle.Render(fmt.Sprintf("%-*s", colWidths[3]-1, statusText))
-
-		col4 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[4]-1, modeText))
-		col5 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[5]-1, imageText))
-		col6 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[6]-1, portsText))
-		col7 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[7]-1, created))
-		col8 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[8], updated))
-
-		// Join with two-space separators for readability
-		sep := strings.Repeat(" ", sepLen)
-		line := col0 + sep + col1 + sep + col2 + sep + col3 + sep + col4 + sep + col5 + sep + col6 + sep + col7 + sep + col8
-
+		var lineStr string
 		if selected && m.selectedTaskIndex == -1 {
 			// Only highlight service row if no task is selected
 			selBg := lipgloss.Color("25") // Lighter blue
 			selBase := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
-			selRep := lipgloss.NewStyle().Foreground(replicasColor).Background(selBg).Bold(true)
-			selStatus := lipgloss.NewStyle().Foreground(statusColor).Background(selBg).Bold(true)
+			lineStr = selBase.Render(fmt.Sprintf(formatStr,
+				serviceName, stackName, replicasText, statusText, modeText, imageText, portsText, created, updated, errText))
 
-			// Render each styled column including the separator so the
-			// highlight background is continuous across the whole line.
-			sepStr := strings.Repeat(" ", sepLen)
-			col0 = selBase.Render(fmt.Sprintf(" %-*s", colWidths[0]-1, serviceName) + sepStr)
-			col1 = selBase.Render(fmt.Sprintf("%-*s", colWidths[1]-1, stackName) + sepStr)
-			col2 = selRep.Render(fmt.Sprintf("%-*s", colWidths[2]-1, replicasText) + sepStr)
-			col3 = selStatus.Render(fmt.Sprintf("%-*s", colWidths[3]-1, statusText) + sepStr)
-			col4 = selBase.Render(fmt.Sprintf("%-*s", colWidths[4]-1, modeText) + sepStr)
-			col5 = selBase.Render(fmt.Sprintf("%-*s", colWidths[5]-1, imageText) + sepStr)
-			col6 = selBase.Render(fmt.Sprintf("%-*s", colWidths[6]-1, portsText) + sepStr)
-			col7 = selBase.Render(fmt.Sprintf("%-*s", colWidths[7]-1, created) + sepStr)
-			col8 = selBase.Render(fmt.Sprintf("%-*s", colWidths[8], updated))
-			line = col0 + col1 + col2 + col3 + col4 + col5 + col6 + col7 + col8
+			// Ensure highlight background fills the full viewport width
+			if m.List.Viewport.Width > 0 {
+				w := lipgloss.Width(lineStr)
+				if m.List.Viewport.Width > w {
+					pad := m.List.Viewport.Width - w
+					lineStr += selBase.Render(strings.Repeat(" ", pad))
+				}
+			}
+		} else if m.serviceHasError[e.ServiceID] {
+			// Color non-selected error rows red
+			errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+			lineStr = errStyle.Render(fmt.Sprintf(formatStr,
+				serviceName, stackName, replicasText, statusText, modeText, imageText, portsText, created, updated, errText))
+		} else {
+			// Normal rendering
+			lineStr = itemStyle.Render(fmt.Sprintf(formatStr,
+				serviceName, stackName, replicasText, statusText, modeText, imageText, portsText, created, updated, errText))
 		}
 
 		// Check if service is expanded and add task rows
 		if m.expandedServices[e.ServiceID] {
 			tasks := m.serviceTasks[e.ServiceID]
 			if len(tasks) > 0 {
-				// Add task header
+				// Add task header (include ERROR column)
 				taskHeaderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Italic(true)
-				taskHeader := taskHeaderStyle.Render("   NAME                    NODE          DESIRED STATE  CURRENT STATE")
-				line += "\n" + taskHeader
+				// Align header columns with task row formatting
+				taskHeader := fmt.Sprintf("   %-22s  %-12s  %-13s  %-40s  %s",
+					"NAME", "NODE", "DESIRED STATE", "CURRENT STATE", "ERROR")
+				lineStr += "\n" + taskHeaderStyle.Render(taskHeader)
 
 				// Add each task as a row
 				for taskIdx, task := range tasks {
 					taskName := truncateWithEllipsis(task.Name, 22)
 					taskNode := truncateWithEllipsis(task.NodeName, 12)
 					taskDesired := truncateWithEllipsis(task.DesiredState, 13)
-					taskCurrent := truncateWithEllipsis(task.CurrentState, 50)
+					taskCurrent := truncateWithEllipsis(task.CurrentState, 40)
+					taskErr := truncateWithEllipsis(task.Error, 30)
 
 					// Check if this task is selected
 					taskSelected := selected && m.selectedTaskIndex == taskIdx
@@ -738,58 +810,32 @@ func (m *Model) setRenderItem() {
 					if taskSelected {
 						// Lighter highlight for task rows
 						taskSelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("24")).Bold(true)
-						taskLine = taskSelStyle.Render(fmt.Sprintf("   %-22s  %-12s  %-13s  %s",
-							taskName, taskNode, taskDesired, taskCurrent))
+						taskLine = taskSelStyle.Render(fmt.Sprintf("   %-22s  %-12s  %-13s  %-40s  %s",
+							taskName, taskNode, taskDesired, taskCurrent, taskErr))
+						// Pad task highlight to full width
+						if m.List.Viewport.Width > 0 {
+							tw := lipgloss.Width(taskLine)
+							if m.List.Viewport.Width > tw {
+								pad := m.List.Viewport.Width - tw
+								taskLine += taskSelStyle.Render(strings.Repeat(" ", pad))
+							}
+						}
 					} else {
 						taskStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
-						taskLine = taskStyle.Render(fmt.Sprintf("   %-22s  %-12s  %-13s  %s",
-							taskName, taskNode, taskDesired, taskCurrent))
+						taskLine = taskStyle.Render(fmt.Sprintf("   %-22s  %-12s  %-13s  %-40s  %s",
+							taskName, taskNode, taskDesired, taskCurrent, taskErr))
 					}
-					line += "\n" + taskLine
+					lineStr += "\n" + taskLine
 				}
 			} else {
 				// Show "no tasks" message
 				noTasksStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Italic(true)
-				line += "\n" + noTasksStyle.Render("   (no tasks)")
+				lineStr += "\n" + noTasksStyle.Render("   (no tasks)")
 			}
 		}
 
-		return line
+		return lineStr
 	}
-}
-
-func truncateWithEllipsis(s string, maxWidth int) string {
-	if maxWidth <= 0 {
-		return ""
-	}
-	// A maxWidth of 1 should render as the ellipsis
-	if maxWidth <= 1 {
-		return "…"
-	}
-
-	// If the string already fits in the available visual width, return it.
-	if lipgloss.Width(s) <= maxWidth {
-		return s
-	}
-
-	// Reserve width for the ellipsis
-	ell := "…"
-	ellW := lipgloss.Width(ell)
-
-	// Build up runes until adding the next would exceed maxWidth-ellW
-	var outRunes []rune
-	cur := ""
-	for _, r := range s {
-		cur += string(r)
-		if lipgloss.Width(cur)+ellW > maxWidth {
-			break
-		}
-		outRunes = append(outRunes, r)
-	}
-	if len(outRunes) == 0 {
-		return ell
-	}
-	return string(outRunes) + ell
 }
 
 // formatRelativeTime formats a time as a relative duration (e.g., "2h ago", "3d ago")
@@ -822,22 +868,6 @@ func formatRelativeTime(t time.Time) string {
 	}
 }
 
-// getStatusColor returns the appropriate color for a service status
-func getStatusColor(status string) lipgloss.Color {
-	switch status {
-	case "updating", "rolling back":
-		return lipgloss.Color("11") // yellow
-	case "updated", "active":
-		return lipgloss.Color("10") // green
-	case "paused", "rollback paused":
-		return lipgloss.Color("8") // gray
-	case "rolled back":
-		return lipgloss.Color("9") // red
-	default:
-		return lipgloss.Color("15") // white
-	}
-}
-
 // GetServicesHelpContent returns categorized help for the services view
 func GetServicesHelpContent() []helpview.HelpCategory {
 	return []helpview.HelpCategory{
@@ -863,6 +893,7 @@ func GetServicesHelpContent() []helpview.HelpCategory {
 				{Keys: "<shift+p>", Description: "Order by Ports"},
 				{Keys: "<shift+c>", Description: "Order by Created"},
 				{Keys: "<shift+u>", Description: "Order by Updated"},
+				{Keys: "<shift+r>", Description: "Order by Error"},
 			},
 		},
 		{
@@ -932,6 +963,29 @@ func (m *Model) applySorting() {
 				return m.List.Filtered[i].UpdatedAt.Before(m.List.Filtered[j].UpdatedAt)
 			}
 			return m.List.Filtered[i].UpdatedAt.After(m.List.Filtered[j].UpdatedAt)
+		})
+	case SortByError:
+		sort.Slice(m.List.Filtered, func(i, j int) bool {
+			iHas := m.serviceHasError[m.List.Filtered[i].ServiceID]
+			jHas := m.serviceHasError[m.List.Filtered[j].ServiceID]
+			if iHas == jHas {
+				iText := m.serviceErrorText[m.List.Filtered[i].ServiceID]
+				jText := m.serviceErrorText[m.List.Filtered[j].ServiceID]
+				if iText == jText {
+					if m.sortAscending {
+						return m.List.Filtered[i].ServiceName < m.List.Filtered[j].ServiceName
+					}
+					return m.List.Filtered[i].ServiceName > m.List.Filtered[j].ServiceName
+				}
+				if m.sortAscending {
+					return iText < jText
+				}
+				return iText > jText
+			}
+			if m.sortAscending {
+				return iHas && !jHas
+			}
+			return !iHas && jHas
 		})
 	}
 

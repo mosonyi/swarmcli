@@ -68,10 +68,5 @@ func getServicePorts(svc swarm.Service) string {
 		return "-"
 	}
 
-	result := strings.Join(ports, ",")
-	// Truncate if too long
-	if len(result) > 30 {
-		return result[:27] + "..."
-	}
-	return result
+	return strings.Join(ports, ",")
 }
