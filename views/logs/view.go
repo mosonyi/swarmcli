@@ -48,6 +48,11 @@ func (m *Model) View() string {
 	header := "Logs"
 	if m.mode == "search" {
 		header = fmt.Sprintf("Logs — Search: %s", m.searchTerm)
+	} else if m.searchTerm != "" && len(m.searchMatches) > 0 {
+		// Show search results when in normal mode but search is active
+		matchCount := len(m.searchMatches)
+		currentMatch := m.searchIndex + 1
+		header = fmt.Sprintf("Logs — Found %d matches (viewing %d/%d) • Press '/' to search, 'n'/'N' to navigate", matchCount, currentMatch, matchCount)
 	}
 
 	headerRendered := ui.FrameHeaderStyle.Render(header)

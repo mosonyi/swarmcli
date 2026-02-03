@@ -232,6 +232,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case tea.KeyMsg:
+		// If this view is not visible, don't process keys
+		// This allows overlaid views (like logs) to handle input
+		if !m.Visible {
+			return nil
+		}
+
 		if m.confirmDialog.Visible {
 			return m.confirmDialog.Update(msg)
 		}

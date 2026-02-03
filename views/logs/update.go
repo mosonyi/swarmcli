@@ -199,7 +199,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 
-		// 1) allow viewport to handle scrolling keys
+		// In search mode, don't intercept any keys for viewport - let HandleKey process them all
+		if m.mode == "search" {
+			cmd := HandleKey(m, msg)
+			return cmd
+		}
+
+		// 1) allow viewport to handle scrolling keys (only in normal mode)
 		switch msg.String() {
 		case "up", "down", "pgup", "pgdown", "home", "end", "k", "j":
 			var cmd tea.Cmd
@@ -346,7 +352,8 @@ func (m *Model) buildContent() string {
 		full = strings.Join(processedLines, "\n")
 	}
 
-	if m.mode == "search" && m.searchTerm != "" {
+	// Apply highlighting if we have an active search, regardless of mode
+	if m.searchTerm != "" {
 		return utils.HighlightMatches(full, m.searchTerm)
 	}
 	return full
@@ -354,7 +361,7 @@ func (m *Model) buildContent() string {
 
 // scrollToMatch centers the viewport on the selected match
 func (m *Model) scrollToMatch() {
-	if len(m.searchMatches) == 0 || m.mode != "search" {
+	if len(m.searchMatches) == 0 {
 		return
 	}
 	idx := m.searchMatches[m.searchIndex]
