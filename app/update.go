@@ -366,13 +366,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		}
-		// Also check for GetSearchMode (for logs view)
-		if logsView, ok := m.currentView.(interface{ GetSearchMode() bool }); ok {
-			if logsView.GetSearchMode() {
-				cmd := m.currentView.Update(msg)
-				return m, cmd
-			}
-		}
 		cmd := m.goBack()
 		return m, cmd
 	}
