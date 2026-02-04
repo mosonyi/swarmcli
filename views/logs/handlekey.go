@@ -87,6 +87,11 @@ func HandleKey(m *Model, k tea.KeyMsg) tea.Cmd {
 			}
 			m.mode = "normal"
 			return nil
+		case " ", "space":
+			// Handle space key explicitly
+			m.searchTerm += " "
+			m.highlightContent()
+			return nil
 		}
 		// In search mode, capture runes/backspace as text input
 		switch k.Type {
