@@ -71,16 +71,51 @@ func HandleKey(m *Model, k tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 
+	// In search mode, only handle special keys and text input
+	if m.mode == "search" {
+		switch k.String() {
+		case "esc":
+			// Exit search mode
+			m.mode = "normal"
+			return nil
+		case "enter":
+			// Perform search and exit search mode
+			m.highlightContent()
+			if len(m.searchMatches) > 0 {
+				m.searchIndex = 0
+				m.scrollToMatch()
+			}
+			m.mode = "normal"
+			return nil
+		case " ", "space":
+			// Handle space key explicitly
+			m.searchTerm += " "
+			m.highlightContent()
+			return nil
+		}
+		// In search mode, capture runes/backspace as text input
+		switch k.Type {
+		case tea.KeyRunes:
+			m.searchTerm += string(k.Runes)
+			m.highlightContent()
+			return nil
+		case tea.KeyBackspace:
+			if len(m.searchTerm) > 0 {
+				m.searchTerm = m.searchTerm[:len(m.searchTerm)-1]
+				m.highlightContent()
+			}
+			return nil
+		}
+		// For other keys in search mode, ignore them (don't let them fall through)
+		return nil
+	}
+
+	// Normal mode key handling
 	switch k.String() {
 	case "q":
 		m.Visible = false
 		return nil
 	case "esc":
-		// If in search mode, exit search mode
-		if m.mode == "search" {
-			m.mode = "normal"
-			return nil
-		}
 		// If in fullscreen, exit fullscreen instead of closing view
 		if m.getFullscreen() {
 			m.setFullscreen(false)
@@ -98,15 +133,8 @@ func HandleKey(m *Model, k tea.KeyMsg) tea.Cmd {
 		m.searchIndex = 0
 		return nil
 	case "enter":
-		if m.mode == "search" {
-			m.highlightContent()
-			if len(m.searchMatches) > 0 {
-				m.searchIndex = 0
-				m.scrollToMatch()
-			}
-			m.mode = "normal"
-			return nil
-		}
+		// In normal mode, enter doesn't do anything
+		return nil
 	case "n":
 		if len(m.searchMatches) > 0 {
 			m.searchIndex = (m.searchIndex + 1) % len(m.searchMatches)
@@ -196,11 +224,6 @@ func HandleKey(m *Model, k tea.KeyMsg) tea.Cmd {
 		}
 		return nil
 	case "o":
-		// Only handle 'o' as a command in normal mode
-		// In search mode, let it fall through to be captured as a rune
-		if m.mode != "normal" {
-			break
-		}
 		// Show node selection dialog
 		nodes := m.extractUniqueNodes()
 		if len(nodes) > 1 { // More than just "All nodes"
@@ -225,22 +248,6 @@ func HandleKey(m *Model, k tea.KeyMsg) tea.Cmd {
 			l().Infof("[logsview] 'o' key pressed: showing node selection dialog with %d nodes", len(nodes))
 		}
 		return nil
-	}
-
-	// if in search mode, capture runes/backspace
-	if m.mode == "search" {
-		switch k.Type {
-		case tea.KeyRunes:
-			m.searchTerm += string(k.Runes)
-			m.highlightContent()
-			return nil
-		case tea.KeyBackspace:
-			if len(m.searchTerm) > 0 {
-				m.searchTerm = m.searchTerm[:len(m.searchTerm)-1]
-				m.highlightContent()
-			}
-			return nil
-		}
 	}
 
 	return nil

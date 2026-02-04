@@ -167,6 +167,11 @@ func (m *Model) GetSearchMode() bool {
 	return m.mode == "search"
 }
 
+// IsSearching is an alias for GetSearchMode for compatibility with app-level search checks
+func (m *Model) IsSearching() bool {
+	return m.GetSearchMode()
+}
+
 // ShortHelpItems stays compatible with your helpbar interface.
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	if m.mode == "search" {
