@@ -155,6 +155,14 @@ homebrew_casks:
     directory: Casks
     homepage: https://swarmcli.io
     description: "Docker Swarm TUI management tool"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/swarmcli"]
+          end
+    caveats: |
+      To run swarmcli for the first time, you may need to allow it in System Preferences > Security & Privacy.
 
 # Docker images (optional)
 # dockers:
