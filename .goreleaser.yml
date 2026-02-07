@@ -144,9 +144,11 @@ homebrew_casks:
       - default
     binaries:
       - swarmcli
+    skip_upload: auto
     repository:
       owner: Eldara-Tech
       name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     commit_author:
       name: Eldara Tech
       email: hello@eldara.io
