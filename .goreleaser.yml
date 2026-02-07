@@ -35,7 +35,7 @@ builds:
       - -X main.date={{.Date}}
     main: .
 
-  - id: darwin
+  - id: osx
     goos:
       - darwin
     goarch:
@@ -90,18 +90,20 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
-    formats:
-      - tar.gz
-      - zip
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
     files:
       - README.md
       - LICENSE*
 
 universal_binaries:
-  - id: darwin
+  - id: darwin-universal
     ids:
-      - darwin
-    replace: false
+      - osx
+    replace: true
+    name_template: "{{ .ProjectName }}"
 
 checksum:
   name_template: 'checksums.txt'
@@ -135,18 +137,22 @@ changelog:
     - title: Others
       order: 999
 
-# Homebrew tap (optional - requires separate tap repo)
-# brews:
-#   - name: swarmcli
-#     repository:
-#       owner: mosonyi
-#       name: homebrew-tap
-#     folder: Formula
-#     homepage: https://github.com/mosonyi/swarmcli
-#     description: "Docker Swarm TUI management tool"
-#     license: MIT
-#     install: |
-#       bin.install "swarmcli"
+# Homebrew tap 
+homebrew_casks:
+  - name: swarmcli
+    ids:
+      - default
+    binaries:
+      - swarmcli
+    repository:
+      owner: Eldara-Tech
+      name: homebrew-tap
+    commit_author:
+      name: Eldara Tech
+      email: hello@eldara.io
+    directory: Casks
+    homepage: https://swarmcli.io
+    description: "Docker Swarm TUI management tool"
 
 # Docker images (optional)
 # dockers:
