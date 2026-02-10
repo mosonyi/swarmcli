@@ -1,0 +1,8 @@
+<svg width="240" height="60" viewBox="0 0 240 60" xmlns="http://www.w3.org/2000/svg">
+  <!-- Terminal Icon (Prompt only) -->
+  <path d="M20 22l6 8-6 8" fill="none" stroke="#3b82f6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="30" y1="38" x2="40" y2="38" stroke="#3b82f6" stroke-width="3" stroke-linecap="round"/>
+  
+  <!-- Text -->
+  <text x="55" y="42" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="32" font-weight="800" fill="#ffffff" letter-spacing="1">SwarmCLI</text>
+</svg>

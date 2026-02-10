@@ -1,77 +1,86 @@
-#SwarmCLI
+![CI](https://github.com/Eldara-Tech/swarmcli/actions/workflows/ci.yml/badge.svg)
 
-Simple CLI for managing Docker Swarm clusters similar to k9s.
+<br/>
 
-![CI](https://github.com/mosonyi/swarmcli/actions/workflows/ci.yml/badge.svg)
+<div align="center">
+  <br />
+  <img src="assets/logo-black.svg" alt="SwarmCLI Logo" width="300">
+  <h1>Swarm Management at the Speed of Thought</h1>
 
+  <p>
+    <strong>The terminal-UI for Docker Swarm you’ve been waiting for. Fast, keyboard-driven, and open source.</strong>
+  </p>
 
-# 🐳 swarmcli
+  <p>
+    <a href="https://github.com/Eldara-Tech/swarmcli/actions"><img src="https://img.shields.io/github/actions/workflow/status/Eldara-Tech/swarmcli/ci.yml?branch=main&style=flat-square&logo=github" alt="Build Status"></a>
+    <a href="https://goreportcard.com/report/github.com/Eldara-Tech/swarmcli"><img src="https://img.shields.io/badge/go%20report-A+-brightgreen?style=flat-square" alt="Go Report Card"></a>
+    <a href="https://github.com/Eldara-Tech/swarmcli/releases"><img src="https://img.shields.io/github/v/release/Eldara-Tech/swarmcli?style=flat-square&color=re-blue" alt="Latest Release"></a>
+    <a href="https://github.com/Eldara-Tech/swarmcli/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="License"></a>
+  </p>
 
-A **terminal UI** for managing Docker Swarm clusters, inspired by [k9s](https://k9scli.io/).
-
----
-
-## 👋 Welcome to swarmcli
-
-**swarmcli** is a command-line interface tool that brings a powerful terminal-based UI to Docker Swarm, much like what [k9s](https://k9scli.io/) does for Kubernetes. Our mission is to empower Swarm users with a fast, intuitive, and feature-rich terminal experience for observing and managing services, containers, nodes, networks, and volumes in a Swarm cluster.
-
----
-
-## ⚡️ Why swarmcli?
-
-While Kubernetes has many tools for cluster management, Docker Swarm users often rely on CLI commands or custom dashboards with limited interactivity. **swarmcli** aims to fill this gap by providing:
-
-- A **real-time, curses-based UI**
-- Fast navigation between nodes, services, tasks, and containers
-- Live inspection of logs and metrics
-- Actions like scaling, updating, restarting, and removing resources
-- Keyboard-driven workflows for efficiency
-
-We believe Swarm deserves a first-class tool like k9s — and we’re here to build it.
+  <p>
+    <a href="#-why-swarmcli">Why SwarmCLI?</a> •
+    <a href="#-quickstart">Quickstart</a> •
+    <a href="#-features">Features</a> •
+    <a href="#-installation">Installation</a> •
+    <a href="#-contributing">Contributing</a>
+  </p>
+</div>
 
 ---
 
-## 🚀 Project Vision
+## Visual Feast
 
-This is an early-stage project inspired by the great work behind `k9s`. Our goal is to build something truly useful for the Docker Swarm community — a tool that combines speed, usability, and clarity.
+![alt text](assets/swarmcli.gif)
 
-We are actively **looking for contributors, testers, and sponsors** to help bring this vision to life.  
-If you believe in Docker Swarm and want to support its ecosystem, we’d love your help!
+## Why SwarmCLI?
 
+In the Kubernetes world, **k9s** is the gold standard for cluster management. We believe Docker Swarm users deserve the same level of quality, speed, and intuition.
 
----
+**"Because Swarm is not dead, it's just efficient. And it deserves better tools."**
 
-## 🧭 Goals
+SwarmCLI translates the complexity of Docker Swarm into a sleek, keyboard-centric terminal UI. It’s built for developers who want to manage their clusters without leaving the terminal or waiting for heavy Web UIs to load.
 
-- Build a minimal, fast, terminal UI for Docker Swarm
-- Mirror some of the UX patterns and capabilities of `k9s`
-- Maintain low dependency and easy installation
-- Focus on practical use cases for real-world Swarm clusters
+## Quickstart
 
----
+Get up and running in seconds:
 
-## ✅ Features
+```bash
+# macOS/Linux via Homebrew
+brew tap eldara-tech/tap
+brew install swarmcli
 
-- ✅ Service/task viewer with sorting and filtering
-- ✅ Node viewer with status monitoring
-- ✅ Container logs viewer
-- ✅ Swarm secrets and configs UI with create/edit/rotate
-- ✅ Docker context switching
-- ✅ Stack management and deployment
-- ✅ Network viewer with inspect and used-by services
+# Run it
+swarmcli
+```
 
-## 🔧 Coming Soon
+## Features
 
-- Enhanced node status dashboard
-- Shell access to containers
-- Overlay network inspection
-- Network create and connect operations
+- **Real-time Observability**: Live monitoring of Services, Tasks, Nodes, and Containers.
+- **Stack Awareness**: Navigate your cluster hierarchically (Stacks > Services > Tasks).
+- **Instant Logs**: No more `docker service logs -f`. Just press `l` on any service.
+- **Secrets & Configs**: Manage, rotate, and — uniquely — **reveal** secrets for debugging.
+- **Management Actions**: Scale, restart, remove, and update services with single keystrokes.
+- **Zero Config**: Works out-of-the-box with your local Docker engine or remote via SSH/Contexts.
+- **Lightweight**: Built with Go. Single static binary (< 20MB). Zero dependencies.
 
----
+## Installation
 
-## 💡 Inspired by k9s
+<!-- ### Docker (No Installation)
 
-This project is not affiliated with the k9s team, but we deeply admire their work. **swarmcli** is our attempt to bring a similarly powerful CLI tool to the Docker Swarm world.
+```bash
+docker run --rm -it \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  ghcr.io/eldara-tech/swarmcli:latest
+``` -->
+
+### Build from Source
+
+```bash
+git clone https://github.com/Eldara-Tech/swarmcli.git
+cd swarmcli
+go install
+```
 
 ## Using Docker container to build and run locally
 
@@ -87,6 +96,7 @@ docker compose run --build --rm swarmcli
 ```
 
 Then run:
+
 ```
 go run .
 ```
@@ -115,24 +125,47 @@ $ LOG_LEVEL=debug SWARMCLI_ENV=dev go run .
   - Useful to test error handling: `SWARMCLI_REVEAL_IMAGE=alpine:this-tag-does-not-exist`
 
 Colorize log tails. Not perfect but simple:
+
 ```bash
 sudo apt install ccze
-tail -f ~/.local/state/swarmcli/app-debug.log | ccze -A 
+tail -f ~/.local/state/swarmcli/app-debug.log | ccze -A
 ```
 
 ### Integration tests
+
 The logs for the integration tests can be enabled with:
 
 ```bash
 TEST_LOG=1 ./test-setup/testenv.sh test
 ```
 
-## License
+## Key Bindings
 
-Copyright © 2026 Eldara Tech
+| Key      | Action                  |
+| :------- | :---------------------- |
+| `?`      | Show Help / Cheat Sheet |
+| `:stack` | Navigate to Stacks      |
+| `:svc`   | Navigate to Services    |
+| `:node`  | Navigate to Nodes       |
+| `:config`  | Navigate to Config    |
+| `:secret`  | Navigate to Secret    |
+| `:node`  | Navigate to Nodes       |
+| `l`      | View Logs               |
+| `s`      | Scale Service           |
+| `r`      | Restart Service         |
+| `ctrl-c` | Quit                    |
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+## Project Hygiene
 
-    http://www.apache.org/licenses/LICENSE-2.0
+Impeccable project hygiene is the backbone of a thriving ecosystem.
+
+- **[Contributing](CONTRIBUTING.md)**: We ❤️ contributions! Check our guide to get started.
+- **[Security](SECURITY.md)**: Found a bug? Let us know securely.
+- **[Code of Conduct](CODE_OF_CONDUCT.md)**: Expectations for our community.
+- **[License](LICENSE)**: Apache 2.0.
+
+---
+
+<div align="center">
+  <sub>Built by the community for the community. Made with ❤️ for the Docker Swarm community.</sub>
+</div>
