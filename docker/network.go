@@ -4,6 +4,7 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -124,10 +125,9 @@ func (nw *NetworkWithUsage) PrettyJSON() ([]byte, error) {
 		return nil, err
 	}
 
-	var buf []byte
-	buf, err = json.MarshalIndent(json.RawMessage(raw), "", "  ")
-	if err != nil {
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, raw, "", "  "); err != nil {
 		return nil, fmt.Errorf("pretty-print failed: %w", err)
 	}
-	return buf, nil
+	return pretty.Bytes(), nil
 }

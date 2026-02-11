@@ -38,7 +38,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		switch msg.String() {
 		case "up":
-			m.Replicas++
+			if m.Replicas < 1000 {
+				m.Replicas++
+			}
 			return nil
 		case "down":
 			if m.Replicas > 0 {

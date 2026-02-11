@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -185,7 +186,7 @@ func InspectContext(contextName string) (string, error) {
 
 // ExportContext exports a Docker context to a tar file in /tmp
 func ExportContext(contextName string) (string, error) {
-	filePath := fmt.Sprintf("/tmp/%s.tar", contextName)
+	filePath := fmt.Sprintf("/tmp/%s.tar", filepath.Base(contextName))
 	cmd := exec.Command("docker", "context", "export", contextName, filePath)
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("failed to export context %s: %w", contextName, err)
@@ -195,7 +196,7 @@ func ExportContext(contextName string) (string, error) {
 
 // ExportContextWithForce exports a Docker context, removing existing file if present
 func ExportContextWithForce(contextName string) (string, error) {
-	filePath := fmt.Sprintf("/tmp/%s.tar", contextName)
+	filePath := fmt.Sprintf("/tmp/%s.tar", filepath.Base(contextName))
 	// Remove existing file if present
 	_ = exec.Command("rm", "-f", filePath).Run()
 
@@ -208,7 +209,7 @@ func ExportContextWithForce(contextName string) (string, error) {
 
 // CheckContextExportExists checks if an export file already exists for a context
 func CheckContextExportExists(contextName string) bool {
-	filePath := fmt.Sprintf("/tmp/%s.tar", contextName)
+	filePath := fmt.Sprintf("/tmp/%s.tar", filepath.Base(contextName))
 	cmd := exec.Command("test", "-f", filePath)
 	return cmd.Run() == nil
 }

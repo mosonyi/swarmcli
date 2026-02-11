@@ -5,6 +5,7 @@ package docker
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -125,20 +126,13 @@ func GetTasksForStack(stackName string) ([]TaskEntry, error) {
 }
 
 func sortTasksByServiceAndTime(tasks []TaskEntry) {
-	// Simple bubble sort for demonstration
-	for i := 0; i < len(tasks); i++ {
-		for j := i + 1; j < len(tasks); j++ {
-			// First compare service names
-			if tasks[i].ServiceName > tasks[j].ServiceName {
-				tasks[i], tasks[j] = tasks[j], tasks[i]
-			} else if tasks[i].ServiceName == tasks[j].ServiceName {
-				// Same service: sort by created time descending (newest first)
-				if tasks[i].CreatedAt.Before(tasks[j].CreatedAt) {
-					tasks[i], tasks[j] = tasks[j], tasks[i]
-				}
-			}
+	sort.Slice(tasks, func(i, j int) bool {
+		if tasks[i].ServiceName != tasks[j].ServiceName {
+			return tasks[i].ServiceName < tasks[j].ServiceName
 		}
-	}
+		// Same service: sort by created time descending (newest first)
+		return tasks[i].CreatedAt.After(tasks[j].CreatedAt)
+	})
 }
 
 // GetTasksForService returns all tasks for a specific service ID from the cached snapshot.
@@ -233,13 +227,9 @@ func GetTasksForService(serviceID string) ([]TaskEntry, error) {
 	}
 
 	// Sort tasks by created time (newest first)
-	for i := 0; i < len(tasks); i++ {
-		for j := i + 1; j < len(tasks); j++ {
-			if tasks[i].CreatedAt.Before(tasks[j].CreatedAt) {
-				tasks[i], tasks[j] = tasks[j], tasks[i]
-			}
-		}
-	}
+	sort.Slice(tasks, func(i, j int) bool {
+		return tasks[i].CreatedAt.After(tasks[j].CreatedAt)
+	})
 
 	return tasks, nil
 }

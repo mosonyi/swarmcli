@@ -82,7 +82,8 @@ func RefreshSnapshot() (*SwarmSnapshot, error) {
 	if err != nil {
 		return nil, fmt.Errorf("docker client: %w", err)
 	}
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	nodes, err := c.NodeList(ctx, swarm.NodeListOptions{})
 	if err != nil {
@@ -120,13 +121,16 @@ func RefreshSnapshotAsync() {
 
 	go func() {
 		defer atomic.StoreInt32(&refreshInProgress, 0)
-		// Run a refresh and ignore the error; the cached snapshot will be updated on success.
-		_, _ = RefreshSnapshot()
+		if _, err := RefreshSnapshot(); err != nil {
+			l().Warnf("background snapshot refresh failed: %v", err)
+		}
 	}()
 }
 
 // TriggerRefreshIfNeeded will check the cache TTL and start a background refresh
 // if the snapshot is empty or stale.
+// Note: there is a benign TOCTOU race between the staleness check and the async
+// refresh start — the worst case is a redundant refresh, which is harmless.
 func TriggerRefreshIfNeeded() {
 	snapshotMu.RLock()
 	s := snapshot

@@ -141,6 +141,7 @@ func GetSwarmCPUUsage() (string, error) {
 				results <- cpuResult{err: err}
 				return
 			}
+			defer stats.Body.Close()
 
 			var s container.StatsResponse
 			decodeErr := json.NewDecoder(stats.Body).Decode(&s)
@@ -242,6 +243,7 @@ func GetSwarmMemUsage() (string, error) {
 				results <- memResult{err: err}
 				return
 			}
+			defer stats.Body.Close()
 
 			var s container.StatsResponse
 			decodeErr := json.NewDecoder(stats.Body).Decode(&s)

@@ -247,6 +247,9 @@ func RotateConfigInServices(ctx context.Context, oldCfg *swarm.Config, newCfg sw
 	// --- 2. Apply updates
 	for _, svc := range services {
 		updated := svc.Spec
+		if updated.TaskTemplate.ContainerSpec == nil {
+			continue
+		}
 		for i, cfgRef := range updated.TaskTemplate.ContainerSpec.Configs {
 			// Match by old ID or by name if oldCfg is nil
 			if (oldCfg != nil && cfgRef.ConfigID == oldCfg.ID) ||
@@ -313,6 +316,9 @@ func listServicesUsingConfig(ctx context.Context, client *client.Client, configI
 	}
 	var filtered []swarm.Service
 	for _, s := range services {
+		if s.Spec.TaskTemplate.ContainerSpec == nil {
+			continue
+		}
 		for _, c := range s.Spec.TaskTemplate.ContainerSpec.Configs {
 			if c.ConfigID == configID {
 				filtered = append(filtered, s)
@@ -339,6 +345,9 @@ func listServicesUsingConfigName(ctx context.Context, client *client.Client, nam
 	}
 	var filtered []swarm.Service
 	for _, s := range services {
+		if s.Spec.TaskTemplate.ContainerSpec == nil {
+			continue
+		}
 		for _, c := range s.Spec.TaskTemplate.ContainerSpec.Configs {
 			if c.ConfigName == name {
 				filtered = append(filtered, s)
