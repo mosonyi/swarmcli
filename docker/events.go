@@ -28,8 +28,6 @@ func WatchEventsCmd() tea.Cmd {
 		if err != nil {
 			return EventMsg{Err: err}
 		}
-		defer closeCli(cli)
-
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 

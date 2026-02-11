@@ -72,7 +72,6 @@ func ListSecrets(ctx context.Context) ([]swarm.Secret, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer closeCli(cli)
 
 	secrets, err := cli.SecretList(ctx, swarm.SecretListOptions{})
 	if err != nil {
@@ -110,7 +109,6 @@ func InspectSecret(ctx context.Context, nameOrID string) (*SecretWithDecodedData
 	if err != nil {
 		return nil, err
 	}
-	defer closeCli(cli)
 
 	sec, _, err := cli.SecretInspectWithRaw(ctx, nameOrID)
 	if err != nil {
@@ -172,7 +170,6 @@ func createSecretWithSpec(ctx context.Context, spec swarm.SecretSpec, logPrefix 
 	if err != nil {
 		return swarm.Secret{}, err
 	}
-	defer closeCli(cli)
 
 	secName := spec.Name
 
@@ -203,7 +200,6 @@ func RotateSecretInServices(ctx context.Context, oldSec *swarm.Secret, newSec sw
 	if err != nil {
 		return fmt.Errorf("failed to get docker client: %w", err)
 	}
-	defer closeCli(client)
 
 	// --- 1. Find affected services
 	var services []swarm.Service
@@ -254,7 +250,6 @@ func DeleteSecret(ctx context.Context, nameOrID string) error {
 	if err != nil {
 		return err
 	}
-	defer closeCli(cli)
 
 	svcs, err := listServicesUsingSecret(ctx, cli, sec.Secret.ID)
 	if err != nil {

@@ -11,9 +11,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	swarmlog "swarmcli/utils/log"
+	"sync"
 	"time"
 
 	"github.com/docker/docker/client"
+)
+
+var (
+	cachedClient *client.Client
+	clientMu     sync.Mutex
 )
 
 func l() *swarmlog.SwarmLogger {
@@ -33,10 +39,41 @@ type dockerContext struct {
 }
 
 // GetClient returns a Docker SDK client configured based on the current Docker context.
+// The client is cached as a package-level singleton; subsequent calls return the
+// cached instance without spawning subprocesses or pinging the daemon. Call
+// ResetClient to force a fresh client (e.g. after a context switch).
 func GetClient() (*client.Client, error) {
-	// Determine the Docker context to use. Prefer the `DOCKER_CONTEXT`
-	// environment variable (useful for CI/dev), otherwise fall back to the
-	// currently active Docker context reported by `docker context show`.
+	clientMu.Lock()
+	defer clientMu.Unlock()
+
+	if cachedClient != nil {
+		return cachedClient, nil
+	}
+
+	cli, err := buildClient()
+	if err != nil {
+		return nil, err
+	}
+	cachedClient = cli
+	return cachedClient, nil
+}
+
+// ResetClient closes the cached client (if any) and clears the cache so the
+// next GetClient call creates a fresh connection. Safe to call when no client
+// has been cached yet.
+func ResetClient() {
+	clientMu.Lock()
+	defer clientMu.Unlock()
+
+	if cachedClient != nil {
+		_ = cachedClient.Close()
+		cachedClient = nil
+	}
+}
+
+// buildClient performs the actual work of resolving the Docker context,
+// creating an SDK client, and pinging the daemon.
+func buildClient() (*client.Client, error) {
 	ctxName, err := GetContextFromEnv()
 	if err != nil {
 		return nil, err

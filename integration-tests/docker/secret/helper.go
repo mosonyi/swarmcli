@@ -32,7 +32,7 @@ func (e *testEnv) cleanupAll(t *testing.T) {
 	for _, fn := range e.cleanup {
 		fn()
 	}
-	_ = e.cli.Close()
+	docker.ResetClient()
 }
 
 func (e *testEnv) registerSecretCleanup(id string) {

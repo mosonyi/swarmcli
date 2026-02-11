@@ -82,8 +82,6 @@ func RefreshSnapshot() (*SwarmSnapshot, error) {
 	if err != nil {
 		return nil, fmt.Errorf("docker client: %w", err)
 	}
-	defer closeCli(c)
-
 	ctx := context.Background()
 
 	nodes, err := c.NodeList(ctx, swarm.NodeListOptions{})

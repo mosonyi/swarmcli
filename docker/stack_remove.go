@@ -16,8 +16,6 @@ func RemoveStack(stackName string) error {
 	if err != nil {
 		return fmt.Errorf("docker client: %w", err)
 	}
-	defer closeCli(c)
-
 	ctx := context.Background()
 
 	// List all services in the stack

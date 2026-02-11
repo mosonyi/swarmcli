@@ -158,6 +158,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case contextsview.ContextChangedNotification:
 		// Context has changed - show loading view then navigate to stacks
+		// Close cached Docker client so a fresh one is created for the new context
+		docker.ResetClient()
 		// Invalidate snapshot cache so stacks load fresh data for new context
 		docker.InvalidateSnapshot()
 		cmd := m.replaceView(loadingview.ViewName, map[string]string{
