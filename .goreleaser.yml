@@ -201,3 +201,13 @@ dockers:
       - "--label=org.opencontainers.image.version={{.Version}}"
     goos: linux
     goarch: arm64
+
+docker_manifests:
+  - name_template: "eldaratech/swarmcli:{{ .Tag }}"
+    image_templates:
+      - "eldaratech/swarmcli:{{ .Tag }}-amd64"
+      - "eldaratech/swarmcli:{{ .Tag }}-arm64"
+  - name_template: "eldaratech/swarmcli:latest"
+    image_templates:
+      - "eldaratech/swarmcli:{{ .Tag }}-amd64"
+      - "eldaratech/swarmcli:{{ .Tag }}-arm64"
