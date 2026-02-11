@@ -1,7 +1,6 @@
 FROM scratch
 
-ARG TARGETARCH
-COPY linux/${TARGETARCH}/swarmcli /swarmcli
+COPY swarmcli /swarmcli
 
 ENV TERM=xterm-256color
 ENTRYPOINT ["/swarmcli"]

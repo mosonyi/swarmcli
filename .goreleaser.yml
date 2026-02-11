@@ -176,20 +176,30 @@ scoops:
       - "Write-Host 'swarmcli installed successfully!' -ForegroundColor Green"
 
 # Docker images
-dockers_v2:
-  - id: linux
-    images:
-      - "eldaratech/swarmcli"
-    tags:
-      - "{{ .Tag }}"
-      - "latest"
-    platforms:
-      - "linux/arm64"
-      - "linux/amd64"
+dockers:
+  - image_templates:
+      - "eldaratech/swarmcli:{{ .Tag }}-amd64"
+      - "eldaratech/swarmcli:latest-amd64"
     dockerfile: Dockerfile.release
-    disable_attestations: true
-    labels:
-      org.opencontainers.image.created: "{{ .Date }}"
-      org.opencontainers.image.title: "{{ .ProjectName }}"
-      org.opencontainers.image.revision: "{{ .FullCommit }}"
-      org.opencontainers.image.version: "{{ .Version }}"
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+    goos: linux
+    goarch: amd64
+  - image_templates:
+      - "eldaratech/swarmcli:{{ .Tag }}-arm64"
+      - "eldaratech/swarmcli:latest-arm64"
+    dockerfile: Dockerfile.release
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+    goos: linux
+    goarch: arm64
