@@ -162,8 +162,6 @@ func ValidateContext(contextName string) error {
 		_ = UseContext(currentCtx)
 		return fmt.Errorf("failed to connect to context %s: %w", contextName, err)
 	}
-	defer func() { _ = cli.Close() }()
-
 	// Verify connection with ping
 	ctx := context.Background()
 	if _, err := cli.Ping(ctx); err != nil {

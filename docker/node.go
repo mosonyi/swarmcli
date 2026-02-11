@@ -15,7 +15,6 @@ func GetNodeIDToHostnameMapFromDocker() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer closeCli(c)
 
 	nodes, err := c.NodeList(context.Background(), swarm.NodeListOptions{})
 	if err != nil {
@@ -35,7 +34,6 @@ func DemoteNode(ctx context.Context, nodeID string) error {
 	if err != nil {
 		return err
 	}
-	defer closeCli(c)
 
 	// Fetch current node to get the version and current spec
 	node, _, err := c.NodeInspectWithRaw(ctx, nodeID)
@@ -60,7 +58,6 @@ func PromoteNode(ctx context.Context, nodeID string) error {
 	if err != nil {
 		return err
 	}
-	defer closeCli(c)
 
 	// Fetch current node to get the version and current spec
 	node, _, err := c.NodeInspectWithRaw(ctx, nodeID)
@@ -85,7 +82,6 @@ func SetNodeAvailability(ctx context.Context, nodeID string, availability swarm.
 	if err != nil {
 		return err
 	}
-	defer closeCli(c)
 
 	// Fetch current node to get the version and current spec
 	node, _, err := c.NodeInspectWithRaw(ctx, nodeID)
@@ -110,7 +106,6 @@ func AddNodeLabel(ctx context.Context, nodeID string, key string, value string) 
 	if err != nil {
 		return err
 	}
-	defer closeCli(c)
 
 	// Fetch current node to get the version and current spec
 	node, _, err := c.NodeInspectWithRaw(ctx, nodeID)
@@ -138,7 +133,6 @@ func RemoveNodeLabel(ctx context.Context, nodeID string, key string) error {
 	if err != nil {
 		return err
 	}
-	defer closeCli(c)
 
 	// Fetch current node to get the version and current spec
 	node, _, err := c.NodeInspectWithRaw(ctx, nodeID)
@@ -165,7 +159,6 @@ func RemoveNode(ctx context.Context, nodeID string, force bool) error {
 	if err != nil {
 		return err
 	}
-	defer closeCli(c)
 
 	opts := swarm.NodeRemoveOptions{Force: force}
 	if err := c.NodeRemove(ctx, nodeID, opts); err != nil {
