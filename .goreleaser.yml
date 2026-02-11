@@ -187,6 +187,7 @@ dockers_v2:
       - "linux/arm64"
       - "linux/amd64"
     dockerfile: Dockerfile.release
+    disable_attestations: true
     labels:
       org.opencontainers.image.created: "{{ .Date }}"
       org.opencontainers.image.title: "{{ .ProjectName }}"
