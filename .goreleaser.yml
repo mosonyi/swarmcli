@@ -179,7 +179,6 @@ scoops:
 dockers:
   - image_templates:
       - "eldaratech/swarmcli:{{ .Tag }}-amd64"
-      - "eldaratech/swarmcli:latest-amd64"
     dockerfile: Dockerfile.release
     use: buildx
     build_flag_templates:
@@ -192,7 +191,6 @@ dockers:
     goarch: amd64
   - image_templates:
       - "eldaratech/swarmcli:{{ .Tag }}-arm64"
-      - "eldaratech/swarmcli:latest-arm64"
     dockerfile: Dockerfile.release
     use: buildx
     build_flag_templates:
