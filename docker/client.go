@@ -132,6 +132,7 @@ func buildClient() (*client.Client, error) {
 	pingCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if _, err := cli.Ping(pingCtx); err != nil {
+		_ = cli.Close()
 		return nil, fmt.Errorf("ping failed: %w", err)
 	}
 
