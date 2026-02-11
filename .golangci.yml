@@ -1,0 +1,45 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - gocritic
+    - misspell
+    - revive
+    - bodyclose
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+      disabled-checks:
+        - appendAssign      # append to different slice is intentional pattern
+        - evalOrder         # Bubble Tea return model, model.Init() pattern
+        - unlambda          # Bubble Tea command wrapping pattern
+        - assignOp          # stylistic, not a bug
+        - commentedOutCode  # false positives on inline explanatory comments
+        - ifElseChain       # pre-existing if-else chains, not worth rewriting
+        - singleCaseSwitch  # Bubble Tea type switches start with one case
+        - dupBranchBody     # intentional defensive branching in UI code
+    govet:
+      disable:
+        - fieldalignment
+    revive:
+      rules:
+        - name: var-naming
+    staticcheck:
+      checks:
+        - "default"
+        - "-QF1008"
+
+formatters:
+  enable:
+    - gofmt
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

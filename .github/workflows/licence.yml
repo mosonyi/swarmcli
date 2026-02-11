@@ -2,15 +2,21 @@ name: License checks
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
   push:
-    branches: [ main ]
+    branches: [main]
+
+permissions: read-all
+
+concurrency:
+  group: licence-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   spdx:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Check SPDX headers
         run: |
           ./scripts/check-spdx.sh

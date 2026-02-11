@@ -82,7 +82,7 @@ type Model struct {
 
 	// Cached column widths for header alignment
 	colNameWidth int
-	colIdWidth   int
+	colIDWidth   int
 
 	// Spinner for slow-used-status indicator
 	spinner int
