@@ -14,8 +14,8 @@ type mockCommand struct {
 	desc string
 }
 
-func (m *mockCommand) Name() string                                { return m.name }
-func (m *mockCommand) Description() string                         { return m.desc }
+func (m *mockCommand) Name() string                       { return m.name }
+func (m *mockCommand) Description() string                { return m.desc }
 func (m *mockCommand) Execute(_ any, _ args.Args) tea.Cmd { return nil }
 
 func cleanup(names ...string) {

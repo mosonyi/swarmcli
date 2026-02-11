@@ -8,7 +8,7 @@ import (
 
 func TestComputeFrameDimensions_Normal(t *testing.T) {
 	spec := ComputeFrameDimensions(100, 40, 0, 0, "", "")
-	require.Equal(t, 104, spec.FrameWidth)  // +4 horizontal padding
+	require.Equal(t, 104, spec.FrameWidth) // +4 horizontal padding
 	require.Equal(t, 40, spec.FrameHeight)
 	require.Equal(t, 38, spec.DesiredContentLines) // 40 - 2 vertical padding
 }

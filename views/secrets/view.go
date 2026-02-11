@@ -120,7 +120,7 @@ func (m *Model) View() string {
 
 	// column width calculations are handled in setRenderItem
 	nameCol := m.colNameWidth
-	idCol := m.colIdWidth
+	idCol := m.colIDWidth
 	if nameCol <= 0 {
 		nameCol = len("NAME")
 	}

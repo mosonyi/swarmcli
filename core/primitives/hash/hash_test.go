@@ -1,4 +1,4 @@
-package hash
+package hash //nolint:revive // matches stdlib name intentionally
 
 import (
 	"math"

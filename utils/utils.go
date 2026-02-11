@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright © 2026 Eldara Tech
 
-package utils
+package utils //nolint:revive // standard utility package name
 
 import (
 	"github.com/muesli/termenv"

@@ -12,13 +12,13 @@ type mockView struct {
 	name string
 }
 
-func (m *mockView) Update(tea.Msg) tea.Cmd          { return nil }
-func (m *mockView) View() string                     { return m.name }
-func (m *mockView) Init() tea.Cmd                    { return nil }
-func (m *mockView) Name() string                     { return m.name }
-func (m *mockView) OnEnter() tea.Cmd                 { return nil }
-func (m *mockView) OnExit() tea.Cmd                  { return nil }
-func (m *mockView) HasErrors() bool                  { return false }
+func (m *mockView) Update(tea.Msg) tea.Cmd              { return nil }
+func (m *mockView) View() string                        { return m.name }
+func (m *mockView) Init() tea.Cmd                       { return nil }
+func (m *mockView) Name() string                        { return m.name }
+func (m *mockView) OnEnter() tea.Cmd                    { return nil }
+func (m *mockView) OnExit() tea.Cmd                     { return nil }
+func (m *mockView) HasErrors() bool                     { return false }
 func (m *mockView) ShortHelpItems() []helpbar.HelpEntry { return nil }
 
 func TestPush_And_Pop(t *testing.T) {

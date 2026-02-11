@@ -2,9 +2,15 @@ name: Integration Tests
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+permissions: read-all
+
+concurrency:
+  group: integration-tests-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   integration:
@@ -13,7 +19,7 @@ jobs:
 
     services:
       docker:
-        image: docker:27-dind
+        image: docker:29-dind
         options: >-
           --privileged
           --health-cmd="docker info >/dev/null 2>&1 || exit 1"
@@ -33,13 +39,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: true
@@ -64,7 +70,7 @@ jobs:
 
       - name: Upload test report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: test-report
           path: /tmp/test-report.xml

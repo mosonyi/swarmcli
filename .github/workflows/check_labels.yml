@@ -1,7 +1,14 @@
 name: Check labels
+
 on:
   pull_request:
     types: [opened, labeled, unlabeled, synchronize, ready_for_review]
+
+permissions: read-all
+
+concurrency:
+  group: check-labels-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   label-check:

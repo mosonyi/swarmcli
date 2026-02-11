@@ -640,7 +640,7 @@ func (m *Model) setRenderItem() {
 
 		// Update cached widths for header alignment
 		m.colNameWidth = colWidths[0]
-		m.colIdWidth = colWidths[1]
+		m.colIDWidth = colWidths[1]
 
 		// Prepare cell texts
 		nameText := truncateWithEllipsis(sec.Name, colWidths[0]-1)

@@ -115,7 +115,7 @@ func (m *Model) View() string {
 
 	// Fixme: https://github.com/mosonyi/swarmcli/issues/141
 	nameCol := m.colNameWidth
-	idCol := m.colIdWidth
+	idCol := m.colIDWidth
 	if nameCol <= 0 {
 		nameCol = len("NAME")
 	}

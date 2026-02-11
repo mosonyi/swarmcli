@@ -41,12 +41,6 @@ func (e *testEnv) registerSecretCleanup(id string) {
 	})
 }
 
-func (e *testEnv) registerServiceCleanup(id string) {
-	e.cleanup = append(e.cleanup, func() {
-		_ = e.cli.ServiceRemove(e.ctx, id)
-	})
-}
-
 func (e *testEnv) createSecret(t *testing.T, name, data string) swarm.Secret {
 	t.Helper()
 
