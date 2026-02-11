@@ -157,6 +157,24 @@ brews:
     install: |
       bin.install "swarmcli"
 
+# Scoop bucket for Windows
+scoops:
+  - name: swarmcli
+    ids:
+      - default
+    repository:
+      owner: Eldara-Tech
+      name: scoop-bucket
+      token: "{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}"
+    commit_author:
+      name: Eldara Tech
+      email: hello@eldara.io
+    homepage: "https://swarmcli.io"
+    description: "Docker Swarm TUI management tool"
+    license: "Apache-2.0"
+    post_install:
+      - "Write-Host 'swarmcli installed successfully!' -ForegroundColor Green"
+
 # Docker images
 dockers_v2:
   - id: linux
