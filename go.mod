@@ -2,6 +2,8 @@ module swarmcli
 
 go 1.25
 
+toolchain go1.25.7
+
 require (
 	github.com/briandowns/spinner v1.23.2
 	github.com/charmbracelet/bubbles v0.21.0
