@@ -15,4 +15,4 @@ ENV GONOSUMDB=* \
 
 RUN echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
 RUN sudo apt update
-RUN sudo apt install -y go releaser
+RUN sudo apt install -y goreleaser

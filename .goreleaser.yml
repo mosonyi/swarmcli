@@ -25,6 +25,7 @@ builds:
       - arm
       - 386
     goarm:
+      - 6
       - 7
     flags:
       - -trimpath
@@ -138,42 +139,56 @@ changelog:
       order: 999
 
 # Homebrew tap 
-homebrew_casks:
+brews:
   - name: swarmcli
     ids:
       - default
-    binaries:
-      - swarmcli
-    skip_upload: auto
     repository:
       owner: Eldara-Tech
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://swarmcli.io"
+    description: "Docker Swarm TUI management tool"
+    license: "Apache-2.0"
     commit_author:
       name: Eldara Tech
       email: hello@eldara.io
-    directory: Casks
-    homepage: https://swarmcli.io
-    description: "Docker Swarm TUI management tool"
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/swarmcli"]
-          end
-    caveats: |
-      To run swarmcli for the first time, you may need to allow it in System Preferences > Security & Privacy.
+    install: |
+      bin.install "swarmcli"
 
-# Docker images (optional)
-# dockers:
-#   - image_templates:
-#       - "mosonyi/swarmcli:{{ .Tag }}"
-#       - "mosonyi/swarmcli:v{{ .Major }}"
-#       - "mosonyi/swarmcli:latest"
-#     dockerfile: Dockerfile
-#     build_flag_templates:
-#       - "--pull"
-#       - "--label=org.opencontainers.image.created={{.Date}}"
-#       - "--label=org.opencontainers.image.title={{.ProjectName}}"
-#       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-#       - "--label=org.opencontainers.image.version={{.Version}}"
+# Scoop bucket for Windows
+scoops:
+  - name: swarmcli
+    ids:
+      - default
+    repository:
+      owner: Eldara-Tech
+      name: scoop-bucket
+      token: "{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}"
+    commit_author:
+      name: Eldara Tech
+      email: hello@eldara.io
+    homepage: "https://swarmcli.io"
+    description: "Docker Swarm TUI management tool"
+    license: "Apache-2.0"
+    post_install:
+      - "Write-Host 'swarmcli installed successfully!' -ForegroundColor Green"
+
+# Docker images
+dockers_v2:
+  - id: linux
+    images:
+      - "eldaratech/swarmcli"
+    tags:
+      - "{{ .Tag }}"
+      - "latest"
+    platforms:
+      - "linux/arm64"
+      - "linux/amd64"
+    dockerfile: Dockerfile.release
+    labels:
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.title: "{{ .ProjectName }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.version: "{{ .Version }}"
