@@ -25,7 +25,12 @@ import (
 // - tail: number of lines to request as initial history (0 means all)
 // - MaxLines: the maximum number of lines to keep in memory (circular buffer behavior)
 func StartStreamingCmd(ctx context.Context, service docker.ServiceEntry, tail int, maxLines int) tea.Cmd {
-	cli, _ := docker.GetClient()
+	cli, err := docker.GetClient()
+	if err != nil {
+		return func() tea.Msg {
+			return StreamErrMsg{Err: fmt.Errorf("failed to get docker client: %w", err)}
+		}
+	}
 
 	return func() tea.Msg {
 		lines := make(chan string, 512)
@@ -84,7 +89,11 @@ func StartStreamingCmd(ctx context.Context, service docker.ServiceEntry, tail in
 					formattedLine, nodeName := formatLogLineWithNode(service.ServiceName, line)
 					// Store both the formatted line and node name (separated by a special marker)
 					// Format: "NODENAME\x00formatted_line" where \x00 is a null byte separator
-					lines <- nodeName + "\x00" + formattedLine
+					select {
+					case lines <- nodeName + "\x00" + formattedLine:
+					case <-ctx.Done():
+						return
+					}
 				}
 			}
 
@@ -171,7 +180,11 @@ func formatLogLineWithNode(serviceName string, line string) (string, string) {
 	// Get node hostname from node ID
 	nodeName := getNodeHostname(nodeID)
 	if nodeName == "" {
-		nodeName = nodeID[:12] // fallback to short ID
+		if len(nodeID) >= 12 {
+			nodeName = nodeID[:12]
+		} else {
+			nodeName = nodeID
+		}
 	}
 
 	// Format task ID (show first 12 chars)
