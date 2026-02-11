@@ -19,6 +19,8 @@ var (
 // ensureHostnameCache lazily initializes the cache once per runtime.
 func ensureHostnameCache() error {
 	nodeCacheOnce.Do(func() {
+		nodeCacheMu.Lock()
+		defer nodeCacheMu.Unlock()
 		nodeCacheErr = refreshNodeCacheLocked()
 	})
 	return nodeCacheErr
@@ -60,15 +62,13 @@ func GetNodeIDToHostnameMap() (map[string]string, error) {
 }
 
 // refreshNodeCacheLocked updates the global cache map in-place.
-// Caller must hold the write lock if not called from ensureHostnameCache().
+// Caller must hold nodeCacheMu write lock.
 func refreshNodeCacheLocked() error {
 	names, err := GetNodeIDToHostnameMapFromDocker()
 	if err != nil {
 		return fmt.Errorf("refreshNodeCacheLocked: %w", err)
 	}
 
-	nodeCacheMu.Lock()
-	defer nodeCacheMu.Unlock()
 	nodeCache = names
 	return nil
 }
