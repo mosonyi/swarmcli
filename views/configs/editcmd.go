@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"swarmcli/docker"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -46,7 +47,9 @@ func editWithTempFileCmd(baseName string, initialData []byte, onDone func([]byte
 	}
 
 	l().Infoln("Invoking editor:", editor, tmp.Name())
-	cmd := exec.Command(editor, tmp.Name())
+	parts := strings.Fields(editor)
+	cmdArgs := append(parts[1:], tmp.Name())
+	cmd := exec.Command(parts[0], cmdArgs...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

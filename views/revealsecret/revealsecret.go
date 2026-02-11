@@ -11,12 +11,17 @@ import (
 	"strings"
 	"swarmcli/docker"
 	"swarmcli/ui"
+	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/helpbar"
 	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+func l() *swarmlog.SwarmLogger {
+	return swarmlog.L().With("view", "revealsecret")
+}
 
 const ViewName = "reveal-secret"
 
@@ -104,7 +109,9 @@ func LoadSecret(name string) tea.Cmd {
 		}
 		// Always clean up the temporary service.
 		defer func() {
-			_ = docker.RemoveService(serviceName)
+			if err := docker.RemoveService(serviceName); err != nil {
+				l().Warnf("failed to remove reveal service %s: %v", serviceName, err)
+			}
 		}()
 
 		// Wait for logs to appear. A fixed sleep is racy (image pull / scheduling).
@@ -131,7 +138,11 @@ func LoadSecret(name string) tea.Cmd {
 				return revealedMsg{Content: "(no output from reveal service)\n\nTask diagnostics:\n" + diag, Decoded: false}
 			}
 
-			time.Sleep(300 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				return revealedMsg{Content: "Secret reveal cancelled", Decoded: false}
+			case <-time.After(300 * time.Millisecond):
+			}
 		}
 
 		// Preserve raw output for debugging. Only trim line endings from `cat`.

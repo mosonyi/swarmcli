@@ -22,12 +22,6 @@ import (
 
 // Update handles all messages for the stacks view.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
-	defer func() {
-		if r := recover(); r != nil {
-			l().Errorf("panic in Stacks.Update: %v", r)
-			l().Errorf("%s", debug.Stack())
-		}
-	}()
 	switch msg := msg.(type) {
 
 	case Msg:

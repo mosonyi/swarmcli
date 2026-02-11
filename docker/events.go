@@ -38,6 +38,7 @@ func WatchEventsCmd() tea.Cmd {
 		f.Add("type", "node")
 
 		opts := events.ListOptions{Filters: f}
+		// The Docker SDK cleans up the event stream goroutine when ctx is cancelled.
 		msgs, errs := cli.Events(ctx, opts)
 
 		for {

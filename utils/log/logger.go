@@ -4,6 +4,7 @@
 package swarmlog
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,6 +57,11 @@ func L() *SwarmLogger {
 // The log level is controlled via LOG_LEVEL (debug, info, warn, error, etc).
 // If unset, defaults to debug in dev mode and info in prod mode.
 func Init(appName string) {
+	// Close previous logger if re-initialized to avoid leaking file handles.
+	if raw != nil {
+		_ = raw.Sync()
+	}
+
 	mode := detectMode()
 	logPath := selectLogPath(appName, mode)
 
@@ -138,19 +144,25 @@ func selectLogPath(appName, mode string) string {
 
 	if xdg := os.Getenv("XDG_STATE_HOME"); xdg != "" {
 		path := filepath.Join(xdg, appName)
-		_ = os.MkdirAll(path, 0755)
+		if err := os.MkdirAll(path, 0755); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "swarmcli: failed to create log directory %s: %v\n", path, err)
+		}
 		return filepath.Join(path, fileName)
 	}
 
 	if home, err := os.UserHomeDir(); err == nil {
 		path := filepath.Join(home, ".local", "state", appName)
-		_ = os.MkdirAll(path, 0755)
+		if err := os.MkdirAll(path, 0755); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "swarmcli: failed to create log directory %s: %v\n", path, err)
+		}
 		return filepath.Join(path, fileName)
 	}
 
 	// Fallback for restrictive environments
 	path := filepath.Join(os.TempDir(), appName)
-	_ = os.MkdirAll(path, 0755)
+	if err := os.MkdirAll(path, 0755); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "swarmcli: failed to create log directory %s: %v\n", path, err)
+	}
 	return filepath.Join(path, fileName)
 }
 

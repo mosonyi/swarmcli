@@ -220,6 +220,9 @@ func RotateSecretInServices(ctx context.Context, oldSec *swarm.Secret, newSec sw
 	// --- 2. Apply updates
 	for _, svc := range services {
 		updated := svc.Spec
+		if updated.TaskTemplate.ContainerSpec == nil {
+			continue
+		}
 		for i, secRef := range updated.TaskTemplate.ContainerSpec.Secrets {
 			// Match by old ID or by name if oldSec is nil
 			if (oldSec != nil && secRef.SecretID == oldSec.ID) ||
@@ -286,6 +289,9 @@ func listServicesUsingSecret(ctx context.Context, client *client.Client, secretI
 	}
 	var filtered []swarm.Service
 	for _, s := range services {
+		if s.Spec.TaskTemplate.ContainerSpec == nil {
+			continue
+		}
 		for _, sec := range s.Spec.TaskTemplate.ContainerSpec.Secrets {
 			if sec.SecretID == secretID {
 				filtered = append(filtered, s)
@@ -312,6 +318,9 @@ func listServicesUsingSecretName(ctx context.Context, client *client.Client, nam
 	}
 	var filtered []swarm.Service
 	for _, s := range services {
+		if s.Spec.TaskTemplate.ContainerSpec == nil {
+			continue
+		}
 		for _, sec := range s.Spec.TaskTemplate.ContainerSpec.Secrets {
 			if sec.SecretName == name {
 				filtered = append(filtered, s)

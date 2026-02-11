@@ -16,9 +16,12 @@ type Command interface {
 	Execute(ctx any, args args.Args) tea.Cmd
 }
 
+// apiRegistry stores all registered commands. It is only written to during
+// init() (single-threaded) and read-only after program start, so no mutex
+// is needed.
 var apiRegistry = map[string]Command{}
 
-// Register a new command (called from api/init.go)
+// Register a new command. Must only be called from init() functions.
 func Register(cmd Command) {
 	apiRegistry[cmd.Name()] = cmd
 }

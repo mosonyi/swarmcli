@@ -368,7 +368,7 @@ type ServiceEntry struct {
 func LoadNodeServices(nodeID string) []ServiceEntry {
 	snap, err := GetOrRefreshSnapshot()
 	if err != nil {
-		l().Infof("failed to get snapshot:", err)
+		l().Warnf("failed to get snapshot: %v", err)
 		return nil
 	}
 
@@ -407,7 +407,7 @@ func LoadNodeServices(nodeID string) []ServiceEntry {
 func LoadStackServices(stackName string) []ServiceEntry {
 	snap, err := GetOrRefreshSnapshot()
 	if err != nil {
-		l().Infof("failed to get snapshot:", err)
+		l().Warnf("failed to get snapshot: %v", err)
 		return nil
 	}
 
