@@ -35,6 +35,9 @@ func HighlightMatches(text, term string) string {
 }
 
 func FindAllMatches(text, term string) []int {
+	if term == "" {
+		return nil
+	}
 	var matches []int
 	textLower := strings.ToLower(text)
 	termLower := strings.ToLower(term)
