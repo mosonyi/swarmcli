@@ -218,7 +218,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "↑/↓", Desc: "Navigate"},
 		{Key: "n", Desc: "New"},
 		{Key: "i", Desc: "Inspect"},
-		{Key: "x", Desc: "Reveal (Pro)", Disabled: !features.IsEnabled("reveal-secret")},
+		{Key: "x", Desc: revealHelpDesc(), Disabled: !features.IsEnabled("reveal-secret")},
 		{Key: "u", Desc: "Used By"},
 		{Key: "ctrl+d", Desc: "Delete"},
 		{Key: "?", Desc: "Help"},
@@ -263,6 +263,13 @@ func (m *Model) OnExit() tea.Cmd {
 
 func (m *Model) HasErrors() bool {
 	return false
+}
+
+func revealHelpDesc() string {
+	if features.IsEnabled("reveal-secret") {
+		return "Reveal"
+	}
+	return "Reveal (Pro)"
 }
 
 // validateSecretName validates a secret name

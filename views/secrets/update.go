@@ -1138,6 +1138,13 @@ func (m *Model) handleRevealDialogKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
+func revealDetailedHelpDesc() string {
+	if features.IsEnabled("reveal-secret") {
+		return "Reveal secret content"
+	}
+	return "Reveal secret content (Pro)"
+}
+
 // GetSecretsHelpContent returns categorized help for the secrets view
 func GetSecretsHelpContent() []helpview.HelpCategory {
 	return []helpview.HelpCategory{
@@ -1146,7 +1153,7 @@ func GetSecretsHelpContent() []helpview.HelpCategory {
 			Items: []helpview.HelpItem{
 				{Keys: "<n>", Description: "Create new secret"},
 				{Keys: "<i>", Description: "Inspect secret (YAML)"},
-				{Keys: "<x>", Description: "Reveal secret content (Pro)"},
+				{Keys: "<x>", Description: revealDetailedHelpDesc()},
 				{Keys: "<u>", Description: "Show Used By"},
 				{Keys: "<ctrl+d>", Description: "Delete secret"},
 				{Keys: "</>", Description: "Filter"},
