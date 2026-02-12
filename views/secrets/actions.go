@@ -137,18 +137,6 @@ func inspectSecretCmd(name string) tea.Cmd {
 	}
 }
 
-func pushRevealViewCmd(name string) tea.Cmd {
-	return func() tea.Msg {
-		// Push a reveal view that will fetch the secret content
-		return view.NavigateToMsg{
-			ViewName: view.NameRevealSecret,
-			Payload: map[string]interface{}{
-				"secretName": name,
-			},
-		}
-	}
-}
-
 func deleteSecretCmd(name string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()

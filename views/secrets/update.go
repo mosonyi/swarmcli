@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"swarmcli/core/primitives/hash"
-	"swarmcli/features"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
@@ -442,13 +441,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				l().Warn("Reveal key pressed but no secret selected")
 				return nil
 			}
-			if !features.IsEnabled("reveal-secret") {
+			action, ok := view.GetAction("reveal-secret")
+			if !ok {
 				m.err = fmt.Errorf("Reveal Secret is a Pro feature. Upgrade to SwarmCLI Pro for access.")
 				m.errorDialogActive = true
 				return nil
 			}
 			l().Infof("Reveal key pressed for secret: %s", secName)
-			return pushRevealViewCmd(secName)
+			return action(secName)
 
 		case "left":
 			if m.labelsScrollOffset > 0 {
@@ -1139,7 +1139,7 @@ func (m *Model) handleRevealDialogKey(msg tea.KeyMsg) tea.Cmd {
 }
 
 func revealDetailedHelpDesc() string {
-	if features.IsEnabled("reveal-secret") {
+	if view.HasAction("reveal-secret") {
 		return "Reveal secret content"
 	}
 	return "Reveal secret content (Pro)"

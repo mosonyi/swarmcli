@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"strings"
 	"swarmcli/docker"
-	"swarmcli/features"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	loading "swarmcli/views/loading"
+	view "swarmcli/views/view"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -218,7 +218,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "↑/↓", Desc: "Navigate"},
 		{Key: "n", Desc: "New"},
 		{Key: "i", Desc: "Inspect"},
-		{Key: "x", Desc: revealHelpDesc(), Disabled: !features.IsEnabled("reveal-secret")},
+		{Key: "x", Desc: revealHelpDesc(), Disabled: !view.HasAction("reveal-secret")},
 		{Key: "u", Desc: "Used By"},
 		{Key: "ctrl+d", Desc: "Delete"},
 		{Key: "?", Desc: "Help"},
@@ -266,7 +266,7 @@ func (m *Model) HasErrors() bool {
 }
 
 func revealHelpDesc() string {
-	if features.IsEnabled("reveal-secret") {
+	if view.HasAction("reveal-secret") {
 		return "Reveal"
 	}
 	return "Reveal (Pro)"
