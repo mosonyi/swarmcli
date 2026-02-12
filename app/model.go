@@ -20,6 +20,8 @@ import (
 
 // Model holds app state
 type Model struct {
+	deps docker.Deps
+
 	viewport viewport.Model
 
 	systemInfo *systeminfoview.Model
@@ -50,6 +52,7 @@ func InitialModel() *Model {
 	})
 
 	return &Model{
+		deps:           docker.DefaultDeps(),
 		viewport:       vp,
 		currentView:    loading,
 		systemInfo:     systeminfoview.New(version),
@@ -74,7 +77,7 @@ func (m *Model) Init() tea.Cmd {
 }
 
 func (m *Model) switchToView(name string, data any) tea.Cmd {
-	factory, ok := viewRegistry[name]
+	factory, ok := view.GetFactory(name)
 	if !ok {
 		return nil
 	}
@@ -82,7 +85,7 @@ func (m *Model) switchToView(name string, data any) tea.Cmd {
 	// Exit hook for current view
 	exitCmd := m.currentView.OnExit()
 
-	newView, loadCmd := factory(m.viewport.Width, m.viewport.Height, data)
+	newView, loadCmd := factory(m.deps, m.viewport.Width, m.viewport.Height, data)
 	resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height, false)
 
 	// Push current view onto stack
@@ -96,7 +99,7 @@ func (m *Model) switchToView(name string, data any) tea.Cmd {
 }
 
 func (m *Model) replaceView(name string, data any) tea.Cmd {
-	factory, ok := viewRegistry[name]
+	factory, ok := view.GetFactory(name)
 	if !ok {
 		return nil
 	}
@@ -104,7 +107,7 @@ func (m *Model) replaceView(name string, data any) tea.Cmd {
 	// Run exit hook on current view
 	exitCmd := m.currentView.OnExit()
 
-	newView, loadCmd := factory(m.viewport.Width, m.viewport.Height, data)
+	newView, loadCmd := factory(m.deps, m.viewport.Width, m.viewport.Height, data)
 	resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height, false)
 
 	m.currentView = newView
