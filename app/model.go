@@ -36,6 +36,23 @@ type Model struct {
 	terminalHeight int
 }
 
+var depsTransform func(docker.Deps) docker.Deps
+
+// SetDepsTransform registers a function that transforms the default Deps
+// before they are stored in the Model. Must be called before InitialModel().
+// Pro code calls this from init() to wrap interfaces with middleware.
+func SetDepsTransform(fn func(docker.Deps) docker.Deps) {
+	depsTransform = fn
+}
+
+func buildDeps() docker.Deps {
+	deps := docker.DefaultDeps()
+	if depsTransform != nil {
+		deps = depsTransform(deps)
+	}
+	return deps
+}
+
 func InitialModel() *Model {
 	// Use larger initial dimensions that will be adjusted by first WindowSizeMsg
 	// This avoids the loading view appearing too small on the first render
@@ -52,7 +69,7 @@ func InitialModel() *Model {
 	})
 
 	return &Model{
-		deps:           docker.DefaultDeps(),
+		deps:           buildDeps(),
 		viewport:       vp,
 		currentView:    loading,
 		systemInfo:     systeminfoview.New(version),
