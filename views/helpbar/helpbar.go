@@ -10,8 +10,9 @@ import (
 )
 
 type HelpEntry struct {
-	Key  string
-	Desc string
+	Key      string
+	Desc     string
+	Disabled bool
 }
 
 type Model struct {
@@ -105,6 +106,9 @@ func (m *Model) View(systemInfo string, hasError bool) string {
 		Foreground(lipgloss.Color("39")).
 		Bold(true)
 
+	disabledKeyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	disabledDescStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+
 	var renderedCols []string
 	for colIdx, col := range columns {
 		// Find max key length in this column for alignment (visible length)
@@ -119,12 +123,15 @@ func (m *Model) View(systemInfo string, hasError bool) string {
 
 		var lines []string
 		for _, entry := range col {
-			styledKey := keyStyle.Render("<" + entry.Key + ">")
-			// Calculate visible padding needed using lipgloss.Width for proper Unicode handling
 			keyText := "<" + entry.Key + ">"
 			visibleKeyLen := lipgloss.Width(keyText)
 			padding := maxKeyLen - visibleKeyLen
-			line := styledKey + strings.Repeat(" ", padding+2) + entry.Desc
+			var line string
+			if entry.Disabled {
+				line = disabledKeyStyle.Render(keyText) + strings.Repeat(" ", padding+2) + disabledDescStyle.Render(entry.Desc)
+			} else {
+				line = keyStyle.Render(keyText) + strings.Repeat(" ", padding+2) + entry.Desc
+			}
 			lines = append(lines, line)
 		}
 

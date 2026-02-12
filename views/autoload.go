@@ -13,7 +13,6 @@ import (
 	_ "swarmcli/views/logs"
 	_ "swarmcli/views/networks"
 	_ "swarmcli/views/nodes"
-	_ "swarmcli/views/revealsecret"
 	_ "swarmcli/views/secrets"
 	_ "swarmcli/views/services"
 	_ "swarmcli/views/stacks"

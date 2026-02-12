@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"swarmcli/core/primitives/hash"
+	"swarmcli/features"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
@@ -441,8 +442,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				l().Warn("Reveal key pressed but no secret selected")
 				return nil
 			}
+			if !features.IsEnabled("reveal-secret") {
+				m.err = fmt.Errorf("Reveal Secret is a Pro feature. Upgrade to SwarmCLI Pro for access.")
+				m.errorDialogActive = true
+				return nil
+			}
 			l().Infof("Reveal key pressed for secret: %s", secName)
-			// Push reveal view onto stack (like inspect)
 			return pushRevealViewCmd(secName)
 
 		case "left":
@@ -1141,7 +1146,7 @@ func GetSecretsHelpContent() []helpview.HelpCategory {
 			Items: []helpview.HelpItem{
 				{Keys: "<n>", Description: "Create new secret"},
 				{Keys: "<i>", Description: "Inspect secret (YAML)"},
-				{Keys: "<x>", Description: "Reveal secret content"},
+				{Keys: "<x>", Description: "Reveal secret content (Pro)"},
 				{Keys: "<u>", Description: "Show Used By"},
 				{Keys: "<ctrl+d>", Description: "Delete secret"},
 				{Keys: "</>", Description: "Filter"},

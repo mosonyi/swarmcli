@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"swarmcli/docker"
+	"swarmcli/features"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
@@ -217,7 +218,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "↑/↓", Desc: "Navigate"},
 		{Key: "n", Desc: "New"},
 		{Key: "i", Desc: "Inspect"},
-		{Key: "x", Desc: "Reveal"},
+		{Key: "x", Desc: "Reveal (Pro)", Disabled: !features.IsEnabled("reveal-secret")},
 		{Key: "u", Desc: "Used By"},
 		{Key: "ctrl+d", Desc: "Delete"},
 		{Key: "?", Desc: "Help"},
