@@ -3,6 +3,12 @@
 
 package view
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	"swarmcli/docker"
 
-type Factory func(width, height int, payload any) (View, tea.Cmd)
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+// Factory creates a View instance with its initial command.
+// The deps parameter provides Docker operation interfaces for testability.
+type Factory func(deps docker.Deps, width, height int, payload any) (View, tea.Cmd)
