@@ -722,13 +722,9 @@ func (m *Model) setRenderItem() {
 			}
 
 			if len(e.Ports) > colWidths[6] {
-				l().Debugf("PORTS truncated: len=%d, colWidth=%d, value='%s'", len(e.Ports), colWidths[6], e.Ports)
 				portsText = formatErrorWithScroll(e.Ports, m.columnScrollOffset, colWidths[6])
-				l().Debugf("PORTS after formatErrorWithScroll: '%s'", portsText)
 			} else {
-				l().Debugf("PORTS fits: len=%d, colWidth=%d, value='%s'", len(e.Ports), colWidths[6], e.Ports)
 				portsText = truncateWithEllipsis(e.Ports, colWidths[6])
-				l().Debugf("PORTS after truncateWithEllipsis: '%s'", portsText)
 			}
 
 			errStr := m.serviceErrorText[e.ServiceID]
