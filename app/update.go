@@ -21,6 +21,12 @@ import (
 )
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	for _, hook := range preUpdateHooks {
+		if handled, cmd := hook(m.currentView.Name(), msg); handled {
+			return m, cmd
+		}
+	}
+
 	switch msg := msg.(type) {
 	case docker.EventMsg:
 		// On Docker events, trigger a background refresh and, if currently
