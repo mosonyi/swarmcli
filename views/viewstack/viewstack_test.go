@@ -37,38 +37,6 @@ func TestPop_Empty(t *testing.T) {
 	require.Nil(t, s.Pop())
 }
 
-func TestPeek(t *testing.T) {
-	s := &Stack{}
-	s.Push(&mockView{name: "a"})
-	s.Push(&mockView{name: "b"})
-
-	v := s.Peek()
-	require.Equal(t, "b", v.Name())
-	require.Equal(t, 2, s.Len(), "peek should not remove")
-}
-
-func TestPeek_Empty(t *testing.T) {
-	s := &Stack{}
-	require.Nil(t, s.Peek())
-}
-
-func TestPopAndPush(t *testing.T) {
-	s := &Stack{}
-	s.Push(&mockView{name: "a"})
-	s.Push(&mockView{name: "b"})
-
-	s.PopAndPush(&mockView{name: "c"})
-	require.Equal(t, 2, s.Len())
-	require.Equal(t, "c", s.Peek().Name())
-}
-
-func TestPopAndPush_Empty(t *testing.T) {
-	s := &Stack{}
-	s.PopAndPush(&mockView{name: "a"})
-	require.Equal(t, 1, s.Len())
-	require.Equal(t, "a", s.Peek().Name())
-}
-
 func TestViews(t *testing.T) {
 	s := &Stack{}
 	s.Push(&mockView{name: "a"})
@@ -99,5 +67,5 @@ func TestReset(t *testing.T) {
 	s.Push(&mockView{name: "b"})
 	s.Reset()
 	require.Equal(t, 0, s.Len())
-	require.Nil(t, s.Peek())
+	require.Nil(t, s.Pop())
 }

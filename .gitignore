@@ -17,3 +17,5 @@ dist/
 
 debug.log
 swarmcli
+
+.idea

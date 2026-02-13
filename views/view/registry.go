@@ -14,6 +14,3 @@ func RegisterView(name string, f Factory) { viewRegistry[name] = f }
 
 // GetFactory returns the factory for the given view name.
 func GetFactory(name string) (Factory, bool) { f, ok := viewRegistry[name]; return f, ok }
-
-// AllFactories returns all registered view factories.
-func AllFactories() map[string]Factory { return viewRegistry }

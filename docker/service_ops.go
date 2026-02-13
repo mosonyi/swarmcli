@@ -23,8 +23,6 @@ type ServiceOps interface {
 	GetServiceLogs(ctx context.Context, serviceID string) (string, error)
 	GetServiceTaskDiagnostics(ctx context.Context, serviceID string) (string, error)
 	CreateService(ctx context.Context, spec swarm.ServiceSpec) (string, error)
-	CreateSecretRevealService(serviceName, secretID, secretName string) swarm.ServiceSpec
-	CreateSecretRevealServiceWithImage(serviceName, imageOverride, secretID, secretName string) swarm.ServiceSpec
 }
 
 type defaultServiceOps struct{}
@@ -64,10 +62,4 @@ func (defaultServiceOps) GetServiceTaskDiagnostics(ctx context.Context, serviceI
 }
 func (defaultServiceOps) CreateService(ctx context.Context, spec swarm.ServiceSpec) (string, error) {
 	return CreateService(ctx, spec)
-}
-func (defaultServiceOps) CreateSecretRevealService(serviceName, secretID, secretName string) swarm.ServiceSpec {
-	return CreateSecretRevealService(serviceName, secretID, secretName)
-}
-func (defaultServiceOps) CreateSecretRevealServiceWithImage(serviceName, imageOverride, secretID, secretName string) swarm.ServiceSpec {
-	return CreateSecretRevealServiceWithImage(serviceName, imageOverride, secretID, secretName)
 }

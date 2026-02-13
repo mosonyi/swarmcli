@@ -41,8 +41,3 @@ type usedByMsg struct {
 	SecretName string
 	UsedBy     []usedByItem
 }
-
-type secretRevealedMsg struct {
-	SecretName string
-	Content    string
-}

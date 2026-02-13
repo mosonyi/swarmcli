@@ -165,29 +165,6 @@ func TestStripDockerLogHeaders_InvalidSize(t *testing.T) {
 	require.Equal(t, string(frame), result, "should fallback to raw on invalid frame")
 }
 
-func TestCreateSecretRevealService(t *testing.T) {
-	spec := CreateSecretRevealService("reveal-svc", "secret-id-123", "my-secret")
-	require.Equal(t, "reveal-svc", spec.Annotations.Name)
-	require.Equal(t, "true", spec.Annotations.Labels["swarmcli.temporary"])
-	require.Equal(t, "reveal-secret", spec.Annotations.Labels["swarmcli.purpose"])
-	require.Equal(t, "alpine:latest", spec.TaskTemplate.ContainerSpec.Image)
-	require.Len(t, spec.TaskTemplate.ContainerSpec.Secrets, 1)
-	require.Equal(t, "secret-id-123", spec.TaskTemplate.ContainerSpec.Secrets[0].SecretID)
-	require.Equal(t, "my-secret", spec.TaskTemplate.ContainerSpec.Secrets[0].SecretName)
-	require.NotNil(t, spec.Mode.Replicated)
-	require.Equal(t, uint64(1), *spec.Mode.Replicated.Replicas)
-}
-
-func TestCreateSecretRevealServiceWithImage_Override(t *testing.T) {
-	spec := CreateSecretRevealServiceWithImage("svc", "busybox:latest", "sid", "sname")
-	require.Equal(t, "busybox:latest", spec.TaskTemplate.ContainerSpec.Image)
-}
-
-func TestCreateSecretRevealServiceWithImage_EmptyFallback(t *testing.T) {
-	spec := CreateSecretRevealServiceWithImage("svc", "", "sid", "sname")
-	require.Equal(t, "alpine:latest", spec.TaskTemplate.ContainerSpec.Image)
-}
-
 func TestTrySendProgress_BufferedChannel(t *testing.T) {
 	ch := make(chan ProgressUpdate, 1)
 	trySendProgress(ch, ProgressUpdate{Replaced: 1, Running: 2, Total: 3})

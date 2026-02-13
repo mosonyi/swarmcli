@@ -7,8 +7,6 @@ import (
 	"swarmcli/registry"
 )
 
-// Public passthroughs so app code can just use `commands.Get()` or `commands.All()`
-func Register(cmd registry.Command)            { registry.Register(cmd) }
+// Public passthroughs so app code can just use `commands.Get()`
 func Get(name string) (registry.Command, bool) { return registry.Get(name) }
-func All() []registry.Command                  { return registry.All() }
 func Suggest(prefix string) []string           { return registry.Suggest(prefix) }
