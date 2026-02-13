@@ -59,7 +59,7 @@ swarmcli
 - **Real-time Observability**: Live monitoring of Services, Tasks, Nodes, and Containers.
 - **Stack Awareness**: Navigate your cluster hierarchically (Stacks > Services > Tasks).
 - **Instant Logs**: No more `docker service logs -f`. Just press `l` on any service.
-- **Secrets & Configs**: Manage, rotate, and — uniquely — **reveal** secrets for debugging.
+- **Secrets & Configs**: Manage, rotate, and — with Pro — **reveal** secrets for debugging.
 - **Management Actions**: Scale, restart, remove, and update services with single keystrokes.
 - **Zero Config**: Works out-of-the-box with your local Docker engine or remote via SSH/Contexts.
 - **Lightweight**: Built with Go. Single static binary (< 20MB). Zero dependencies.
@@ -120,10 +120,6 @@ $ LOG_LEVEL=debug SWARMCLI_ENV=dev go run .
 
 - `SWARMCLI_ENV`: `dev` enables pretty debug logs (default is `prod`).
 - `LOG_LEVEL`: `debug`, `info`, `warn`, `error`, …
-- `SWARMCLI_REVEAL_IMAGE`: image used for the temporary service behind **Secrets → Reveal** (`x`).
-  - Default: `alpine:latest`
-  - Useful to test error handling: `SWARMCLI_REVEAL_IMAGE=alpine:this-tag-does-not-exist`
-
 Colorize log tails. Not perfect but simple:
 
 ```bash

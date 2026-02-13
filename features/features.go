@@ -2,8 +2,8 @@
 // Copyright © 2026 Eldara Tech
 
 // Package features provides a simple feature flag registry.
-// The OSS build has no features enabled. A pro build calls
-// Enable() from init() after license validation.
+// The base build has no features enabled. Extension builds
+// call Enable() from init() to activate additional features.
 package features
 
 import "maps"

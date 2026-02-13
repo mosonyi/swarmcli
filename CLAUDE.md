@@ -44,7 +44,7 @@ views/
   services/                Service list (filterable by stack/node/all), scale/restart actions
   tasks/                   Task list per service/stack
   nodes/                   Cluster node list
-  secrets/                 Secret management + reveal
+  secrets/                 Secret management
   configs/                 Config management
   logs/                    Service log streaming
   contexts/                Docker context switcher
@@ -55,7 +55,6 @@ views/
   commandinput/            ":" command bar
   confirmdialog/           Confirmation prompts
   scaledialog/             Scale replica input
-  revealsecret/            Secret reveal (temp container)
   helpbar/                 Dynamic keybinding bar
   systeminfo/              Header with cluster info
   viewstack/               Navigation stack (push/pop)
@@ -100,6 +99,10 @@ utils/log/
 | `LOG_LEVEL` | `debug`/`info`/`warn`/`error` | `debug` (dev), `info` (prod) |
 | `DOCKER_CONTEXT` | Override Docker context | `docker context show` |
 | `TEST_LOG` | Enable logging in tests | unset |
+
+## Pro Feature Boundary
+
+The OSS repo must not contain pro implementation details — no pro-specific logic, no descriptions of how pro features work internally. Generic extension points (registries, hooks, feature flags) are fine; naming specific pro features or describing their internals is not. When adding code that will be called by pro, keep it generic and document it as an extension point without referencing pro specifics.
 
 ## Integration Test Infrastructure
 

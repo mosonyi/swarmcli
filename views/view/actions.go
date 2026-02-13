@@ -7,7 +7,7 @@ import tea "github.com/charmbracelet/bubbletea"
 
 // Action is a feature action that can be triggered by key presses.
 // The string parameter is the resource name (e.g. secret name).
-// Registered during init() by pro packages, read-only after startup.
+// Registered during init() by extension packages, read-only after startup.
 type Action func(name string) tea.Cmd
 
 var actionRegistry = map[string]Action{}
