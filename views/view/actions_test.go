@@ -15,7 +15,7 @@ func TestRegisterAction_And_GetAction(t *testing.T) {
 	defer delete(actionRegistry, "test-action")
 
 	called := false
-	RegisterAction("test-action", func(payload any) tea.Cmd {
+	RegisterAction("test-action", func(name string) tea.Cmd {
 		called = true
 		return nil
 	})
@@ -24,7 +24,7 @@ func TestRegisterAction_And_GetAction(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, action)
 
-	action(nil)
+	action("")
 	require.True(t, called)
 }
 
@@ -39,16 +39,16 @@ func TestHasAction(t *testing.T) {
 
 	require.False(t, HasAction("has-test"))
 
-	RegisterAction("has-test", func(payload any) tea.Cmd { return nil })
+	RegisterAction("has-test", func(name string) tea.Cmd { return nil })
 	require.True(t, HasAction("has-test"))
 }
 
 func TestGetAction_Payload(t *testing.T) {
 	defer delete(actionRegistry, "payload-test")
 
-	var received any
-	RegisterAction("payload-test", func(payload any) tea.Cmd {
-		received = payload
+	var received string
+	RegisterAction("payload-test", func(name string) tea.Cmd {
+		received = name
 		return nil
 	})
 
