@@ -40,7 +40,7 @@ var depsTransform func(docker.Deps) docker.Deps
 
 // SetDepsTransform registers a function that transforms the default Deps
 // before they are stored in the Model. Must be called before InitialModel().
-// Pro code calls this from init() to wrap interfaces with middleware.
+// Pro uses this to wrap Deps interfaces with RBAC / audit middleware.
 func SetDepsTransform(fn func(docker.Deps) docker.Deps) {
 	depsTransform = fn
 }

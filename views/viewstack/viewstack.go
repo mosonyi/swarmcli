@@ -24,23 +24,6 @@ func (s *Stack) Pop() view.View {
 	return last
 }
 
-// PopAndPush replaces the top view with a new one.
-// If the stack is empty, it just pushes the new view.
-func (s *Stack) PopAndPush(v view.View) {
-	if len(s.stack) > 0 {
-		s.stack = s.stack[:len(s.stack)-1]
-	}
-	s.stack = append(s.stack, v)
-}
-
-// Peek returns the last view without removing it
-func (s *Stack) Peek() view.View {
-	if len(s.stack) == 0 {
-		return nil
-	}
-	return s.stack[len(s.stack)-1]
-}
-
 // Views returns the full stack (shallow copy)
 func (s *Stack) Views() []view.View {
 	cpy := make([]view.View, len(s.stack))
