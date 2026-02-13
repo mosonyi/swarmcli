@@ -99,11 +99,6 @@ func secretItemFromSwarm(ctx context.Context, s swarm.Secret) secretItem {
 }
 
 func (m *Model) View() string {
-	// If in reveal dialog, render it
-	if m.revealDialogActive {
-		return m.renderRevealDialog()
-	}
-
 	// If in UsedBy view, render it instead of the main secrets view
 	if m.usedByViewActive {
 		return m.renderUsedByView()
@@ -562,50 +557,4 @@ func (m *Model) renderUsedByFooter() string {
 		return statusBar + "\n" + footer
 	}
 	return statusBar
-}
-
-func (m *Model) renderRevealDialog() string {
-	width := m.revealViewport.Width
-	if width <= 0 {
-		width = 80
-	}
-
-	// Build title
-	title := fmt.Sprintf("Secret: %s", m.revealSecretName)
-	if m.revealingInProgress {
-		// Show spinner while revealing
-		spinnerChar := ui.SpinnerCharAt(m.spinner)
-		title = fmt.Sprintf("Revealing secret: %s %s", m.revealSecretName, spinnerChar)
-	} else if m.revealDecoded {
-		title += " (base64 decoded)"
-	}
-
-	// Build header with note if decoded
-	header := ""
-	if !m.revealingInProgress && m.revealDecoded {
-		noteStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("yellow")).Bold(true)
-		header = noteStyle.Render("Note: Content was base64 encoded and has been decoded for display")
-	}
-
-	// Render header
-	var headerRendered string
-	if header != "" {
-		headerRendered = ui.FrameHeaderStyle.Render(header)
-	}
-
-	// Calculate frame dimensions using full model dimensions like inspect
-	frame := ui.ComputeFrameDimensions(
-		width,
-		m.revealViewport.Height,
-		m.width,
-		m.height,
-		headerRendered,
-		"",
-	)
-
-	// Get viewport content and trim to fit the frame
-	viewportContent := ui.TrimOrPadContentToLines(m.revealViewport.View(), frame.DesiredContentLines)
-
-	// Render framed box with no footer (like inspect)
-	return ui.RenderFramedBox(title, headerRendered, viewportContent, "", frame.FrameWidth)
 }

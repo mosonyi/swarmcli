@@ -73,14 +73,6 @@ type Model struct {
 	usedByList       filterlist.FilterableList[usedByItem]
 	usedBySecretName string
 
-	// Reveal secret dialog
-	revealDialogActive  bool
-	revealSecretName    string
-	revealContent       string
-	revealDecoded       bool // true if content was base64 decoded
-	revealViewport      viewport.Model
-	revealingInProgress bool // true while waiting for secret to be revealed
-
 	// Cached column widths for header alignment
 	colNameWidth int
 	colIDWidth   int
@@ -136,9 +128,6 @@ func New(width, height int) *Model {
 	labelsInput.CharLimit = 512
 	labelsInput.Width = 50
 
-	// Initialize viewport for reveal dialog - use full dimensions like inspect
-	revealVp := viewport.New(width, height)
-
 	return &Model{
 		secretsList:        list,
 		width:              width,
@@ -152,7 +141,6 @@ func New(width, height int) *Model {
 		createFileInput:    fileInput,
 		createLabelsInput:  labelsInput,
 		createEncodeSecret: true, // Default to encoding
-		revealViewport:     revealVp,
 		sortField:          SortByName,
 		sortAscending:      true,
 	}
@@ -160,7 +148,7 @@ func New(width, height int) *Model {
 
 // HasActiveDialog returns true if any dialog is currently active
 func (m *Model) HasActiveDialog() bool {
-	return m.revealDialogActive || m.createDialogActive || m.fileBrowserActive || m.confirmDialog.Visible || m.errorDialogActive
+	return m.createDialogActive || m.fileBrowserActive || m.confirmDialog.Visible || m.errorDialogActive
 }
 
 // IsInUsedByView returns true if the UsedBy view is currently active

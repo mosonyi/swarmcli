@@ -4,7 +4,6 @@
 package secretsview
 
 import (
-	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -285,51 +284,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.usedByViewActive = true
 		return nil
 
-	case secretRevealedMsg:
-		l().Infof("Secret %s revealed: %d bytes (raw)", msg.SecretName, len(msg.Content))
-		m.revealDialogActive = true
-		m.revealSecretName = msg.SecretName
-
-		// Log first 100 chars of raw content for debugging
-		if len(msg.Content) > 0 {
-			sample := msg.Content
-			if len(sample) > 100 {
-				sample = sample[:100] + "..."
-			}
-			l().Infof("Raw content sample: %q", sample)
-		}
-
-		// Try to detect and decode base64
-		content := msg.Content
-		decoded := false
-		trimmed := strings.TrimSpace(content)
-
-		// Only try to decode if content looks like base64:
-		// - reasonable length
-		// - length is multiple of 4 (or has proper padding)
-		// - contains only base64 characters
-		if len(trimmed) > 0 {
-			if decodedBytes, err := base64.StdEncoding.DecodeString(trimmed); err == nil {
-				// Successfully decoded - check if result is printable/reasonable
-				decodedStr := string(decodedBytes)
-				if len(decodedStr) > 0 {
-					content = decodedStr
-					decoded = true
-					l().Infof("Secret content was base64 encoded, decoded %d -> %d bytes", len(trimmed), len(content))
-				}
-			} else {
-				l().Infof("Content is not base64 encoded (decode error: %v)", err)
-			}
-		}
-
-		m.revealContent = content
-		m.revealDecoded = decoded
-		m.revealingInProgress = false
-		m.revealViewport.SetContent(content)
-		m.revealViewport.GotoTop()
-		m.state = stateReady
-		return nil
-
 	case errorMsg:
 		l().Errorf("Error occurred: %v", msg)
 		m.state = stateError
@@ -365,11 +319,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case tea.KeyMsg:
-		// Handle reveal dialog FIRST before any other key handling
-		if m.revealDialogActive {
-			return m.handleRevealDialogKey(msg)
-		}
-
 		if m.errorDialogActive {
 			if msg.String() == "enter" || msg.String() == "esc" {
 				m.errorDialogActive = false
@@ -1103,39 +1052,6 @@ func (m *Model) handleUsedByViewKey(msg tea.KeyMsg) tea.Cmd {
 		}
 		return nil
 	}
-}
-
-func (m *Model) handleRevealDialogKey(msg tea.KeyMsg) tea.Cmd {
-	switch msg.String() {
-	case "esc", "q":
-		m.revealDialogActive = false
-		m.revealSecretName = ""
-		m.revealContent = ""
-		m.revealDecoded = false
-		m.revealingInProgress = false
-		m.state = stateReady
-		// Don't return anything - the message is consumed
-		return tea.Batch()
-	case "up", "k":
-		m.revealViewport.ScrollUp(1)
-		return nil
-	case "down", "j":
-		m.revealViewport.ScrollDown(1)
-		return nil
-	case "pgup":
-		m.revealViewport.PageUp()
-		return nil
-	case "pgdown":
-		m.revealViewport.PageDown()
-		return nil
-	case "home", "g":
-		m.revealViewport.GotoTop()
-		return nil
-	case "end", "G":
-		m.revealViewport.GotoBottom()
-		return nil
-	}
-	return nil
 }
 
 func revealDetailedHelpDesc() string {
