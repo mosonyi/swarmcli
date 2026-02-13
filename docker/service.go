@@ -585,55 +585,6 @@ func stripDockerLogHeaders(logs []byte) string {
 	return out.String()
 }
 
-// CreateSecretRevealService creates a temporary service spec to reveal a secret
-func CreateSecretRevealService(serviceName, secretID, secretName string) swarm.ServiceSpec {
-	return CreateSecretRevealServiceWithImage(serviceName, "alpine:latest", secretID, secretName)
-}
-
-// CreateSecretRevealServiceWithImage creates a temporary service spec to reveal a secret.
-// imageOverride is mainly intended for debugging error-handling paths.
-func CreateSecretRevealServiceWithImage(serviceName, imageOverride, secretID, secretName string) swarm.ServiceSpec {
-	image := imageOverride
-	if image == "" {
-		image = "alpine:latest"
-	}
-	return swarm.ServiceSpec{
-		Annotations: swarm.Annotations{
-			Name: serviceName,
-			Labels: map[string]string{
-				"swarmcli.temporary": "true",
-				"swarmcli.purpose":   "reveal-secret",
-			},
-		},
-		TaskTemplate: swarm.TaskSpec{
-			ContainerSpec: &swarm.ContainerSpec{
-				Image:   image,
-				Command: []string{"sh", "-c", fmt.Sprintf("cat /run/secrets/%s && sleep 10", secretName)},
-				Secrets: []*swarm.SecretReference{
-					{
-						SecretID:   secretID,
-						SecretName: secretName,
-						File: &swarm.SecretReferenceFileTarget{
-							Name: secretName,
-							UID:  "0",
-							GID:  "0",
-							Mode: 0444,
-						},
-					},
-				},
-			},
-			RestartPolicy: &swarm.RestartPolicy{
-				Condition: swarm.RestartPolicyConditionNone,
-			},
-		},
-		Mode: swarm.ServiceMode{
-			Replicated: &swarm.ReplicatedService{
-				Replicas: func() *uint64 { r := uint64(1); return &r }(),
-			},
-		},
-	}
-}
-
 // GetServiceTaskDiagnostics returns a human-readable summary of tasks for a service.
 // This is useful when a service produces no logs (e.g., image pull errors).
 func GetServiceTaskDiagnostics(ctx context.Context, serviceID string) (string, error) {
