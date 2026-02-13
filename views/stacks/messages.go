@@ -34,3 +34,20 @@ type RemoveErrorMsg struct {
 	StackName string
 	Error     error
 }
+
+// editorContentMsg is sent when editor returns content
+type editorContentMsg struct {
+	Content string
+}
+
+// stackCreateErrorMsg is sent when stack creation has an error
+type stackCreateErrorMsg struct {
+	Err error
+}
+
+// filesLoadedMsg is sent when files are loaded from a directory
+type filesLoadedMsg struct {
+	Path  string
+	Files []string
+	Error error
+}

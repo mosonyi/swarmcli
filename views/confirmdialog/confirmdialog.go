@@ -11,14 +11,19 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-type ResultMsg struct{ Confirmed bool }
+type ResultMsg struct {
+	Confirmed       bool
+	CheckboxChecked bool // State of the optional checkbox
+}
 
 type Model struct {
-	Visible   bool
-	Message   string
-	Width     int
-	Height    int
-	ErrorMode bool // If true, shows "Close" instead of "Yes/No"
+	Visible         bool
+	Message         string
+	Width           int
+	Height          int
+	ErrorMode       bool   // If true, shows "Close" instead of "Yes/No"
+	CheckboxLabel   string // If non-empty, shows a checkbox with this label
+	CheckboxChecked bool   // State of the checkbox
 }
 
 func New(width, height int) *Model { return &Model{Width: width, Height: height} }
@@ -33,24 +38,30 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		if msg.Type == tea.KeyEsc {
 			m.Visible = false
-			return func() tea.Msg { return ResultMsg{Confirmed: false} }
+			return func() tea.Msg { return ResultMsg{Confirmed: false, CheckboxChecked: m.CheckboxChecked} }
 		}
 		if m.ErrorMode {
 			// In error mode, any key closes the dialog
 			switch msg.String() {
 			case "enter", "esc", " ":
 				m.Visible = false
-				return func() tea.Msg { return ResultMsg{Confirmed: false} }
+				return func() tea.Msg { return ResultMsg{Confirmed: false, CheckboxChecked: m.CheckboxChecked} }
 			}
 		} else {
-			// In confirm mode, y/n keys
+			// In confirm mode, y/n keys and space for checkbox
 			switch msg.String() {
+			case " ":
+				// Toggle checkbox if it's available
+				if m.CheckboxLabel != "" {
+					m.CheckboxChecked = !m.CheckboxChecked
+				}
+				return nil
 			case "y", "Y":
 				m.Visible = false
-				return func() tea.Msg { return ResultMsg{Confirmed: true} }
+				return func() tea.Msg { return ResultMsg{Confirmed: true, CheckboxChecked: m.CheckboxChecked} }
 			case "n", "N", "esc":
 				m.Visible = false
-				return func() tea.Msg { return ResultMsg{Confirmed: false} }
+				return func() tea.Msg { return ResultMsg{Confirmed: false, CheckboxChecked: m.CheckboxChecked} }
 			}
 		}
 	}
@@ -106,13 +117,36 @@ func (m *Model) View() string {
 	}
 	lines = append(lines, messageStyle.Render(m.Message))
 
+	// Add checkbox if label is provided
+	if m.CheckboxLabel != "" && !m.ErrorMode {
+		checkboxStyle := lipgloss.NewStyle().
+			Padding(0, 2).
+			Width(contentWidth)
+
+		checkMark := "[ ]"
+		if m.CheckboxChecked {
+			checkMark = "[✓]"
+		}
+		checkboxText := fmt.Sprintf("%s %s",
+			keyStyle.Render(checkMark),
+			m.CheckboxLabel)
+		lines = append(lines, checkboxStyle.Render(checkboxText))
+	}
+
 	var helpText string
 	if m.ErrorMode {
 		helpText = fmt.Sprintf("%s Close", keyStyle.Render("<Enter/Esc>"))
 	} else {
-		helpText = fmt.Sprintf("%s Yes • %s No",
-			keyStyle.Render("<y>"),
-			keyStyle.Render("<n/Esc>"))
+		if m.CheckboxLabel != "" {
+			helpText = fmt.Sprintf("%s Yes • %s No • %s Toggle",
+				keyStyle.Render("<y>"),
+				keyStyle.Render("<n/Esc>"),
+				keyStyle.Render("<Space>"))
+		} else {
+			helpText = fmt.Sprintf("%s Yes • %s No",
+				keyStyle.Render("<y>"),
+				keyStyle.Render("<n/Esc>"))
+		}
 	}
 	lines = append(lines, helpStyle.Render(helpText))
 
