@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright © 2026 Eldara Tech
 
-package api
+package api //nolint:revive // standard short package name
 
 import (
 	"strings"
