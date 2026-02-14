@@ -13,9 +13,9 @@ import (
 )
 
 func TestReconstructStackCompose(t *testing.T) {
-	// This test assumes that the test-stack is already deployed
+	// This test assumes that the demo stack is already deployed
 	// (done by test-setup/testenv.sh deploy)
-	stackName := "test-stack"
+	stackName := "demo"
 
 	yaml, err := docker.ReconstructStackCompose(stackName)
 	if err != nil {

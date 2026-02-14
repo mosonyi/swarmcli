@@ -14,9 +14,9 @@ import (
 )
 
 func TestDescribeStack(t *testing.T) {
-	// This test assumes that the test-stack is already deployed
+	// This test assumes that the demo stack is already deployed
 	// (done by test-setup/testenv.sh deploy)
-	stackName := "test-stack"
+	stackName := "demo"
 
 	jsonOutput, err := docker.DescribeStack(stackName)
 	if err != nil {
