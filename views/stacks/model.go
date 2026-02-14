@@ -11,11 +11,28 @@ import (
 	"swarmcli/views/helpbar"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
 	filterlist "swarmcli/ui/components/filterable/list"
 )
+
+const defaultStackTemplate = `version: '3.8'
+
+services:
+  # Define your services here
+  # Example:
+  # myservice:
+  #   image: myimage:latest
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     - MY_VAR=value
+
+networks:
+  # Define custom networks if needed
+`
 
 type SortField int
 
@@ -55,6 +72,24 @@ type Model struct {
 	confirmDialog *confirmdialog.Model
 	// pendingAction tracks what action is awaiting confirmation
 	pendingAction string
+
+	// Create stack dialog
+	createDialogActive  bool
+	createDialogStep    string // "source", "details-file", "details-inline"
+	createDialogError   string // error message to display
+	createInputFocus    int    // 0 = name, 1 = file path/content
+	createNameInput     textinput.Model
+	createFileInput     textinput.Model // For typing file path
+	createStackSource   string          // "file" or "inline"
+	createStackPath     string          // selected file path from browser
+	createDialogContent string          // YAML content for the stack
+	fileBrowserActive   bool
+	fileBrowserPath     string
+	fileBrowserFiles    []string
+	fileBrowserCursor   int
+
+	// Edit stack tracking
+	editStackName string // non-empty when editing a stack (vs creating new)
 }
 
 func New(width, height int) *Model {
@@ -70,6 +105,20 @@ func New(width, height int) *Model {
 		},
 	}
 
+	// Initialize name input for create dialog
+	nameInput := textinput.New()
+	nameInput.Placeholder = "my-stack"
+	nameInput.Prompt = "Stack Name: "
+	nameInput.CharLimit = 100
+	nameInput.Width = 50
+
+	// Initialize file path input for create dialog
+	fileInput := textinput.New()
+	fileInput.Placeholder = "/path/to/compose.yml"
+	fileInput.Prompt = "Compose File: "
+	fileInput.CharLimit = 512
+	fileInput.Width = 50
+
 	return &Model{
 		List:              list,
 		Visible:           false,
@@ -84,6 +133,10 @@ func New(width, height int) *Model {
 		stackErrorText:    make(map[string]string),
 		selectedTaskIndex: -1,
 		confirmDialog:     confirmdialog.New(width, height),
+		createNameInput:   nameInput,
+		createFileInput:   fileInput,
+		createDialogStep:  "source",
+		createStackSource: "file",
 	}
 }
 
@@ -101,12 +154,13 @@ func (m *Model) Name() string { return ViewName }
 
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
+		{Key: "n", Desc: "New stack"},
+		{Key: "e", Desc: "Edit"},
 		{Key: "i/enter", Desc: "Services"},
+		{Key: "d", Desc: "Describe"},
 		{Key: "p", Desc: "Tasks"},
-		{Key: "ctrl+d", Desc: "Delete stack"},
+		{Key: "ctrl+d", Desc: "Delete"},
 		{Key: "↑/↓", Desc: "Navigate"},
-		{Key: "pgup", Desc: "Page up"},
-		{Key: "pgdown", Desc: "Page down"},
 		{Key: "/", Desc: "Filter"},
 		{Key: "?", Desc: "Help"},
 		{Key: "q", Desc: "Close"},
@@ -196,7 +250,7 @@ func (m *Model) IsSearching() bool {
 
 // HasActiveDialog reports whether a dialog is currently visible.
 func (m *Model) HasActiveDialog() bool {
-	return m.confirmDialog != nil && m.confirmDialog.Visible
+	return (m.confirmDialog != nil && m.confirmDialog.Visible) || m.createDialogActive || m.fileBrowserActive
 }
 
 // HasErrors returns true if any stack has errors

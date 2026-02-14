@@ -5,6 +5,8 @@ package stacksview
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -114,14 +116,16 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case confirmdialog.ResultMsg:
 		m.confirmDialog.Visible = false
+		m.confirmDialog.CheckboxLabel = "" // Clear checkbox for next use
 
 		if msg.Confirmed && m.List.Cursor < len(m.List.Filtered) {
 			selected := m.List.Filtered[m.List.Cursor]
 
 			if m.pendingAction == "remove" {
 				l().Debugln("Starting remove for stack", selected.Name)
+				removeNetworks := msg.CheckboxChecked // Capture checkbox state
 				return func() tea.Msg {
-					l().Infof("Executing remove for stack: %s", selected.Name)
+					l().Infof("Executing remove for stack: %s (remove networks: %v)", selected.Name, removeNetworks)
 					if err := docker.RemoveStack(selected.Name); err != nil {
 						l().Errorf("Failed to remove stack %s: %v", selected.Name, err)
 						return RemoveErrorMsg{
@@ -130,6 +134,16 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 						}
 					}
 					l().Infof("Successfully removed stack: %s", selected.Name)
+
+					// Remove networks if checkbox was checked
+					if removeNetworks {
+						l().Infof("Removing networks for stack: %s", selected.Name)
+						if err := docker.RemoveStackNetworks(selected.Name); err != nil {
+							l().Warnf("Failed to remove networks for stack %s: %v", selected.Name, err)
+							// Don't fail the whole operation if network removal fails
+						}
+					}
+
 					// Force immediate snapshot refresh
 					if _, err := docker.RefreshSnapshot(); err != nil {
 						l().Warnf("Failed to refresh snapshot: %v", err)
@@ -147,10 +161,110 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.confirmDialog.Message = fmt.Sprintf("Failed to remove stack %q:\n%v", msg.StackName, msg.Error)
 		return nil
 
+	case editorContentMsg:
+		preview := msg.Content
+		if len(preview) > 100 {
+			preview = preview[:100] + "..."
+		}
+		l().Infof("Editor content received: %d bytes, preview: %q", len(msg.Content), preview)
+
+		// Check if we're editing an existing stack or creating new
+		if m.editStackName != "" {
+			// Edit mode: redeploy the stack with updated YAML
+			stackName := m.editStackName
+			m.editStackName = "" // Clear edit mode
+			return func() tea.Msg {
+				l().Infof("Redeploying edited stack: %s", stackName)
+				err := docker.DeployStack(stackName, msg.Content)
+				if err != nil {
+					l().Errorf("Failed to redeploy stack %s: %v", stackName, err)
+					return stackUpdateErrorMsg{StackName: stackName, Err: err}
+				}
+				l().Infof("Successfully redeployed stack: %s", stackName)
+				// Force snapshot refresh
+				if _, err := docker.RefreshSnapshot(); err != nil {
+					l().Warnf("Failed to refresh snapshot: %v", err)
+				}
+				return CheckStacksCmd(m.lastSnapshot, m.nodeID)()
+			}
+		}
+
+		// Create mode: show create dialog with content
+		m.createDialogContent = msg.Content
+		l().Infof("Updated m.createDialogContent, now: %d bytes", len(m.createDialogContent))
+		m.createDialogError = "" // Clear any previous error
+		// Return to create dialog with inline content
+		m.createDialogActive = true
+		m.createDialogStep = "details-inline"
+		m.createInputFocus = 0
+		m.createNameInput.Focus()
+		return nil
+
+	case stackUpdateErrorMsg:
+		l().Errorf("Error updating stack %s: %v", msg.StackName, msg.Err)
+		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = true
+		m.confirmDialog.Message = fmt.Sprintf("Failed to update stack %q:\n%v", msg.StackName, msg.Err)
+		return nil
+
+	case stackCreateErrorMsg:
+		l().Errorf("Error deploying stack: %v", msg.Err)
+		// Return to create dialog with error message
+		// Determine which step to return to based on available data
+		if m.createFileInput.Value() != "" {
+			m.createDialogStep = "details-file"
+			m.createInputFocus = 1
+			m.createFileInput.Focus()
+		} else {
+			m.createDialogStep = "details-inline"
+			m.createInputFocus = 0
+			m.createNameInput.Focus()
+		}
+		m.createDialogActive = true
+		m.createDialogError = msg.Err.Error()
+		m.fileBrowserActive = false
+		return nil
+
+	case filesLoadedMsg:
+		if msg.Error != nil {
+			l().Errorf("Error loading files: %v", msg.Error)
+			m.fileBrowserActive = false
+			m.createDialogActive = true
+			m.createDialogError = fmt.Sprintf("Failed to load directory: %v", msg.Error)
+			return nil
+		}
+		m.fileBrowserPath = msg.Path
+		m.fileBrowserFiles = msg.Files
+		m.fileBrowserCursor = 0
+		m.fileBrowserActive = true // Ensure browser stays active
+		return nil
+
 	case tea.KeyMsg:
+		// If create dialog is active, handle its keys
+		if m.createDialogActive {
+			return m.handleCreateDialogKey(msg)
+		}
+
+		// If file browser is active, handle its keys
+		if m.fileBrowserActive {
+			return m.handleFileBrowserKey(msg)
+		}
+
 		// If confirm dialog is visible, let it handle the key
 		if m.confirmDialog.Visible {
 			return m.confirmDialog.Update(msg)
+		}
+
+		// Handle keyboard shortcuts
+		if msg.String() == "c" {
+			m.createDialogActive = true
+			m.createDialogStep = "source"
+			m.createStackSource = "file"
+			m.createNameInput.SetValue("")
+			m.createFileInput.SetValue("")
+			m.createDialogContent = defaultStackTemplate
+			m.createDialogError = ""
+			return nil
 		}
 
 		// --- if in search mode, handle all keys via FilterableList ---
@@ -218,6 +332,76 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 		}
 
+		// 'd' describes the stack (shows detailed YAML)
+		if msg.String() == "d" {
+			if m.List.Cursor < len(m.List.Filtered) {
+				selected := m.List.Filtered[m.List.Cursor]
+				stackName := selected.Name
+				return func() tea.Msg {
+					l().Infof("Describing stack: %s", stackName)
+					yamlContent, err := docker.DescribeStack(stackName)
+					if err != nil {
+						l().Errorf("Failed to describe stack %s: %v", stackName, err)
+						// Show error in inspect view
+						return view.NavigateToMsg{
+							ViewName: "inspect",
+							Payload: map[string]interface{}{
+								"title":  fmt.Sprintf("Stack: %s (describe failed)", stackName),
+								"json":   fmt.Sprintf("# Error describing stack:\n# %v", err),
+								"format": "raw",
+							},
+						}
+					}
+					l().Infof("Successfully described stack: %s (%d bytes)", stackName, len(yamlContent))
+					return view.NavigateToMsg{
+						ViewName: "inspect",
+						Payload: map[string]interface{}{
+							"title":  fmt.Sprintf("Stack: %s", stackName),
+							"json":   yamlContent,
+							"format": "yml",
+						},
+					}
+				}
+			}
+		}
+
+		// 'e' opens editor to edit the selected stack
+		if msg.String() == "e" {
+			if m.List.Cursor < len(m.List.Filtered) {
+				selected := m.List.Filtered[m.List.Cursor]
+				stackName := selected.Name
+				m.editStackName = stackName // Mark that we're editing
+				l().Infof("Opening editor for stack: %s", stackName)
+
+				// Reconstruct YAML in background and then open editor
+				yamlContent, err := docker.ReconstructStackCompose(stackName)
+				if err != nil {
+					l().Errorf("Failed to reconstruct YAML for stack %s: %v", stackName, err)
+					m.editStackName = "" // Clear edit mode on error
+					m.confirmDialog.Visible = true
+					m.confirmDialog.ErrorMode = true
+					m.confirmDialog.Message = fmt.Sprintf("Failed to load stack %q for editing:\n%v", stackName, err)
+					return nil
+				}
+				l().Infof("Reconstructed YAML for editing: %s (%d bytes)", stackName, len(yamlContent))
+				return openEditorForStackCmd(yamlContent)
+			}
+		}
+
+		// 'n' opens create stack dialog
+		if msg.String() == "n" {
+			l().Info("Create stack key pressed")
+			m.createDialogActive = true
+			m.createDialogStep = "source"
+			m.createStackSource = "file" // default
+			m.createNameInput.SetValue("")
+			m.createFileInput.SetValue("")
+			m.createStackPath = "" // Clear any previous file path
+			m.createDialogContent = defaultStackTemplate
+			m.createDialogError = ""
+			return nil
+		}
+
 		// 'ctrl+d' removes selected stack
 		if msg.String() == "ctrl+d" {
 			if m.List.Cursor < len(m.List.Filtered) {
@@ -226,6 +410,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				m.confirmDialog.Visible = true
 				m.confirmDialog.ErrorMode = false
 				m.confirmDialog.Message = fmt.Sprintf("Remove stack %q?\n\nThis will remove all services in the stack.\nThis action cannot be undone!", selected.Name)
+				m.confirmDialog.CheckboxLabel = "Also remove associated networks"
+				m.confirmDialog.CheckboxChecked = true // Checked by default
 			}
 		}
 
@@ -385,6 +571,370 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	m.List.Viewport, cmd = m.List.Viewport.Update(msg)
 	return cmd
+}
+
+// handleCreateDialogKey handles key presses inside the create dialog
+func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
+	switch m.createDialogStep {
+	case "source":
+		switch msg.String() {
+		case "esc":
+			m.createDialogActive = false
+			m.createDialogError = ""
+			return nil
+		case "up", "down":
+			// Toggle between file and inline
+			if m.createStackSource == "file" {
+				m.createStackSource = "inline"
+			} else {
+				m.createStackSource = "file"
+			}
+			return nil
+		case "enter":
+			// Move to name entry
+			m.createDialogError = ""
+			if m.createStackSource == "file" {
+				m.createDialogStep = "details-file"
+			} else {
+				m.createDialogStep = "details-inline"
+			}
+			m.createInputFocus = 0
+			m.createNameInput.SetValue("")
+			m.createFileInput.SetValue("")
+			m.createStackPath = "" // Clear any previous file path
+			m.createDialogContent = defaultStackTemplate
+			m.createNameInput.Focus()
+			m.createFileInput.Blur()
+			return nil
+		}
+
+	case "details-file":
+		switch msg.String() {
+		case "esc":
+			m.createDialogActive = false
+			m.createDialogError = ""
+			m.createNameInput.Blur()
+			m.createFileInput.Blur()
+			m.createInputFocus = 0
+			return nil
+		case "tab", "shift+tab":
+			// Toggle focus between name and file inputs
+			if m.createInputFocus == 0 {
+				m.createInputFocus = 1
+				m.createNameInput.Blur()
+				m.createFileInput.Focus()
+			} else {
+				m.createInputFocus = 0
+				m.createFileInput.Blur()
+				m.createNameInput.Focus()
+			}
+			return nil
+		case "f", "F":
+			// Only open file browser when focused on file input
+			if m.createInputFocus == 1 {
+				m.createDialogActive = false
+				m.fileBrowserActive = true
+				homeDir, _ := os.UserHomeDir()
+				if homeDir == "" {
+					homeDir = "/"
+				}
+				return loadFilesCmd(homeDir)
+			}
+			// Otherwise let textinput handle it (typing 'f')
+			var cmd tea.Cmd
+			if m.createInputFocus == 0 {
+				m.createNameInput, cmd = m.createNameInput.Update(msg)
+			} else {
+				m.createFileInput, cmd = m.createFileInput.Update(msg)
+			}
+			if m.createDialogError != "" {
+				m.createDialogError = ""
+			}
+			return cmd
+		case "enter":
+			// If there's an error, clear it and stay in editing mode
+			if m.createDialogError != "" {
+				l().Infof("Clearing error and staying in editing mode")
+				m.createDialogError = ""
+				return nil
+			}
+			// Validate name
+			stackName := m.createNameInput.Value()
+			if stackName == "" {
+				l().Warn("Stack name is empty")
+				m.createDialogError = "Stack name cannot be empty"
+				return nil
+			}
+			l().Infof("Stack name: %s", stackName)
+			// Validate file path
+			filePath := m.createFileInput.Value()
+			if filePath == "" {
+				l().Warn("File path is empty")
+				m.createDialogError = "Please enter or select a file path"
+				return nil
+			}
+			l().Infof("File path: %s", filePath)
+			// Read file and validate YAML
+			fileContent, err := os.ReadFile(filePath)
+			if err != nil {
+				l().Errorf("Failed to read file %s: %v", filePath, err)
+				m.createDialogError = fmt.Sprintf("Cannot read file: %v", err)
+				return nil
+			}
+			l().Infof("File read successfully (%d bytes), validating YAML", len(fileContent))
+			if err := docker.ValidateStackYAML(string(fileContent)); err != nil {
+				l().Errorf("YAML validation failed: %v", err)
+				m.createDialogError = fmt.Sprintf("Invalid YAML: %v", err)
+				return nil
+			}
+			l().Infof("YAML validation passed, deploying stack %s", stackName)
+			// Deploy the stack
+			m.createDialogActive = false
+			m.createDialogError = ""
+			m.createNameInput.Blur()
+			m.createFileInput.Blur()
+			return func() tea.Msg {
+				l().Infof("Deploying stack %s from file %s", stackName, filePath)
+				err := docker.DeployStack(stackName, string(fileContent))
+				if err != nil {
+					l().Errorf("Stack deployment failed: %v", err)
+					return stackCreateErrorMsg{err}
+				}
+				l().Infof("Stack %s deployed successfully", stackName)
+				// Force immediate snapshot refresh
+				if _, err := docker.RefreshSnapshot(); err != nil {
+					l().Warnf("Failed to refresh snapshot: %v", err)
+				}
+				return Msg{NodeID: m.nodeID}
+			}
+		default:
+			// Pass keys to the focused textinput
+			var cmd tea.Cmd
+			if m.createInputFocus == 0 {
+				m.createNameInput, cmd = m.createNameInput.Update(msg)
+			} else {
+				m.createFileInput, cmd = m.createFileInput.Update(msg)
+			}
+			// Clear error when user types
+			if m.createDialogError != "" {
+				m.createDialogError = ""
+			}
+			return cmd
+		}
+
+	case "details-inline":
+		switch msg.String() {
+		case "esc":
+			m.createDialogActive = false
+			m.createDialogError = ""
+			m.createNameInput.Blur()
+			m.createDialogContent = ""
+			m.createInputFocus = 0
+			return nil
+		case "tab", "shift+tab":
+			// Toggle focus between name and content
+			if m.createInputFocus == 0 {
+				m.createInputFocus = 1
+				m.createNameInput.Blur()
+			} else {
+				m.createInputFocus = 0
+				m.createNameInput.Focus()
+			}
+			return nil
+		case "e", "E":
+			// Open editor for content when focused on content
+			if m.createInputFocus == 1 {
+				preview := m.createDialogContent
+				if len(preview) > 100 {
+					preview = preview[:100] + "..."
+				}
+				l().Infof("Opening editor with content (%d bytes), preview: %q", len(m.createDialogContent), preview)
+				m.createDialogActive = false
+				m.createNameInput.Blur()
+				return openEditorForStackCmd(m.createDialogContent)
+			}
+			// Otherwise let textinput handle it (typing 'e')
+			var cmd tea.Cmd
+			m.createNameInput, cmd = m.createNameInput.Update(msg)
+			if m.createDialogError != "" {
+				m.createDialogError = ""
+			}
+			return cmd
+		case "enter":
+			// If there's an error, clear it and stay in editing mode
+			if m.createDialogError != "" {
+				l().Infof("Clearing error and staying in editing mode")
+				m.createDialogError = ""
+				return nil
+			}
+			// Validate name
+			stackName := m.createNameInput.Value()
+			if stackName == "" {
+				l().Warn("Stack name is empty")
+				m.createDialogError = "Stack name cannot be empty"
+				return nil
+			}
+			l().Infof("Stack name: %s (inline mode)", stackName)
+			// Check if we have content
+			if m.createDialogContent == "" {
+				l().Warn("No YAML content provided")
+				m.createDialogError = "Please add YAML content (press Tab then E to edit)"
+				return nil
+			}
+			l().Infof("YAML content provided (%d bytes), validating", len(m.createDialogContent))
+			preview := m.createDialogContent
+			if len(preview) > 100 {
+				preview = preview[:100] + "..."
+			}
+			l().Infof("Content preview before validation: %q", preview)
+			// Validate YAML
+			if err := docker.ValidateStackYAML(m.createDialogContent); err != nil {
+				l().Errorf("YAML validation failed: %v", err)
+				m.createDialogError = fmt.Sprintf("Invalid YAML: %v", err)
+				return nil
+			}
+			l().Infof("YAML validation passed, deploying stack %s", stackName)
+			// Deploy the stack
+			// IMPORTANT: Capture content NOW before creating closure
+			contentToDeploy := m.createDialogContent
+			deployPreview := contentToDeploy
+			if len(deployPreview) > 100 {
+				deployPreview = deployPreview[:100] + "..."
+			}
+			l().Infof("Captured content for deployment (%d bytes), preview: %q", len(contentToDeploy), deployPreview)
+			m.createDialogActive = false
+			m.createDialogError = ""
+			m.createNameInput.Blur()
+			return func() tea.Msg {
+				l().Infof("Deploying stack %s from inline editor (%d bytes)", stackName, len(contentToDeploy))
+				err := docker.DeployStack(stackName, contentToDeploy)
+				if err != nil {
+					l().Errorf("Stack deployment failed: %v", err)
+					return stackCreateErrorMsg{err}
+				}
+				l().Infof("Stack %s deployed successfully", stackName)
+				// Force immediate snapshot refresh
+				if _, err := docker.RefreshSnapshot(); err != nil {
+					l().Warnf("Failed to refresh snapshot: %v", err)
+				}
+				return Msg{NodeID: m.nodeID}
+			}
+		default:
+			// Pass keys to the focused textinput (name only in inline mode)
+			var cmd tea.Cmd
+			if m.createInputFocus == 0 {
+				m.createNameInput, cmd = m.createNameInput.Update(msg)
+			}
+			// Clear error when user types
+			if m.createDialogError != "" {
+				m.createDialogError = ""
+			}
+			return cmd
+		}
+	}
+
+	return nil
+}
+
+// handleFileBrowserKey handles key presses in file browser mode
+func (m *Model) handleFileBrowserKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "esc":
+		m.fileBrowserActive = false
+		m.createDialogActive = true
+		return nil
+
+	case "up":
+		if m.fileBrowserCursor > 0 {
+			m.fileBrowserCursor--
+		}
+		return nil
+
+	case "down":
+		if m.fileBrowserCursor < len(m.fileBrowserFiles)-1 {
+			m.fileBrowserCursor++
+		}
+		return nil
+
+	case "pgup":
+		m.fileBrowserCursor -= 10
+		if m.fileBrowserCursor < 0 {
+			m.fileBrowserCursor = 0
+		}
+		return nil
+
+	case "pgdown":
+		m.fileBrowserCursor += 10
+		if m.fileBrowserCursor >= len(m.fileBrowserFiles) {
+			m.fileBrowserCursor = len(m.fileBrowserFiles) - 1
+		}
+		return nil
+
+	case "enter":
+		if len(m.fileBrowserFiles) == 0 {
+			return nil
+		}
+
+		selected := m.fileBrowserFiles[m.fileBrowserCursor]
+
+		// Handle parent directory
+		if selected == ".." {
+			parentDir := filepath.Dir(m.fileBrowserPath)
+			if parentDir == m.fileBrowserPath {
+				parentDir = "/"
+			}
+			return loadFilesCmd(parentDir)
+		}
+
+		// Handle directory
+		if strings.HasSuffix(selected, "/") {
+			dirPath := strings.TrimSuffix(selected, "/")
+			return loadFilesCmd(dirPath)
+		}
+
+		// It's a file - read the content and load it into the editor
+		m.createStackPath = selected
+		m.fileBrowserActive = false
+		l().Infof("File selected: %s, loading content for review", selected)
+
+		// Read file content and switch to inline mode for review/editing
+		fileContent, err := os.ReadFile(selected)
+		if err != nil {
+			l().Errorf("Failed to read file %s: %v", selected, err)
+			// Return to file dialog with error
+			m.createDialogActive = true
+			m.createDialogStep = "details-file"
+			m.createDialogError = fmt.Sprintf("Cannot read file: %v", err)
+			m.createInputFocus = 1
+			m.createFileInput.SetValue(selected)
+			m.createFileInput.Focus()
+			return tea.Printf("Error reading file: %v", err)
+		}
+		l().Infof("File read successfully (%d bytes), switching to inline mode for review", len(fileContent))
+
+		// Load content and switch to inline mode
+		m.createDialogContent = string(fileContent)
+		m.createDialogStep = "details-inline"
+		m.createInputFocus = 1 // Focus on content so editor can be opened
+		m.createNameInput.Blur()
+		m.createDialogError = ""
+
+		// Suggest stack name from filename if not set
+		name := m.createNameInput.Value()
+		if name == "" {
+			// Extract filename without extension as suggested name
+			baseName := filepath.Base(selected)
+			if idx := strings.LastIndex(baseName, "."); idx > 0 {
+				baseName = baseName[:idx]
+			}
+			m.createNameInput.SetValue(baseName)
+		}
+
+		// Automatically open editor for review/editing before deployment
+		l().Infof("Opening editor for review of loaded file (%d bytes)", len(fileContent))
+		return openEditorForStackCmd(m.createDialogContent)
+	}
+	return nil
 }
 
 func (m *Model) setStacks(stacks []docker.StackEntry) {
@@ -694,7 +1244,10 @@ func GetStacksHelpContent() []helpview.HelpCategory {
 			Title: "General",
 			Items: []helpview.HelpItem{
 				{Keys: "<i/enter>", Description: "Show services for Stack"},
+				{Keys: "<d>", Description: "Describe stack"},
+				{Keys: "<e>", Description: "Edit stack (opens editor)"},
 				{Keys: "<p>", Description: "Show tasks for Stack"},
+				{Keys: "<n>", Description: "Create new stack"},
 				{Keys: "<ctrl+d>", Description: "Delete stack"},
 				{Keys: "</>", Description: "Filter"},
 			},
