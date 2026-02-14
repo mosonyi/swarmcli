@@ -45,6 +45,12 @@ type stackCreateErrorMsg struct {
 	Err error
 }
 
+// stackUpdateErrorMsg is sent when stack update (edit) has an error
+type stackUpdateErrorMsg struct {
+	StackName string
+	Err       error
+}
+
 // filesLoadedMsg is sent when files are loaded from a directory
 type filesLoadedMsg struct {
 	Path  string

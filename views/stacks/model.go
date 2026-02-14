@@ -87,6 +87,9 @@ type Model struct {
 	fileBrowserPath     string
 	fileBrowserFiles    []string
 	fileBrowserCursor   int
+
+	// Edit stack tracking
+	editStackName string // non-empty when editing a stack (vs creating new)
 }
 
 func New(width, height int) *Model {
@@ -152,12 +155,12 @@ func (m *Model) Name() string { return ViewName }
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "n", Desc: "New stack"},
+		{Key: "e", Desc: "Edit"},
 		{Key: "i/enter", Desc: "Services"},
+		{Key: "d", Desc: "Describe"},
 		{Key: "p", Desc: "Tasks"},
-		{Key: "ctrl+d", Desc: "Delete stack"},
+		{Key: "ctrl+d", Desc: "Delete"},
 		{Key: "↑/↓", Desc: "Navigate"},
-		{Key: "pgup", Desc: "Page up"},
-		{Key: "pgdown", Desc: "Page down"},
 		{Key: "/", Desc: "Filter"},
 		{Key: "?", Desc: "Help"},
 		{Key: "q", Desc: "Close"},

@@ -167,6 +167,29 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			preview = preview[:100] + "..."
 		}
 		l().Infof("Editor content received: %d bytes, preview: %q", len(msg.Content), preview)
+
+		// Check if we're editing an existing stack or creating new
+		if m.editStackName != "" {
+			// Edit mode: redeploy the stack with updated YAML
+			stackName := m.editStackName
+			m.editStackName = "" // Clear edit mode
+			return func() tea.Msg {
+				l().Infof("Redeploying edited stack: %s", stackName)
+				err := docker.DeployStack(stackName, msg.Content)
+				if err != nil {
+					l().Errorf("Failed to redeploy stack %s: %v", stackName, err)
+					return stackUpdateErrorMsg{StackName: stackName, Err: err}
+				}
+				l().Infof("Successfully redeployed stack: %s", stackName)
+				// Force snapshot refresh
+				if _, err := docker.RefreshSnapshot(); err != nil {
+					l().Warnf("Failed to refresh snapshot: %v", err)
+				}
+				return CheckStacksCmd(m.lastSnapshot, m.nodeID)()
+			}
+		}
+
+		// Create mode: show create dialog with content
 		m.createDialogContent = msg.Content
 		l().Infof("Updated m.createDialogContent, now: %d bytes", len(m.createDialogContent))
 		m.createDialogError = "" // Clear any previous error
@@ -175,6 +198,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.createDialogStep = "details-inline"
 		m.createInputFocus = 0
 		m.createNameInput.Focus()
+		return nil
+
+	case stackUpdateErrorMsg:
+		l().Errorf("Error updating stack %s: %v", msg.StackName, msg.Err)
+		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = true
+		m.confirmDialog.Message = fmt.Sprintf("Failed to update stack %q:\n%v", msg.StackName, msg.Err)
 		return nil
 
 	case stackCreateErrorMsg:
@@ -299,6 +329,62 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					m.selectedTaskIndex = -1
 					m.setRenderItem()
 				}
+			}
+		}
+
+		// 'd' describes the stack (shows detailed YAML)
+		if msg.String() == "d" {
+			if m.List.Cursor < len(m.List.Filtered) {
+				selected := m.List.Filtered[m.List.Cursor]
+				stackName := selected.Name
+				return func() tea.Msg {
+					l().Infof("Describing stack: %s", stackName)
+					yamlContent, err := docker.DescribeStack(stackName)
+					if err != nil {
+						l().Errorf("Failed to describe stack %s: %v", stackName, err)
+						// Show error in inspect view
+						return view.NavigateToMsg{
+							ViewName: "inspect",
+							Payload: map[string]interface{}{
+								"title":  fmt.Sprintf("Stack: %s (describe failed)", stackName),
+								"json":   fmt.Sprintf("# Error describing stack:\n# %v", err),
+								"format": "raw",
+							},
+						}
+					}
+					l().Infof("Successfully described stack: %s (%d bytes)", stackName, len(yamlContent))
+					return view.NavigateToMsg{
+						ViewName: "inspect",
+						Payload: map[string]interface{}{
+							"title":  fmt.Sprintf("Stack: %s", stackName),
+							"json":   yamlContent,
+							"format": "yml",
+						},
+					}
+				}
+			}
+		}
+
+		// 'e' opens editor to edit the selected stack
+		if msg.String() == "e" {
+			if m.List.Cursor < len(m.List.Filtered) {
+				selected := m.List.Filtered[m.List.Cursor]
+				stackName := selected.Name
+				m.editStackName = stackName // Mark that we're editing
+				l().Infof("Opening editor for stack: %s", stackName)
+
+				// Reconstruct YAML in background and then open editor
+				yamlContent, err := docker.ReconstructStackCompose(stackName)
+				if err != nil {
+					l().Errorf("Failed to reconstruct YAML for stack %s: %v", stackName, err)
+					m.editStackName = "" // Clear edit mode on error
+					m.confirmDialog.Visible = true
+					m.confirmDialog.ErrorMode = true
+					m.confirmDialog.Message = fmt.Sprintf("Failed to load stack %q for editing:\n%v", stackName, err)
+					return nil
+				}
+				l().Infof("Reconstructed YAML for editing: %s (%d bytes)", stackName, len(yamlContent))
+				return openEditorForStackCmd(yamlContent)
 			}
 		}
 
@@ -1158,6 +1244,8 @@ func GetStacksHelpContent() []helpview.HelpCategory {
 			Title: "General",
 			Items: []helpview.HelpItem{
 				{Keys: "<i/enter>", Description: "Show services for Stack"},
+				{Keys: "<d>", Description: "Describe stack"},
+				{Keys: "<e>", Description: "Edit stack (opens editor)"},
 				{Keys: "<p>", Description: "Show tasks for Stack"},
 				{Keys: "<n>", Description: "Create new stack"},
 				{Keys: "<ctrl+d>", Description: "Delete stack"},
