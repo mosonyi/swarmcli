@@ -88,3 +88,36 @@ func CheckServicesCmd(lastHash uint64, filterType FilterType, nodeID, stackName 
 		})()
 	}
 }
+
+// RefreshExpandedTasksCmd refreshes tasks for all expanded services
+func RefreshExpandedTasksCmd(expandedServices map[string]bool) tea.Cmd {
+	if len(expandedServices) == 0 {
+		return nil
+	}
+
+	// Create a batch of commands to fetch tasks for each expanded service
+	var cmds []tea.Cmd
+	for serviceID, expanded := range expandedServices {
+		if expanded {
+			// Capture serviceID in closure
+			sid := serviceID
+			cmds = append(cmds, func() tea.Msg {
+				tasks, err := docker.GetTasksForService(sid)
+				if err != nil {
+					l().Errorf("Failed to refresh tasks for service %s: %v", sid, err)
+					tasks = []docker.TaskEntry{}
+				}
+				return TasksLoadedMsg{
+					ServiceID: sid,
+					Tasks:     tasks,
+				}
+			})
+		}
+	}
+
+	if len(cmds) == 0 {
+		return nil
+	}
+
+	return tea.Batch(cmds...)
+}

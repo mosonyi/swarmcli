@@ -22,6 +22,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/docker/docker/api/types/swarm"
 )
 
 // truncateWithEllipsis truncates a string to maxWidth, adding … if needed
@@ -73,14 +74,17 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		m.SetContent(msg)
 		m.Visible = true
-		// Continue polling
-		return tickCmd()
+		// Continue polling and refresh tasks for any expanded services
+		return tea.Batch(tickCmd(), RefreshExpandedTasksCmd(m.expandedServices))
 
 	case TickMsg:
 		l().Infof("ServicesView: Received TickMsg, visible=%v", m.Visible)
-		// Check for changes (this will return either a Msg or the next TickMsg)
+		// Check for changes and refresh expanded tasks
 		if m.Visible {
-			return CheckServicesCmd(m.lastSnapshot, m.filterType, m.nodeID, m.stackName)
+			return tea.Batch(
+				CheckServicesCmd(m.lastSnapshot, m.filterType, m.nodeID, m.stackName),
+				RefreshExpandedTasksCmd(m.expandedServices),
+			)
 		}
 		// Continue polling even if not visible
 		return tickCmd()
@@ -567,13 +571,36 @@ func (m *Model) SetContent(msg Msg) {
 	}
 	snap := docker.GetSnapshot()
 	if snap != nil {
+		svcDesired := make(map[string]int)
+		svcRunning := make(map[string]int)
+		for _, svc := range snap.Services {
+			desired := 1
+			if svc.Spec.Mode.Replicated != nil && svc.Spec.Mode.Replicated.Replicas != nil {
+				desired = int(*svc.Spec.Mode.Replicated.Replicas)
+			} else if svc.Spec.Mode.Global != nil {
+				desired = len(snap.Nodes)
+			}
+			svcDesired[svc.ID] = desired
+		}
+
 		for _, t := range snap.Tasks {
-			// Consider only tasks whose desired state is running and have an error
-			if string(t.DesiredState) == "running" && t.Status.Err != "" {
-				m.serviceHasError[t.ServiceID] = true
-				if m.serviceErrorText[t.ServiceID] == "" {
-					m.serviceErrorText[t.ServiceID] = t.Status.Err
-				}
+			if t.DesiredState == swarm.TaskStateRunning && t.Status.State == swarm.TaskStateRunning {
+				svcRunning[t.ServiceID]++
+			}
+		}
+
+		for _, t := range snap.Tasks {
+			if t.Status.Err == "" {
+				continue
+			}
+			desired := svcDesired[t.ServiceID]
+			running := svcRunning[t.ServiceID]
+			if desired == 0 || running >= desired {
+				continue
+			}
+			m.serviceHasError[t.ServiceID] = true
+			if m.serviceErrorText[t.ServiceID] == "" {
+				m.serviceErrorText[t.ServiceID] = t.Status.Err
 			}
 		}
 	}

@@ -20,6 +20,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/docker/docker/api/types/swarm"
 )
 
 // Update handles all messages for the stacks view.
@@ -64,7 +65,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		l().Infof("StacksView: Received TickMsg, visible=%v", m.Visible)
 		// Check for changes (this will return either a Msg or the next TickMsg)
 		if m.Visible {
-			return CheckStacksCmd(m.lastSnapshot, m.nodeID)
+			return tea.Batch(
+				CheckStacksCmd(m.lastSnapshot, m.nodeID),
+				RefreshExpandedStackTasksCmd(m.expandedStacks),
+			)
 		}
 		// Continue polling even if not visible
 		return tickCmd()
@@ -972,11 +976,26 @@ func (m *Model) setStacks(stacks []docker.StackEntry) {
 	if snap != nil {
 		// map service ID -> stack name
 		svcToStack := make(map[string]string)
+		svcDesired := make(map[string]int)
+		svcRunning := make(map[string]int)
 		for _, svc := range snap.Services {
 			if svc.Spec.Labels != nil {
 				if stackName, ok := svc.Spec.Labels["com.docker.stack.namespace"]; ok {
 					svcToStack[svc.ID] = stackName
 				}
+			}
+			desired := 1
+			if svc.Spec.Mode.Replicated != nil && svc.Spec.Mode.Replicated.Replicas != nil {
+				desired = int(*svc.Spec.Mode.Replicated.Replicas)
+			} else if svc.Spec.Mode.Global != nil {
+				desired = len(snap.Nodes)
+			}
+			svcDesired[svc.ID] = desired
+		}
+
+		for _, t := range snap.Tasks {
+			if t.DesiredState == swarm.TaskStateRunning && t.Status.State == swarm.TaskStateRunning {
+				svcRunning[t.ServiceID]++
 			}
 		}
 
@@ -985,11 +1004,17 @@ func (m *Model) setStacks(stacks []docker.StackEntry) {
 			if stackName == "" {
 				continue
 			}
-			if string(t.DesiredState) == "running" && t.Status.Err != "" {
-				m.stackHasError[stackName] = true
-				if m.stackErrorText[stackName] == "" {
-					m.stackErrorText[stackName] = t.Status.Err
-				}
+			if t.Status.Err == "" {
+				continue
+			}
+			desired := svcDesired[t.ServiceID]
+			running := svcRunning[t.ServiceID]
+			if desired == 0 || running >= desired {
+				continue
+			}
+			m.stackHasError[stackName] = true
+			if m.stackErrorText[stackName] == "" {
+				m.stackErrorText[stackName] = t.Status.Err
 			}
 		}
 	}
@@ -1093,18 +1118,9 @@ func (m *Model) setRenderItem() {
 			nodeStr = nodeStr[:colWidths[2]]
 		}
 
-		// Determine if the stack has an error: any task where desired is running and Error != ""
-		stackHasError := false
-		stackErrorText := ""
-		if tasks, ok := m.stackTasks[s.Name]; ok {
-			for _, t := range tasks {
-				if strings.ToLower(t.DesiredState) == "running" && t.Error != "" {
-					stackHasError = true
-					stackErrorText = t.Error
-					break
-				}
-			}
-		}
+		// Get error status from the stack-level error maps (populated from snapshot)
+		stackHasError := m.stackHasError[s.Name]
+		stackErrorText := m.stackErrorText[s.Name]
 
 		// For selected row, apply horizontal scroll to error text
 		errorDisplayText := stackErrorText
@@ -1235,6 +1251,31 @@ func truncateWithEllipsis(s string, maxWidth int) string {
 		return ell
 	}
 	return string(outRunes) + ell
+}
+
+// RefreshExpandedStackTasksCmd refreshes tasks for any expanded stacks.
+func RefreshExpandedStackTasksCmd(expandedStacks map[string]bool) tea.Cmd {
+	if len(expandedStacks) == 0 {
+		return nil
+	}
+
+	var cmds []tea.Cmd
+	for stackName, expanded := range expandedStacks {
+		if !expanded {
+			continue
+		}
+		name := stackName
+		cmds = append(cmds, func() tea.Msg {
+			tasks, err := docker.GetTasksForStack(name)
+			return StackTasksLoadedMsg{StackName: name, Tasks: tasks, Error: err}
+		})
+	}
+
+	if len(cmds) == 0 {
+		return nil
+	}
+
+	return tea.Batch(cmds...)
 }
 
 // GetStacksHelpContent returns categorized help for the stacks view
