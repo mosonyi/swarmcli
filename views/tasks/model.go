@@ -28,7 +28,8 @@ type Model struct {
 	width         int
 	height        int
 	sortField     SortField
-	sortAscending bool // true for ascending, false for descending
+	sortAscending bool   // true for ascending, false for descending
+	lastSnapshot  uint64 // hash of last snapshot for change detection
 }
 
 func New(width, height int, stackName string) *Model {

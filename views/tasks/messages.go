@@ -4,7 +4,9 @@
 package tasksview
 
 import (
+	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -14,6 +16,10 @@ type TasksLoadedMsg struct {
 	Error error
 }
 
+type TickMsg time.Time
+
+const PollInterval = 2 * time.Second
+
 func LoadTasksCmd(stackName string) tea.Cmd {
 	return func() tea.Msg {
 		tasks, err := docker.GetTasksForStack(stackName)
@@ -21,5 +27,51 @@ func LoadTasksCmd(stackName string) tea.Cmd {
 			Tasks: tasks,
 			Error: err,
 		}
+	}
+}
+
+func tickCmd() tea.Cmd {
+	return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
+		return TickMsg(t)
+	})
+}
+
+// CheckTasksCmd checks if tasks have changed and returns update message if so
+func CheckTasksCmd(lastHash uint64, stackName string) tea.Cmd {
+	return func() tea.Msg {
+		l().Info("CheckTasksCmd: Polling for task changes")
+
+		// Trigger async refresh if needed and use cached snapshot for quick checks
+		docker.TriggerRefreshIfNeeded()
+
+		tasks, err := docker.GetTasksForStack(stackName)
+		if err != nil {
+			l().Errorf("CheckTasksCmd: Failed to get tasks: %v", err)
+			return tickCmd()
+		}
+
+		newHash, err := hash.Compute(tasks)
+		if err != nil {
+			l().Errorf("CheckTasksCmd: Hash computation failed: %v", err)
+			return tickCmd()
+		}
+
+		l().Infof("CheckTasksCmd: lastHash=%s, newHash=%s, taskCount=%d",
+			hash.Fmt(lastHash), hash.Fmt(newHash), len(tasks))
+
+		// Only return update message if something changed
+		if newHash != lastHash {
+			l().Info("CheckTasksCmd: Change detected! Refreshing task list")
+			return TasksLoadedMsg{
+				Tasks: tasks,
+				Error: nil,
+			}
+		}
+
+		l().Info("CheckTasksCmd: No changes detected, scheduling next poll")
+		// Schedule next poll
+		return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
+			return TickMsg(t)
+		})()
 	}
 }

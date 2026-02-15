@@ -6,6 +6,7 @@ package tasksview
 import (
 	"fmt"
 	"sort"
+	hash "swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	"swarmcli/ui"
 	helpview "swarmcli/views/help"
@@ -24,9 +25,25 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		m.tasks = msg.Tasks
+		// Compute and store hash for change detection
+		var err error
+		m.lastSnapshot, err = hash.Compute(msg.Tasks)
+		if err != nil {
+			l().Errorf("Error computing hash: %v", err)
+		}
 		// Reapply sorting to maintain sort order after data refresh
 		m.applySorting()
-		return nil
+		// Continue polling
+		return tickCmd()
+
+	case TickMsg:
+		l().Infof("TasksView: Received TickMsg, visible=%v", m.visible)
+		// Check for changes (this will return either a TasksLoadedMsg or the next TickMsg)
+		if m.visible {
+			return CheckTasksCmd(m.lastSnapshot, m.stackName)
+		}
+		// Continue polling even if not visible
+		return tickCmd()
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
