@@ -39,7 +39,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// Auto-refresh contexts list every 5 seconds when visible and no dialogs open
 		if m.Visible && !m.HasActiveDialog() && !m.loading {
 			return tea.Batch(
-				func() tea.Msg { return LoadContextsCmd() },
+				m.loadContextsCmd(),
 				tickCmd(),
 			)
 		}
@@ -110,7 +110,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// Refresh contexts list and then navigate to stacks view
 		m.SetLoading(true)
 		return tea.Batch(
-			func() tea.Msg { return LoadContextsCmd() },
+			m.loadContextsCmd(),
 			func() tea.Msg { return ContextChangedNotification{} },
 		)
 
@@ -145,9 +145,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.SetSuccess("Imported context: " + msg.ContextName)
 		// Auto-refresh the list to show the new context
 		m.SetLoading(true)
-		return func() tea.Msg {
-			return LoadContextsCmd()
-		}
+		return m.loadContextsCmd()
 
 	case ContextDeletedMsg:
 		if !msg.Success {
@@ -159,9 +157,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.SetSuccess("Deleted context: " + msg.ContextName)
 		// Refresh the list
 		m.SetLoading(true)
-		return func() tea.Msg {
-			return LoadContextsCmd()
-		}
+		return m.loadContextsCmd()
 
 	case FilesLoadedMsg:
 		if msg.Error != nil {
@@ -223,9 +219,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.SetSuccess("Created context: " + msg.ContextName)
 		// Refresh the list to show the new context
 		m.SetLoading(true)
-		return func() tea.Msg {
-			return LoadContextsCmd()
-		}
+		return m.loadContextsCmd()
 
 	case ContextUpdatedMsg:
 		if !msg.Success {
@@ -243,9 +237,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.SetSuccess("Updated context: " + msg.ContextName)
 		// Refresh the list to show the updated context
 		m.SetLoading(true)
-		return func() tea.Msg {
-			return LoadContextsCmd()
-		}
+		return m.loadContextsCmd()
 
 	case confirmdialog.ResultMsg:
 		if msg.Confirmed {
@@ -257,7 +249,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					m.pendingExportContext = ""
 					m.pendingAction = ""
 					m.confirmDialog.Hide()
-					return ExportContextWithForceCmd(contextName)
+					return m.exportContextWithForceCmd(contextName)
 				}
 			case "delete":
 				if m.pendingDeleteContext != "" {
@@ -266,7 +258,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					m.pendingDeleteContext = ""
 					m.pendingAction = ""
 					m.confirmDialog.Hide()
-					return DeleteContextCmd(contextName)
+					return m.deleteContextCmd(contextName)
 				}
 			}
 		}
@@ -398,7 +390,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				useTLS := m.createTLSEnabled
 				m.SetError("")
 				m.SetSuccess("")
-				return CreateContextWithCertFilesCmd(name, desc, host, ca, cert, key, useTLS)
+				return m.createContextWithCertFilesCmd(name, desc, host, ca, cert, key, useTLS)
 			case "esc":
 				// Cancel create
 				m.createDialogActive = false
@@ -546,7 +538,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				description := strings.TrimSpace(m.editDescInput.Value())
 
 				// Update only the description (no host or cert changes)
-				return UpdateContextDescriptionCmd(m.editContextName, description)
+				return m.updateContextDescriptionCmd(m.editContextName, description)
 
 			case "esc":
 				// Cancel edit dialog
@@ -628,7 +620,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					m.fileBrowserFiles = []string{}
 					m.SetError("")
 					m.SetSuccess("")
-					return ImportContextCmd(selectedFile)
+					return m.importContextCmd(selectedFile)
 				}
 				return nil
 			case "esc":
@@ -706,7 +698,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.SetSwitchPending(true)
 			m.SetError("")
 			m.SetSuccess("")
-			return SwitchContextCmd(ctx.Name)
+			return m.switchContextCmd(ctx.Name)
 
 		case "i":
 			// Inspect selected context
@@ -714,7 +706,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			if !ok {
 				return nil
 			}
-			return InspectContextCmd(ctx.Name)
+			return m.inspectContextCmd(ctx.Name)
 
 		case "?":
 			return func() tea.Msg {
@@ -770,7 +762,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			if !ok {
 				return nil
 			}
-			return ExportContextCmd(ctx.Name)
+			return m.exportContextCmd(ctx.Name)
 
 		case "m":
 			// Import context from file - open file browser

@@ -89,11 +89,12 @@ func openEditorForContentCmd(initialData string) tea.Cmd {
 }
 
 // editConfigInEditorCmd creates a tmp file and opens the editor to edit the new config.
-func editConfigInEditorCmd(name string) tea.Cmd {
+func (m *Model) editConfigInEditorCmd(name string) tea.Cmd {
+	configOps := m.deps.Configs
 	l().Infoln("editConfigInEditorCmd: started")
 
 	ctx := context.Background()
-	cfg, err := docker.InspectConfig(ctx, name)
+	cfg, err := configOps.InspectConfig(ctx, name)
 	if err != nil {
 		l().Infoln("InspectConfig error:", err)
 		return func() tea.Msg { return editConfigErrorMsg{err} }
@@ -115,7 +116,7 @@ func editConfigInEditorCmd(name string) tea.Cmd {
 			}
 
 			// Create a new Docker config version with the edited data
-			newCfg, err := docker.CreateConfigVersion(ctx, cfg.Config, newData)
+			newCfg, err := configOps.CreateConfigVersion(ctx, cfg.Config, newData)
 			if err != nil {
 				l().Infoln("CreateConfigVersion error:", err)
 				return editConfigErrorMsg{err}

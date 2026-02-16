@@ -28,6 +28,7 @@ const (
 )
 
 type Model struct {
+	deps     docker.Deps
 	Visible  bool
 	viewport viewport.Model
 	ready    bool
@@ -353,7 +354,7 @@ func (m *Model) OnEnter() tea.Cmd {
 	// from other code paths by calling SetLoading(true) before navigating.
 	if len(m.contexts) == 0 {
 		m.SetLoading(true)
-		return func() tea.Msg { return LoadContextsCmd() }
+		return m.loadContextsCmd()
 	}
 	return nil
 }

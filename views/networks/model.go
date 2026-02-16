@@ -6,6 +6,7 @@ package networksview
 import (
 	"fmt"
 	"strings"
+	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
@@ -29,6 +30,7 @@ const (
 )
 
 type Model struct {
+	deps                  docker.Deps
 	networksList          filterlist.FilterableList[networkItem]
 	width                 int
 	height                int
@@ -212,7 +214,7 @@ func (m *Model) IsSearching() bool {
 
 func (m *Model) Init() tea.Cmd {
 	l().Info("NetworksView: Init() called - starting ticker and loading networks")
-	return tea.Batch(tickCmd(), m.spinnerTickCmd(), LoadNetworks())
+	return tea.Batch(tickCmd(), m.spinnerTickCmd(), m.loadNetworksCmd())
 }
 
 func (m *Model) spinnerTickCmd() tea.Cmd {
@@ -227,8 +229,8 @@ func tickCmd() tea.Cmd {
 	})
 }
 
-func LoadNetworks() tea.Cmd {
-	return loadNetworksCmd()
+func (m *Model) LoadNetworks() tea.Cmd {
+	return m.loadNetworksCmd()
 }
 
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
@@ -327,7 +329,7 @@ func (m *Model) OnEnter() tea.Cmd {
 	m.resetCursorOnNextLoad = true
 	m.networksList.Cursor = 0
 	m.networksList.Viewport.YOffset = 0
-	return LoadNetworks()
+	return m.LoadNetworks()
 }
 
 func (m *Model) OnExit() tea.Cmd {

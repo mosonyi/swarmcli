@@ -23,10 +23,11 @@ import (
 
 // --- Async commands ---
 
-func loadSecretsCmd() tea.Cmd {
+func (m *Model) loadSecretsCmd() tea.Cmd {
+	secretOps := m.deps.Secrets
 	return func() tea.Msg {
 		ctx := context.Background()
-		secs, err := docker.ListSecrets(ctx)
+		secs, err := secretOps.ListSecrets(ctx)
 		if err != nil {
 			return errorMsg(fmt.Errorf("failed to list secrets: %w", err))
 		}
@@ -41,13 +42,14 @@ func loadSecretsCmd() tea.Cmd {
 
 // computeSecretUsedCmd checks which secrets are used by services in background
 // and returns a usedStatusUpdatedMsg containing a map[id]bool.
-func computeSecretUsedCmd(secs []docker.SecretWithDecodedData) tea.Cmd {
+func (m *Model) computeSecretUsedCmd(secs []docker.SecretWithDecodedData) tea.Cmd {
+	secretOps := m.deps.Secrets
 	return func() tea.Msg {
 		usedMap := make(map[string]bool, len(secs))
 		ctx := context.Background()
 		for _, s := range secs {
 			usedMap[s.Secret.ID] = false
-			svcs, err := docker.ListServicesUsingSecretID(ctx, s.Secret.ID)
+			svcs, err := secretOps.ListServicesUsingSecretID(ctx, s.Secret.ID)
 			if err == nil && len(svcs) > 0 {
 				usedMap[s.Secret.ID] = true
 			}
@@ -56,15 +58,16 @@ func computeSecretUsedCmd(secs []docker.SecretWithDecodedData) tea.Cmd {
 	}
 }
 
-// CheckSecretsCmd checks if secrets have changed and returns update message if so
-func CheckSecretsCmd(lastHash uint64) tea.Cmd {
+// checkSecretsCmd checks if secrets have changed and returns update message if so
+func (m *Model) checkSecretsCmd(lastHash uint64) tea.Cmd {
+	secretOps := m.deps.Secrets
 	return func() tea.Msg {
-		l().Info("CheckSecretsCmd: Polling for secret changes")
+		l().Info("checkSecretsCmd: Polling for secret changes")
 
 		ctx := context.Background()
-		secs, err := docker.ListSecrets(ctx)
+		secs, err := secretOps.ListSecrets(ctx)
 		if err != nil {
-			l().Errorf("CheckSecretsCmd: ListSecrets failed: %v", err)
+			l().Errorf("checkSecretsCmd: ListSecrets failed: %v", err)
 			return tickCmd()
 		}
 
@@ -90,29 +93,30 @@ func CheckSecretsCmd(lastHash uint64) tea.Cmd {
 
 		newHash, err := hash.Compute(stableSecrets)
 		if err != nil {
-			l().Errorf("CheckSecretsCmd: Error computing hash: %v", err)
+			l().Errorf("checkSecretsCmd: Error computing hash: %v", err)
 			// Schedule next poll even on error
 			return tickCmd()
 		}
 
-		l().Infof("CheckSecretsCmd: lastHash=%s, newHash=%s, secretCount=%d",
+		l().Infof("checkSecretsCmd: lastHash=%s, newHash=%s, secretCount=%d",
 			hash.Fmt(lastHash), hash.Fmt(newHash), len(wrapped))
 
 		// Only return update message if something changed
 		if newHash != lastHash {
-			l().Info("CheckSecretsCmd: Change detected! Refreshing secret list")
+			l().Info("checkSecretsCmd: Change detected! Refreshing secret list")
 			return secretsLoadedMsg(wrapped)
 		}
 
-		l().Info("CheckSecretsCmd: No changes detected, scheduling next poll")
+		l().Info("checkSecretsCmd: No changes detected, scheduling next poll")
 		// Schedule next poll in 5 seconds
 		return tickCmd()
 	}
 }
 
-func inspectSecretCmd(name string) tea.Cmd {
+func (m *Model) inspectSecretCmd(name string) tea.Cmd {
+	secretOps := m.deps.Secrets
 	return func() tea.Msg {
-		sec, err := docker.InspectSecret(context.Background(), name)
+		sec, err := secretOps.InspectSecret(context.Background(), name)
 		jsonStr := ""
 		if err != nil {
 			jsonStr = fmt.Sprintf("Error inspecting secret %q: %v", name, err)
@@ -124,10 +128,10 @@ func inspectSecretCmd(name string) tea.Cmd {
 
 		return view.NavigateToMsg{
 			ViewName: inspectview.ViewName,
-			Payload: map[string]interface{}{
+			Payload: map[string]any{
 				"title": fmt.Sprintf("Secret: %s", name),
 				"json":  jsonStr,
-				"meta": map[string]interface{}{
+				"meta": map[string]any{
 					"ID":   sec.Secret.ID,
 					"Name": sec.Secret.Spec.Name,
 					"Note": "Secret data is not available (write-only)",
@@ -137,10 +141,11 @@ func inspectSecretCmd(name string) tea.Cmd {
 	}
 }
 
-func deleteSecretCmd(name string) tea.Cmd {
+func (m *Model) deleteSecretCmd(name string) tea.Cmd {
+	secretOps := m.deps.Secrets
 	return func() tea.Msg {
 		ctx := context.Background()
-		err := docker.DeleteSecret(ctx, name)
+		err := secretOps.DeleteSecret(ctx, name)
 		if err != nil {
 			return errorMsg(fmt.Errorf("failed to delete secret %q: %w", name, err))
 		}
@@ -197,7 +202,8 @@ func loadFilesCmd(dirPath string) tea.Cmd {
 	}
 }
 
-func createSecretFromFileCmd(name, filePath string, labels map[string]string, encode bool) tea.Cmd {
+func (m *Model) createSecretFromFileCmd(name, filePath string, labels map[string]string, encode bool) tea.Cmd {
+	secretOps := m.deps.Secrets
 	return func() tea.Msg {
 		l().Infof("Creating secret %s from file %s (encode=%v, labels=%v)", name, filePath, encode, labels)
 
@@ -223,7 +229,7 @@ func createSecretFromFileCmd(name, filePath string, labels map[string]string, en
 
 		// Create the secret
 		ctx := context.Background()
-		newSec, err := docker.CreateSecret(ctx, name, data, labels)
+		newSec, err := secretOps.CreateSecret(ctx, name, data, labels)
 		if err != nil {
 			l().Errorf("Failed to create secret %s: %v", name, err)
 			return errorMsg(fmt.Errorf("failed to create secret: %w", err))
@@ -237,7 +243,8 @@ func createSecretFromFileCmd(name, filePath string, labels map[string]string, en
 	}
 }
 
-func createSecretFromContentCmd(name string, content []byte, labels map[string]string, encode bool) tea.Cmd {
+func (m *Model) createSecretFromContentCmd(name string, content []byte, labels map[string]string, encode bool) tea.Cmd {
+	secretOps := m.deps.Secrets
 	return func() tea.Msg {
 		l().Infof("Creating secret %s from inline content (encode=%v, labels=%v)", name, encode, labels)
 
@@ -256,7 +263,7 @@ func createSecretFromContentCmd(name string, content []byte, labels map[string]s
 
 		// Create the secret
 		ctx := context.Background()
-		newSec, err := docker.CreateSecret(ctx, name, content, labels)
+		newSec, err := secretOps.CreateSecret(ctx, name, content, labels)
 		if err != nil {
 			l().Errorf("Failed to create secret %s: %v", name, err)
 			return errorMsg(fmt.Errorf("failed to create secret: %w", err))
@@ -270,25 +277,26 @@ func createSecretFromContentCmd(name string, content []byte, labels map[string]s
 	}
 }
 
-func getUsedByStacksCmd(secretName string) tea.Cmd {
+func (m *Model) getUsedByStacksCmd(secretName string) tea.Cmd {
+	secretOps := m.deps.Secrets
 	return func() tea.Msg {
 		l().Infof("Getting stacks/services that use secret: %s", secretName)
 
 		ctx := context.Background()
 		// Get secret ID for robust matching
-		sec, err := docker.InspectSecret(ctx, secretName)
+		sec, err := secretOps.InspectSecret(ctx, secretName)
 		if err != nil {
 			l().Errorf("Failed to inspect secret %s: %v", secretName, err)
 			return errorMsg(err)
 		}
 
 		// Get services by secret name and ID
-		servicesByName, err := docker.ListServicesUsingSecretName(ctx, secretName)
+		servicesByName, err := secretOps.ListServicesUsingSecretName(ctx, secretName)
 		if err != nil {
 			l().Errorf("Failed to list services using secret name %s: %v", secretName, err)
 			return errorMsg(err)
 		}
-		servicesByID, err := docker.ListServicesUsingSecretID(ctx, sec.Secret.ID)
+		servicesByID, err := secretOps.ListServicesUsingSecretID(ctx, sec.Secret.ID)
 		if err != nil {
 			l().Errorf("Failed to list services using secret ID %s: %v", sec.Secret.ID, err)
 			return errorMsg(err)

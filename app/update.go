@@ -35,13 +35,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If node event, refresh nodes view; if stacks view, refresh stacks.
 		switch msg.Type {
 		case "node":
-			if m.currentView.Name() == nodesview.ViewName {
-				return m, tea.Batch(nodesview.LoadNodesCmd(), docker.WatchEventsCmd())
+			if nv, ok := m.currentView.(*nodesview.Model); ok {
+				return m, tea.Batch(nv.LoadNodesCmd(), docker.WatchEventsCmd())
 			}
 		case "service", "config", "network":
-			if m.currentView.Name() == stacksview.ViewName {
+			if sv, ok := m.currentView.(*stacksview.Model); ok {
 				// Use cached snapshot to update stacks quickly
-				return m, tea.Batch(stacksview.LoadStacksCmd(""), docker.WatchEventsCmd())
+				return m, tea.Batch(sv.LoadStacksCmd(""), docker.WatchEventsCmd())
 			}
 		}
 		// Re-issue watcher after handling
@@ -174,7 +174,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			"message": "Loading Swarm nodes and stacks...",
 		})
 		return m, tea.Batch(
-			systeminfoview.LoadStatus(),
+			m.systemInfo.LoadStatus(),
 			cmd,
 			// Load snapshot and navigate to stacks when ready
 			loadSnapshotAndNavigateToStacksCmd(),
@@ -183,12 +183,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loadingview.ErrorDismissedMsg:
 		// Navigate to contexts view from loading error screen
 		cmd := m.replaceView(contextsview.ViewName, nil)
-		return m, tea.Batch(
-			cmd,
-			func() tea.Msg {
-				return contextsview.LoadContextsCmd()
-			},
-		)
+		return m, cmd
 
 	default:
 		cmd := m.delegateToCurrentView(msg)

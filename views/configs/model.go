@@ -31,6 +31,7 @@ const (
 )
 
 type Model struct {
+	deps          docker.Deps
 	configsList   filterlist.FilterableList[configItem]
 	width         int
 	height        int
@@ -160,7 +161,7 @@ func (m *Model) IsSearching() bool {
 
 func (m *Model) Init() tea.Cmd {
 	l().Info("ConfigsView: Init() called - starting ticker and loading configs")
-	return tea.Batch(tickCmd(), m.spinnerTickCmd(), LoadConfigs())
+	return tea.Batch(tickCmd(), m.spinnerTickCmd(), m.loadConfigsCmd())
 }
 
 func (m *Model) spinnerTickCmd() tea.Cmd {
@@ -173,10 +174,6 @@ func tickCmd() tea.Cmd {
 	return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
 		return TickMsg(t)
 	})
-}
-
-func LoadConfigs() tea.Cmd {
-	return loadConfigsCmd()
 }
 
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
@@ -229,7 +226,7 @@ func (m *Model) addConfig(cfg docker.ConfigWithDecodedData) {
 func (m *Model) OnEnter() tea.Cmd {
 	m.visible = true
 	l().Info("ConfigsView: OnEnter() - view is now visible")
-	return LoadConfigs()
+	return m.loadConfigsCmd()
 }
 
 func (m *Model) OnExit() tea.Cmd {

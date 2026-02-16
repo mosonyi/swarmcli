@@ -5,7 +5,6 @@ package app
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	systeminfoview "swarmcli/views/systeminfo"
 	"time"
 )
 
@@ -18,5 +17,5 @@ func tick() tea.Cmd {
 }
 
 func (m *Model) handleTick(msg tickMsg) (tea.Model, tea.Cmd) {
-	return m, systeminfoview.LoadStatus()
+	return m, m.systemInfo.LoadStatus()
 }

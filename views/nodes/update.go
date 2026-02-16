@@ -23,12 +23,13 @@ import (
 )
 
 // getFreshNodeState retrieves the current node state with a forced refresh
-func getFreshNodeState(nodeID string) *docker.NodeEntry {
+func (m *Model) getFreshNodeState(nodeID string) *docker.NodeEntry {
+	snapshotOps := m.deps.Snapshot
 	// Force a synchronous refresh to get the absolute latest state
-	snap, err := docker.RefreshSnapshot()
+	snap, err := snapshotOps.RefreshSnapshot()
 	if err != nil {
 		l().Warnf("Failed to refresh snapshot: %v", err)
-		snap = docker.GetSnapshot()
+		snap = snapshotOps.GetSnapshot()
 		if snap == nil {
 			return nil
 		}
@@ -55,39 +56,45 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			node := m.List.Filtered[m.List.Cursor]
 			// Check which action to perform based on message content
 			if strings.Contains(m.confirmDialog.Message, "Demote") {
+				nodeOps := m.deps.Nodes
+				snapshotOps := m.deps.Snapshot
 				// Run demote, keeping dialog visible during operation
 				return func() tea.Msg {
-					if err := docker.DemoteNode(context.Background(), node.ID); err != nil {
+					if err := nodeOps.DemoteNode(context.Background(), node.ID); err != nil {
 						return DemoteErrorMsg{NodeID: node.ID, Error: err}
 					}
 					// Force refresh
-					if _, err := docker.RefreshSnapshot(); err != nil {
+					if _, err := snapshotOps.RefreshSnapshot(); err != nil {
 						l().Warnf("Failed to refresh snapshot: %v", err)
 					}
 					// Return a message that will close dialog and refresh list
 					return DemoteSuccessMsg{}
 				}
 			} else if strings.Contains(m.confirmDialog.Message, "Promote") {
+				nodeOps := m.deps.Nodes
+				snapshotOps := m.deps.Snapshot
 				// Run promote, keeping dialog visible during operation
 				return func() tea.Msg {
-					if err := docker.PromoteNode(context.Background(), node.ID); err != nil {
+					if err := nodeOps.PromoteNode(context.Background(), node.ID); err != nil {
 						return PromoteErrorMsg{NodeID: node.ID, Error: err}
 					}
 					// Force refresh
-					if _, err := docker.RefreshSnapshot(); err != nil {
+					if _, err := snapshotOps.RefreshSnapshot(); err != nil {
 						l().Warnf("Failed to refresh snapshot: %v", err)
 					}
 					// Return a message that will close dialog and refresh list
 					return PromoteSuccessMsg{}
 				}
 			} else if strings.Contains(m.confirmDialog.Message, "Remove") {
+				nodeOps := m.deps.Nodes
+				snapshotOps := m.deps.Snapshot
 				// Run remove with force=true, keeping dialog visible during operation
 				return func() tea.Msg {
-					if err := docker.RemoveNode(context.Background(), node.ID, true); err != nil {
+					if err := nodeOps.RemoveNode(context.Background(), node.ID, true); err != nil {
 						return RemoveErrorMsg{NodeID: node.ID, Error: err}
 					}
 					// Force refresh
-					if _, err := docker.RefreshSnapshot(); err != nil {
+					if _, err := snapshotOps.RefreshSnapshot(); err != nil {
 						l().Warnf("Failed to refresh snapshot: %v", err)
 					}
 					// Return a message that will close dialog and refresh list
@@ -115,12 +122,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case DemoteSuccessMsg:
 		// Close dialog and reload nodes with fresh data
 		m.confirmDialog.Visible = false
-		return LoadNodesCmd()
+		return m.LoadNodesCmd()
 
 	case PromoteSuccessMsg:
 		// Close dialog and reload nodes with fresh data
 		m.confirmDialog.Visible = false
-		return LoadNodesCmd()
+		return m.LoadNodesCmd()
 
 	case RemoveErrorMsg:
 		// Reuse confirm dialog to display error
@@ -132,7 +139,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case RemoveSuccessMsg:
 		// Close dialog and reload nodes with fresh data
 		m.confirmDialog.Visible = false
-		return LoadNodesCmd()
+		return m.LoadNodesCmd()
 
 	case SetAvailabilityErrorMsg:
 		// Show error in confirm dialog
@@ -144,7 +151,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case SetAvailabilitySuccessMsg:
 		// Close dialog and reload nodes
 		m.availabilityDialog = false
-		return LoadNodesCmd()
+		return m.LoadNodesCmd()
 
 	case AddLabelErrorMsg:
 		// Show error in confirm dialog
@@ -156,7 +163,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case AddLabelSuccessMsg:
 		// Close dialog and reload nodes
 		m.labelInputDialog = false
-		return LoadNodesCmd()
+		return m.LoadNodesCmd()
 
 	case RemoveLabelErrorMsg:
 		// Show error in confirm dialog
@@ -168,7 +175,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case RemoveLabelSuccessMsg:
 		// Close dialog and reload nodes
 		m.labelRemoveDialog = false
-		return LoadNodesCmd()
+		return m.LoadNodesCmd()
 
 	case Msg:
 		l().Infof("NodesView: Received Msg with %d entries", len(msg.Entries))
@@ -206,7 +213,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		l().Infof("NodesView: Received TickMsg, visible=%v", m.Visible)
 		// Check for changes (this will return either a Msg or the next TickMsg)
 		if m.Visible {
-			return CheckNodesCmd(m.lastSnapshot)
+			return m.checkNodesCmd(m.lastSnapshot)
 		}
 		// Continue polling even if not visible
 		return tickCmd()
@@ -298,8 +305,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		case "i":
 			if m.List.Cursor < len(m.List.Filtered) {
 				node := m.List.Filtered[m.List.Cursor]
+				inspectOps := m.deps.Inspect
 				return func() tea.Msg {
-					inspectContent, err := docker.Inspect(context.Background(), docker.InspectNode, node.ID)
+					inspectContent, err := inspectOps.Inspect(context.Background(), docker.InspectNode, node.ID)
 					if err != nil {
 						inspectContent = "Error inspecting node: " + err.Error()
 					}
@@ -336,7 +344,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			if m.List.Cursor < len(m.List.Filtered) {
 				node := m.List.Filtered[m.List.Cursor]
 				// Get fresh node state from snapshot to avoid stale data
-				freshNode := getFreshNodeState(node.ID)
+				freshNode := m.getFreshNodeState(node.ID)
 				if freshNode != nil {
 					node = *freshNode
 				}
@@ -355,7 +363,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			if m.List.Cursor < len(m.List.Filtered) {
 				node := m.List.Filtered[m.List.Cursor]
 				// Get fresh node state from snapshot to avoid stale data
-				freshNode := getFreshNodeState(node.ID)
+				freshNode := m.getFreshNodeState(node.ID)
 				if freshNode != nil {
 					node = *freshNode
 				}
@@ -649,6 +657,8 @@ func (m *Model) handleAvailabilityDialogKey(msg tea.KeyMsg) tea.Cmd {
 		// Apply the selected availability
 		availability := []string{"active", "pause", "drain"}[m.availabilitySelection]
 		nodeID := m.availabilityNodeID
+		nodeOps := m.deps.Nodes
+		snapshotOps := m.deps.Snapshot
 		m.availabilityDialog = false
 		return func() tea.Msg {
 			var avail swarm.NodeAvailability
@@ -660,11 +670,11 @@ func (m *Model) handleAvailabilityDialogKey(msg tea.KeyMsg) tea.Cmd {
 			case "drain":
 				avail = swarm.NodeAvailabilityDrain
 			}
-			if err := docker.SetNodeAvailability(context.Background(), nodeID, avail); err != nil {
+			if err := nodeOps.SetNodeAvailability(context.Background(), nodeID, avail); err != nil {
 				return SetAvailabilityErrorMsg{NodeID: nodeID, Error: err}
 			}
 			// Force refresh
-			if _, err := docker.RefreshSnapshot(); err != nil {
+			if _, err := snapshotOps.RefreshSnapshot(); err != nil {
 				l().Warnf("Failed to refresh snapshot: %v", err)
 			}
 			return SetAvailabilitySuccessMsg{}
@@ -712,15 +722,17 @@ func (m *Model) handleLabelInputDialogKey(msg tea.KeyMsg) tea.Cmd {
 		}
 
 		nodeID := m.labelInputNodeID
+		nodeOps := m.deps.Nodes
+		snapshotOps := m.deps.Snapshot
 		m.labelInputDialog = false
 		m.labelInputValue = ""
 
 		return func() tea.Msg {
-			if err := docker.AddNodeLabel(context.Background(), nodeID, key, value); err != nil {
+			if err := nodeOps.AddNodeLabel(context.Background(), nodeID, key, value); err != nil {
 				return AddLabelErrorMsg{NodeID: nodeID, Error: err}
 			}
 			// Force refresh
-			if _, err := docker.RefreshSnapshot(); err != nil {
+			if _, err := snapshotOps.RefreshSnapshot(); err != nil {
 				l().Warnf("Failed to refresh snapshot: %v", err)
 			}
 			return AddLabelSuccessMsg{}
@@ -758,14 +770,16 @@ func (m *Model) handleLabelRemoveDialogKey(msg tea.KeyMsg) tea.Cmd {
 			}
 			key := parts[0]
 			nodeID := m.labelRemoveNodeID
+			nodeOps := m.deps.Nodes
+			snapshotOps := m.deps.Snapshot
 			m.labelRemoveDialog = false
 
 			return func() tea.Msg {
-				if err := docker.RemoveNodeLabel(context.Background(), nodeID, key); err != nil {
+				if err := nodeOps.RemoveNodeLabel(context.Background(), nodeID, key); err != nil {
 					return RemoveLabelErrorMsg{NodeID: nodeID, Error: err}
 				}
 				// Force refresh
-				if _, err := docker.RefreshSnapshot(); err != nil {
+				if _, err := snapshotOps.RefreshSnapshot(); err != nil {
 					l().Warnf("Failed to refresh snapshot: %v", err)
 				}
 				return RemoveLabelSuccessMsg{}

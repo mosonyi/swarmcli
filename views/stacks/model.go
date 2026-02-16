@@ -44,6 +44,7 @@ const (
 )
 
 type Model struct {
+	deps             docker.Deps
 	List             filterlist.FilterableList[docker.StackEntry]
 	Visible          bool
 	nodeID           string
@@ -167,35 +168,21 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	}
 }
 
-func LoadStacks(nodeID string) []docker.StackEntry {
-	stacks, _ := LoadStacksWithErr(nodeID)
-	return stacks
-}
-
-// LoadStacksWithErr refreshes snapshot and returns stack entries along with any error
-func LoadStacksWithErr(nodeID string) ([]docker.StackEntry, error) {
-	// Trigger a background refresh if needed, but prefer using cached data to avoid blocking UI
-	docker.TriggerRefreshIfNeeded()
-
-	snap := docker.GetSnapshot()
-	if snap == nil {
-		// No cached data available; attempt a synchronous refresh as a last resort
-		s, err := docker.RefreshSnapshot()
-		if err != nil {
-			l().Errorf("LoadStacksWithErr: RefreshSnapshot failed: %v", err)
-			return []docker.StackEntry{}, err
-		}
-		snap = s
-	}
-	return snap.ToStackEntries(), nil
-}
-
-func LoadStacksCmd(nodeID string) tea.Cmd {
+func (m *Model) LoadStacksCmd(nodeID string) tea.Cmd {
+	snapOps := m.deps.Snapshot
 	return func() tea.Msg {
-		stacks, err := LoadStacksWithErr(nodeID)
-		if err != nil {
-			l().Errorf("LoadStacksCmd: Error loading stacks: %v", err)
+		snapOps.TriggerRefreshIfNeeded()
+
+		snap := snapOps.GetSnapshot()
+		if snap == nil {
+			s, err := snapOps.RefreshSnapshot()
+			if err != nil {
+				l().Errorf("LoadStacksCmd: RefreshSnapshot failed: %v", err)
+				return Msg{NodeID: nodeID, Stacks: []docker.StackEntry{}}
+			}
+			snap = s
 		}
+		stacks := snap.ToStackEntries()
 
 		l().Debugf("LoadStacksCmd: Loaded %v stacks", stacks)
 
@@ -203,35 +190,48 @@ func LoadStacksCmd(nodeID string) tea.Cmd {
 	}
 }
 
-// CheckStacksCmd checks if stacks have changed and returns update message if so
-func CheckStacksCmd(lastHash uint64, nodeID string) tea.Cmd {
+// checkStacksCmd checks if stacks have changed and returns update message if so
+func (m *Model) checkStacksCmd(lastHash uint64, nodeID string) tea.Cmd {
+	snapOps := m.deps.Snapshot
+	clusterOps := m.deps.ClusterInfo
 	return func() tea.Msg {
-		l().Info("CheckStacksCmd: Polling for stack changes")
+		l().Info("checkStacksCmd: Polling for stack changes")
 
-		stacks := LoadStacks(nodeID)
-		var err error
+		snapOps.TriggerRefreshIfNeeded()
+
+		snap := snapOps.GetSnapshot()
+		if snap == nil {
+			s, err := snapOps.RefreshSnapshot()
+			if err != nil {
+				l().Errorf("checkStacksCmd: RefreshSnapshot failed: %v", err)
+				return tickCmd()
+			}
+			snap = s
+		}
+		stacks := snap.ToStackEntries()
+
 		newHash, err := hash.Compute(stacks)
 		if err != nil {
-			l().Errorf("CheckStacksCmd: Error computing hash: %v", err)
+			l().Errorf("checkStacksCmd: Error computing hash: %v", err)
 			// Keep polling on error instead of returning nil which would stop the tick loop
 			return tickCmd()
 		}
 
-		l().Infof("CheckStacksCmd: lastHash=%s, newHash=%s, stackCount=%d",
+		l().Infof("checkStacksCmd: lastHash=%s, newHash=%s, stackCount=%d",
 			hash.Fmt(lastHash), hash.Fmt(newHash), len(stacks))
 
-		l().Debugf("CheckStacksCmd: Stacks: %+v", stacks)
+		l().Debugf("checkStacksCmd: Stacks: %+v", stacks)
 
-		ctxName, _ := docker.GetCurrentContext()
-		l().Debugf("CheckStacksCmd: docker context: %s", ctxName)
+		ctxName, _ := clusterOps.GetCurrentContext()
+		l().Debugf("checkStacksCmd: docker context: %s", ctxName)
 
 		// Only return update message if something changed
 		if newHash != lastHash {
-			l().Info("CheckStacksCmd: Change detected! Refreshing stack list")
+			l().Info("checkStacksCmd: Change detected! Refreshing stack list")
 			return Msg{NodeID: nodeID, Stacks: stacks}
 		}
 
-		l().Info("CheckStacksCmd: No changes detected, scheduling next poll")
+		l().Info("checkStacksCmd: No changes detected, scheduling next poll")
 		return tickCmd()
 	}
 }

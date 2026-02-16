@@ -75,15 +75,15 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.SetContent(msg)
 		m.Visible = true
 		// Continue polling and refresh tasks for any expanded services
-		return tea.Batch(tickCmd(), RefreshExpandedTasksCmd(m.expandedServices))
+		return tea.Batch(tickCmd(), m.refreshExpandedTasksCmd(m.expandedServices))
 
 	case TickMsg:
 		l().Infof("ServicesView: Received TickMsg, visible=%v", m.Visible)
 		// Check for changes and refresh expanded tasks
 		if m.Visible {
 			return tea.Batch(
-				CheckServicesCmd(m.lastSnapshot, m.filterType, m.nodeID, m.stackName),
-				RefreshExpandedTasksCmd(m.expandedServices),
+				m.checkServicesCmd(m.lastSnapshot, m.filterType, m.nodeID, m.stackName),
+				m.refreshExpandedTasksCmd(m.expandedServices),
 			)
 		}
 		// Continue polling even if not visible
@@ -112,8 +112,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		if msg.Confirmed && m.List.Cursor < len(m.List.Filtered) {
 			entry := m.List.Filtered[m.List.Cursor]
 			l().Infof("Scaling service %s to %d replicas", entry.ServiceName, msg.Replicas)
+			serviceOps := m.deps.Services
+			snapshotOps := m.deps.Snapshot
+			refreshCmd := m.refreshServicesCmd(m.nodeID, m.stackName, m.filterType)
 			return func() tea.Msg {
-				if err := docker.ScaleService(entry.ServiceID, msg.Replicas); err != nil {
+				if err := serviceOps.ScaleService(entry.ServiceID, msg.Replicas); err != nil {
 					l().Errorf("Failed to scale service %s: %v", entry.ServiceName, err)
 					return ScaleErrorMsg{
 						ServiceName: entry.ServiceName,
@@ -122,10 +125,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				}
 				l().Infof("Successfully scaled service %s to %d replicas", entry.ServiceName, msg.Replicas)
 				// Force immediate snapshot refresh
-				if _, err := docker.RefreshSnapshot(); err != nil {
+				if _, err := snapshotOps.RefreshSnapshot(); err != nil {
 					l().Warnf("Failed to refresh snapshot: %v", err)
 				}
-				return refreshServicesCmd(m.nodeID, m.stackName, m.filterType)()
+				return refreshCmd()
 			}
 		}
 		return nil
@@ -135,13 +138,16 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 		if msg.Confirmed && m.List.Cursor < len(m.List.Filtered) {
 			entry := m.List.Filtered[m.List.Cursor]
+			serviceOps := m.deps.Services
+			snapshotOps := m.deps.Snapshot
+			refreshCmd := m.refreshServicesCmd(m.nodeID, m.stackName, m.filterType)
 
 			switch m.pendingAction {
 			case "remove":
 				l().Debugln("Starting remove for", entry.ServiceName)
 				return func() tea.Msg {
 					l().Infof("Executing remove for service: %s", entry.ServiceName)
-					if err := docker.RemoveService(entry.ServiceName); err != nil {
+					if err := serviceOps.RemoveService(entry.ServiceName); err != nil {
 						l().Errorf("Failed to remove service %s: %v", entry.ServiceName, err)
 						return RemoveErrorMsg{
 							ServiceName: entry.ServiceName,
@@ -150,16 +156,16 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					}
 					l().Infof("Successfully removed service: %s", entry.ServiceName)
 					// Force immediate snapshot refresh
-					if _, err := docker.RefreshSnapshot(); err != nil {
+					if _, err := snapshotOps.RefreshSnapshot(); err != nil {
 						l().Warnf("Failed to refresh snapshot: %v", err)
 					}
-					return refreshServicesCmd(m.nodeID, m.stackName, m.filterType)()
+					return refreshCmd()
 				}
 			case "rollback":
 				l().Debugln("Starting rollback for", entry.ServiceName)
 				return func() tea.Msg {
 					l().Infof("Executing rollback for service: %s", entry.ServiceName)
-					if err := docker.RollbackService(entry.ServiceName); err != nil {
+					if err := serviceOps.RollbackService(entry.ServiceName); err != nil {
 						l().Errorf("Failed to rollback service %s: %v", entry.ServiceName, err)
 						return RollbackErrorMsg{
 							ServiceName: entry.ServiceName,
@@ -168,17 +174,17 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					}
 					l().Infof("Successfully rolled back service: %s", entry.ServiceName)
 					// Force immediate snapshot refresh
-					if _, err := docker.RefreshSnapshot(); err != nil {
+					if _, err := snapshotOps.RefreshSnapshot(); err != nil {
 						l().Warnf("Failed to refresh snapshot: %v", err)
 					}
-					return refreshServicesCmd(m.nodeID, m.stackName, m.filterType)()
+					return refreshCmd()
 				}
 			default:
 				// Default to restart
 				l().Debugln("Starting restart for", entry.ServiceName)
 				return func() tea.Msg {
 					l().Infof("Executing restart for service: %s", entry.ServiceName)
-					if err := docker.RestartService(entry.ServiceName); err != nil {
+					if err := serviceOps.RestartService(entry.ServiceName); err != nil {
 						l().Errorf("Failed to restart service %s: %v", entry.ServiceName, err)
 						return RestartErrorMsg{
 							ServiceName: entry.ServiceName,
@@ -187,10 +193,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					}
 					l().Infof("Successfully restarted service: %s", entry.ServiceName)
 					// Force immediate snapshot refresh
-					if _, err := docker.RefreshSnapshot(); err != nil {
+					if _, err := snapshotOps.RefreshSnapshot(); err != nil {
 						l().Warnf("Failed to refresh snapshot: %v", err)
 					}
-					return refreshServicesCmd(m.nodeID, m.stackName, m.filterType)()
+					return refreshCmd()
 				}
 			}
 		}
@@ -362,8 +368,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 				// If expanding, fetch tasks
 				if m.expandedServices[entry.ServiceID] {
+					taskOps := m.deps.Tasks
 					return func() tea.Msg {
-						tasks, err := docker.GetTasksForService(entry.ServiceID)
+						tasks, err := taskOps.GetTasksForService(entry.ServiceID)
 						if err != nil {
 							l().Errorf("Failed to fetch tasks for service %s: %v", entry.ServiceName, err)
 							// Still toggle to show empty state
@@ -384,8 +391,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		case "i":
 			if m.List.Cursor < len(m.List.Filtered) {
 				entry := m.List.Filtered[m.List.Cursor]
+				inspectOps := m.deps.Inspect
 				return func() tea.Msg {
-					content, err := docker.Inspect(context.Background(), docker.InspectService, entry.ServiceID)
+					content, err := inspectOps.Inspect(context.Background(), docker.InspectService, entry.ServiceID)
 					if err != nil {
 						content = fmt.Sprintf("Error inspecting service %q: %v", entry.ServiceName, err)
 					}
@@ -569,7 +577,7 @@ func (m *Model) SetContent(msg Msg) {
 	for k := range m.serviceErrorText {
 		delete(m.serviceErrorText, k)
 	}
-	snap := docker.GetSnapshot()
+	snap := m.deps.Snapshot.GetSnapshot()
 	if snap != nil {
 		svcDesired := make(map[string]int)
 		svcRunning := make(map[string]int)

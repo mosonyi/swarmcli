@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"swarmcli/core/primitives/hash"
-	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
@@ -158,14 +157,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.state = stateReady
 		l().Info("ConfigsView: Config list updated (used status pending)")
 		// Start background computation of Used flags
-		return computeConfigUsedCmd(msg)
+		return m.computeConfigUsedCmd(msg)
 
 	case TickMsg:
 		l().Infof("ConfigsView: Received TickMsg, state=%v, visible=%v", m.state, m.visible)
 		// Only check for changes if view is visible, ready, and not showing dialogs
 		if m.visible && m.state == stateReady && !m.confirmDialog.Visible && !m.loadingView.Visible() {
 			return tea.Batch(
-				CheckConfigsCmd(m.lastSnapshot),
+				m.checkConfigsCmd(m.lastSnapshot),
 				tickCmd(),
 			)
 		}
@@ -177,18 +176,18 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// After rotating a config, reload the config list so the "Used" state
 		// is recalculated (services may have been updated to reference the new config).
 		return tea.Batch(
-			loadConfigsCmd(),
+			m.loadConfigsCmd(),
 			tea.Printf("Rotated %s → %s", msg.Old.Config.Spec.Name, msg.New.Config.Spec.Name),
 		)
 
 	case configDeletedMsg:
 		l().Infof("Config deleted successfully: %s", msg.Name)
-		return loadConfigsCmd()
+		return m.loadConfigsCmd()
 
 	case editConfigMsg:
 		cfg := m.selectedConfig()
 		l().Infof("Editing config: %s", cfg)
-		return editConfigInEditorCmd(cfg)
+		return m.editConfigInEditorCmd(cfg)
 
 	case editConfigDoneMsg:
 		oldName := msg.OldConfig.Config.Spec.Name
@@ -218,7 +217,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case configCreatedMsg:
 		l().Infof("Config created successfully: %s", msg.Config.Spec.Name)
-		return loadConfigsCmd()
+		return m.loadConfigsCmd()
 
 	case editorContentMsg:
 		l().Infof("Editor content received: %d bytes", len(msg.Content))
@@ -243,7 +242,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		// Success
-		return loadConfigsCmd()
+		return m.loadConfigsCmd()
 
 	case fileContentReadyMsg:
 		if msg.Err != nil {
@@ -258,7 +257,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		// Success
-		return loadConfigsCmd()
+		return m.loadConfigsCmd()
 
 	case configCreateErrorMsg:
 		l().Errorf("Error creating config: %v", msg.err)
@@ -422,7 +421,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				return nil
 			}
 			l().Infof("Confirmed rotation for %s", m.configToRotateInto.Config.Spec.Name)
-			return rotateConfigCmd(m.configToRotateFrom, m.configToRotateInto)
+			return m.rotateConfigCmd(m.configToRotateFrom, m.configToRotateInto)
 		case "delete":
 			if m.configToDelete == nil {
 				l().Warnln("Confirmed delete but configToDelete is nil")
@@ -430,7 +429,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			name := m.configToDelete.Config.Spec.Name
 			l().Infof("Confirmed deletion for config %s", name)
-			return deleteConfigCmd(name)
+			return m.deleteConfigCmd(name)
 		}
 		return nil
 
@@ -495,7 +494,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			cfgName := m.selectedConfig()
 			l().Infof("Edit key pressed for config: %s", cfgName)
 			// Start editor; the editCmd will send back editConfigDoneMsg or editConfigErrorMsg
-			return editConfigInEditorCmd(cfgName)
+			return m.editConfigInEditorCmd(cfgName)
 		case "u":
 			cfgName := m.selectedConfig()
 			if cfgName == "" {
@@ -503,7 +502,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				return nil
 			}
 			l().Infof("UsedBy key pressed for config: %s", cfgName)
-			return getUsedByStacksCmd(cfgName)
+			return m.getUsedByStacksCmd(cfgName)
 
 		case "left":
 			if m.labelsScrollOffset > 0 {
@@ -550,7 +549,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			l().Infof("Clone key pressed for config: %s", cfgName)
 			// Inspect to get content
 			ctx := context.Background()
-			cfg, err := docker.InspectConfig(ctx, cfgName)
+			cfg, err := m.deps.Configs.InspectConfig(ctx, cfgName)
 			if err != nil {
 				l().Errorf("Failed to inspect config for clone: %v", err)
 				m.err = err
@@ -570,7 +569,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		case "i":
 			cfg := m.selectedConfig()
 			l().Infof("Inspect key pressed for config: %s", cfg)
-			return inspectConfigCmd(m.selectedConfig())
+			return m.inspectConfigCmd(m.selectedConfig())
 		case "?":
 			return func() tea.Msg {
 				return view.NavigateToMsg{
@@ -581,7 +580,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		case "enter":
 			cfg := m.selectedConfig()
 			l().Infof("Inspect key pressed for config: %s", cfg)
-			return inspectRawConfigCmd(m.selectedConfig())
+			return m.inspectRawConfigCmd(m.selectedConfig())
 
 		case "N":
 			if m.sortField == SortByName {
@@ -913,7 +912,7 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 			m.createNameInput.Blur()
 			m.createFileInput.Blur()
 			m.createLabelsInput.Blur()
-			return createConfigFromFileCmd(m.createNameInput.Value(), filePath, labels)
+			return m.createConfigFromFileCmd(m.createNameInput.Value(), filePath, labels)
 		default:
 			// Pass keys to the focused textinput
 			var cmd tea.Cmd
@@ -1016,7 +1015,7 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 			m.createDialogError = ""
 			m.createNameInput.Blur()
 			m.createLabelsInput.Blur()
-			return createConfigFromContentCmd(m.createNameInput.Value(), []byte(m.createConfigData), labels)
+			return m.createConfigFromContentCmd(m.createNameInput.Value(), []byte(m.createConfigData), labels)
 		default:
 			// Pass keys to the focused textinput
 			var cmd tea.Cmd
@@ -1117,7 +1116,7 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyMsg) tea.Cmd {
 				m.createNameInput.Blur()
 				m.createFileInput.Blur()
 				m.createLabelsInput.Blur()
-				return createConfigFromFileCmd(name, selected, labels)
+				return m.createConfigFromFileCmd(name, selected, labels)
 			}
 		}
 

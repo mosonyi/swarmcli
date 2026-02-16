@@ -21,10 +21,11 @@ import (
 
 // --- Async commands ---
 
-func loadConfigsCmd() tea.Cmd {
+func (m *Model) loadConfigsCmd() tea.Cmd {
+	configOps := m.deps.Configs
 	return func() tea.Msg {
 		ctx := context.Background()
-		cfgs, err := docker.ListConfigs(ctx)
+		cfgs, err := configOps.ListConfigs(ctx)
 		if err != nil {
 			return errorMsg(fmt.Errorf("failed to list configs: %w", err))
 		}
@@ -39,13 +40,14 @@ func loadConfigsCmd() tea.Cmd {
 
 // computeConfigUsedCmd checks which configs are used by services in background
 // and returns a usedStatusUpdatedMsg containing a map[id]bool.
-func computeConfigUsedCmd(cfgs []docker.ConfigWithDecodedData) tea.Cmd {
+func (m *Model) computeConfigUsedCmd(cfgs []docker.ConfigWithDecodedData) tea.Cmd {
+	configOps := m.deps.Configs
 	return func() tea.Msg {
 		usedMap := make(map[string]bool, len(cfgs))
 		ctx := context.Background()
 		for _, c := range cfgs {
 			usedMap[c.Config.ID] = false
-			svcs, err := docker.ListServicesUsingConfigID(ctx, c.Config.ID)
+			svcs, err := configOps.ListServicesUsingConfigID(ctx, c.Config.ID)
 			if err == nil && len(svcs) > 0 {
 				usedMap[c.Config.ID] = true
 			}
@@ -54,15 +56,16 @@ func computeConfigUsedCmd(cfgs []docker.ConfigWithDecodedData) tea.Cmd {
 	}
 }
 
-// CheckConfigsCmd checks if configs have changed and returns update message if so
-func CheckConfigsCmd(lastHash uint64) tea.Cmd {
+// checkConfigsCmd checks if configs have changed and returns update message if so
+func (m *Model) checkConfigsCmd(lastHash uint64) tea.Cmd {
+	configOps := m.deps.Configs
 	return func() tea.Msg {
-		l().Info("CheckConfigsCmd: Polling for config changes")
+		l().Info("checkConfigsCmd: Polling for config changes")
 
 		ctx := context.Background()
-		cfgs, err := docker.ListConfigs(ctx)
+		cfgs, err := configOps.ListConfigs(ctx)
 		if err != nil {
-			l().Errorf("CheckConfigsCmd: ListConfigs failed: %v", err)
+			l().Errorf("checkConfigsCmd: ListConfigs failed: %v", err)
 			return tickCmd()
 		}
 
@@ -88,31 +91,32 @@ func CheckConfigsCmd(lastHash uint64) tea.Cmd {
 
 		newHash, err := hash.Compute(stableConfigs)
 		if err != nil {
-			l().Errorf("CheckConfigsCmd: Error computing hash: %v", err)
+			l().Errorf("checkConfigsCmd: Error computing hash: %v", err)
 			// Schedule next poll even on error
 			return tickCmd()
 		}
 
-		l().Infof("CheckConfigsCmd: lastHash=%s, newHash=%s, configCount=%d",
+		l().Infof("checkConfigsCmd: lastHash=%s, newHash=%s, configCount=%d",
 			hash.Fmt(lastHash), hash.Fmt(newHash), len(wrapped))
 
 		// Only return update message if something changed
 		if newHash != lastHash {
-			l().Info("CheckConfigsCmd: Change detected! Refreshing config list")
+			l().Info("checkConfigsCmd: Change detected! Refreshing config list")
 			return configsLoadedMsg(wrapped)
 		}
 
-		l().Info("CheckConfigsCmd: No changes detected, scheduling next poll")
+		l().Info("checkConfigsCmd: No changes detected, scheduling next poll")
 		// Schedule next poll in 5 seconds
 		return tickCmd()
 	}
 }
 
-func rotateConfigCmd(oldCfg *docker.ConfigWithDecodedData, newCfg *docker.ConfigWithDecodedData) tea.Cmd {
+func (m *Model) rotateConfigCmd(oldCfg *docker.ConfigWithDecodedData, newCfg *docker.ConfigWithDecodedData) tea.Cmd {
 	if newCfg == nil {
 		return nil
 	}
 
+	configOps := m.deps.Configs
 	l().Debugln("Starting to rotate config", newCfg.Config.Spec.Name)
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -122,7 +126,7 @@ func rotateConfigCmd(oldCfg *docker.ConfigWithDecodedData, newCfg *docker.Config
 			oldSwarmCfg = &oldCfg.Config
 		}
 
-		if err := docker.RotateConfigInServices(ctx, oldSwarmCfg, newCfg.Config); err != nil {
+		if err := configOps.RotateConfigInServices(ctx, oldSwarmCfg, newCfg.Config); err != nil {
 			return errorMsg(err)
 		}
 
@@ -136,9 +140,10 @@ func rotateConfigCmd(oldCfg *docker.ConfigWithDecodedData, newCfg *docker.Config
 	}
 }
 
-func inspectConfigCmd(name string) tea.Cmd {
+func (m *Model) inspectConfigCmd(name string) tea.Cmd {
+	configOps := m.deps.Configs
 	return func() tea.Msg {
-		cfg, err := docker.InspectConfig(context.Background(), name)
+		cfg, err := configOps.InspectConfig(context.Background(), name)
 		jsonStr := ""
 		if err != nil {
 			jsonStr = fmt.Sprintf("Error inspecting config %q: %v", name, err)
@@ -163,9 +168,10 @@ func inspectConfigCmd(name string) tea.Cmd {
 	}
 }
 
-func inspectRawConfigCmd(name string) tea.Cmd {
+func (m *Model) inspectRawConfigCmd(name string) tea.Cmd {
+	configOps := m.deps.Configs
 	return func() tea.Msg {
-		cfg, err := docker.InspectConfig(context.Background(), name)
+		cfg, err := configOps.InspectConfig(context.Background(), name)
 		if err != nil {
 			return view.NavigateToMsg{
 				ViewName: inspectview.ViewName,
@@ -190,10 +196,11 @@ func inspectRawConfigCmd(name string) tea.Cmd {
 	}
 }
 
-func deleteConfigCmd(name string) tea.Cmd {
+func (m *Model) deleteConfigCmd(name string) tea.Cmd {
+	configOps := m.deps.Configs
 	return func() tea.Msg {
 		ctx := context.Background()
-		err := docker.DeleteConfig(ctx, name)
+		err := configOps.DeleteConfig(ctx, name)
 		if err != nil {
 			return errorMsg(fmt.Errorf("failed to delete config %q: %w", name, err))
 		}
@@ -252,7 +259,8 @@ func loadFilesCmd(dirPath string) tea.Cmd {
 	}
 }
 
-func createConfigFromFileCmd(name, filePath string, labels map[string]string) tea.Cmd {
+func (m *Model) createConfigFromFileCmd(name, filePath string, labels map[string]string) tea.Cmd {
+	configOps := m.deps.Configs
 	return func() tea.Msg {
 		l().Infof("Creating config %s from file %s (labels=%v)", name, filePath, labels)
 
@@ -265,7 +273,7 @@ func createConfigFromFileCmd(name, filePath string, labels map[string]string) te
 
 		// Create the config
 		ctx := context.Background()
-		newCfg, err := docker.CreateConfig(ctx, name, data, labels)
+		newCfg, err := configOps.CreateConfig(ctx, name, data, labels)
 		if err != nil {
 			l().Errorf("Failed to create config %s: %v", name, err)
 			// Return error with file path so we can retry with corrected name
@@ -277,12 +285,13 @@ func createConfigFromFileCmd(name, filePath string, labels map[string]string) te
 	}
 }
 
-func createConfigFromContentCmd(name string, content []byte, labels map[string]string) tea.Cmd {
+func (m *Model) createConfigFromContentCmd(name string, content []byte, labels map[string]string) tea.Cmd {
+	configOps := m.deps.Configs
 	return func() tea.Msg {
 		l().Infof("Creating config %s from inline content (labels=%v)", name, labels)
 
 		ctx := context.Background()
-		newCfg, err := docker.CreateConfig(ctx, name, content, labels)
+		newCfg, err := configOps.CreateConfig(ctx, name, content, labels)
 		if err != nil {
 			l().Errorf("Failed to create config %s: %v", name, err)
 			return configCreateErrorMsg{fmt.Errorf("failed to create config: %w", err)}
@@ -293,25 +302,26 @@ func createConfigFromContentCmd(name string, content []byte, labels map[string]s
 	}
 }
 
-func getUsedByStacksCmd(configName string) tea.Cmd {
+func (m *Model) getUsedByStacksCmd(configName string) tea.Cmd {
+	configOps := m.deps.Configs
 	return func() tea.Msg {
 		l().Infof("Getting stacks/services that use config: %s", configName)
 
 		ctx := context.Background()
 		// Get config ID for robust matching
-		cfg, err := docker.InspectConfig(ctx, configName)
+		cfg, err := configOps.InspectConfig(ctx, configName)
 		if err != nil {
 			l().Errorf("Failed to inspect config %s: %v", configName, err)
 			return usedByMsg{ConfigName: configName, UsedBy: nil, Error: err}
 		}
 
 		// Get services by config name and ID
-		servicesByName, err := docker.ListServicesUsingConfigName(ctx, configName)
+		servicesByName, err := configOps.ListServicesUsingConfigName(ctx, configName)
 		if err != nil {
 			l().Errorf("Failed to list services using config name %s: %v", configName, err)
 			return usedByMsg{ConfigName: configName, UsedBy: nil, Error: err}
 		}
-		servicesByID, err := docker.ListServicesUsingConfigID(ctx, cfg.Config.ID)
+		servicesByID, err := configOps.ListServicesUsingConfigID(ctx, cfg.Config.ID)
 		if err != nil {
 			l().Errorf("Failed to list services using config ID %s: %v", cfg.Config.ID, err)
 			return usedByMsg{ConfigName: configName, UsedBy: nil, Error: err}

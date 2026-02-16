@@ -29,6 +29,7 @@ const (
 )
 
 type Model struct {
+	deps                  docker.Deps
 	List                  filterlist.FilterableList[docker.NodeEntry]
 	Visible               bool
 	ready                 bool
@@ -112,14 +113,15 @@ func (m *Model) HasActiveDialog() bool {
 	return m.confirmDialog.Visible || m.errorDialogActive || m.availabilityDialog || m.labelInputDialog || m.labelRemoveDialog
 }
 
-func LoadNodes() []docker.NodeEntry {
+func (m *Model) loadNodes() []docker.NodeEntry {
+	snapshotOps := m.deps.Snapshot
 	// Prefer cached snapshot to avoid blocking the UI. Trigger an async refresh if needed.
-	docker.TriggerRefreshIfNeeded()
+	snapshotOps.TriggerRefreshIfNeeded()
 
-	snap := docker.GetSnapshot()
+	snap := snapshotOps.GetSnapshot()
 	if snap == nil {
 		// Try synchronous refresh as a last resort
-		s, err := docker.RefreshSnapshot()
+		s, err := snapshotOps.RefreshSnapshot()
 		if err != nil {
 			l().Errorf("LoadNodes: RefreshSnapshot failed: %v", err)
 			return []docker.NodeEntry{}
@@ -129,19 +131,19 @@ func LoadNodes() []docker.NodeEntry {
 	return snap.ToNodeEntries()
 }
 
-func LoadNodesCmd() tea.Cmd {
+func (m *Model) LoadNodesCmd() tea.Cmd {
 	return func() tea.Msg {
-		entries := LoadNodes()
+		entries := m.loadNodes()
 		return Msg{Entries: entries}
 	}
 }
 
-// CheckNodesCmd checks if nodes have changed and returns update message if so
-func CheckNodesCmd(lastHash uint64) tea.Cmd {
+// checkNodesCmd checks if nodes have changed and returns update message if so
+func (m *Model) checkNodesCmd(lastHash uint64) tea.Cmd {
 	return func() tea.Msg {
 		l().Info("CheckNodesCmd: Polling for node changes")
 
-		entries := LoadNodes()
+		entries := m.loadNodes()
 		newHash, err := hash.Compute(entries)
 		if err != nil {
 			l().Errorf("CheckNodesCmd: Compute hash failed: %v", err)
