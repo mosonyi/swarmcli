@@ -15,21 +15,23 @@ import (
 // --- mocks ---
 
 type mockSnapshotOps struct {
-	getSnapshotFn           func() *docker.SwarmSnapshot
-	setSnapshotFn           func(s *docker.SwarmSnapshot)
-	invalidateSnapshotFn    func()
-	refreshSnapshotFn       func() (*docker.SwarmSnapshot, error)
-	refreshSnapshotAsyncFn  func()
+	getSnapshotFn            func() *docker.SwarmSnapshot
+	setSnapshotFn            func(s *docker.SwarmSnapshot)
+	invalidateSnapshotFn     func()
+	refreshSnapshotFn        func() (*docker.SwarmSnapshot, error)
+	refreshSnapshotAsyncFn   func()
 	triggerRefreshIfNeededFn func()
-	getOrRefreshSnapshotFn  func() (*docker.SwarmSnapshot, error)
+	getOrRefreshSnapshotFn   func() (*docker.SwarmSnapshot, error)
 }
 
-func (m *mockSnapshotOps) GetSnapshot() *docker.SwarmSnapshot              { return m.getSnapshotFn() }
-func (m *mockSnapshotOps) SetSnapshot(s *docker.SwarmSnapshot)             { m.setSnapshotFn(s) }
-func (m *mockSnapshotOps) InvalidateSnapshot()                             { m.invalidateSnapshotFn() }
-func (m *mockSnapshotOps) RefreshSnapshot() (*docker.SwarmSnapshot, error) { return m.refreshSnapshotFn() }
-func (m *mockSnapshotOps) RefreshSnapshotAsync()                           { m.refreshSnapshotAsyncFn() }
-func (m *mockSnapshotOps) TriggerRefreshIfNeeded()                         { m.triggerRefreshIfNeededFn() }
+func (m *mockSnapshotOps) GetSnapshot() *docker.SwarmSnapshot  { return m.getSnapshotFn() }
+func (m *mockSnapshotOps) SetSnapshot(s *docker.SwarmSnapshot) { m.setSnapshotFn(s) }
+func (m *mockSnapshotOps) InvalidateSnapshot()                 { m.invalidateSnapshotFn() }
+func (m *mockSnapshotOps) RefreshSnapshot() (*docker.SwarmSnapshot, error) {
+	return m.refreshSnapshotFn()
+}
+func (m *mockSnapshotOps) RefreshSnapshotAsync()   { m.refreshSnapshotAsyncFn() }
+func (m *mockSnapshotOps) TriggerRefreshIfNeeded() { m.triggerRefreshIfNeededFn() }
 func (m *mockSnapshotOps) GetOrRefreshSnapshot() (*docker.SwarmSnapshot, error) {
 	return m.getOrRefreshSnapshotFn()
 }
@@ -119,13 +121,13 @@ func runCmd(cmd tea.Cmd) tea.Msg {
 func noopSnapshotOps() *mockSnapshotOps {
 	emptySnap := &docker.SwarmSnapshot{}
 	return &mockSnapshotOps{
-		getSnapshotFn:           func() *docker.SwarmSnapshot { return emptySnap },
-		setSnapshotFn:           func(_ *docker.SwarmSnapshot) {},
-		invalidateSnapshotFn:    func() {},
-		refreshSnapshotFn:       func() (*docker.SwarmSnapshot, error) { return emptySnap, nil },
-		refreshSnapshotAsyncFn:  func() {},
+		getSnapshotFn:            func() *docker.SwarmSnapshot { return emptySnap },
+		setSnapshotFn:            func(_ *docker.SwarmSnapshot) {},
+		invalidateSnapshotFn:     func() {},
+		refreshSnapshotFn:        func() (*docker.SwarmSnapshot, error) { return emptySnap, nil },
+		refreshSnapshotAsyncFn:   func() {},
 		triggerRefreshIfNeededFn: func() {},
-		getOrRefreshSnapshotFn:  func() (*docker.SwarmSnapshot, error) { return emptySnap, nil },
+		getOrRefreshSnapshotFn:   func() (*docker.SwarmSnapshot, error) { return emptySnap, nil },
 	}
 }
 

@@ -68,7 +68,7 @@ func TestSpinnerTickMsg_AdvancesSpinner(t *testing.T) {
 func TestWindowSizeMsg(t *testing.T) {
 	m := New(80, 24, true, nil)
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 50})
-	require.Equal(t, 104, m.width)  // +4 for padding
+	require.Equal(t, 104, m.width) // +4 for padding
 	require.Equal(t, 50, m.height)
 }
 

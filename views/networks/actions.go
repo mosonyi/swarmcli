@@ -54,4 +54,3 @@ func (nw *networkWithUsage) PrettyJSON() ([]byte, error) {
 	}
 	return dockerNW.PrettyJSON()
 }
-

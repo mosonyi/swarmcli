@@ -15,13 +15,13 @@ import (
 // --- mocks ---
 
 type mockConfigOps struct {
-	listConfigsFn                func(ctx context.Context) ([]swarm.Config, error)
-	inspectConfigFn              func(ctx context.Context, nameOrID string) (*docker.ConfigWithDecodedData, error)
-	createConfigFn               func(ctx context.Context, name string, data []byte, labels map[string]string) (swarm.Config, error)
-	createConfigVersionFn        func(ctx context.Context, baseConfig swarm.Config, newData []byte) (swarm.Config, error)
-	rotateConfigInServicesFn     func(ctx context.Context, oldCfg *swarm.Config, newCfg swarm.Config) error
-	deleteConfigFn               func(ctx context.Context, nameOrID string) error
-	listServicesUsingConfigIDFn  func(ctx context.Context, configID string) ([]swarm.Service, error)
+	listConfigsFn                 func(ctx context.Context) ([]swarm.Config, error)
+	inspectConfigFn               func(ctx context.Context, nameOrID string) (*docker.ConfigWithDecodedData, error)
+	createConfigFn                func(ctx context.Context, name string, data []byte, labels map[string]string) (swarm.Config, error)
+	createConfigVersionFn         func(ctx context.Context, baseConfig swarm.Config, newData []byte) (swarm.Config, error)
+	rotateConfigInServicesFn      func(ctx context.Context, oldCfg *swarm.Config, newCfg swarm.Config) error
+	deleteConfigFn                func(ctx context.Context, nameOrID string) error
+	listServicesUsingConfigIDFn   func(ctx context.Context, configID string) ([]swarm.Service, error)
 	listServicesUsingConfigNameFn func(ctx context.Context, name string) ([]swarm.Service, error)
 }
 

@@ -15,12 +15,12 @@ import (
 // --- mocks ---
 
 type mockSecretOps struct {
-	listSecretsFn             func(ctx context.Context) ([]swarm.Secret, error)
-	inspectSecretFn           func(ctx context.Context, nameOrID string) (*docker.SecretWithDecodedData, error)
-	createSecretFn            func(ctx context.Context, name string, data []byte, labels map[string]string) (swarm.Secret, error)
-	createSecretVersionFn     func(ctx context.Context, baseSecret swarm.Secret, newData []byte) (swarm.Secret, error)
-	rotateSecretInServicesFn  func(ctx context.Context, oldSec *swarm.Secret, newSec swarm.Secret) error
-	deleteSecretFn            func(ctx context.Context, nameOrID string) error
+	listSecretsFn                 func(ctx context.Context) ([]swarm.Secret, error)
+	inspectSecretFn               func(ctx context.Context, nameOrID string) (*docker.SecretWithDecodedData, error)
+	createSecretFn                func(ctx context.Context, name string, data []byte, labels map[string]string) (swarm.Secret, error)
+	createSecretVersionFn         func(ctx context.Context, baseSecret swarm.Secret, newData []byte) (swarm.Secret, error)
+	rotateSecretInServicesFn      func(ctx context.Context, oldSec *swarm.Secret, newSec swarm.Secret) error
+	deleteSecretFn                func(ctx context.Context, nameOrID string) error
 	listServicesUsingSecretIDFn   func(ctx context.Context, secretID string) ([]swarm.Service, error)
 	listServicesUsingSecretNameFn func(ctx context.Context, name string) ([]swarm.Service, error)
 }

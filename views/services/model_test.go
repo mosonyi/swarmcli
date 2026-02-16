@@ -19,14 +19,14 @@ import (
 // --- mocks ---
 
 type mockServiceOps struct {
-	scaleServiceFn       func(serviceID string, replicas uint64) error
-	restartServiceFn     func(serviceName string) error
-	removeServiceFn      func(serviceName string) error
-	rollbackServiceFn    func(serviceName string) error
-	loadNodeServicesFn   func(nodeID string) []docker.ServiceEntry
-	loadStackServicesFn  func(stackName string) []docker.ServiceEntry
-	getServiceLogsFn     func(ctx context.Context, serviceID string) (string, error)
-	createServiceFn      func(ctx context.Context, spec swarm.ServiceSpec) (string, error)
+	scaleServiceFn      func(serviceID string, replicas uint64) error
+	restartServiceFn    func(serviceName string) error
+	removeServiceFn     func(serviceName string) error
+	rollbackServiceFn   func(serviceName string) error
+	loadNodeServicesFn  func(nodeID string) []docker.ServiceEntry
+	loadStackServicesFn func(stackName string) []docker.ServiceEntry
+	getServiceLogsFn    func(ctx context.Context, serviceID string) (string, error)
+	createServiceFn     func(ctx context.Context, spec swarm.ServiceSpec) (string, error)
 }
 
 func (m *mockServiceOps) ScaleService(serviceID string, replicas uint64) error {
@@ -71,8 +71,8 @@ func (m *mockServiceOps) CreateService(ctx context.Context, spec swarm.ServiceSp
 }
 
 type mockSnapshotOps struct {
-	getSnapshotFn          func() *docker.SwarmSnapshot
-	refreshSnapshotFn      func() (*docker.SwarmSnapshot, error)
+	getSnapshotFn            func() *docker.SwarmSnapshot
+	refreshSnapshotFn        func() (*docker.SwarmSnapshot, error)
 	triggerRefreshIfNeededFn func()
 }
 

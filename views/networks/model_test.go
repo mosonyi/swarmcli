@@ -322,7 +322,7 @@ func TestValidateSubnet_Valid(t *testing.T) {
 
 func TestValidateSubnet_Invalid(t *testing.T) {
 	require.Error(t, validateSubnet("not-a-cidr", false))
-	require.Error(t, validateSubnet("fd00::/64", false)) // ipv6 in ipv4 slot
+	require.Error(t, validateSubnet("fd00::/64", false))  // ipv6 in ipv4 slot
 	require.Error(t, validateSubnet("10.0.0.0/24", true)) // ipv4 in ipv6 slot
 }
 

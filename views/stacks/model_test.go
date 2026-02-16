@@ -13,11 +13,11 @@ import (
 // --- mocks ---
 
 type mockStackOps struct {
-	removeStackFn            func(stackName string) error
-	removeStackNetworksFn    func(stackName string) error
-	deployStackFn            func(stackName string, yamlContent string) error
-	validateStackYAMLFn      func(content string) error
-	describeStackFn          func(stackName string) (string, error)
+	removeStackFn             func(stackName string) error
+	removeStackNetworksFn     func(stackName string) error
+	deployStackFn             func(stackName string, yamlContent string) error
+	validateStackYAMLFn       func(content string) error
+	describeStackFn           func(stackName string) (string, error)
 	reconstructStackComposeFn func(stackName string) (string, error)
 }
 
@@ -50,13 +50,17 @@ type mockSnapshotOps struct {
 	getOrRefreshFn         func() (*docker.SwarmSnapshot, error)
 }
 
-func (m *mockSnapshotOps) GetSnapshot() *docker.SwarmSnapshot          { return m.getSnapshotFn() }
-func (m *mockSnapshotOps) SetSnapshot(s *docker.SwarmSnapshot)         { m.setSnapshotFn(s) }
-func (m *mockSnapshotOps) InvalidateSnapshot()                         { m.invalidateSnapshotFn() }
-func (m *mockSnapshotOps) RefreshSnapshot() (*docker.SwarmSnapshot, error) { return m.refreshSnapshotFn() }
-func (m *mockSnapshotOps) RefreshSnapshotAsync()                       { m.refreshSnapshotAsyncFn() }
-func (m *mockSnapshotOps) TriggerRefreshIfNeeded()                     { m.triggerRefreshFn() }
-func (m *mockSnapshotOps) GetOrRefreshSnapshot() (*docker.SwarmSnapshot, error) { return m.getOrRefreshFn() }
+func (m *mockSnapshotOps) GetSnapshot() *docker.SwarmSnapshot  { return m.getSnapshotFn() }
+func (m *mockSnapshotOps) SetSnapshot(s *docker.SwarmSnapshot) { m.setSnapshotFn(s) }
+func (m *mockSnapshotOps) InvalidateSnapshot()                 { m.invalidateSnapshotFn() }
+func (m *mockSnapshotOps) RefreshSnapshot() (*docker.SwarmSnapshot, error) {
+	return m.refreshSnapshotFn()
+}
+func (m *mockSnapshotOps) RefreshSnapshotAsync()   { m.refreshSnapshotAsyncFn() }
+func (m *mockSnapshotOps) TriggerRefreshIfNeeded() { m.triggerRefreshFn() }
+func (m *mockSnapshotOps) GetOrRefreshSnapshot() (*docker.SwarmSnapshot, error) {
+	return m.getOrRefreshFn()
+}
 
 type mockTaskOps struct {
 	getTasksForStackFn   func(stackName string) ([]docker.TaskEntry, error)
@@ -123,11 +127,11 @@ func runCmd(cmd tea.Cmd) tea.Msg {
 
 func noopStackOps() *mockStackOps {
 	return &mockStackOps{
-		removeStackFn:         func(_ string) error { return nil },
-		removeStackNetworksFn: func(_ string) error { return nil },
-		deployStackFn:         func(_ string, _ string) error { return nil },
-		validateStackYAMLFn:   func(_ string) error { return nil },
-		describeStackFn:       func(_ string) (string, error) { return "", nil },
+		removeStackFn:             func(_ string) error { return nil },
+		removeStackNetworksFn:     func(_ string) error { return nil },
+		deployStackFn:             func(_ string, _ string) error { return nil },
+		validateStackYAMLFn:       func(_ string) error { return nil },
+		describeStackFn:           func(_ string) (string, error) { return "", nil },
 		reconstructStackComposeFn: func(_ string) (string, error) { return "", nil },
 	}
 }
