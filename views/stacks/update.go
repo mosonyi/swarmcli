@@ -17,6 +17,7 @@ import (
 	helpview "swarmcli/views/help"
 	servicesview "swarmcli/views/services"
 	"swarmcli/views/view"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -991,20 +992,21 @@ func (m *Model) setStacks(stacks []docker.StackEntry) {
 				desired = len(snap.Nodes)
 			}
 			svcDesired[svc.ID] = desired
+			// Initialize svcRunning with 0 for all services
+			svcRunning[svc.ID] = 0
 		}
 
-		for _, t := range snap.Tasks {
+		latestTasks := latestTasksByServiceKey(snap.Tasks)
+
+		for _, t := range latestTasks {
 			if t.DesiredState == swarm.TaskStateRunning && t.Status.State == swarm.TaskStateRunning {
 				svcRunning[t.ServiceID]++
 			}
 		}
 
-		for _, t := range snap.Tasks {
+		for _, t := range latestTasks {
 			stackName := svcToStack[t.ServiceID]
 			if stackName == "" {
-				continue
-			}
-			if t.Status.Err == "" {
 				continue
 			}
 			desired := svcDesired[t.ServiceID]
@@ -1012,9 +1014,78 @@ func (m *Model) setStacks(stacks []docker.StackEntry) {
 			if desired == 0 || running >= desired {
 				continue
 			}
+			if t.DesiredState == swarm.TaskStateShutdown && t.Status.State == swarm.TaskStateComplete {
+				continue
+			}
+			hasError := false
+			// Only count explicit errors: Status.Err or Failed/Rejected states
+			if t.Status.Err != "" {
+				hasError = true
+			} else if t.Status.State == swarm.TaskStateFailed || t.Status.State == swarm.TaskStateRejected {
+				hasError = true
+			}
+			if !hasError {
+				continue
+			}
 			m.stackHasError[stackName] = true
 			if m.stackErrorText[stackName] == "" {
 				m.stackErrorText[stackName] = t.Status.Err
+			}
+		}
+
+		// If a service is under-replicated with no explicit error from latest task,
+		// check recent tasks for the most recent error
+		for serviceID, running := range svcRunning {
+			desired := svcDesired[serviceID]
+			if desired > 0 && running < desired {
+				stackName := svcToStack[serviceID]
+				if stackName == "" || m.stackErrorText[stackName] != "" {
+					continue
+				}
+				// Find most recent task timestamp for this service
+				var newestTaskTime time.Time
+				for _, t := range snap.Tasks {
+					if t.ServiceID != serviceID {
+						continue
+					}
+					at := t.Status.Timestamp
+					if at.IsZero() {
+						at = t.CreatedAt
+					}
+					if newestTaskTime.IsZero() || at.After(newestTaskTime) {
+						newestTaskTime = at
+					}
+				}
+				
+				// Only check tasks within 5 minutes of the newest task
+				cutoff := newestTaskTime.Add(-5 * time.Minute)
+				
+				// Find most recent task with an actual error (not just non-running)
+				var mostRecentErr string
+				var mostRecentErrTime time.Time
+				for _, t := range snap.Tasks {
+					if t.ServiceID != serviceID {
+						continue
+					}
+					if t.Status.Err == "" {
+						continue
+					}
+					at := t.Status.Timestamp
+					if at.IsZero() {
+						at = t.CreatedAt
+					}
+					if at.Before(cutoff) {
+						continue
+					}
+					if mostRecentErr == "" || at.After(mostRecentErrTime) {
+						mostRecentErr = t.Status.Err
+						mostRecentErrTime = at
+					}
+				}
+				if mostRecentErr != "" {
+					m.stackHasError[stackName] = true
+					m.stackErrorText[stackName] = mostRecentErr
+				}
 			}
 		}
 	}
@@ -1061,6 +1132,35 @@ func (m *Model) setStacks(stacks []docker.StackEntry) {
 	} else {
 		l().Warn("StacksView.setStacks: View not ready yet")
 	}
+}
+
+func latestTasksByServiceKey(tasks []swarm.Task) []swarm.Task {
+	latest := make(map[string]swarm.Task)
+	latestAt := make(map[string]time.Time)
+	for _, t := range tasks {
+		key := taskKeyForService(t)
+		at := t.Status.Timestamp
+		if at.IsZero() {
+			at = t.CreatedAt
+		}
+		if prevAt, ok := latestAt[key]; !ok || at.After(prevAt) {
+			latestAt[key] = at
+			latest[key] = t
+		}
+	}
+
+	res := make([]swarm.Task, 0, len(latest))
+	for _, t := range latest {
+		res = append(res, t)
+	}
+	return res
+}
+
+func taskKeyForService(t swarm.Task) string {
+	if t.Slot > 0 {
+		return fmt.Sprintf("%s:%d", t.ServiceID, t.Slot)
+	}
+	return fmt.Sprintf("%s:%s", t.ServiceID, t.NodeID)
 }
 
 // After loading stacks, set RenderItem dynamically with correct column width
