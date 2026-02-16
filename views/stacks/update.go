@@ -1056,10 +1056,10 @@ func (m *Model) setStacks(stacks []docker.StackEntry) {
 						newestTaskTime = at
 					}
 				}
-				
+
 				// Only check tasks within 5 minutes of the newest task
 				cutoff := newestTaskTime.Add(-5 * time.Minute)
-				
+
 				// Find most recent task with an actual error (not just non-running)
 				var mostRecentErr string
 				var mostRecentErrTime time.Time
