@@ -6,6 +6,9 @@ package servicesview
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
+	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
@@ -15,10 +18,6 @@ import (
 	"swarmcli/views/scaledialog"
 	"swarmcli/views/view"
 	"time"
-
-	"sort"
-	"strings"
-	hash "swarmcli/core/primitives/hash"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -81,6 +80,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		l().Infof("ServicesView: Received TickMsg, visible=%v", m.Visible)
 		// Check for changes and refresh expanded tasks
 		if m.Visible {
+			m.refreshServiceErrorsFromSnapshot()
+			if m.ready {
+				m.List.Viewport.SetContent(m.List.View())
+			}
 			return tea.Batch(
 				CheckServicesCmd(m.lastSnapshot, m.filterType, m.nodeID, m.stackName),
 				RefreshExpandedTasksCmd(m.expandedServices),
@@ -562,48 +565,8 @@ func (m *Model) SetContent(msg Msg) {
 	m.List.ApplyFilter()
 
 	// Compute per-service error summary from cached snapshot so errors appear
-	// without expanding tasks. Reset maps first.
-	for k := range m.serviceHasError {
-		delete(m.serviceHasError, k)
-	}
-	for k := range m.serviceErrorText {
-		delete(m.serviceErrorText, k)
-	}
-	snap := docker.GetSnapshot()
-	if snap != nil {
-		svcDesired := make(map[string]int)
-		svcRunning := make(map[string]int)
-		for _, svc := range snap.Services {
-			desired := 1
-			if svc.Spec.Mode.Replicated != nil && svc.Spec.Mode.Replicated.Replicas != nil {
-				desired = int(*svc.Spec.Mode.Replicated.Replicas)
-			} else if svc.Spec.Mode.Global != nil {
-				desired = len(snap.Nodes)
-			}
-			svcDesired[svc.ID] = desired
-		}
-
-		for _, t := range snap.Tasks {
-			if t.DesiredState == swarm.TaskStateRunning && t.Status.State == swarm.TaskStateRunning {
-				svcRunning[t.ServiceID]++
-			}
-		}
-
-		for _, t := range snap.Tasks {
-			if t.Status.Err == "" {
-				continue
-			}
-			desired := svcDesired[t.ServiceID]
-			running := svcRunning[t.ServiceID]
-			if desired == 0 || running >= desired {
-				continue
-			}
-			m.serviceHasError[t.ServiceID] = true
-			if m.serviceErrorText[t.ServiceID] == "" {
-				m.serviceErrorText[t.ServiceID] = t.Status.Err
-			}
-		}
-	}
+	// without expanding tasks.
+	m.refreshServiceErrorsFromSnapshot()
 
 	// Reapply sorting to maintain sort order after data refresh
 	m.applySorting()
@@ -630,6 +593,148 @@ func (m *Model) SetContent(msg Msg) {
 		m.List.Viewport.SetContent(m.List.View())
 		// Preserve cursor position on refresh, don't call GotoTop
 	}
+}
+
+func (m *Model) refreshServiceErrorsFromSnapshot() {
+	for k := range m.serviceHasError {
+		delete(m.serviceHasError, k)
+	}
+	for k := range m.serviceErrorText {
+		delete(m.serviceErrorText, k)
+	}
+
+	snap := docker.GetSnapshot()
+	if snap == nil {
+		return
+	}
+
+	svcDesired := make(map[string]int)
+	svcRunning := make(map[string]int)
+	for _, svc := range snap.Services {
+		desired := 1
+		if svc.Spec.Mode.Replicated != nil && svc.Spec.Mode.Replicated.Replicas != nil {
+			desired = int(*svc.Spec.Mode.Replicated.Replicas)
+		} else if svc.Spec.Mode.Global != nil {
+			desired = len(snap.Nodes)
+		}
+		svcDesired[svc.ID] = desired
+		// Initialize svcRunning with 0 for all services
+		svcRunning[svc.ID] = 0
+	}
+
+	latestTasks := latestTasksByServiceKey(snap.Tasks)
+
+	for _, t := range latestTasks {
+		if t.DesiredState == swarm.TaskStateRunning && t.Status.State == swarm.TaskStateRunning {
+			svcRunning[t.ServiceID]++
+		}
+	}
+
+	for _, t := range latestTasks {
+		desired := svcDesired[t.ServiceID]
+		running := svcRunning[t.ServiceID]
+		if desired == 0 || running >= desired {
+			continue
+		}
+		if t.DesiredState == swarm.TaskStateShutdown && t.Status.State == swarm.TaskStateComplete {
+			continue
+		}
+		hasError := false
+		// Only count explicit errors: Status.Err or Failed/Rejected states
+		if t.Status.Err != "" {
+			hasError = true
+		} else if t.Status.State == swarm.TaskStateFailed || t.Status.State == swarm.TaskStateRejected {
+			hasError = true
+		}
+		if !hasError {
+			continue
+		}
+		m.serviceHasError[t.ServiceID] = true
+		if m.serviceErrorText[t.ServiceID] == "" {
+			m.serviceErrorText[t.ServiceID] = t.Status.Err
+		}
+	}
+
+	// If service is under-replicated with no explicit error from latest task,
+	// check recent tasks for the most recent error
+	for serviceID, running := range svcRunning {
+		desired := svcDesired[serviceID]
+		if desired > 0 && running < desired && m.serviceErrorText[serviceID] == "" {
+			// Find most recent task timestamp for this service
+			var newestTaskTime time.Time
+			for _, t := range snap.Tasks {
+				if t.ServiceID != serviceID {
+					continue
+				}
+				at := t.Status.Timestamp
+				if at.IsZero() {
+					at = t.CreatedAt
+				}
+				if newestTaskTime.IsZero() || at.After(newestTaskTime) {
+					newestTaskTime = at
+				}
+			}
+
+			// Only check tasks within 5 minutes of the newest task
+			cutoff := newestTaskTime.Add(-5 * time.Minute)
+
+			// Find most recent task with an actual error (not just non-running)
+			var mostRecentErr string
+			var mostRecentErrTime time.Time
+			for _, t := range snap.Tasks {
+				if t.ServiceID != serviceID {
+					continue
+				}
+				if t.Status.Err == "" {
+					continue
+				}
+				at := t.Status.Timestamp
+				if at.IsZero() {
+					at = t.CreatedAt
+				}
+				if at.Before(cutoff) {
+					continue
+				}
+				if mostRecentErr == "" || at.After(mostRecentErrTime) {
+					mostRecentErr = t.Status.Err
+					mostRecentErrTime = at
+				}
+			}
+			if mostRecentErr != "" {
+				m.serviceHasError[serviceID] = true
+				m.serviceErrorText[serviceID] = mostRecentErr
+			}
+		}
+	}
+}
+
+func latestTasksByServiceKey(tasks []swarm.Task) []swarm.Task {
+	latest := make(map[string]swarm.Task)
+	latestAt := make(map[string]time.Time)
+	for _, t := range tasks {
+		key := taskKeyForService(t)
+		at := t.Status.Timestamp
+		if at.IsZero() {
+			at = t.CreatedAt
+		}
+		if prevAt, ok := latestAt[key]; !ok || at.After(prevAt) {
+			latestAt[key] = at
+			latest[key] = t
+		}
+	}
+
+	res := make([]swarm.Task, 0, len(latest))
+	for _, t := range latest {
+		res = append(res, t)
+	}
+	return res
+}
+
+func taskKeyForService(t swarm.Task) string {
+	if t.Slot > 0 {
+		return fmt.Sprintf("%s:%d", t.ServiceID, t.Slot)
+	}
+	return fmt.Sprintf("%s:%s", t.ServiceID, t.NodeID)
 }
 
 // computeColWidths centralizes column width calculation so header and rows
