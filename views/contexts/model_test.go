@@ -76,23 +76,6 @@ func (m *mockContextOps) UpdateContextWithCertFiles(name, description, dockerHos
 // Verify interface compliance
 var _ docker.ContextOps = (*mockContextOps)(nil)
 
-// Unused interface — needed for deps field but not referenced by contexts view.
-type mockSnapshotOps struct {
-	getSnapshotFn func() *docker.SwarmSnapshot
-}
-
-func (m *mockSnapshotOps) GetSnapshot() *docker.SwarmSnapshot  { return m.getSnapshotFn() }
-func (m *mockSnapshotOps) SetSnapshot(_ *docker.SwarmSnapshot) {}
-func (m *mockSnapshotOps) InvalidateSnapshot()                 {}
-func (m *mockSnapshotOps) RefreshSnapshot() (*docker.SwarmSnapshot, error) {
-	return m.getSnapshotFn(), nil
-}
-func (m *mockSnapshotOps) RefreshSnapshotAsync()   {}
-func (m *mockSnapshotOps) TriggerRefreshIfNeeded() {}
-func (m *mockSnapshotOps) GetOrRefreshSnapshot() (*docker.SwarmSnapshot, error) {
-	return m.getSnapshotFn(), nil
-}
-
 // --- helpers ---
 
 func key(s string) tea.KeyMsg {

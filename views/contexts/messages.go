@@ -250,24 +250,6 @@ func LoadFilesCmd(dirPath string) tea.Cmd {
 	}
 }
 
-// createContextCmd creates a new Docker context
-func (m *Model) createContextCmd(name, dockerHost, tlsPath string, useTLS bool) tea.Cmd {
-	contextOps := m.deps.Contexts
-	return func() tea.Msg {
-		var err error
-		if useTLS && tlsPath != "" {
-			err = contextOps.CreateContextWithTLS(name, dockerHost, tlsPath, false)
-		} else {
-			err = contextOps.CreateContext(name, dockerHost)
-		}
-		return ContextCreatedMsg{
-			ContextName: name,
-			Success:     err == nil,
-			Error:       err,
-		}
-	}
-}
-
 // createContextWithCertFilesCmd creates a new Docker context with individual cert files
 func (m *Model) createContextWithCertFilesCmd(name, description, dockerHost, caFile, certFile, keyFile string, useTLS bool) tea.Cmd {
 	contextOps := m.deps.Contexts
@@ -291,25 +273,6 @@ func (m *Model) updateContextDescriptionCmd(name, description string) tea.Cmd {
 	contextOps := m.deps.Contexts
 	return func() tea.Msg {
 		err := contextOps.UpdateContextDescription(name, description)
-		return ContextUpdatedMsg{
-			ContextName: name,
-			Success:     err == nil,
-			Error:       err,
-		}
-	}
-}
-
-// updateContextWithCertFilesCmd updates an existing Docker context with individual cert files
-func (m *Model) updateContextWithCertFilesCmd(name, description, dockerHost, caFile, certFile, keyFile string, useTLS bool) tea.Cmd {
-	contextOps := m.deps.Contexts
-	return func() tea.Msg {
-		var err error
-		if useTLS && caFile != "" && certFile != "" && keyFile != "" {
-			err = contextOps.UpdateContextWithCertFiles(name, description, dockerHost, caFile, certFile, keyFile, false)
-		} else {
-			// Update without TLS
-			err = contextOps.UpdateContextWithCertFiles(name, description, dockerHost, "", "", "", false)
-		}
 		return ContextUpdatedMsg{
 			ContextName: name,
 			Success:     err == nil,
