@@ -43,6 +43,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 		// Start background fetches for stacks to surface errors without pressing 'p'.
 		// Create commands that will load tasks for each stack asynchronously.
+		taskOps := m.deps.Tasks
 		var cmds []tea.Cmd
 		// Always keep the tick running
 		cmds = append(cmds, tickCmd())
@@ -55,7 +56,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			// Launch async fetch for this stack
 			cmds = append(cmds, func(name string) tea.Cmd {
 				return func() tea.Msg {
-					tasks, err := docker.GetTasksForStack(name)
+					tasks, err := taskOps.GetTasksForStack(name)
 					return StackTasksLoadedMsg{StackName: name, Tasks: tasks, Error: err}
 				}
 			}(stackName))
@@ -67,8 +68,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// Check for changes (this will return either a Msg or the next TickMsg)
 		if m.Visible {
 			return tea.Batch(
-				CheckStacksCmd(m.lastSnapshot, m.nodeID),
-				RefreshExpandedStackTasksCmd(m.expandedStacks),
+				m.checkStacksCmd(m.lastSnapshot, m.nodeID),
+				m.refreshExpandedStackTasksCmd(m.expandedStacks),
 			)
 		}
 		// Continue polling even if not visible
@@ -129,9 +130,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			if m.pendingAction == "remove" {
 				l().Debugln("Starting remove for stack", selected.Name)
 				removeNetworks := msg.CheckboxChecked // Capture checkbox state
+				stackOps := m.deps.Stacks
+				snapOps := m.deps.Snapshot
+				checkCmd := m.checkStacksCmd(m.lastSnapshot, m.nodeID)
 				return func() tea.Msg {
 					l().Infof("Executing remove for stack: %s (remove networks: %v)", selected.Name, removeNetworks)
-					if err := docker.RemoveStack(selected.Name); err != nil {
+					if err := stackOps.RemoveStack(selected.Name); err != nil {
 						l().Errorf("Failed to remove stack %s: %v", selected.Name, err)
 						return RemoveErrorMsg{
 							StackName: selected.Name,
@@ -143,17 +147,17 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					// Remove networks if checkbox was checked
 					if removeNetworks {
 						l().Infof("Removing networks for stack: %s", selected.Name)
-						if err := docker.RemoveStackNetworks(selected.Name); err != nil {
+						if err := stackOps.RemoveStackNetworks(selected.Name); err != nil {
 							l().Warnf("Failed to remove networks for stack %s: %v", selected.Name, err)
 							// Don't fail the whole operation if network removal fails
 						}
 					}
 
 					// Force immediate snapshot refresh
-					if _, err := docker.RefreshSnapshot(); err != nil {
+					if _, err := snapOps.RefreshSnapshot(); err != nil {
 						l().Warnf("Failed to refresh snapshot: %v", err)
 					}
-					return CheckStacksCmd(m.lastSnapshot, m.nodeID)()
+					return checkCmd()
 				}
 			}
 		}
@@ -178,19 +182,22 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			// Edit mode: redeploy the stack with updated YAML
 			stackName := m.editStackName
 			m.editStackName = "" // Clear edit mode
+			stackOps := m.deps.Stacks
+			snapOps := m.deps.Snapshot
+			checkCmd := m.checkStacksCmd(m.lastSnapshot, m.nodeID)
 			return func() tea.Msg {
 				l().Infof("Redeploying edited stack: %s", stackName)
-				err := docker.DeployStack(stackName, msg.Content)
+				err := stackOps.DeployStack(stackName, msg.Content)
 				if err != nil {
 					l().Errorf("Failed to redeploy stack %s: %v", stackName, err)
 					return stackUpdateErrorMsg{StackName: stackName, Err: err}
 				}
 				l().Infof("Successfully redeployed stack: %s", stackName)
 				// Force snapshot refresh
-				if _, err := docker.RefreshSnapshot(); err != nil {
+				if _, err := snapOps.RefreshSnapshot(); err != nil {
 					l().Warnf("Failed to refresh snapshot: %v", err)
 				}
-				return CheckStacksCmd(m.lastSnapshot, m.nodeID)()
+				return checkCmd()
 			}
 		}
 
@@ -325,8 +332,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				if m.expandedStacks[selected.Name] {
 					// Load tasks for this stack asynchronously
 					stackName := selected.Name
+					taskOps := m.deps.Tasks
 					return func() tea.Msg {
-						tasks, err := docker.GetTasksForStack(stackName)
+						tasks, err := taskOps.GetTasksForStack(stackName)
 						return StackTasksLoadedMsg{StackName: stackName, Tasks: tasks, Error: err}
 					}
 				} else {
@@ -342,9 +350,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			if m.List.Cursor < len(m.List.Filtered) {
 				selected := m.List.Filtered[m.List.Cursor]
 				stackName := selected.Name
+				stackOps := m.deps.Stacks
 				return func() tea.Msg {
 					l().Infof("Describing stack: %s", stackName)
-					yamlContent, err := docker.DescribeStack(stackName)
+					yamlContent, err := stackOps.DescribeStack(stackName)
 					if err != nil {
 						l().Errorf("Failed to describe stack %s: %v", stackName, err)
 						// Show error in inspect view
@@ -379,7 +388,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				l().Infof("Opening editor for stack: %s", stackName)
 
 				// Reconstruct YAML in background and then open editor
-				yamlContent, err := docker.ReconstructStackCompose(stackName)
+				yamlContent, err := m.deps.Stacks.ReconstructStackCompose(stackName)
 				if err != nil {
 					l().Errorf("Failed to reconstruct YAML for stack %s: %v", stackName, err)
 					m.editStackName = "" // Clear edit mode on error
@@ -687,7 +696,7 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 				return nil
 			}
 			l().Infof("File read successfully (%d bytes), validating YAML", len(fileContent))
-			if err := docker.ValidateStackYAML(string(fileContent)); err != nil {
+			if err := m.deps.Stacks.ValidateStackYAML(string(fileContent)); err != nil {
 				l().Errorf("YAML validation failed: %v", err)
 				m.createDialogError = fmt.Sprintf("Invalid YAML: %v", err)
 				return nil
@@ -698,16 +707,18 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 			m.createDialogError = ""
 			m.createNameInput.Blur()
 			m.createFileInput.Blur()
+			stackOps := m.deps.Stacks
+			snapOps := m.deps.Snapshot
 			return func() tea.Msg {
 				l().Infof("Deploying stack %s from file %s", stackName, filePath)
-				err := docker.DeployStack(stackName, string(fileContent))
+				err := stackOps.DeployStack(stackName, string(fileContent))
 				if err != nil {
 					l().Errorf("Stack deployment failed: %v", err)
 					return stackCreateErrorMsg{err}
 				}
 				l().Infof("Stack %s deployed successfully", stackName)
 				// Force immediate snapshot refresh
-				if _, err := docker.RefreshSnapshot(); err != nil {
+				if _, err := snapOps.RefreshSnapshot(); err != nil {
 					l().Warnf("Failed to refresh snapshot: %v", err)
 				}
 				return Msg{NodeID: m.nodeID}
@@ -793,7 +804,7 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 			}
 			l().Infof("Content preview before validation: %q", preview)
 			// Validate YAML
-			if err := docker.ValidateStackYAML(m.createDialogContent); err != nil {
+			if err := m.deps.Stacks.ValidateStackYAML(m.createDialogContent); err != nil {
 				l().Errorf("YAML validation failed: %v", err)
 				m.createDialogError = fmt.Sprintf("Invalid YAML: %v", err)
 				return nil
@@ -810,16 +821,18 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 			m.createDialogActive = false
 			m.createDialogError = ""
 			m.createNameInput.Blur()
+			stackOps := m.deps.Stacks
+			snapOps := m.deps.Snapshot
 			return func() tea.Msg {
 				l().Infof("Deploying stack %s from inline editor (%d bytes)", stackName, len(contentToDeploy))
-				err := docker.DeployStack(stackName, contentToDeploy)
+				err := stackOps.DeployStack(stackName, contentToDeploy)
 				if err != nil {
 					l().Errorf("Stack deployment failed: %v", err)
 					return stackCreateErrorMsg{err}
 				}
 				l().Infof("Stack %s deployed successfully", stackName)
 				// Force immediate snapshot refresh
-				if _, err := docker.RefreshSnapshot(); err != nil {
+				if _, err := snapOps.RefreshSnapshot(); err != nil {
 					l().Warnf("Failed to refresh snapshot: %v", err)
 				}
 				return Msg{NodeID: m.nodeID}
@@ -973,7 +986,7 @@ func (m *Model) setStacks(stacks []docker.StackEntry) {
 		delete(m.stackErrorText, k)
 	}
 
-	snap := docker.GetSnapshot()
+	snap := m.deps.Snapshot.GetSnapshot()
 	if snap != nil {
 		// map service ID -> stack name
 		svcToStack := make(map[string]string)
@@ -1353,12 +1366,13 @@ func truncateWithEllipsis(s string, maxWidth int) string {
 	return string(outRunes) + ell
 }
 
-// RefreshExpandedStackTasksCmd refreshes tasks for any expanded stacks.
-func RefreshExpandedStackTasksCmd(expandedStacks map[string]bool) tea.Cmd {
+// refreshExpandedStackTasksCmd refreshes tasks for any expanded stacks.
+func (m *Model) refreshExpandedStackTasksCmd(expandedStacks map[string]bool) tea.Cmd {
 	if len(expandedStacks) == 0 {
 		return nil
 	}
 
+	taskOps := m.deps.Tasks
 	var cmds []tea.Cmd
 	for stackName, expanded := range expandedStacks {
 		if !expanded {
@@ -1366,7 +1380,7 @@ func RefreshExpandedStackTasksCmd(expandedStacks map[string]bool) tea.Cmd {
 		}
 		name := stackName
 		cmds = append(cmds, func() tea.Msg {
-			tasks, err := docker.GetTasksForStack(name)
+			tasks, err := taskOps.GetTasksForStack(name)
 			return StackTasksLoadedMsg{StackName: name, Tasks: tasks, Error: err}
 		})
 	}

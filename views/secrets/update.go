@@ -153,13 +153,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 		m.state = stateReady
 		l().Info("SecretsView: Secret list updated (used status pending)")
-		return computeSecretUsedCmd(msg)
+		return m.computeSecretUsedCmd(msg)
 
 	case TickMsg:
 		l().Infof("SecretsView: Received TickMsg, state=%v, visible=%v", m.state, m.visible)
 		if m.visible && m.state == stateReady && !m.confirmDialog.Visible && !m.loadingView.Visible() {
 			return tea.Batch(
-				CheckSecretsCmd(m.lastSnapshot),
+				m.checkSecretsCmd(m.lastSnapshot),
 				tickCmd(),
 			)
 		}
@@ -167,7 +167,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case secretDeletedMsg:
 		l().Infof("Secret deleted successfully: %s", msg.Name)
-		return loadSecretsCmd()
+		return m.loadSecretsCmd()
 
 	case secretCreatedMsg:
 		l().Infof("Secret created successfully: %s", msg.Name)
@@ -314,7 +314,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			name := m.secretToDelete.Secret.Spec.Name
 			l().Infof("Confirmed deletion for secret %s", name)
-			return deleteSecretCmd(name)
+			return m.deleteSecretCmd(name)
 		}
 		return nil
 
@@ -382,7 +382,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				return nil
 			}
 			l().Infof("UsedBy key pressed for secret: %s", secName)
-			return getUsedByStacksCmd(secName)
+			return m.getUsedByStacksCmd(secName)
 
 		case "x":
 			secName := m.selectedSecret()
@@ -436,7 +436,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		case "i":
 			sec := m.selectedSecret()
 			l().Infof("Inspect key pressed for secret: %s", sec)
-			return inspectSecretCmd(m.selectedSecret())
+			return m.inspectSecretCmd(m.selectedSecret())
 
 		case "?":
 			return func() tea.Msg {
@@ -801,7 +801,7 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 			m.createNameInput.Blur()
 			m.createFileInput.Blur()
 			m.createLabelsInput.Blur()
-			return createSecretFromFileCmd(m.createNameInput.Value(), filePath, labels, m.createEncodeSecret)
+			return m.createSecretFromFileCmd(m.createNameInput.Value(), filePath, labels, m.createEncodeSecret)
 		default:
 			var cmd tea.Cmd
 			switch m.createInputFocus {
@@ -922,7 +922,7 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 			m.createDialogError = ""
 			m.createNameInput.Blur()
 			m.createLabelsInput.Blur()
-			return createSecretFromContentCmd(m.createNameInput.Value(), []byte(m.createSecretData), labels, m.createEncodeSecret)
+			return m.createSecretFromContentCmd(m.createNameInput.Value(), []byte(m.createSecretData), labels, m.createEncodeSecret)
 		default:
 			switch m.createInputFocus {
 			case 0:

@@ -14,8 +14,9 @@ func init() {
 	view.RegisterView(ViewName, factory)
 }
 
-func factory(_ docker.Deps, w, h int, payload any) (view.View, tea.Cmd) {
+func factory(deps docker.Deps, w, h int, payload any) (view.View, tea.Cmd) {
 	v := New(w, h)
+	v.deps = deps
 
 	data, _ := payload.(map[string]any)
 
@@ -54,7 +55,7 @@ func factory(_ docker.Deps, w, h int, payload any) (view.View, tea.Cmd) {
 		v.SetPendingSelectServiceName(selectServiceName)
 	}
 
-	entries, title := LoadServicesForView(filterType, nodeID, stackName)
+	entries, title := v.loadServicesForView(filterType, nodeID, stackName)
 
 	return v, func() tea.Msg {
 		return Msg{

@@ -28,6 +28,7 @@ const (
 )
 
 type Model struct {
+	deps     docker.Deps
 	Visible  bool
 	viewport viewport.Model
 	ready    bool
@@ -274,15 +275,14 @@ func (m *Model) SetLoading(loading bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.loading = loading
-	// Write debug state when loading changes
-	go m.debugWriteLoadingState()
+	// Capture values under lock for race-free debug logging.
+	l, c := m.loading, len(m.contexts)
+	go debugWriteLoadingState(l, c)
 }
 
-// debug write of loading state for diagnostics
-func (m *Model) debugWriteLoadingState() {
-	// Only log this information at debug level using the standard logger.
-	// The logger will no-op if not running in debug mode.
-	swarmlog.L().Debugf("[contexts] loading=%v count=%d", m.loading, len(m.contexts))
+// debugWriteLoadingState logs loading state for diagnostics.
+func debugWriteLoadingState(loading bool, count int) {
+	swarmlog.L().Debugf("[contexts] loading=%v count=%d", loading, count)
 }
 
 func (m *Model) IsLoading() bool {
@@ -353,7 +353,7 @@ func (m *Model) OnEnter() tea.Cmd {
 	// from other code paths by calling SetLoading(true) before navigating.
 	if len(m.contexts) == 0 {
 		m.SetLoading(true)
-		return func() tea.Msg { return LoadContextsCmd() }
+		return m.loadContextsCmd()
 	}
 	return nil
 }

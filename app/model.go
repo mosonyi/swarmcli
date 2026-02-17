@@ -68,11 +68,13 @@ func InitialModel() *Model {
 		"message": "Loading Swarm nodes and stacks...",
 	})
 
+	deps := buildDeps()
+
 	return &Model{
-		deps:           buildDeps(),
+		deps:           deps,
 		viewport:       vp,
 		currentView:    loading,
-		systemInfo:     systeminfoview.New(version),
+		systemInfo:     systeminfoview.New(deps, version),
 		viewStack:      viewstack.Stack{},
 		commandInput:   cmdBar(),
 		terminalWidth:  terminalWidth,
@@ -87,7 +89,7 @@ func (m *Model) Init() tea.Cmd {
 	return tea.Batch(
 		tick(),
 		loadSnapshotAsync(),
-		systeminfoview.LoadStatus(),
+		m.systemInfo.LoadStatus(),
 		m.systemInfo.Init(), // Initialize systeminfo's tick commands
 		docker.WatchEventsCmd(),
 	)

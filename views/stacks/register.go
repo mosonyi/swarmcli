@@ -14,12 +14,13 @@ func init() {
 	view.RegisterView(ViewName, factory)
 }
 
-func factory(_ docker.Deps, w, h int, payload any) (view.View, tea.Cmd) {
+func factory(deps docker.Deps, w, h int, payload any) (view.View, tea.Cmd) {
 	var nodeID string
 	if payload != nil {
 		nodeID, _ = payload.(string)
 	}
 	model := New(w, h)
+	model.deps = deps
 	model.Visible = true
-	return model, tea.Batch(model.Init(), LoadStacksCmd(nodeID))
+	return model, tea.Batch(model.Init(), model.LoadStacksCmd(nodeID))
 }

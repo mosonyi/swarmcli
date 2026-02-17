@@ -14,6 +14,8 @@ import (
 )
 
 type Model struct {
+	deps docker.Deps
+
 	// We don't need a viewport here, as we will use a fixed size for the content.
 	content string
 
@@ -47,10 +49,11 @@ type Model struct {
 }
 
 // Create a new instance
-func New(version string) *Model {
+func New(deps docker.Deps, version string) *Model {
 	// Get initial context synchronously to display immediately
-	context, _ := docker.GetCurrentContext()
+	context, _ := deps.ClusterInfo.GetCurrentContext()
 	return &Model{
+		deps:           deps,
 		content:        content(context, version, "", "", 0, 0),
 		version:        version,
 		context:        context,
@@ -78,16 +81,17 @@ func (m *Model) spinnerTickCmd() tea.Cmd {
 	})
 }
 
-func LoadStatus() tea.Cmd {
+func (m *Model) LoadStatus() tea.Cmd {
+	clusterInfo := m.deps.ClusterInfo
 	return func() tea.Msg {
 		// Get fast values immediately
-		context, _ := docker.GetCurrentContext()
-		containers, _ := docker.GetContainerCount()
-		services, _ := docker.GetServiceCount()
+		context, _ := clusterInfo.GetCurrentContext()
+		containers, _ := clusterInfo.GetContainerCount()
+		services, _ := clusterInfo.GetServiceCount()
 
 		// Get capacity (fast) - show immediately
-		cpuCapacity, _ := docker.GetSwarmCPUCapacity()
-		memCapacity, _ := docker.GetSwarmMemCapacity()
+		cpuCapacity, _ := clusterInfo.GetSwarmCPUCapacity()
+		memCapacity, _ := clusterInfo.GetSwarmMemCapacity()
 
 		cpuCapStr := ""
 		if cpuCapacity > 0 {
@@ -118,12 +122,13 @@ func LoadStatus() tea.Cmd {
 	}
 }
 
-func LoadSlowStatus() tea.Cmd {
+func (m *Model) LoadSlowStatus() tea.Cmd {
+	clusterInfo := m.deps.ClusterInfo
 	return func() tea.Msg {
 		l().Info("LoadSlowStatus: Starting background stats collection")
 
 		// Get CPU/MEM - these are slow
-		cpu, err := docker.GetSwarmCPUUsage()
+		cpu, err := clusterInfo.GetSwarmCPUUsage()
 		if err != nil {
 			l().Error("LoadSlowStatus: GetSwarmCPUUsage failed: %v", err)
 			cpu = "N/A"
@@ -133,7 +138,7 @@ func LoadSlowStatus() tea.Cmd {
 		}
 		l().Info("LoadSlowStatus: CPU usage collected: %s", cpu)
 
-		mem, err := docker.GetSwarmMemUsage()
+		mem, err := clusterInfo.GetSwarmMemUsage()
 		if err != nil {
 			l().Error("LoadSlowStatus: GetSwarmMemUsage failed: %v", err)
 			mem = "N/A"

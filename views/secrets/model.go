@@ -32,6 +32,7 @@ const (
 )
 
 type Model struct {
+	deps          docker.Deps
 	secretsList   filterlist.FilterableList[secretItem]
 	width         int
 	height        int
@@ -173,7 +174,7 @@ func (m *Model) IsSearching() bool {
 
 func (m *Model) Init() tea.Cmd {
 	l().Info("SecretsView: Init() called - starting ticker and loading secrets")
-	return tea.Batch(tickCmd(), m.spinnerTickCmd(), LoadSecrets())
+	return tea.Batch(tickCmd(), m.spinnerTickCmd(), m.loadSecretsCmd())
 }
 
 func (m *Model) spinnerTickCmd() tea.Cmd {
@@ -186,10 +187,6 @@ func tickCmd() tea.Cmd {
 	return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
 		return TickMsg(t)
 	})
-}
-
-func LoadSecrets() tea.Cmd {
-	return loadSecretsCmd()
 }
 
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
@@ -240,7 +237,7 @@ func (m *Model) addSecret(sec docker.SecretWithDecodedData) {
 func (m *Model) OnEnter() tea.Cmd {
 	m.visible = true
 	l().Info("SecretsView: OnEnter() - view is now visible")
-	return LoadSecrets()
+	return m.loadSecretsCmd()
 }
 
 func (m *Model) OnExit() tea.Cmd {

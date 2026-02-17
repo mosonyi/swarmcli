@@ -14,8 +14,9 @@ func init() {
 	view.RegisterView(ViewName, factory)
 }
 
-func factory(_ docker.Deps, w, h int, payload any) (view.View, tea.Cmd) {
+func factory(deps docker.Deps, w, h int, payload any) (view.View, tea.Cmd) {
 	service := payload.(docker.ServiceEntry)
 	v := New(w, h, 10000, service)
-	return v, StartStreamingCmd(v.StreamCtx, service, 200, v.MaxLines)
+	v.deps = deps
+	return v, v.startStreamingCmd(v.StreamCtx, service, 200, v.MaxLines)
 }

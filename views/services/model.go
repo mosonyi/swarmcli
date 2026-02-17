@@ -40,6 +40,7 @@ const (
 )
 
 type Model struct {
+	deps         docker.Deps
 	List         filterlist.FilterableList[docker.ServiceEntry]
 	Visible      bool
 	title        string

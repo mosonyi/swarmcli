@@ -63,41 +63,45 @@ type ContextUpdatedMsg struct {
 // and should navigate to stacks view
 type ContextChangedNotification struct{}
 
-// LoadContextsCmd loads all Docker contexts
-func LoadContextsCmd() tea.Msg {
-	contexts, err := docker.ListContexts()
-	// Log the result so we can diagnose environments where the CLI is slow
-	// or returns an error even though `docker context ls` seems fast.
-	l := swarmlog.L()
-	if err != nil {
-		l.Warnw("ListContexts failed", "error", err)
-	} else {
-		l.Infow("ListContexts succeeded", "count", len(contexts))
-	}
-	// Also emit debug information at debug log level so test runs and CI
-	// can be inspected via the standard logger instead of writing to /tmp.
-	debug := map[string]any{
-		"count": len(contexts),
-		"error": nil,
-	}
-	if err != nil {
-		debug["error"] = err.Error()
-	}
-	if b, jerr := json.Marshal(debug); jerr == nil {
-		swarmlog.L().Debugf("[LoadContexts] %s", string(b))
-	}
-	return ContextsLoadedMsg{
-		Contexts: contexts,
-		Error:    err,
+// loadContextsCmd loads all Docker contexts
+func (m *Model) loadContextsCmd() func() tea.Msg {
+	contextOps := m.deps.Contexts
+	return func() tea.Msg {
+		contexts, err := contextOps.ListContexts()
+		// Log the result so we can diagnose environments where the CLI is slow
+		// or returns an error even though `docker context ls` seems fast.
+		l := swarmlog.L()
+		if err != nil {
+			l.Warnw("ListContexts failed", "error", err)
+		} else {
+			l.Infow("ListContexts succeeded", "count", len(contexts))
+		}
+		// Also emit debug information at debug log level so test runs and CI
+		// can be inspected via the standard logger instead of writing to /tmp.
+		debug := map[string]any{
+			"count": len(contexts),
+			"error": nil,
+		}
+		if err != nil {
+			debug["error"] = err.Error()
+		}
+		if b, jerr := json.Marshal(debug); jerr == nil {
+			swarmlog.L().Debugf("[LoadContexts] %s", string(b))
+		}
+		return ContextsLoadedMsg{
+			Contexts: contexts,
+			Error:    err,
+		}
 	}
 }
 
-// SwitchContextCmd switches to a different Docker context and validates it's reachable
-func SwitchContextCmd(contextName string) tea.Cmd {
+// switchContextCmd switches to a different Docker context and validates it's reachable
+func (m *Model) switchContextCmd(contextName string) tea.Cmd {
+	contextOps := m.deps.Contexts
 	return func() tea.Msg {
 		// ValidateContext will switch to the context, verify it's reachable,
 		// and switch back to the original if validation fails
-		err := docker.ValidateContext(contextName)
+		err := contextOps.ValidateContext(contextName)
 		return ContextSwitchedMsg{
 			ContextName: contextName,
 			Success:     err == nil,
@@ -106,10 +110,11 @@ func SwitchContextCmd(contextName string) tea.Cmd {
 	}
 }
 
-// InspectContextCmd inspects a Docker context and navigates to inspect view
-func InspectContextCmd(contextName string) tea.Cmd {
+// inspectContextCmd inspects a Docker context and navigates to inspect view
+func (m *Model) inspectContextCmd(contextName string) tea.Cmd {
+	contextOps := m.deps.Contexts
 	return func() tea.Msg {
-		inspectContent, err := docker.InspectContext(contextName)
+		inspectContent, err := contextOps.InspectContext(contextName)
 		if err != nil {
 			inspectContent = "Error inspecting context: " + err.Error()
 		}
@@ -123,11 +128,12 @@ func InspectContextCmd(contextName string) tea.Cmd {
 	}
 }
 
-// ExportContextCmd exports a Docker context to a file
-func ExportContextCmd(contextName string) tea.Cmd {
+// exportContextCmd exports a Docker context to a file
+func (m *Model) exportContextCmd(contextName string) tea.Cmd {
+	contextOps := m.deps.Contexts
 	return func() tea.Msg {
 		// Check if file already exists
-		if docker.CheckContextExportExists(contextName) {
+		if contextOps.CheckContextExportExists(contextName) {
 			// Return a special message indicating file exists
 			return ContextExportedMsg{
 				ContextName: contextName,
@@ -136,7 +142,7 @@ func ExportContextCmd(contextName string) tea.Cmd {
 				Error:       fmt.Errorf("file_exists"),
 			}
 		}
-		filePath, err := docker.ExportContext(contextName)
+		filePath, err := contextOps.ExportContext(contextName)
 		return ContextExportedMsg{
 			ContextName: contextName,
 			FilePath:    filePath,
@@ -146,10 +152,11 @@ func ExportContextCmd(contextName string) tea.Cmd {
 	}
 }
 
-// ExportContextWithForceCmd exports a context, overwriting existing file
-func ExportContextWithForceCmd(contextName string) tea.Cmd {
+// exportContextWithForceCmd exports a context, overwriting existing file
+func (m *Model) exportContextWithForceCmd(contextName string) tea.Cmd {
+	contextOps := m.deps.Contexts
 	return func() tea.Msg {
-		filePath, err := docker.ExportContextWithForce(contextName)
+		filePath, err := contextOps.ExportContextWithForce(contextName)
 		return ContextExportedMsg{
 			ContextName: contextName,
 			FilePath:    filePath,
@@ -159,10 +166,11 @@ func ExportContextWithForceCmd(contextName string) tea.Cmd {
 	}
 }
 
-// ImportContextCmd imports a Docker context from a file
-func ImportContextCmd(filePath string) tea.Cmd {
+// importContextCmd imports a Docker context from a file
+func (m *Model) importContextCmd(filePath string) tea.Cmd {
+	contextOps := m.deps.Contexts
 	return func() tea.Msg {
-		contextName, err := docker.ImportContext(filePath)
+		contextName, err := contextOps.ImportContext(filePath)
 		return ContextImportedMsg{
 			ContextName: contextName,
 			Success:     err == nil,
@@ -171,10 +179,11 @@ func ImportContextCmd(filePath string) tea.Cmd {
 	}
 }
 
-// DeleteContextCmd deletes a Docker context
-func DeleteContextCmd(contextName string) tea.Cmd {
+// deleteContextCmd deletes a Docker context
+func (m *Model) deleteContextCmd(contextName string) tea.Cmd {
+	contextOps := m.deps.Contexts
 	return func() tea.Msg {
-		err := docker.DeleteContext(contextName)
+		err := contextOps.DeleteContext(contextName)
 		return ContextDeletedMsg{
 			ContextName: contextName,
 			Success:     err == nil,
@@ -241,14 +250,15 @@ func LoadFilesCmd(dirPath string) tea.Cmd {
 	}
 }
 
-// CreateContextCmd creates a new Docker context
-func CreateContextCmd(name, dockerHost, tlsPath string, useTLS bool) tea.Cmd {
+// createContextWithCertFilesCmd creates a new Docker context with individual cert files
+func (m *Model) createContextWithCertFilesCmd(name, description, dockerHost, caFile, certFile, keyFile string, useTLS bool) tea.Cmd {
+	contextOps := m.deps.Contexts
 	return func() tea.Msg {
 		var err error
-		if useTLS && tlsPath != "" {
-			err = docker.CreateContextWithTLS(name, dockerHost, tlsPath, false)
+		if useTLS && caFile != "" && certFile != "" && keyFile != "" {
+			err = contextOps.CreateContextWithCertFiles(name, description, dockerHost, caFile, certFile, keyFile, false)
 		} else {
-			err = docker.CreateContext(name, dockerHost)
+			err = contextOps.CreateContext(name, dockerHost)
 		}
 		return ContextCreatedMsg{
 			ContextName: name,
@@ -258,45 +268,11 @@ func CreateContextCmd(name, dockerHost, tlsPath string, useTLS bool) tea.Cmd {
 	}
 }
 
-// CreateContextWithCertFilesCmd creates a new Docker context with individual cert files
-func CreateContextWithCertFilesCmd(name, description, dockerHost, caFile, certFile, keyFile string, useTLS bool) tea.Cmd {
+// updateContextDescriptionCmd updates only the description of an existing Docker context
+func (m *Model) updateContextDescriptionCmd(name, description string) tea.Cmd {
+	contextOps := m.deps.Contexts
 	return func() tea.Msg {
-		var err error
-		if useTLS && caFile != "" && certFile != "" && keyFile != "" {
-			err = docker.CreateContextWithCertFiles(name, description, dockerHost, caFile, certFile, keyFile, false)
-		} else {
-			err = docker.CreateContext(name, dockerHost)
-		}
-		return ContextCreatedMsg{
-			ContextName: name,
-			Success:     err == nil,
-			Error:       err,
-		}
-	}
-}
-
-// UpdateContextDescriptionCmd updates only the description of an existing Docker context
-func UpdateContextDescriptionCmd(name, description string) tea.Cmd {
-	return func() tea.Msg {
-		err := docker.UpdateContextDescription(name, description)
-		return ContextUpdatedMsg{
-			ContextName: name,
-			Success:     err == nil,
-			Error:       err,
-		}
-	}
-}
-
-// UpdateContextWithCertFilesCmd updates an existing Docker context with individual cert files
-func UpdateContextWithCertFilesCmd(name, description, dockerHost, caFile, certFile, keyFile string, useTLS bool) tea.Cmd {
-	return func() tea.Msg {
-		var err error
-		if useTLS && caFile != "" && certFile != "" && keyFile != "" {
-			err = docker.UpdateContextWithCertFiles(name, description, dockerHost, caFile, certFile, keyFile, false)
-		} else {
-			// Update without TLS
-			err = docker.UpdateContextWithCertFiles(name, description, dockerHost, "", "", "", false)
-		}
+		err := contextOps.UpdateContextDescription(name, description)
 		return ContextUpdatedMsg{
 			ContextName: name,
 			Success:     err == nil,

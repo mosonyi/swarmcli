@@ -18,14 +18,15 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 )
 
-// StartStreamingCmd returns a tea.Cmd that starts streaming logs for the given service
+// startStreamingCmd returns a tea.Cmd that starts streaming logs for the given service
 // using the provided docker client. It reads the last `tail` lines and then follows.
 // - cli: Docker client
 // - service: your ServiceEntry (we use ServiceID)
 // - tail: number of lines to request as initial history (0 means all)
 // - MaxLines: the maximum number of lines to keep in memory (circular buffer behavior)
-func StartStreamingCmd(ctx context.Context, service docker.ServiceEntry, tail int, maxLines int) tea.Cmd {
-	cli, err := docker.GetClient()
+func (m *Model) startStreamingCmd(ctx context.Context, service docker.ServiceEntry, tail int, maxLines int) tea.Cmd {
+	clientOps := m.deps.Client
+	cli, err := clientOps.GetClient()
 	if err != nil {
 		return func() tea.Msg {
 			return StreamErrMsg{Err: fmt.Errorf("failed to get docker client: %w", err)}
@@ -86,7 +87,7 @@ func StartStreamingCmd(ctx context.Context, service docker.ServiceEntry, tail in
 				for sc.Scan() {
 					line := sc.Text()
 					// Format the log line with node information
-					formattedLine, nodeName := formatLogLineWithNode(service.ServiceName, line)
+					formattedLine, nodeName := m.formatLogLineWithNode(service.ServiceName, line)
 					// Store both the formatted line and node name (separated by a special marker)
 					// Format: "NODENAME\x00formatted_line" where \x00 is a null byte separator
 					select {
@@ -145,7 +146,7 @@ func (m *Model) StopStreamingCmd() tea.Cmd {
 // Input format: "com.docker.swarm.node.id=xxx,com.docker.swarm.task.id=yyy actual log message"
 // Output format: formatted line and node name for filtering
 // Returns: ("service_name.task_id@node_name | actual log message", "node_name")
-func formatLogLineWithNode(serviceName string, line string) (string, string) {
+func (m *Model) formatLogLineWithNode(serviceName string, line string) (string, string) {
 	// Check if line has Docker details prefix
 	if !strings.Contains(line, "com.docker.swarm.") {
 		return line, ""
@@ -178,7 +179,7 @@ func formatLogLineWithNode(serviceName string, line string) (string, string) {
 	}
 
 	// Get node hostname from node ID
-	nodeName := getNodeHostname(nodeID)
+	nodeName := m.getNodeHostname(nodeID)
 	if nodeName == "" {
 		if len(nodeID) >= 12 {
 			nodeName = nodeID[:12]
@@ -201,8 +202,9 @@ func formatLogLineWithNode(serviceName string, line string) (string, string) {
 }
 
 // getNodeHostname retrieves the hostname for a node ID from the snapshot
-func getNodeHostname(nodeID string) string {
-	snap := docker.GetSnapshot()
+func (m *Model) getNodeHostname(nodeID string) string {
+	snapshotOps := m.deps.Snapshot
+	snap := snapshotOps.GetSnapshot()
 	if snap == nil {
 		return ""
 	}

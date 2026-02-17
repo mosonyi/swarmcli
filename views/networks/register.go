@@ -14,7 +14,8 @@ func init() {
 	view.RegisterView(ViewName, factory)
 }
 
-func factory(_ docker.Deps, w, h int, _ any) (view.View, tea.Cmd) {
+func factory(deps docker.Deps, w, h int, _ any) (view.View, tea.Cmd) {
 	model := New(w, h)
+	model.deps = deps
 	return model, model.Init()
 }

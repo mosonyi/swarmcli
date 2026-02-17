@@ -14,13 +14,14 @@ func init() {
 	view.RegisterView(ViewName, factory)
 }
 
-func factory(_ docker.Deps, w, h int, _ any) (view.View, tea.Cmd) {
+func factory(deps docker.Deps, w, h int, _ any) (view.View, tea.Cmd) {
 	model := New()
+	model.deps = deps
 	model.Visible = true
 	model.SetSize(w, h)
 	model.SetLoading(true)
 	return model, tea.Batch(
-		func() tea.Msg { return LoadContextsCmd() },
+		model.loadContextsCmd(),
 		StartTickerCmd(),
 	)
 }

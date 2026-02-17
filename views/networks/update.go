@@ -4,6 +4,7 @@
 package networksview
 
 import (
+	"context"
 	"fmt"
 	"net/netip"
 	"sort"
@@ -14,6 +15,7 @@ import (
 	helpview "swarmcli/views/help"
 	servicesview "swarmcli/views/services"
 	view "swarmcli/views/view"
+	"time"
 	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -355,13 +357,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 		m.state = stateReady
 		l().Info("NetworksView: Network list updated (used status pending)")
-		return computeNetworkUsedCmd(items)
+		return m.computeNetworkUsedCmd(items)
 
 	case TickMsg:
 		l().Infof("NetworksView: Received TickMsg, state=%v, visible=%v", m.state, m.visible)
 		if m.visible && m.state == stateReady && !m.confirmDialog.Visible && !m.loadingView.Visible() {
 			return tea.Batch(
-				CheckNetworksCmd(m.lastSnapshot),
+				m.checkNetworksCmd(m.lastSnapshot),
 				tickCmd(),
 			)
 		}
@@ -406,7 +408,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		} else {
 			m.showToast("Network deleted")
 		}
-		return loadNetworksCmd()
+		return m.loadNetworksCmd()
 
 	case NetworksPrunedMsg:
 		if msg.Err != nil {
@@ -429,7 +431,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.showToast(strings.Join(lines, "\n"))
 		}
 		l().Info("Networks pruned successfully")
-		return loadNetworksCmd()
+		return m.loadNetworksCmd()
 
 	case NetworkCreatedMsg:
 		if msg.Err != nil {
@@ -459,7 +461,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 		}
 		m.showToast(strings.Join(lines, "\n"))
-		return loadNetworksCmd()
+		return m.loadNetworksCmd()
 
 	case NetworkInspectMsg:
 		if msg.Err != nil {
@@ -740,7 +742,7 @@ func (m *Model) handleCreateDialogKeys(msg tea.KeyMsg) tea.Cmd {
 			m.createIPv4Gateway.Blur()
 			m.createIPv6Subnet.Blur()
 			m.createIPv6Gateway.Blur()
-			return createNetworkCmd(name, driver, m.createAttachable, m.createInternal, ipv4Subnet, ipv4Gateway, enableIPv6, ipv6Subnet, ipv6Gateway)
+			return m.createNetworkCmd(name, driver, m.createAttachable, m.createInternal, ipv4Subnet, ipv4Gateway, enableIPv6, ipv6Subnet, ipv6Gateway)
 		}
 
 		name := strings.TrimSpace(m.createNameInput.Value())
@@ -1003,7 +1005,7 @@ func (m *Model) handleNormalKeys(msg tea.KeyMsg) tea.Cmd {
 			return nil
 		}
 		selected := m.networksList.Filtered[m.networksList.Cursor]
-		return inspectNetworkCmd(selected.ID)
+		return m.inspectNetworkCmd(selected.ID)
 	case "u":
 		// Show used by
 		if len(m.networksList.Filtered) == 0 {
@@ -1011,7 +1013,7 @@ func (m *Model) handleNormalKeys(msg tea.KeyMsg) tea.Cmd {
 		}
 		selected := m.networksList.Filtered[m.networksList.Cursor]
 		m.usedByNetworkName = selected.Name
-		return loadUsedByCmd(selected.ID, selected.Name)
+		return m.loadUsedByCmd(selected.ID, selected.Name)
 	case "ctrl+d":
 		// Delete network
 		if len(m.networksList.Filtered) == 0 {
@@ -1037,10 +1039,10 @@ func (m *Model) executeConfirmedAction() tea.Cmd {
 	switch m.pendingAction {
 	case "delete":
 		if m.networkToDelete != nil {
-			return deleteNetworkCmd(m.networkToDelete.ID)
+			return m.deleteNetworkCmd(m.networkToDelete.ID)
 		}
 	case "prune":
-		return pruneNetworksCmd()
+		return m.pruneNetworksCmd()
 	}
 	m.pendingAction = ""
 	return nil
@@ -1211,12 +1213,30 @@ func (m *Model) setUsedByRenderItem() {
 	m.usedByList.Viewport.SetContent(m.usedByList.View())
 }
 
-// CheckNetworksCmd checks if networks have changed by comparing hashes
-func CheckNetworksCmd(lastHash uint64) tea.Cmd {
+// checkNetworksCmd checks if networks have changed by comparing hashes
+func (m *Model) checkNetworksCmd(lastHash uint64) tea.Cmd {
+	networkOps := m.deps.Networks
 	return func() tea.Msg {
-		networks, err := fetchNetworks()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		nets, err := networkOps.ListNetworks(ctx)
 		if err != nil {
 			return NetworksLoadedMsg{Err: err}
+		}
+
+		networks := make([]networkItem, 0, len(nets))
+		for _, net := range nets {
+			networks = append(networks, networkItem{
+				Name:      net.Name,
+				ID:        net.ID,
+				Driver:    net.Driver,
+				Scope:     net.Scope,
+				CreatedAt: net.Created,
+				Ingress:   net.Ingress,
+				Used:      false,
+				UsedKnown: false,
+			})
 		}
 
 		// Compute new hash

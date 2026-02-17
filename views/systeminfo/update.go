@@ -16,7 +16,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case Msg:
 		m.SetContent(msg)
 		// Trigger slow status load right after fast values
-		return LoadSlowStatus()
+		return m.LoadSlowStatus()
 
 	case SlowStatusMsg:
 		m.updateCPUMem(msg)
@@ -31,7 +31,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.content = m.buildContent()
 		}
 		// Trigger slow status reload (will schedule next tick after completion)
-		return LoadSlowStatus()
+		return m.LoadSlowStatus()
 
 	case SpinnerTickMsg:
 		// Fast animation tick - always keep running

@@ -17,6 +17,7 @@ import (
 
 // Model holds the state for the streaming logs view.
 type Model struct {
+	deps          docker.Deps
 	viewport      viewport.Model
 	Visible       bool
 	mode          string // "normal" or "search"
@@ -215,7 +216,8 @@ func (m *Model) HasErrors() bool {
 
 // extractUniqueNodes returns a sorted list of nodes where the service has running tasks
 func (m *Model) extractUniqueNodes() []string {
-	snap := docker.GetSnapshot()
+	snapshotOps := m.deps.Snapshot
+	snap := snapshotOps.GetSnapshot()
 	if snap == nil {
 		return []string{"All nodes"}
 	}
