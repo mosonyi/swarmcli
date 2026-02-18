@@ -61,13 +61,23 @@ type HelpItem struct {
 }
 
 func New(width, height int, cmds []CommandInfo) *Model {
-	var b strings.Builder
+	cmdW := 16
+	descW := 20
 	for _, c := range cmds {
-		line := fmt.Sprintf(":%-15s %s", c.Name, c.Description)
-		if len(c.Aliases) > 0 {
-			line += "    aliases: " + strings.Join(c.Aliases, ", ")
+		if w := len(c.Name) + 1; w > cmdW { // +1 for ':'
+			cmdW = w
 		}
-		fmt.Fprintln(&b, line)
+		if w := len(c.Description); w > descW {
+			descW = w
+		}
+	}
+
+	var b strings.Builder
+	if len(cmds) > 0 {
+		fmt.Fprintf(&b, "%-*s %-*s %s\n", cmdW, "COMMAND", descW, "DESCRIPTION", "ALIASES")
+	}
+	for _, c := range cmds {
+		fmt.Fprintf(&b, "%-*s %-*s %s\n", cmdW, ":"+c.Name, descW, c.Description, strings.Join(c.Aliases, ", "))
 	}
 
 	vp := viewport.New(width, height)
