@@ -47,6 +47,7 @@ type Model struct {
 type CommandInfo struct {
 	Name        string
 	Description string
+	Aliases     []string
 }
 
 type HelpCategory struct {
@@ -62,7 +63,11 @@ type HelpItem struct {
 func New(width, height int, cmds []CommandInfo) *Model {
 	var b strings.Builder
 	for _, c := range cmds {
-		fmt.Fprintf(&b, ":%-15s %s\n", c.Name, c.Description)
+		line := fmt.Sprintf(":%-15s %s", c.Name, c.Description)
+		if len(c.Aliases) > 0 {
+			line += "    aliases: " + strings.Join(c.Aliases, ", ")
+		}
+		fmt.Fprintln(&b, line)
 	}
 
 	vp := viewport.New(width, height)

@@ -21,3 +21,6 @@ func (a aliasCommand) Description() string { return a.target.Description() }
 func (a aliasCommand) Execute(ctx any, args args.Args) tea.Cmd {
 	return a.target.Execute(ctx, args)
 }
+
+// AliasOf implements registry.Aliaser.
+func (a aliasCommand) AliasOf() string { return a.target.Name() }

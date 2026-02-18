@@ -1,6 +1,7 @@
 package helpview
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -73,6 +74,26 @@ func TestView_CommandList(t *testing.T) {
 	out := m.View()
 	require.Contains(t, out, "stacks")
 	require.Contains(t, out, "List stacks")
+}
+
+func TestNew_AliasesRenderedInline(t *testing.T) {
+	cmds := []CommandInfo{
+		{Name: "contexts", Description: "List and switch Docker contexts", Aliases: []string{"ctx", "context"}},
+		{Name: "help", Description: "Show help"},
+	}
+	m := New(120, 24, cmds)
+	content := m.content
+	require.Contains(t, content, "aliases: ctx, context")
+	// Command without aliases should not contain "aliases:"
+	require.NotContains(t, content, "help"+strings.Repeat(" ", 10)+"Show help    aliases:")
+}
+
+func TestNew_NoAliases_NoSuffix(t *testing.T) {
+	cmds := []CommandInfo{
+		{Name: "stacks", Description: "List stacks"},
+	}
+	m := New(80, 24, cmds)
+	require.NotContains(t, m.content, "aliases:")
 }
 
 func TestView_Categorized(t *testing.T) {
