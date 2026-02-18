@@ -1399,7 +1399,7 @@ func GetStacksHelpContent() []helpview.HelpCategory {
 			Title: "General",
 			Items: []helpview.HelpItem{
 				{Keys: "<i/enter>", Description: "Show services for Stack"},
-				{Keys: "<d>", Description: "Describe stack"},
+				{Keys: "<d>", Description: "Inspect stack"},
 				{Keys: "<e>", Description: "Edit stack (opens editor)"},
 				{Keys: "<p>", Description: "Show tasks for Stack"},
 				{Keys: "<n>", Description: "Create new stack"},
