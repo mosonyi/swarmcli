@@ -113,6 +113,18 @@ The OSS repo must not contain pro implementation details — no pro-specific log
 - Tests use `gotestsum` as test runner (with `--format=testname` locally, `--format=github-actions` in CI)
 - Docker context name for tests: `swarmcli`
 
+## Pull Requests
+
+Every PR to `main` must pass the `check_labels.yml` workflow which requires one label from each of three groups:
+
+| Group | Labels | Meaning |
+|---|---|---|
+| A — Change type | `A0-ui`, `A1-feature`, `A2-bugfix`, `A3-technical` | What kind of change |
+| B — Urgency | `B0-low-priority`, `B2-high-priority` | How urgent |
+| C — Breaking | `C0-breaks-nothing`, `C1-breaking-change` | Backward compatibility |
+
+Add all three labels when creating a PR: `gh pr edit <number> --add-label "A0-ui,B0-low-priority,C0-breaks-nothing"` (or use the REST API if `gh pr edit` fails due to classic projects deprecation).
+
 ## CI Workflows (.github/workflows/)
 
 - `ci.yml`: go fmt, golangci-lint, go build, Docker image build
