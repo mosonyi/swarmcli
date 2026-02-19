@@ -101,6 +101,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case tea.WindowSizeMsg:
 		m.List.Viewport.Width = msg.Width
 		m.List.Viewport.Height = msg.Height
+		m.List.SetOuterSize(msg.Width, msg.Height)
 		m.ready = true
 		// On first resize, reset YOffset to 0; on subsequent resizes, only reset if cursor is at top
 		if m.firstResize {
@@ -801,38 +802,13 @@ func (m *Model) computeColWidths(width int) []int {
 	return colWidths
 }
 
-// buildHeaderLine creates a header string using the same formatting rules as
-// the row renderer so labels line up exactly with data columns.
-func (m *Model) buildHeaderLine(labels []string, colWidths []int) string {
-	hdrs := make([]string, len(labels))
-	copy(hdrs, labels)
-	if len(hdrs) > 0 && !strings.HasPrefix(hdrs[0], " ") {
-		hdrs[0] = " " + hdrs[0]
-	}
-	line := make([]byte, 0, 256)
-	pos := 0
-	for i, h := range hdrs {
-		for len(line) < pos {
-			line = append(line, ' ')
-		}
-		s := fmt.Sprintf("%-*s", colWidths[i], h)
-		line = append(line, []byte(s)...)
-		pos += colWidths[i]
-	}
-	return string(line)
-}
-
 func (m *Model) setRenderItem() {
 	// Use shared computation for column widths to keep header and rows in sync
 	m.List.RenderItem = func(e docker.ServiceEntry, selected bool, _ int) string {
-		width := m.List.Viewport.Width
-		if width <= 0 {
-			width = 80
+		colWidths := m.List.ColWidths()
+		if len(colWidths) < 10 {
+			return e.ServiceName
 		}
-
-		colWidths := m.computeColWidths(width)
-		// sepLen := 2
-		// sep := strings.Repeat(" ", sepLen)
 
 		// Cache for header alignment
 		m.colServiceWidth = colWidths[0]

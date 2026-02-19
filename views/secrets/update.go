@@ -90,6 +90,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case tea.WindowSizeMsg:
 		m.secretsList.Viewport.Width = msg.Width
 		m.secretsList.Viewport.Height = msg.Height
+		m.secretsList.SetOuterSize(msg.Width, msg.Height)
+		if m.usedByViewActive {
+			m.usedByList.Viewport.Width = msg.Width
+			m.usedByList.Viewport.Height = msg.Height
+			m.usedByList.SetOuterSize(msg.Width, msg.Height)
+		}
 		if m.firstResize {
 			m.secretsList.Viewport.YOffset = 0
 			m.firstResize = false
@@ -223,26 +229,17 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				return strings.Contains(strings.ToLower(item.StackName), strings.ToLower(query)) ||
 					strings.Contains(strings.ToLower(item.ServiceName), strings.ToLower(query))
 			},
+			Header: &filterlist.HeaderConfig{
+				Columns: []filterlist.ColumnDef{
+					{Label: "STACK NAME"},
+					{Label: "SERVICE NAME"},
+				},
+			},
+			Footer: &filterlist.FooterConfig{ItemLabel: "Stack"},
 			RenderItem: func(item usedByItem, selected bool, _ int) string {
-				width := vp.Width
-				if width <= 0 {
-					width = 80
-				}
-				cols := 2
-				starts := make([]int, cols)
-				for i := 0; i < cols; i++ {
-					starts[i] = (i * width) / cols
-				}
-				colWidths := make([]int, cols)
-				for i := 0; i < cols; i++ {
-					if i == cols-1 {
-						colWidths[i] = width - starts[i]
-					} else {
-						colWidths[i] = starts[i+1] - starts[i]
-					}
-					if colWidths[i] < 1 {
-						colWidths[i] = 1
-					}
+				colWidths := m.usedByList.ColWidths()
+				if len(colWidths) < 2 {
+					return item.StackName
 				}
 
 				stackText := item.StackName
@@ -269,6 +266,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				return line
 			},
 		}
+		m.usedByList.SetOuterSize(w, h)
 
 		// Important: keep Items as a non-nil slice even when empty.
 		// This ensures FilterableList.VisibleContent uses its padded empty-state rendering.
@@ -539,62 +537,10 @@ func (m *Model) setRenderItem() {
 	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
 
 	m.secretsList.RenderItem = func(sec secretItem, selected bool, _ int) string {
-		width := m.secretsList.Viewport.Width
-		if width <= 0 {
-			width = 80
+		colWidths := m.secretsList.ColWidths()
+		if len(colWidths) < 6 {
+			return sec.Name
 		}
-
-		// Columns: NAME | ID | USED | LABELS | CREATED | UPDATED
-		cols := 6
-		starts := make([]int, cols)
-		for i := 0; i < cols; i++ {
-			starts[i] = (i * width) / cols
-		}
-		colWidths := make([]int, cols)
-		for i := 0; i < cols; i++ {
-			if i == cols-1 {
-				colWidths[i] = width - starts[i]
-			} else {
-				colWidths[i] = starts[i+1] - starts[i]
-			}
-			if colWidths[i] < 1 {
-				colWidths[i] = 1
-			}
-		}
-
-		// Ensure CREATED and UPDATED columns have at least 19 chars
-		minTime := 19
-		cur := colWidths[3] + colWidths[4]
-		if cur < 2*minTime {
-			deficit := 2*minTime - cur
-			for i := 2; i >= 0 && deficit > 0; i-- {
-				take := deficit
-				if colWidths[i] > take+5 {
-					colWidths[i] -= take
-					deficit = 0
-				} else {
-					take = colWidths[i] - 5
-					if take > 0 {
-						colWidths[i] -= take
-						deficit -= take
-					}
-				}
-			}
-			if colWidths[3] < minTime {
-				colWidths[3] = minTime
-			}
-			if colWidths[4] < minTime {
-				colWidths[4] = minTime
-			}
-		}
-
-		if colWidths[2] < 1 {
-			colWidths[2] = 1
-		}
-
-		// Update cached widths for header alignment
-		m.colNameWidth = colWidths[0]
-		m.colIDWidth = colWidths[1]
 
 		// Prepare cell texts
 		nameText := truncateWithEllipsis(sec.Name, colWidths[0]-1)

@@ -4,6 +4,7 @@
 package stacksview
 
 import (
+	"fmt"
 	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
@@ -98,13 +99,54 @@ func New(width, height int) *Model {
 	vp.SetContent("")
 	vp.YOffset = 0
 
+	m := &Model{
+		Visible:           false,
+		firstResize:       true,
+		width:             width,
+		height:            height,
+		sortField:         SortByName,
+		sortAscending:     true,
+		expandedStacks:    make(map[string]bool),
+		stackTasks:        make(map[string][]docker.TaskEntry),
+		stackHasError:     make(map[string]bool),
+		stackErrorText:    make(map[string]string),
+		selectedTaskIndex: -1,
+		createDialogStep:  "source",
+		createStackSource: "file",
+	}
+
 	list := filterlist.FilterableList[docker.StackEntry]{
 		Viewport: vp,
 		// Render item will be initialized later after the column with is set
 		Match: func(s docker.StackEntry, query string) bool {
 			return strings.Contains(strings.ToLower(s.Name), strings.ToLower(query))
 		},
+		Header: &filterlist.HeaderConfig{
+			Columns: []filterlist.ColumnDef{
+				{Label: "STACK", Pct: 25},
+				{Label: "SERVICES", Pct: 10},
+				{Label: "TASKS", Pct: 10},
+				{Label: "ERROR", Pct: 55},
+			},
+			SortIndicator: func() (int, bool) {
+				return int(m.sortField), m.sortAscending
+			},
+			DynamicLabel: func(idx int, base string) string {
+				if idx == 3 {
+					count := 0
+					for _, v := range m.stackHasError {
+						if v {
+							count++
+						}
+					}
+					return fmt.Sprintf("ERROR: %d", count)
+				}
+				return ""
+			},
+		},
+		Footer: &filterlist.FooterConfig{ItemLabel: "Stack"},
 	}
+	list.SetOuterSize(width, height)
 
 	// Initialize name input for create dialog
 	nameInput := textinput.New()
@@ -120,25 +162,11 @@ func New(width, height int) *Model {
 	fileInput.CharLimit = 512
 	fileInput.Width = 50
 
-	return &Model{
-		List:              list,
-		Visible:           false,
-		firstResize:       true,
-		width:             width,
-		height:            height,
-		sortField:         SortByName,
-		sortAscending:     true,
-		expandedStacks:    make(map[string]bool),
-		stackTasks:        make(map[string][]docker.TaskEntry),
-		stackHasError:     make(map[string]bool),
-		stackErrorText:    make(map[string]string),
-		selectedTaskIndex: -1,
-		confirmDialog:     confirmdialog.New(width, height),
-		createNameInput:   nameInput,
-		createFileInput:   fileInput,
-		createDialogStep:  "source",
-		createStackSource: "file",
-	}
+	m.List = list
+	m.confirmDialog = confirmdialog.New(width, height)
+	m.createNameInput = nameInput
+	m.createFileInput = fileInput
+	return m
 }
 
 func (m *Model) Init() tea.Cmd {

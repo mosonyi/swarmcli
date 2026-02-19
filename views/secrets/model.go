@@ -74,10 +74,6 @@ type Model struct {
 	usedByList       filterlist.FilterableList[usedByItem]
 	usedBySecretName string
 
-	// Cached column widths for header alignment
-	colNameWidth int
-	colIDWidth   int
-
 	// Spinner for slow-used-status indicator
 	spinner int
 
@@ -99,6 +95,17 @@ func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
 
+	m := &Model{
+		width:              width,
+		height:             height,
+		firstResize:        true,
+		state:              stateLoading,
+		visible:            true,
+		sortField:          SortByName,
+		sortAscending:      true,
+		createEncodeSecret: true,
+	}
+
 	list := filterlist.FilterableList[secretItem]{
 		Viewport: vp,
 		Match: func(s secretItem, query string) bool {
@@ -106,7 +113,22 @@ func New(width, height int) *Model {
 			return strings.Contains(strings.ToLower(s.Name), q) ||
 				strings.Contains(strings.ToLower(s.ID), q)
 		},
+		Header: &filterlist.HeaderConfig{
+			Columns: []filterlist.ColumnDef{
+				{Label: "NAME"},
+				{Label: "ID"},
+				{Label: "SECRET USED"},
+				{Label: "CREATED AT", MinWidth: 19},
+				{Label: "UPDATED AT", MinWidth: 19},
+				{Label: "LABELS"},
+			},
+			SortIndicator: func() (int, bool) {
+				return int(m.sortField), m.sortAscending
+			},
+		},
+		Footer: &filterlist.FooterConfig{ItemLabel: "Secret"},
 	}
+	list.SetOuterSize(width, height)
 
 	// Initialize name input for create dialog
 	nameInput := textinput.New()
@@ -129,22 +151,14 @@ func New(width, height int) *Model {
 	labelsInput.CharLimit = 512
 	labelsInput.Width = 50
 
-	return &Model{
-		secretsList:        list,
-		width:              width,
-		height:             height,
-		firstResize:        true,
-		state:              stateLoading,
-		visible:            true,
-		confirmDialog:      confirmdialog.New(0, 0),
-		loadingView:        loading.New(width, height, false, "Loading Docker secrets..."),
-		createNameInput:    nameInput,
-		createFileInput:    fileInput,
-		createLabelsInput:  labelsInput,
-		createEncodeSecret: true, // Default to encoding
-		sortField:          SortByName,
-		sortAscending:      true,
-	}
+	m.secretsList = list
+	m.confirmDialog = confirmdialog.New(0, 0)
+	m.loadingView = loading.New(width, height, false, "Loading Docker secrets...")
+	m.createNameInput = nameInput
+	m.createFileInput = fileInput
+	m.createLabelsInput = labelsInput
+
+	return m
 }
 
 // HasActiveDialog returns true if any dialog is currently active

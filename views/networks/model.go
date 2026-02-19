@@ -103,21 +103,6 @@ func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
 
-	list := filterlist.FilterableList[networkItem]{
-		Viewport: vp,
-		Match: func(n networkItem, query string) bool {
-			q := strings.ToLower(query)
-			return strings.Contains(strings.ToLower(n.Name), q) ||
-				strings.Contains(strings.ToLower(n.ID), q) ||
-				strings.Contains(strings.ToLower(n.Driver), q) ||
-				strings.Contains(strings.ToLower(n.Scope), q)
-		},
-	}
-	// Important: make Items a non-nil slice so the FilterableList renderer pads
-	// content properly while loading (avoids truncated overlays / missing rows).
-	list.Items = []networkItem{}
-	list.Filtered = []networkItem{}
-
 	inspectVp := viewport.New(width, height)
 	inspectVp.SetContent("")
 
@@ -151,8 +136,7 @@ func New(width, height int) *Model {
 	ipv6Gateway.CharLimit = 64
 	ipv6Gateway.Width = 50
 
-	return &Model{
-		networksList:      list,
+	m := &Model{
 		width:             width,
 		height:            height,
 		firstResize:       true,
@@ -170,6 +154,50 @@ func New(width, height int) *Model {
 		createIPv6Subnet:  ipv6Subnet,
 		createIPv6Gateway: ipv6Gateway,
 	}
+
+	list := filterlist.FilterableList[networkItem]{
+		Viewport: vp,
+		Match: func(n networkItem, query string) bool {
+			q := strings.ToLower(query)
+			return strings.Contains(strings.ToLower(n.Name), q) ||
+				strings.Contains(strings.ToLower(n.ID), q) ||
+				strings.Contains(strings.ToLower(n.Driver), q) ||
+				strings.Contains(strings.ToLower(n.Scope), q)
+		},
+		Header: &filterlist.HeaderConfig{
+			Columns: []filterlist.ColumnDef{
+				{Label: "NAME"}, {Label: "DRIVER"}, {Label: "SCOPE"}, {Label: "USED"}, {Label: "ID"},
+			},
+			ColWidthsFunc: func(w int) []int {
+				nameW, driverW, scopeW, usedW, idW := m.networkColWidths(w)
+				return []int{nameW, driverW, scopeW, usedW, idW}
+			},
+			SortIndicator: func() (int, bool) {
+				colMap := map[SortField]int{
+					SortByName: 0, SortByDriver: 1, SortByScope: 2, SortByUsed: 3, SortByID: 4,
+				}
+				col, ok := colMap[m.sortField]
+				if !ok {
+					return -1, true
+				}
+				return col, m.sortAscending
+			},
+		},
+		Footer: &filterlist.FooterConfig{
+			ItemLabel: "Network",
+			Override: func(cursor, filteredCount int, mode filterlist.ModeType, query string) string {
+				return m.renderNetworksFooter()
+			},
+		},
+	}
+	// Important: make Items a non-nil slice so the FilterableList renderer pads
+	// content properly while loading (avoids truncated overlays / missing rows).
+	list.Items = []networkItem{}
+	list.Filtered = []networkItem{}
+	list.SetOuterSize(width, height)
+
+	m.networksList = list
+	return m
 }
 
 func (m *Model) Name() string { return ViewName }
@@ -313,10 +341,12 @@ func (m *Model) SetSize(width, height int) {
 	// do not subtract header/footer/help again.
 	m.networksList.Viewport.Width = width
 	m.networksList.Viewport.Height = height
+	m.networksList.SetOuterSize(width, height)
 
 	if m.usedByViewActive {
 		m.usedByList.Viewport.Width = width
 		m.usedByList.Viewport.Height = height
+		m.usedByList.SetOuterSize(width, height)
 	}
 }
 

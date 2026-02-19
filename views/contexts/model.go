@@ -126,14 +126,7 @@ func New() *Model {
 	vp := viewport.New(80, 20)
 	vp.SetContent("")
 
-	list := filterlist.FilterableList[docker.ContextInfo]{
-		Viewport: vp,
-		Match: func(item docker.ContextInfo, query string) bool {
-			return strings.Contains(strings.ToLower(item.Name), strings.ToLower(query))
-		},
-	}
-
-	return &Model{
+	m := &Model{
 		Visible:          false,
 		contexts:         []docker.ContextInfo{},
 		cursor:           0,
@@ -148,10 +141,35 @@ func New() *Model {
 		createCertInput:  createCertInput,
 		createKeyInput:   createKeyInput,
 		editDescInput:    editDescInput,
-		List:             list,
 		sortField:        SortByName,
 		sortAscending:    true,
 	}
+
+	list := filterlist.FilterableList[docker.ContextInfo]{
+		Viewport: vp,
+		Match: func(item docker.ContextInfo, query string) bool {
+			return strings.Contains(strings.ToLower(item.Name), strings.ToLower(query))
+		},
+		Header: &filterlist.HeaderConfig{
+			Columns: []filterlist.ColumnDef{
+				{Label: " NAME"}, {Label: "TLS"}, {Label: "DESCRIPTION"}, {Label: "ENDPOINT"}, {Label: "ERROR"},
+			},
+			SortIndicator: func() (int, bool) {
+				colMap := map[SortField]int{
+					SortByName: 0, SortByStatus: 1, SortByDescription: 2, SortByEndpoint: 3,
+				}
+				col, ok := colMap[m.sortField]
+				if !ok {
+					return -1, true
+				}
+				return col, m.sortAscending
+			},
+		},
+	}
+	list.SetOuterSize(80, 20)
+
+	m.List = list
+	return m
 }
 
 func (m *Model) SetSize(width, height int) {
