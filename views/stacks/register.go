@@ -4,6 +4,7 @@
 package stacksview
 
 import (
+	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	"swarmcli/views/view"
 
@@ -22,5 +23,14 @@ func factory(deps docker.Deps, w, h int, payload any) (view.View, tea.Cmd) {
 	model := New(w, h)
 	model.deps = deps
 	model.Visible = true
+
+	// Pre-populate from cached snapshot so keys work immediately.
+	if snap := deps.Snapshot.GetSnapshot(); snap != nil {
+		stacks := snap.ToStackEntries()
+		model.lastSnapshot, _ = hash.Compute(stacks)
+		model.nodeID = nodeID
+		model.setStacks(stacks)
+	}
+
 	return model, tea.Batch(model.Init(), model.LoadStacksCmd(nodeID))
 }
