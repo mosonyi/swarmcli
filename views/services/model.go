@@ -93,15 +93,7 @@ func (m *Model) SetPendingSelectServiceName(serviceName string) {
 func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 
-	list := filterlist.FilterableList[docker.ServiceEntry]{
-		Viewport: vp,
-		Match: func(s docker.ServiceEntry, query string) bool {
-			return strings.Contains(strings.ToLower(s.ServiceName), strings.ToLower(query))
-		},
-	}
-
-	return &Model{
-		List:              list,
+	m := &Model{
 		Visible:           false,
 		firstResize:       true,
 		width:             width,
@@ -116,6 +108,37 @@ func New(width, height int) *Model {
 		sortField:         SortByName,
 		sortAscending:     true,
 	}
+
+	list := filterlist.FilterableList[docker.ServiceEntry]{
+		Viewport: vp,
+		Match: func(s docker.ServiceEntry, query string) bool {
+			return strings.Contains(strings.ToLower(s.ServiceName), strings.ToLower(query))
+		},
+		Header: &filterlist.HeaderConfig{
+			Columns: []filterlist.ColumnDef{
+				{Label: "SERVICE"}, {Label: "STACK"}, {Label: "REPLICAS"},
+				{Label: "STATUS"}, {Label: "MODE"}, {Label: "IMAGE"},
+				{Label: "PORTS"}, {Label: "CREATED"}, {Label: "UPDATED"}, {Label: "ERROR"},
+			},
+			ColWidthsFunc: m.computeColWidths,
+			SortIndicator: func() (int, bool) {
+				colMap := map[SortField]int{
+					SortByName: 0, SortByStatus: 3, SortByImage: 5,
+					SortByPorts: 6, SortByCreated: 7, SortByUpdated: 8, SortByError: 9,
+				}
+				col, ok := colMap[m.sortField]
+				if !ok {
+					return -1, true
+				}
+				return col, m.sortAscending
+			},
+		},
+		Footer: &filterlist.FooterConfig{ItemLabel: "Node"},
+	}
+	list.SetOuterSize(width, height)
+
+	m.List = list
+	return m
 }
 
 func (m *Model) Init() tea.Cmd {

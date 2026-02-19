@@ -31,7 +31,58 @@ type FilterableList[T any] struct {
 	// where the cursor position doesn't reflect the actual line being viewed.
 	SkipOffsetAdjustment bool
 
-	colWidth int
+	// Header configures column headers with sort indicators.
+	// Nil means no header is rendered by RenderHeader/RenderFramedView.
+	Header *HeaderConfig
+
+	// Footer configures the status bar and filter line.
+	// Nil means no footer is rendered by RenderFooter/RenderFramedView.
+	Footer *FooterConfig
+
+	outerWidth  int
+	outerHeight int
+	colWidth    int
+}
+
+// SetOuterSize stores fallback dimensions from tea.WindowSizeMsg.
+func (f *FilterableList[T]) SetOuterSize(width, height int) {
+	f.outerWidth = width
+	f.outerHeight = height
+}
+
+// effectiveWidth returns the best available width.
+func (f *FilterableList[T]) effectiveWidth() int {
+	if f.Viewport.Width > 0 {
+		return f.Viewport.Width
+	}
+	if f.outerWidth > 0 {
+		return f.outerWidth
+	}
+	return 80
+}
+
+// effectiveHeight returns the best available height.
+func (f *FilterableList[T]) effectiveHeight() int {
+	if f.Viewport.Height > 0 {
+		return f.Viewport.Height
+	}
+	if f.outerHeight > 0 {
+		return f.outerHeight
+	}
+	return 20
+}
+
+// ColWidths returns column widths for the current header configuration.
+// Returns nil when Header is nil.
+func (f *FilterableList[T]) ColWidths() []int {
+	if f.Header == nil {
+		return nil
+	}
+	w := f.effectiveWidth()
+	if f.Header.ColWidthsFunc != nil {
+		return f.Header.ColWidthsFunc(w)
+	}
+	return computeColWidths(f.Header.Columns, w)
 }
 
 type ModeType int

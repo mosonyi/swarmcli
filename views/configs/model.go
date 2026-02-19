@@ -74,10 +74,6 @@ type Model struct {
 	usedByList       filterlist.FilterableList[usedByItem]
 	usedByConfigName string
 
-	// Cached column widths for header alignment
-	colNameWidth int
-	colIDWidth   int
-
 	// Spinner for slow-used-status indicator
 	spinner int
 
@@ -97,6 +93,16 @@ func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
 
+	m := &Model{
+		width:         width,
+		height:        height,
+		firstResize:   true,
+		state:         stateLoading,
+		visible:       true,
+		sortField:     SortByName,
+		sortAscending: true,
+	}
+
 	list := filterlist.FilterableList[configItem]{
 		Viewport: vp,
 		Match: func(c configItem, query string) bool {
@@ -104,7 +110,22 @@ func New(width, height int) *Model {
 			return strings.Contains(strings.ToLower(c.Name), q) ||
 				strings.Contains(strings.ToLower(c.ID), q)
 		},
+		Header: &filterlist.HeaderConfig{
+			Columns: []filterlist.ColumnDef{
+				{Label: "NAME"},
+				{Label: "ID"},
+				{Label: "CONFIG USED"},
+				{Label: "CREATED AT", MinWidth: 19},
+				{Label: "UPDATED AT", MinWidth: 19},
+				{Label: "LABELS"},
+			},
+			SortIndicator: func() (int, bool) {
+				return int(m.sortField), m.sortAscending
+			},
+		},
+		Footer: &filterlist.FooterConfig{ItemLabel: "Config"},
 	}
+	list.SetOuterSize(width, height)
 
 	// Initialize name input for create dialog
 	nameInput := textinput.New()
@@ -127,21 +148,14 @@ func New(width, height int) *Model {
 	labelsInput.CharLimit = 512
 	labelsInput.Width = 50
 
-	return &Model{
-		configsList:       list,
-		width:             width,
-		height:            height,
-		firstResize:       true,
-		state:             stateLoading,
-		visible:           true,
-		confirmDialog:     confirmdialog.New(0, 0),
-		loadingView:       loading.New(width, height, false, "Loading Docker configs..."),
-		createNameInput:   nameInput,
-		createFileInput:   fileInput,
-		createLabelsInput: labelsInput,
-		sortField:         SortByName,
-		sortAscending:     true,
-	}
+	m.configsList = list
+	m.confirmDialog = confirmdialog.New(0, 0)
+	m.loadingView = loading.New(width, height, false, "Loading Docker configs...")
+	m.createNameInput = nameInput
+	m.createFileInput = fileInput
+	m.createLabelsInput = labelsInput
+
+	return m
 }
 
 func (m *Model) Name() string { return ViewName }

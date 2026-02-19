@@ -221,6 +221,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case tea.WindowSizeMsg:
 		m.List.Viewport.Width = msg.Width
 		m.List.Viewport.Height = msg.Height
+		m.List.SetOuterSize(msg.Width, msg.Height)
 		m.ready = true
 		// On first resize, reset YOffset to 0; on subsequent resizes, only reset if cursor is at top
 		if m.firstResize {
@@ -529,35 +530,13 @@ func (m *Model) SetContent(msg Msg) {
 }
 
 func (m *Model) setRenderItem() {
-	// Still need to call this for filterable list internals
-	m.List.ComputeAndSetColWidth(func(n docker.NodeEntry) string {
-		return n.ID
-	}, 15)
-
 	// Use bright white for content and reserve leading space in first column
 	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
 
-	m.List.RenderItem = func(n docker.NodeEntry, selected bool, colWidth int) string {
-		// Compute proportional column widths for the current viewport width
-		width := m.List.Viewport.Width
-		if width <= 0 {
-			width = 80
-		}
-		cols := 10
-		starts := make([]int, cols)
-		for i := 0; i < cols; i++ {
-			starts[i] = (i * width) / cols
-		}
-		colWidths := make([]int, cols)
-		for i := 0; i < cols; i++ {
-			if i == cols-1 {
-				colWidths[i] = width - starts[i]
-			} else {
-				colWidths[i] = starts[i+1] - starts[i]
-			}
-			if colWidths[i] < 1 {
-				colWidths[i] = 1
-			}
+	m.List.RenderItem = func(n docker.NodeEntry, selected bool, _ int) string {
+		colWidths := m.List.ColWidths()
+		if len(colWidths) < 10 {
+			return n.Hostname
 		}
 		manager := "no"
 		if n.Manager {

@@ -9,8 +9,6 @@ import (
 	"strings"
 	"swarmcli/docker"
 	"swarmcli/ui"
-	filterlist "swarmcli/ui/components/filterable/list"
-	"swarmcli/ui/components/sorting"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -29,119 +27,8 @@ func (m *Model) View() string {
 	}
 
 	title := fmt.Sprintf("Nodes (%d total, %d manager%s)", total, managers, plural(managers))
-	// Add Manager Status column
-	labels := []string{"ID", "HOSTNAME", "ROLE", "STATE", "Availability", "MANAGER", "MGR STATUS", "VERSION", "ADDRESS", "LABELS"}
 
-	// Add sort indicators to labels
-	if m.sortField == SortByHostname {
-		arrow := sorting.SortArrow(sorting.Ascending)
-		if !m.sortAscending {
-			arrow = sorting.SortArrow(sorting.Descending)
-		}
-		labels[1] = fmt.Sprintf("HOSTNAME %s", arrow)
-	}
-	if m.sortField == SortByRole {
-		arrow := sorting.SortArrow(sorting.Ascending)
-		if !m.sortAscending {
-			arrow = sorting.SortArrow(sorting.Descending)
-		}
-		labels[2] = fmt.Sprintf("ROLE %s", arrow)
-	}
-	if m.sortField == SortByState {
-		arrow := sorting.SortArrow(sorting.Ascending)
-		if !m.sortAscending {
-			arrow = sorting.SortArrow(sorting.Descending)
-		}
-		labels[3] = fmt.Sprintf("STATE %s", arrow)
-	}
-	if m.sortField == SortByAvailability {
-		arrow := sorting.SortArrow(sorting.Ascending)
-		if !m.sortAscending {
-			arrow = sorting.SortArrow(sorting.Descending)
-		}
-		labels[4] = fmt.Sprintf("Availability %s", arrow)
-	}
-	if m.sortField == SortByVersion {
-		arrow := sorting.SortArrow(sorting.Ascending)
-		if !m.sortAscending {
-			arrow = sorting.SortArrow(sorting.Descending)
-		}
-		labels[6] = fmt.Sprintf("VERSION %s", arrow)
-	}
-	if m.sortField == SortByAddress {
-		arrow := sorting.SortArrow(sorting.Ascending)
-		if !m.sortAscending {
-			arrow = sorting.SortArrow(sorting.Descending)
-		}
-		labels[7] = fmt.Sprintf("ADDRESS %s", arrow)
-	}
-	if m.sortField == SortByLabels {
-		arrow := sorting.SortArrow(sorting.Ascending)
-		if !m.sortAscending {
-			arrow = sorting.SortArrow(sorting.Descending)
-		}
-		labels[8] = fmt.Sprintf("LABELS %s", arrow)
-	}
-	width := m.List.Viewport.Width
-	if width <= 0 {
-		if m.width > 0 {
-			width = m.width
-		} else {
-			width = 80
-		}
-	}
-	cols := 10
-	starts := make([]int, cols)
-	for i := 0; i < cols; i++ {
-		starts[i] = (i * width) / cols
-	}
-	colWidths := make([]int, cols)
-	for i := 0; i < cols; i++ {
-		if i == cols-1 {
-			colWidths[i] = width - starts[i]
-		} else {
-			colWidths[i] = starts[i+1] - starts[i]
-		}
-		if colWidths[i] < 1 {
-			colWidths[i] = 1
-		}
-	}
-	// Prefix first label with a leading space to match item alignment
-	labels[0] = " " + labels[0]
-	header := ui.RenderColumnHeader(labels, colWidths)
-
-	// Footer: cursor + optional search query
-	status := fmt.Sprintf("Node %d of %d", m.List.Cursor+1, len(m.List.Filtered))
-	statusBar := ui.StatusBarStyle.Render(status)
-
-	var footer string
-	if m.List.Mode == filterlist.ModeSearching {
-		footer = ui.StatusBarStyle.Render("Filter (type then Enter): " + m.List.Query)
-	} else if m.List.Query != "" {
-		footer = ui.StatusBarStyle.Render("Filter: " + m.List.Query)
-	}
-
-	if footer != "" {
-		footer = statusBar + "\n" + footer
-	} else {
-		footer = statusBar
-	}
-
-	frame := ui.ComputeFrameDimensions(
-		m.List.Viewport.Width,
-		m.List.Viewport.Height,
-		m.width,
-		m.height,
-		header,
-		footer,
-	)
-	if frame.DesiredContentLines < 1 {
-		frame.DesiredContentLines = 1
-	}
-
-	content := m.List.VisibleContent(frame.DesiredContentLines)
-
-	framed := ui.RenderFramedBox(title, header, content, footer, frame.FrameWidth)
+	framed, frame := m.List.RenderFramedView(title)
 
 	if m.labelInputDialog {
 		framed = ui.OverlayCentered(framed, m.renderLabelInputDialog(), frame.FrameWidth, frame.FrameHeight)

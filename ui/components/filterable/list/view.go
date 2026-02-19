@@ -6,6 +6,8 @@ package filterlist
 import (
 	"fmt"
 	"strings"
+	"swarmcli/ui"
+	"swarmcli/ui/components/sorting"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -52,6 +54,10 @@ func (f *FilterableList[T]) View() string {
 // ensureCursorVisible keeps the cursor in the visible viewport range
 // This now accounts for multi-line items
 func (f *FilterableList[T]) ensureCursorVisible() {
+	if len(f.Filtered) == 0 {
+		return
+	}
+
 	h := f.Viewport.Height
 	if h < 1 {
 		h = 1
@@ -121,4 +127,105 @@ func (f *FilterableList[T]) ComputeAndSetColWidth(renderName func(item T) string
 // GetColWidth returns the computed column width
 func (f *FilterableList[T]) GetColWidth() int {
 	return f.colWidth
+}
+
+// RenderHeader builds a styled column header from the Header config.
+// Returns "" when Header is nil.
+func (f *FilterableList[T]) RenderHeader() string {
+	if f.Header == nil {
+		return ""
+	}
+
+	colWidths := f.ColWidths()
+	cols := f.Header.Columns
+	labels := make([]string, len(cols))
+	for i, c := range cols {
+		labels[i] = c.Label
+	}
+
+	// Apply dynamic label overrides
+	if f.Header.DynamicLabel != nil {
+		for i, base := range labels {
+			if override := f.Header.DynamicLabel(i, base); override != "" {
+				labels[i] = override
+			}
+		}
+	}
+
+	// Apply sort arrow
+	if f.Header.SortIndicator != nil {
+		colIdx, asc := f.Header.SortIndicator()
+		if colIdx >= 0 && colIdx < len(labels) {
+			arrow := sorting.SortArrow(sorting.Ascending)
+			if !asc {
+				arrow = sorting.SortArrow(sorting.Descending)
+			}
+			labels[colIdx] = fmt.Sprintf("%s %s", labels[colIdx], arrow)
+		}
+	}
+
+	// Prefix first label with leading space (existing convention)
+	if len(labels) > 0 {
+		labels[0] = " " + labels[0]
+	}
+
+	return ui.RenderColumnHeader(labels, colWidths)
+}
+
+// RenderFooter builds the status bar and filter line from the Footer config.
+// Returns "" when Footer is nil.
+func (f *FilterableList[T]) RenderFooter() string {
+	if f.Footer == nil {
+		return ""
+	}
+
+	if f.Footer.Override != nil {
+		return f.Footer.Override(f.Cursor, len(f.Filtered), f.Mode, f.Query)
+	}
+
+	label := f.Footer.ItemLabel
+	if label == "" {
+		label = "Item"
+	}
+
+	var status string
+	if len(f.Filtered) == 0 {
+		status = fmt.Sprintf("No %ss found", label)
+	} else {
+		status = fmt.Sprintf("%s %d of %d", label, f.Cursor+1, len(f.Filtered))
+	}
+	statusBar := ui.StatusBarStyle.Render(status)
+
+	var filterLine string
+	if f.Mode == ModeSearching {
+		filterLine = ui.StatusBarStyle.Render("Filter (type then Enter): " + f.Query)
+	} else if f.Query != "" {
+		filterLine = ui.StatusBarStyle.Render("Filter: " + f.Query)
+	}
+
+	if filterLine != "" {
+		return statusBar + "\n" + filterLine
+	}
+	return statusBar
+}
+
+// RenderFramedView builds the complete framed view: title, header, content, footer.
+// Returns the rendered string and a FrameSpec for dialog overlay positioning.
+func (f *FilterableList[T]) RenderFramedView(title string) (string, ui.FrameSpec) {
+	header := f.RenderHeader()
+	footer := f.RenderFooter()
+
+	frame := ui.ComputeFrameDimensions(
+		f.Viewport.Width,
+		f.Viewport.Height,
+		f.outerWidth,
+		f.outerHeight,
+		header,
+		footer,
+	)
+
+	content := f.VisibleContent(frame.DesiredContentLines)
+	framed := ui.RenderFramedBox(title, header, content, footer, frame.FrameWidth)
+
+	return framed, frame
 }

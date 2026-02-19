@@ -11,8 +11,6 @@ import (
 	"swarmcli/docker"
 	"swarmcli/ui"
 	"swarmcli/ui/components/errordialog"
-	filterlist "swarmcli/ui/components/filterable/list"
-	"swarmcli/ui/components/sorting"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -104,35 +102,8 @@ func (m *Model) View() string {
 		return m.renderUsedByView()
 	}
 
-	width := 80
-	if m.secretsList.Viewport.Width > 0 {
-		width = m.secretsList.Viewport.Width
-	} else if m.width > 0 {
-		width = m.width
-	}
-
-	header := m.renderSecretsHeader(m.secretsList.Items, width)
-
-	// column width calculations are handled in setRenderItem
-	nameCol := m.colNameWidth
-	idCol := m.colIDWidth
-	if nameCol <= 0 {
-		nameCol = len("NAME")
-	}
-	if idCol <= 0 {
-		idCol = len("ID")
-	}
-	for _, sec := range m.secretsList.Items {
-		if len(sec.Name) > nameCol {
-			nameCol = len(sec.Name)
-		}
-		if len(sec.ID) > idCol {
-			idCol = len(sec.ID)
-		}
-	}
-
-	var content string
-	footer := m.renderSecretsFooter()
+	header := m.secretsList.RenderHeader()
+	footer := m.secretsList.RenderFooter()
 
 	frame := ui.ComputeFrameDimensions(
 		m.secretsList.Viewport.Width,
@@ -143,7 +114,8 @@ func (m *Model) View() string {
 		footer,
 	)
 
-	content = m.secretsList.VisibleContent(frame.DesiredContentLines)
+	width := frame.FrameWidth
+	content := m.secretsList.VisibleContent(frame.DesiredContentLines)
 
 	// Apply overlays to content BEFORE framing
 	if m.fileBrowserActive {
@@ -167,109 +139,6 @@ func (m *Model) View() string {
 	view := ui.RenderFramedBox(title, header, content, footer, frame.FrameWidth)
 
 	return view
-}
-
-func (m *Model) renderSecretsHeader(items []secretItem, width int) string {
-	if len(items) == 0 {
-		return "NAME         ID                 SECRET USED    CREATED AT             UPDATED AT             LABELS"
-	}
-	if width <= 0 {
-		width = 80
-	}
-	cols := 6
-	starts := make([]int, cols)
-	for i := 0; i < cols; i++ {
-		starts[i] = (i * width) / cols
-	}
-	colWidths := make([]int, cols)
-	for i := 0; i < cols; i++ {
-		if i == cols-1 {
-			colWidths[i] = width - starts[i]
-		} else {
-			colWidths[i] = starts[i+1] - starts[i]
-		}
-		if colWidths[i] < 1 {
-			colWidths[i] = 1
-		}
-	}
-
-	// Ensure CREATED and UPDATED columns have at least 19 chars
-	minTime := 19
-	cur := colWidths[3] + colWidths[4]
-	if cur < 2*minTime {
-		deficit := 2*minTime - cur
-		for i := 2; i >= 0 && deficit > 0; i-- {
-			take := deficit
-			if colWidths[i] > take+5 {
-				colWidths[i] -= take
-				deficit = 0
-			} else {
-				take = colWidths[i] - 5
-				if take > 0 {
-					colWidths[i] -= take
-					deficit -= take
-				}
-			}
-		}
-		if colWidths[3] < minTime {
-			colWidths[3] = minTime
-		}
-		if colWidths[4] < minTime {
-			colWidths[4] = minTime
-		}
-	}
-
-	if colWidths[2] < 1 {
-		colWidths[2] = 1
-	}
-
-	// Prefix first label with a leading space to match item alignment
-	labels := []string{" NAME", "ID", "SECRET USED", "CREATED AT", "UPDATED AT", "LABELS"}
-
-	// Add sort indicators
-	arrow := func() string {
-		if m.sortAscending {
-			return sorting.SortArrow(sorting.Ascending)
-		}
-		return sorting.SortArrow(sorting.Descending)
-	}
-	if m.sortField == SortByName {
-		labels[0] = fmt.Sprintf(" NAME %s", arrow())
-	}
-	if m.sortField == SortByID {
-		labels[1] = fmt.Sprintf("ID %s", arrow())
-	}
-	if m.sortField == SortByUsed {
-		labels[2] = fmt.Sprintf("SECRET USED %s", arrow())
-	}
-	if m.sortField == SortByCreated {
-		labels[3] = fmt.Sprintf("CREATED AT %s", arrow())
-	}
-	if m.sortField == SortByUpdated {
-		labels[4] = fmt.Sprintf("UPDATED AT %s", arrow())
-	}
-	if m.sortField == SortByLabels {
-		labels[5] = fmt.Sprintf("LABELS %s", arrow())
-	}
-
-	return ui.RenderColumnHeader(labels, colWidths)
-}
-
-func (m *Model) renderSecretsFooter() string {
-	status := fmt.Sprintf("Secret %d of %d", m.secretsList.Cursor+1, len(m.secretsList.Filtered))
-	statusBar := ui.StatusBarStyle.Render(status)
-
-	var footer string
-	if m.secretsList.Mode == filterlist.ModeSearching {
-		footer = ui.StatusBarStyle.Render("Filter (type then Enter): " + m.secretsList.Query)
-	} else if m.secretsList.Query != "" {
-		footer = ui.StatusBarStyle.Render("Filter: " + m.secretsList.Query)
-	}
-
-	if footer != "" {
-		return statusBar + "\n" + footer
-	}
-	return statusBar
 }
 
 func (m *Model) renderCreateDialog() string {
@@ -487,74 +356,7 @@ func (m *Model) renderUsedByView() string {
 		return "Error: UsedBy view not properly initialized"
 	}
 
-	header := m.renderUsedByHeader()
-	footer := m.renderUsedByFooter()
-
-	// Compute frame dimensions to get the exact number of content lines needed
-	frame := ui.ComputeFrameDimensions(
-		m.usedByList.Viewport.Width,
-		m.usedByList.Viewport.Height,
-		m.width,
-		m.height,
-		header,
-		footer,
-	)
-
-	// Use VisibleContent to get only the visible portion based on cursor position
-	content := m.usedByList.VisibleContent(frame.DesiredContentLines)
-
 	title := fmt.Sprintf("Secret: %s - Used By Stacks (%d)", m.usedBySecretName, len(m.usedByList.Filtered))
-	return ui.RenderFramedBox(title, header, content, footer, frame.FrameWidth)
-}
-
-func (m *Model) renderUsedByHeader() string {
-	width := m.usedByList.Viewport.Width
-	if width <= 0 {
-		width = m.width
-	}
-	if width <= 0 {
-		width = 80
-	}
-	cols := 2
-	starts := make([]int, cols)
-	for i := 0; i < cols; i++ {
-		starts[i] = (i * width) / cols
-	}
-	colWidths := make([]int, cols)
-	for i := 0; i < cols; i++ {
-		if i == cols-1 {
-			colWidths[i] = width - starts[i]
-		} else {
-			colWidths[i] = starts[i+1] - starts[i]
-		}
-		if colWidths[i] < 1 {
-			colWidths[i] = 1
-		}
-	}
-
-	// Uppercase labels and prefix first label with a leading space to align
-	labels := []string{" STACK NAME", "SERVICE NAME"}
-	return ui.RenderColumnHeader(labels, colWidths)
-}
-
-func (m *Model) renderUsedByFooter() string {
-	totalStacks := len(m.usedByList.Items)
-	if totalStacks == 0 {
-		return ui.StatusBarStyle.Render("No stacks use this secret")
-	}
-
-	status := fmt.Sprintf("Stack %d of %d", m.usedByList.Cursor+1, len(m.usedByList.Filtered))
-	statusBar := ui.StatusBarStyle.Render(status)
-
-	var footer string
-	if m.usedByList.Mode == filterlist.ModeSearching {
-		footer = ui.StatusBarStyle.Render("Filter (type then Enter): " + m.usedByList.Query)
-	} else if m.usedByList.Query != "" {
-		footer = ui.StatusBarStyle.Render("Filter: " + m.usedByList.Query)
-	}
-
-	if footer != "" {
-		return statusBar + "\n" + footer
-	}
-	return statusBar
+	framed, _ := m.usedByList.RenderFramedView(title)
+	return framed
 }

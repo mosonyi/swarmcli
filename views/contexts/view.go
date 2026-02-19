@@ -10,7 +10,6 @@ import (
 	"swarmcli/docker"
 	"swarmcli/ui"
 	"swarmcli/ui/components/errordialog"
-	"swarmcli/ui/components/sorting"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -85,23 +84,11 @@ func (m *Model) View() string {
 
 	// Use FilterableList for the contexts content. Keep its viewport size
 	// in sync with the inner content area (DesiredContentLines), otherwise
-	// the list can effectively scroll past the top and “hide” the first rows.
+	// the list can effectively scroll past the top and "hide" the first rows.
 	m.List.Viewport.Width = width
 	m.List.Viewport.Height = frame.DesiredContentLines
 
-	// Compute column widths as five equal percentage chunks so columns
-	// start at 0%, 20%, 40%, 60% and 80% of the content width.
-	contentWidth := width
-	base := contentWidth / 5
-	colWidths := make([]int, 5)
-	for i := 0; i < 5; i++ {
-		colWidths[i] = base
-	}
-	// Distribute remainder to the leftmost columns
-	rem := contentWidth - base*5
-	for i := 0; i < rem && i < 5; i++ {
-		colWidths[i]++
-	}
+	colWidths := m.List.ColWidths()
 
 	// Now define render using those exact column widths so items align
 	m.List.RenderItem = func(ctx docker.ContextInfo, selected bool, _ int) string {
@@ -191,56 +178,11 @@ func (m *Model) View() string {
 		loadingLine := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("Loading contexts...")
 		content = ui.TrimOrPadContentToLines(loadingLine, frame.DesiredContentLines)
 	} else {
-		// Column header displayed in the frame header slot. Build it here
-		// so it aligns exactly with the row layout.
 		// VisibleContent returns exactly DesiredContentLines and keeps the cursor visible.
 		listContent := m.List.VisibleContent(frame.DesiredContentLines)
 
-		// Header: reserve two leading spaces so the NAME label lines up
-		// with the name text that starts after the current marker and a space.
-		nameLbl := "  NAME"
-		statusLbl := "TLS"
-		descLbl := "DESCRIPTION"
-		endpointLbl := "ENDPOINT"
-
-		// Add sort indicators
-		if m.sortField == SortByName {
-			arrow := sorting.SortArrow(sorting.Ascending)
-			if !m.sortAscending {
-				arrow = sorting.SortArrow(sorting.Descending)
-			}
-			nameLbl = fmt.Sprintf("  NAME %s", arrow)
-		}
-		if m.sortField == SortByStatus {
-			arrow := sorting.SortArrow(sorting.Ascending)
-			if !m.sortAscending {
-				arrow = sorting.SortArrow(sorting.Descending)
-			}
-			statusLbl = fmt.Sprintf("TLS %s", arrow)
-		}
-		if m.sortField == SortByDescription {
-			arrow := sorting.SortArrow(sorting.Ascending)
-			if !m.sortAscending {
-				arrow = sorting.SortArrow(sorting.Descending)
-			}
-			descLbl = fmt.Sprintf("DESCRIPTION %s", arrow)
-		}
-		if m.sortField == SortByEndpoint {
-			arrow := sorting.SortArrow(sorting.Ascending)
-			if !m.sortAscending {
-				arrow = sorting.SortArrow(sorting.Descending)
-			}
-			endpointLbl = fmt.Sprintf("ENDPOINT %s", arrow)
-		}
-
-		headerLine := fmt.Sprintf("%-*s%-*s%-*s%-*s%-*s",
-			colWidths[0], nameLbl,
-			colWidths[1], statusLbl,
-			colWidths[2], descLbl,
-			colWidths[3], endpointLbl,
-			colWidths[4], "ERROR",
-		)
-		headerRendered = ui.FrameHeaderStyle.Render(headerLine)
+		// Column header with sort arrows rendered by FilterableList
+		headerRendered = m.List.RenderHeader()
 
 		content = listContent
 	}

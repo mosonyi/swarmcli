@@ -105,6 +105,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.height = msg.Height
 		m.List.Viewport.Width = msg.Width
 		m.List.Viewport.Height = msg.Height
+		m.List.SetOuterSize(msg.Width, msg.Height)
 		m.ready = true
 
 		// On first resize (initialization), always reset YOffset to 0
@@ -1188,24 +1189,10 @@ func (m *Model) setRenderItem() {
 	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
 
 	m.List.RenderItem = func(s docker.StackEntry, selected bool, _ int) string {
-		// Compute column widths similar to View()
-		width := m.List.Viewport.Width
-		if width <= 0 {
-			width = m.width
+		colWidths := m.List.ColWidths()
+		if len(colWidths) < 4 {
+			return s.Name
 		}
-		if width <= 0 {
-			width = 80
-		}
-		contentWidth := width
-		// STACK: 25%, SERVICES: 10%, TASKS: 10%, ERROR: 55% (remainder)
-		colWidths := make([]int, 4)
-		colWidths[0] = (contentWidth * 25) / 100
-		colWidths[1] = (contentWidth * 10) / 100
-		colWidths[2] = (contentWidth * 10) / 100
-		colWidths[3] = contentWidth - colWidths[0] - colWidths[1] - colWidths[2]
-
-		// Update cached width
-		m.width = width
 
 		// Prepare stack name
 		nameMax := colWidths[0] - 2
