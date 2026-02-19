@@ -1,6 +1,7 @@
 package helpview
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -73,6 +74,46 @@ func TestView_CommandList(t *testing.T) {
 	out := m.View()
 	require.Contains(t, out, "stacks")
 	require.Contains(t, out, "List stacks")
+}
+
+func TestNew_AliasesTableLayout(t *testing.T) {
+	cmds := []CommandInfo{
+		{Name: "contexts", Description: "List and switch Docker contexts", Aliases: []string{"ctx", "context"}},
+		{Name: "help", Description: "Show help"},
+	}
+	m := New(120, 24, cmds)
+	content := m.content
+	// Header line
+	require.Contains(t, content, "COMMAND")
+	require.Contains(t, content, "DESCRIPTION")
+	require.Contains(t, content, "ALIASES")
+	// Aliases column uses bare list, no "aliases:" prefix
+	require.Contains(t, content, "ctx, context")
+	require.NotContains(t, content, "aliases:")
+	// Command without aliases has no trailing text after description
+	for _, line := range strings.Split(content, "\n") {
+		if strings.Contains(line, ":help") {
+			require.NotContains(t, line, "ctx")
+		}
+	}
+}
+
+func TestNew_NoAliases_NoSuffix(t *testing.T) {
+	cmds := []CommandInfo{
+		{Name: "stacks", Description: "List stacks"},
+	}
+	m := New(80, 24, cmds)
+	// Header still present
+	require.Contains(t, m.content, "ALIASES")
+	// No "aliases:" prefix anywhere
+	require.NotContains(t, m.content, "aliases:")
+	// Data row has no alias text
+	for _, line := range strings.Split(m.content, "\n") {
+		if strings.Contains(line, ":stacks") {
+			trimmed := strings.TrimRight(line, " \t")
+			require.True(t, strings.HasSuffix(trimmed, "List stacks"), "expected row to end with description, got: %q", trimmed)
+		}
+	}
 }
 
 func TestView_Categorized(t *testing.T) {
