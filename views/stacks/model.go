@@ -264,7 +264,7 @@ func (m *Model) checkStacksCmd(lastHash uint64, nodeID string) tea.Cmd {
 	}
 }
 
-func (m *Model) OnEnter() tea.Cmd { return nil }
+func (m *Model) OnEnter() tea.Cmd { return m.LoadStacksCmd(m.nodeID) }
 func (m *Model) OnExit() tea.Cmd  { return nil }
 
 func (m *Model) HasActiveFilter() bool {

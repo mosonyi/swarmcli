@@ -267,10 +267,10 @@ func TestShortHelpItems(t *testing.T) {
 	require.True(t, keys["?"])
 }
 
-func TestOnEnter_ReturnsNil(t *testing.T) {
+func TestOnEnter_ReturnsLoadCmd(t *testing.T) {
 	m := testModel()
 	cmd := m.OnEnter()
-	require.Nil(t, cmd)
+	require.NotNil(t, cmd)
 }
 
 func TestOnExit_ReturnsNil(t *testing.T) {
