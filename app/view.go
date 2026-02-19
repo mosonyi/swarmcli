@@ -13,16 +13,21 @@ import (
 )
 
 func (m *Model) View() string {
-	// Check if current view has fullscreen mode enabled
-	if logsView, ok := m.currentView.(interface{ GetFullscreen() bool }); ok && logsView.GetFullscreen() {
-		// Fullscreen mode: show only the current view (no helpbar, no stackbar)
-		return m.currentView.View()
+	// Fullscreen mode: show only the current view (no helpbar, no stackbar)
+	if m.fullscreen {
+		title := m.currentView.FrameTitle()
+		header := m.currentView.FrameHeader()
+		content := m.currentView.FrameContent()
+		return ui.RenderViewFrame(title, header, content, "", m.terminalWidth, m.terminalHeight, true)
 	}
 
 	systemInfo := m.systemInfo.View()
 
 	// Build global help - exclude "?" when already in help view
-	globalHelp := []helpbar.HelpEntry{{Key: "?", Desc: "Help"}}
+	globalHelp := []helpbar.HelpEntry{
+		{Key: "f", Desc: "Fullscreen"},
+		{Key: "?", Desc: "Help"},
+	}
 	if m.currentView.Name() == view.NameHelp {
 		globalHelp = []helpbar.HelpEntry{}
 	}
@@ -35,23 +40,30 @@ func (m *Model) View() string {
 		WithViewHelp(m.currentView.ShortHelpItems()).
 		View(systemInfo, hasError)
 
+	// Build the framed view from components
+	title := m.currentView.FrameTitle()
+	header := m.currentView.FrameHeader()
+	content := m.currentView.FrameContent()
+	content = ui.LeftPadContent(content)
+	footer := m.currentView.FrameFooter()
+	// Subtract help bar (systeminfoview.Height) and stack bar (1 line) from the
+	// viewport height so the frame fits between chrome elements.
+	frameHeight := m.viewport.Height - systeminfoview.Height - 1
+	if frameHeight < 1 {
+		frameHeight = 1
+	}
+	framedView := ui.RenderViewFrame(title, header, content, footer, m.viewport.Width, frameHeight, false)
+
 	if m.commandInput.Visible() {
 		// Render a framed 3-line command box between the header and main view.
-		// Use the viewport width (which is usable width) and add 4 to match
-		// the frame sizing used by views that render full-width frames.
 		frameWidth := m.viewport.Width + 4
-		// Render the normal framed command box then post-process the top
-		// border to replace corner glyphs so it visually integrates with
-		// the header above.
 		cmdFrame := ui.RenderFramedBoxHeight("", "", m.commandInput.View(), "", frameWidth, 3)
-
-		// Use the framed command box as rendered (keep corner glyphs)
 
 		return lipgloss.JoinVertical(
 			lipgloss.Left,
 			help,
 			cmdFrame,
-			m.currentView.View(),
+			framedView,
 			m.renderStackBar(),
 		)
 	}
@@ -59,7 +71,7 @@ func (m *Model) View() string {
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		help,
-		m.currentView.View(),
+		framedView,
 		m.renderStackBar(),
 	)
 }

@@ -151,11 +151,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		return nil
 
-	case FullscreenToggledMsg:
-		// Fullscreen mode is handled in the View() method
-		// Just trigger a re-render
-		return nil
-
 	case NodeFilterToggledMsg:
 		// When node filter changes, we need to rebuild the content
 		// because existing lines need to be filtered/unfiltered

@@ -8,58 +8,42 @@ import (
 	"swarmcli/ui"
 )
 
-func (m *Model) View() string {
-	width := m.viewport.Width
-	if width <= 0 {
-		width = 80
-	}
-
-	// ---- Build dynamic title ----
+func (m *Model) FrameTitle() string {
 	title := m.Title
 	if title == "" {
 		title = "Inspecting"
 	}
+	return title
+}
 
-	// ---- Format indicator ----
+func (m *Model) FrameHeader() string {
 	formatIndicator := "[YAML]"
 	if m.Format == "raw" {
 		formatIndicator = "[RAW]"
 	}
-
-	// ---- Build header ----
 	errorHint := ""
 	if m.ParseError != "" {
 		errorHint = " — Could not parse JSON, showing raw"
 	}
-
 	header := fmt.Sprintf("Inspecting %s%s", formatIndicator, errorHint)
-
 	if m.searchMode {
 		header = fmt.Sprintf("%s — Search: %s", header, m.SearchTerm)
 	}
+	return ui.FrameHeaderStyle.Render(header)
+}
 
-	headerRendered := ui.FrameHeaderStyle.Render(header)
+func (m *Model) FrameFooter() string { return "" }
 
-	frame := ui.ComputeFrameDimensions(
-		width,
-		m.viewport.Height,
-		width,
-		m.height,
-		headerRendered,
-		"",
-	)
+func (m *Model) FrameContent() string {
+	header := m.FrameHeader()
+	width := m.viewport.Width
+	if width <= 0 {
+		width = 80
+	}
+	frame := ui.ComputeFrameDimensions(width, m.viewport.Height, width, m.height, header, "")
+	return ui.TrimOrPadContentToLines(m.viewport.View(), frame.DesiredContentLines)
+}
 
-	// Get viewport content and truncate to fit the frame
-	viewportContent := ui.TrimOrPadContentToLines(m.viewport.View(), frame.DesiredContentLines)
-
-	// ---- Render framed box ----
-	content := ui.RenderFramedBox(
-		title,
-		headerRendered,
-		viewportContent,
-		"",
-		frame.FrameWidth,
-	)
-
-	return content
+func (m *Model) View() string {
+	return ui.RenderViewFrame(m.FrameTitle(), m.FrameHeader(), m.FrameContent(), m.FrameFooter(), m.viewport.Width, m.viewport.Height, false)
 }

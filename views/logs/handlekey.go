@@ -116,15 +116,7 @@ func HandleKey(m *Model, k tea.KeyMsg) tea.Cmd {
 		m.Visible = false
 		return nil
 	case "esc":
-		// If in fullscreen, exit fullscreen instead of closing view
-		if m.getFullscreen() {
-			m.setFullscreen(false)
-			l().Infof("[logsview] 'esc' key pressed: exiting fullscreen")
-			return func() tea.Msg {
-				return FullscreenToggledMsg{}
-			}
-		}
-		// Otherwise, close the view
+		// Close the view
 		m.Visible = false
 		return nil
 	case "/":
@@ -154,15 +146,6 @@ func HandleKey(m *Model, k tea.KeyMsg) tea.Cmd {
 		m.setFollow(newFollow)
 		l().Infof("[logsview] 's' key pressed: follow %v -> %v", oldFollow, newFollow)
 		return nil
-	case "f":
-		// toggle fullscreen mode
-		oldFullscreen := m.getFullscreen()
-		newFullscreen := !oldFullscreen
-		m.setFullscreen(newFullscreen)
-		l().Infof("[logsview] 'f' key pressed: fullscreen %v -> %v", oldFullscreen, newFullscreen)
-		return func() tea.Msg {
-			return FullscreenToggledMsg{}
-		}
 	case "w":
 		// toggle wrap mode
 		oldWrap := m.getWrap()

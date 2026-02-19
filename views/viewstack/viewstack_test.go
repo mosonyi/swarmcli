@@ -20,6 +20,10 @@ func (m *mockView) OnEnter() tea.Cmd                    { return nil }
 func (m *mockView) OnExit() tea.Cmd                     { return nil }
 func (m *mockView) HasErrors() bool                     { return false }
 func (m *mockView) ShortHelpItems() []helpbar.HelpEntry { return nil }
+func (m *mockView) FrameTitle() string                  { return m.name }
+func (m *mockView) FrameHeader() string                 { return "" }
+func (m *mockView) FrameFooter() string                 { return "" }
+func (m *mockView) FrameContent() string                { return "" }
 
 func TestPush_And_Pop(t *testing.T) {
 	s := &Stack{}

@@ -10,16 +10,25 @@ import (
 	"swarmcli/ui/components/sorting"
 )
 
+func (m *Model) FrameTitle() string {
+	return fmt.Sprintf("Tasks - Stack: %s (Total: %d)", m.stackName, len(m.tasks))
+}
+
+func (m *Model) FrameHeader() string { return "" }
+
+func (m *Model) FrameFooter() string {
+	return ui.StatusBarStyle.Render(fmt.Sprintf("Viewing %d tasks", len(m.tasks)))
+}
+
+func (m *Model) FrameContent() string {
+	return m.viewport.View()
+}
+
 func (m *Model) View() string {
 	if !m.visible {
 		return ""
 	}
-
-	title := fmt.Sprintf("Tasks - Stack: %s (Total: %d)", m.stackName, len(m.tasks))
-	content := m.viewport.View()
-	footer := ui.StatusBarStyle.Render(fmt.Sprintf("Viewing %d tasks", len(m.tasks)))
-
-	return ui.RenderFramedBox(title, "", content, footer, m.width)
+	return ui.RenderFramedBox(m.FrameTitle(), m.FrameHeader(), m.FrameContent(), m.FrameFooter(), m.width)
 }
 
 func (m *Model) renderTasks() string {

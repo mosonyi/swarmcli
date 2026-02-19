@@ -70,7 +70,6 @@ func TestNew(t *testing.T) {
 	require.Equal(t, "normal", m.mode)
 	require.True(t, m.getFollow())
 	require.True(t, m.getWrap())
-	require.False(t, m.getFullscreen())
 }
 
 func TestName(t *testing.T) {
@@ -92,13 +91,6 @@ func TestIsSearching_SearchMode(t *testing.T) {
 	m := testModel()
 	m.mode = "search"
 	require.True(t, m.IsSearching())
-}
-
-func TestGetFullscreen(t *testing.T) {
-	m := testModel()
-	require.False(t, m.GetFullscreen())
-	m.setFullscreen(true)
-	require.True(t, m.GetFullscreen())
 }
 
 func TestGetNodeSelectVisible(t *testing.T) {
@@ -140,7 +132,6 @@ func TestShortHelpItems_NormalMode(t *testing.T) {
 	require.True(t, keys["s"])
 	require.True(t, keys["w"])
 	require.True(t, keys["o"])
-	require.True(t, keys["f"])
 	require.True(t, keys["q"])
 }
 
@@ -294,30 +285,11 @@ func TestKey_W_TogglesWrap(t *testing.T) {
 	require.NotNil(t, cmd) // WrapToggledMsg
 }
 
-func TestKey_F_TogglesFullscreen(t *testing.T) {
-	m := testModel()
-	m.Visible = true
-	require.False(t, m.getFullscreen())
-	cmd := m.Update(key("f"))
-	require.True(t, m.getFullscreen())
-	require.NotNil(t, cmd) // FullscreenToggledMsg
-}
-
 func TestKey_Q_ClosesView(t *testing.T) {
 	m := testModel()
 	m.Visible = true
 	m.Update(key("q"))
 	require.False(t, m.Visible)
-}
-
-func TestKey_Esc_ExitsFullscreen(t *testing.T) {
-	m := testModel()
-	m.Visible = true
-	m.setFullscreen(true)
-	cmd := m.Update(key("esc"))
-	require.False(t, m.getFullscreen())
-	require.True(t, m.Visible) // view stays open
-	require.NotNil(t, cmd)
 }
 
 func TestKey_Esc_ClosesView(t *testing.T) {

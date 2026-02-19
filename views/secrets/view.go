@@ -11,39 +11,11 @@ import (
 	"swarmcli/docker"
 	"swarmcli/ui"
 	"swarmcli/ui/components/errordialog"
+	"swarmcli/ui/dialog"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/docker/docker/api/types/swarm"
-)
-
-// Shared dialog styles
-var (
-	dialogTitleStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("15")).
-				Background(lipgloss.Color("63")).
-				Padding(0, 1)
-
-	dialogBorderStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("117"))
-
-	dialogItemStyle = lipgloss.NewStyle().
-			Padding(0, 1)
-
-	dialogSelectedStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("15")).
-				Background(lipgloss.Color("63")).
-				Padding(0, 1)
-
-	dialogHelpStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Padding(0, 1)
-
-	dialogKeyStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("63")).
-			Bold(true)
 )
 
 type secretItem struct {
@@ -96,28 +68,47 @@ func secretItemFromSwarm(ctx context.Context, s swarm.Secret) secretItem {
 	}
 }
 
-func (m *Model) View() string {
-	// If in UsedBy view, render it instead of the main secrets view
+func (m *Model) FrameTitle() string {
 	if m.usedByViewActive {
-		return m.renderUsedByView()
+		return fmt.Sprintf("Secret: %s - Used By Stacks (%d)", m.usedBySecretName, len(m.usedByList.Filtered))
+	}
+	return fmt.Sprintf("Docker Secrets (%d)", len(m.secretsList.Filtered))
+}
+
+func (m *Model) FrameHeader() string {
+	if m.usedByViewActive {
+		return m.usedByList.RenderHeader()
+	}
+	return m.secretsList.RenderHeader()
+}
+
+func (m *Model) FrameFooter() string {
+	if m.usedByViewActive {
+		return m.usedByList.RenderFooter()
+	}
+	return m.secretsList.RenderFooter()
+}
+
+func (m *Model) FrameContent() string {
+	if m.usedByViewActive {
+		header := m.usedByList.RenderHeader()
+		footer := m.usedByList.RenderFooter()
+		frame := ui.ComputeFrameDimensions(
+			m.usedByList.Viewport.Width, m.usedByList.Viewport.Height,
+			m.width, m.height, header, footer,
+		)
+		return m.usedByList.VisibleContent(frame.DesiredContentLines)
 	}
 
 	header := m.secretsList.RenderHeader()
 	footer := m.secretsList.RenderFooter()
-
 	frame := ui.ComputeFrameDimensions(
-		m.secretsList.Viewport.Width,
-		m.secretsList.Viewport.Height,
-		m.width,
-		m.height,
-		header,
-		footer,
+		m.secretsList.Viewport.Width, m.secretsList.Viewport.Height,
+		m.width, m.height, header, footer,
 	)
-
 	width := frame.FrameWidth
 	content := m.secretsList.VisibleContent(frame.DesiredContentLines)
 
-	// Apply overlays to content BEFORE framing
 	if m.fileBrowserActive {
 		fileBrowserDialog := ui.RenderFileBrowserDialog("Select File", m.fileBrowserPath, m.fileBrowserFiles, m.fileBrowserCursor)
 		content = ui.OverlayCentered(content, fileBrowserDialog, width, 0)
@@ -135,10 +126,15 @@ func (m *Model) View() string {
 		content = ui.OverlayCentered(content, loadingView, width, 0)
 	}
 
-	title := fmt.Sprintf("Docker Secrets (%d)", len(m.secretsList.Filtered))
-	view := ui.RenderFramedBox(title, header, content, footer, frame.FrameWidth)
+	return content
+}
 
-	return view
+func (m *Model) View() string {
+	if m.usedByViewActive {
+		return m.renderUsedByView()
+	}
+	return ui.RenderViewFrame(m.FrameTitle(), m.FrameHeader(), m.FrameContent(), m.FrameFooter(),
+		m.secretsList.Viewport.Width, m.secretsList.Viewport.Height, false)
 }
 
 func (m *Model) renderCreateDialog() string {
@@ -146,34 +142,34 @@ func (m *Model) renderCreateDialog() string {
 
 	switch m.createDialogStep {
 	case "source":
-		lines = append(lines, dialogTitleStyle.Render(" Create Secret - Choose Source "))
-		lines = append(lines, dialogItemStyle.Render(""))
-		lines = append(lines, dialogItemStyle.Render("How would you like to create the secret?"))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.TitleStyle.Render(" Create Secret - Choose Source "))
+		lines = append(lines, dialog.ItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render("How would you like to create the secret?"))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		if m.createSecretSource == "file" {
-			lines = append(lines, dialogSelectedStyle.Render("→ From file"))
+			lines = append(lines, dialog.SelectedStyle.Render("→ From file"))
 		} else {
-			lines = append(lines, dialogItemStyle.Render("  From file"))
+			lines = append(lines, dialog.ItemStyle.Render("  From file"))
 		}
 
 		if m.createSecretSource == "inline" {
-			lines = append(lines, dialogSelectedStyle.Render("→ Inline editor"))
+			lines = append(lines, dialog.SelectedStyle.Render("→ Inline editor"))
 		} else {
-			lines = append(lines, dialogItemStyle.Render("  Inline editor"))
+			lines = append(lines, dialog.ItemStyle.Render("  Inline editor"))
 		}
 
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 		helpText := fmt.Sprintf(" %s Select • %s / %s Navigate • %s Cancel",
-			dialogKeyStyle.Render("<Enter>"),
-			dialogKeyStyle.Render("<↑>"),
-			dialogKeyStyle.Render("<↓>"),
-			dialogKeyStyle.Render("<Esc>"))
-		lines = append(lines, dialogHelpStyle.Render(helpText))
+			dialog.KeyStyle.Render("<Enter>"),
+			dialog.KeyStyle.Render("<↑>"),
+			dialog.KeyStyle.Render("<↓>"),
+			dialog.KeyStyle.Render("<Esc>"))
+		lines = append(lines, dialog.HelpStyle.Render(helpText))
 
 	case "details-file":
-		lines = append(lines, dialogTitleStyle.Render(" Create Secret from File "))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.TitleStyle.Render(" Create Secret from File "))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Show error if present
 		if m.createDialogError != "" {
@@ -181,23 +177,23 @@ func (m *Model) renderCreateDialog() string {
 				Foreground(lipgloss.Color("196")).
 				Padding(0, 1)
 			lines = append(lines, errorStyle.Render("⚠ "+m.createDialogError))
-			lines = append(lines, dialogItemStyle.Render(""))
+			lines = append(lines, dialog.ItemStyle.Render(""))
 		}
 
-		lines = append(lines, dialogItemStyle.Render(m.createNameInput.View()))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render(m.createNameInput.View()))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Show file path input with browse indicator when focused
 		fileLine := m.createFileInput.View()
 		if m.createInputFocus == 1 {
-			fileLine += "  " + dialogKeyStyle.Render("[f: Browse]")
+			fileLine += "  " + dialog.KeyStyle.Render("[f: Browse]")
 		}
-		lines = append(lines, dialogItemStyle.Render(fileLine))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render(fileLine))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Show labels input
-		lines = append(lines, dialogItemStyle.Render(m.createLabelsInput.View()))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render(m.createLabelsInput.View()))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Show encode toggle
 		encodeText := "Encode secret: "
@@ -207,34 +203,34 @@ func (m *Model) renderCreateDialog() string {
 			encodeText += "OFF"
 		}
 		if m.createInputFocus == 3 {
-			encodeText = dialogSelectedStyle.Render(encodeText)
+			encodeText = dialog.SelectedStyle.Render(encodeText)
 		} else {
-			encodeText = dialogItemStyle.Render(encodeText)
+			encodeText = dialog.ItemStyle.Render(encodeText)
 		}
 		lines = append(lines, encodeText)
-		lines = append(lines, dialogItemStyle.Render("  (Secrets need to be base64 encoded. Disable this if already encoded.)"))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render("  (Secrets need to be base64 encoded. Disable this if already encoded.)"))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Change help text based on error state
 		var helpText string
 		if m.createDialogError != "" {
 			helpText = fmt.Sprintf(" %s Fix error • %s Navigate • %s Toggle • %s Cancel",
-				dialogKeyStyle.Render("<Enter>"),
-				dialogKeyStyle.Render("<Tab>"),
-				dialogKeyStyle.Render("<Space>"),
-				dialogKeyStyle.Render("<Esc>"))
+				dialog.KeyStyle.Render("<Enter>"),
+				dialog.KeyStyle.Render("<Tab>"),
+				dialog.KeyStyle.Render("<Space>"),
+				dialog.KeyStyle.Render("<Esc>"))
 		} else {
 			helpText = fmt.Sprintf(" %s Confirm • %s Navigate • %s Toggle • %s Cancel",
-				dialogKeyStyle.Render("<Enter>"),
-				dialogKeyStyle.Render("<Tab>"),
-				dialogKeyStyle.Render("<Space>"),
-				dialogKeyStyle.Render("<Esc>"))
+				dialog.KeyStyle.Render("<Enter>"),
+				dialog.KeyStyle.Render("<Tab>"),
+				dialog.KeyStyle.Render("<Space>"),
+				dialog.KeyStyle.Render("<Esc>"))
 		}
-		lines = append(lines, dialogHelpStyle.Render(helpText))
+		lines = append(lines, dialog.HelpStyle.Render(helpText))
 
 	case "details-inline":
-		lines = append(lines, dialogTitleStyle.Render(" Create Secret - Inline Editor "))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.TitleStyle.Render(" Create Secret - Inline Editor "))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Show error if present
 		if m.createDialogError != "" {
@@ -242,11 +238,11 @@ func (m *Model) renderCreateDialog() string {
 				Foreground(lipgloss.Color("196")).
 				Padding(0, 1)
 			lines = append(lines, errorStyle.Render("⚠ "+m.createDialogError))
-			lines = append(lines, dialogItemStyle.Render(""))
+			lines = append(lines, dialog.ItemStyle.Render(""))
 		}
 
-		lines = append(lines, dialogItemStyle.Render(m.createNameInput.View()))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render(m.createNameInput.View()))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Show editor status with edit hint when focused
 		editorStatus := "Content: "
@@ -256,14 +252,14 @@ func (m *Model) renderCreateDialog() string {
 			editorStatus += "(empty)"
 		}
 		if m.createInputFocus == 1 {
-			editorStatus += "  " + dialogKeyStyle.Render("[e: Edit]")
+			editorStatus += "  " + dialog.KeyStyle.Render("[e: Edit]")
 		}
-		lines = append(lines, dialogItemStyle.Render(editorStatus))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render(editorStatus))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Show labels input
-		lines = append(lines, dialogItemStyle.Render(m.createLabelsInput.View()))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render(m.createLabelsInput.View()))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Show encode toggle
 		encodeText := "Encode secret: "
@@ -273,34 +269,34 @@ func (m *Model) renderCreateDialog() string {
 			encodeText += "OFF"
 		}
 		if m.createInputFocus == 3 {
-			encodeText = dialogSelectedStyle.Render(encodeText)
+			encodeText = dialog.SelectedStyle.Render(encodeText)
 		} else {
-			encodeText = dialogItemStyle.Render(encodeText)
+			encodeText = dialog.ItemStyle.Render(encodeText)
 		}
 		lines = append(lines, encodeText)
-		lines = append(lines, dialogItemStyle.Render("  (Secrets need to be base64 encoded. Disable this if already encoded.)"))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render("  (Secrets need to be base64 encoded. Disable this if already encoded.)"))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Change help text based on error state
 		var helpText string
 		if m.createDialogError != "" {
 			helpText = fmt.Sprintf(" %s Fix error • %s Navigate • %s Toggle • %s Cancel",
-				dialogKeyStyle.Render("<Enter>"),
-				dialogKeyStyle.Render("<Tab>"),
-				dialogKeyStyle.Render("<Space>"),
-				dialogKeyStyle.Render("<Esc>"))
+				dialog.KeyStyle.Render("<Enter>"),
+				dialog.KeyStyle.Render("<Tab>"),
+				dialog.KeyStyle.Render("<Space>"),
+				dialog.KeyStyle.Render("<Esc>"))
 		} else {
 			helpText = fmt.Sprintf(" %s Confirm • %s Navigate • %s Toggle • %s Cancel",
-				dialogKeyStyle.Render("<Enter>"),
-				dialogKeyStyle.Render("<Tab>"),
-				dialogKeyStyle.Render("<Space>"),
-				dialogKeyStyle.Render("<Esc>"))
+				dialog.KeyStyle.Render("<Enter>"),
+				dialog.KeyStyle.Render("<Tab>"),
+				dialog.KeyStyle.Render("<Space>"),
+				dialog.KeyStyle.Render("<Esc>"))
 		}
-		lines = append(lines, dialogHelpStyle.Render(helpText))
+		lines = append(lines, dialog.HelpStyle.Render(helpText))
 	}
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	return dialogBorderStyle.Render(content)
+	return dialog.BorderStyle.Render(content)
 }
 
 // formatLabels formats labels map to sorted key=value string
