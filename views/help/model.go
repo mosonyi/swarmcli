@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // Help view provides a generic categorized help screen for any view.
@@ -47,6 +48,7 @@ type Model struct {
 type CommandInfo struct {
 	Name        string
 	Description string
+	Aliases     []string
 }
 
 type HelpCategory struct {
@@ -60,9 +62,29 @@ type HelpItem struct {
 }
 
 func New(width, height int, cmds []CommandInfo) *Model {
-	var b strings.Builder
+	cmdW := 16
+	descW := 20
 	for _, c := range cmds {
-		fmt.Fprintf(&b, ":%-15s %s\n", c.Name, c.Description)
+		if w := len(c.Name) + 1; w > cmdW { // +1 for ':'
+			cmdW = w
+		}
+		if w := len(c.Description); w > descW {
+			descW = w
+		}
+	}
+
+	const gap = "   "
+	headerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("33")).
+		Bold(true)
+
+	var b strings.Builder
+	if len(cmds) > 0 {
+		header := fmt.Sprintf("%-*s%s%-*s%s%s", cmdW, "COMMAND", gap, descW, "DESCRIPTION", gap, "ALIASES")
+		fmt.Fprintln(&b, headerStyle.Render(header))
+	}
+	for _, c := range cmds {
+		fmt.Fprintf(&b, "%-*s%s%-*s%s%s\n", cmdW, ":"+c.Name, gap, descW, c.Description, gap, strings.Join(c.Aliases, ", "))
 	}
 
 	vp := viewport.New(width, height)

@@ -59,15 +59,7 @@ func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
 
-	list := filterlist.FilterableList[docker.NodeEntry]{
-		Viewport: vp,
-		Match: func(n docker.NodeEntry, query string) bool {
-			return strings.Contains(strings.ToLower(n.Hostname), strings.ToLower(query))
-		},
-	}
-
-	return &Model{
-		List:          list,
+	m := &Model{
 		Visible:       false,
 		firstResize:   true,
 		width:         width,
@@ -76,6 +68,40 @@ func New(width, height int) *Model {
 		sortField:     SortByHostname,
 		sortAscending: true,
 	}
+
+	list := filterlist.FilterableList[docker.NodeEntry]{
+		Viewport: vp,
+		Match: func(n docker.NodeEntry, query string) bool {
+			return strings.Contains(strings.ToLower(n.Hostname), strings.ToLower(query))
+		},
+		Header: &filterlist.HeaderConfig{
+			Columns: []filterlist.ColumnDef{
+				{Label: "ID"}, {Label: "HOSTNAME"}, {Label: "ROLE"}, {Label: "STATE"},
+				{Label: "Availability"}, {Label: "MANAGER"}, {Label: "MGR STATUS"},
+				{Label: "VERSION"}, {Label: "ADDRESS"}, {Label: "LABELS"},
+			},
+			SortIndicator: func() (int, bool) {
+				sortColMap := map[SortField]int{
+					SortByHostname:     1,
+					SortByRole:         2,
+					SortByState:        3,
+					SortByAvailability: 4,
+					SortByVersion:      7,
+					SortByAddress:      8,
+					SortByLabels:       9,
+				}
+				col, ok := sortColMap[m.sortField]
+				if !ok {
+					return -1, true
+				}
+				return col, m.sortAscending
+			},
+		},
+		Footer: &filterlist.FooterConfig{ItemLabel: "Node"},
+	}
+	list.SetOuterSize(width, height)
+	m.List = list
+	return m
 }
 
 func (m *Model) Init() tea.Cmd {

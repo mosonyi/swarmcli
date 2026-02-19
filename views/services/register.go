@@ -4,6 +4,7 @@
 package servicesview
 
 import (
+	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	"swarmcli/views/view"
 
@@ -57,13 +58,17 @@ func factory(deps docker.Deps, w, h int, payload any) (view.View, tea.Cmd) {
 
 	entries, title := v.loadServicesForView(filterType, nodeID, stackName)
 
-	return v, func() tea.Msg {
-		return Msg{
-			Title:      title,
-			Entries:    entries,
-			FilterType: filterType,
-			NodeID:     nodeID,
-			StackName:  stackName,
-		}
+	// Apply data directly so keys work immediately (no race with async Cmd).
+	msg := Msg{
+		Title:      title,
+		Entries:    entries,
+		FilterType: filterType,
+		NodeID:     nodeID,
+		StackName:  stackName,
 	}
+	v.lastSnapshot, _ = hash.Compute(entries)
+	v.SetContent(msg)
+	v.Visible = true
+
+	return v, tickCmd()
 }

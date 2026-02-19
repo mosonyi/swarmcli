@@ -4,6 +4,7 @@
 package registry
 
 import (
+	"sort"
 	"strings"
 	"swarmcli/args"
 
@@ -39,6 +40,44 @@ func All() []Command {
 		cmds = append(cmds, c)
 	}
 	return cmds
+}
+
+// Aliaser is optionally implemented by alias commands to indicate
+// which primary command they delegate to.
+type Aliaser interface {
+	AliasOf() string
+}
+
+// CommandWithAliases pairs a primary command with its collected alias names.
+type CommandWithAliases struct {
+	Command
+	Aliases []string
+}
+
+// PrimaryCommands returns deduplicated commands with alias names collected.
+// Commands implementing Aliaser are folded into their target's Aliases slice.
+func PrimaryCommands() []CommandWithAliases {
+	aliases := map[string][]string{} // target name → alias names
+	primaries := map[string]Command{}
+
+	for _, cmd := range apiRegistry {
+		if a, ok := cmd.(Aliaser); ok {
+			aliases[a.AliasOf()] = append(aliases[a.AliasOf()], cmd.Name())
+		} else {
+			primaries[cmd.Name()] = cmd
+		}
+	}
+
+	out := make([]CommandWithAliases, 0, len(primaries))
+	for name, cmd := range primaries {
+		a := aliases[name]
+		sort.Strings(a)
+		out = append(out, CommandWithAliases{
+			Command: cmd,
+			Aliases: a,
+		})
+	}
+	return out
 }
 
 // Suggest returns all command names that start with a given prefix

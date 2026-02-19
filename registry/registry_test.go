@@ -88,3 +88,57 @@ func TestRegister_OverwritesSameName(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "second", cmd.Description())
 }
+
+// mockAlias implements Aliaser so PrimaryCommands can detect it.
+type mockAlias struct {
+	name       string
+	desc       string
+	aliasOfCmd string
+}
+
+func (m *mockAlias) Name() string                       { return m.name }
+func (m *mockAlias) Description() string                { return m.desc }
+func (m *mockAlias) Execute(_ any, _ args.Args) tea.Cmd { return nil }
+func (m *mockAlias) AliasOf() string                    { return m.aliasOfCmd }
+
+func TestPrimaryCommands_GroupsAliases(t *testing.T) {
+	Register(&mockCommand{name: "test_primary", desc: "primary cmd"})
+	Register(&mockAlias{name: "test_alias_a", desc: "primary cmd", aliasOfCmd: "test_primary"})
+	Register(&mockAlias{name: "test_alias_b", desc: "primary cmd", aliasOfCmd: "test_primary"})
+	defer cleanup("test_primary", "test_alias_a", "test_alias_b")
+
+	cmds := PrimaryCommands()
+
+	var found *CommandWithAliases
+	for i := range cmds {
+		if cmds[i].Name() == "test_primary" {
+			found = &cmds[i]
+			break
+		}
+	}
+	require.NotNil(t, found, "primary command should appear in PrimaryCommands()")
+	require.Equal(t, "primary cmd", found.Description())
+
+	sort.Strings(found.Aliases)
+	require.Equal(t, []string{"test_alias_a", "test_alias_b"}, found.Aliases)
+
+	// Aliases must not appear as top-level entries.
+	for _, c := range cmds {
+		require.NotEqual(t, "test_alias_a", c.Name())
+		require.NotEqual(t, "test_alias_b", c.Name())
+	}
+}
+
+func TestPrimaryCommands_NoAliases(t *testing.T) {
+	Register(&mockCommand{name: "test_noalias", desc: "solo"})
+	defer cleanup("test_noalias")
+
+	cmds := PrimaryCommands()
+	for _, c := range cmds {
+		if c.Name() == "test_noalias" {
+			require.Empty(t, c.Aliases)
+			return
+		}
+	}
+	t.Fatal("test_noalias not found in PrimaryCommands()")
+}

@@ -31,10 +31,11 @@ func AllCommandInfos() []helpview.CommandInfo {
 	// Go technicality. Need to call `registry` directly.
 	// We can't depend on the parent package, as it creates
 	// a cycle.
-	for _, cmd := range registry.All() {
+	for _, cmd := range registry.PrimaryCommands() {
 		cmds = append(cmds, helpview.CommandInfo{
 			Name:        cmd.Name(),
 			Description: cmd.Description(),
+			Aliases:     cmd.Aliases,
 		})
 	}
 	return cmds

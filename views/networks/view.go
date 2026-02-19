@@ -34,7 +34,7 @@ func (m *Model) View() string {
 	}
 
 	header := m.renderNetworksHeader(m.networksList.Items, width)
-	footer := m.renderNetworksFooter()
+	footer := m.networksList.RenderFooter()
 
 	frame := ui.ComputeFrameDimensions(
 		m.networksList.Viewport.Width,
@@ -207,11 +207,11 @@ func (m *Model) renderCreateNetworkDialog(width int) string {
 }
 
 func (m *Model) renderNetworksHeader(items []networkItem, width int) string {
-	if width <= 0 {
-		width = 80
+	colWidths := m.networksList.ColWidths()
+	if len(colWidths) < 5 {
+		return ""
 	}
-
-	nameWidth, driverWidth, scopeWidth, usedWidth, idWidth := m.networkColWidths(width)
+	nameWidth, driverWidth, scopeWidth, usedWidth, idWidth := colWidths[0], colWidths[1], colWidths[2], colWidths[3], colWidths[4]
 
 	// Store for rendering items (header alignment / other rendering)
 	m.colNameWidth = nameWidth
@@ -300,8 +300,8 @@ func (m *Model) renderUsedByView() string {
 		width = m.width
 	}
 
-	header := m.renderUsedByHeader(width)
-	footer := m.renderUsedByFooter()
+	header := m.usedByList.RenderHeader()
+	footer := m.usedByList.RenderFooter()
 
 	frame := ui.ComputeFrameDimensions(
 		m.usedByList.Viewport.Width,
@@ -324,31 +324,6 @@ func (m *Model) renderUsedByView() string {
 	view := ui.RenderFramedBox(title, header, content, footer, frame.FrameWidth)
 
 	return view
-}
-
-func (m *Model) renderUsedByHeader(width int) string {
-	return ui.RenderColumnHeader([]string{" STACK", "SERVICE"}, []int{32, 50})
-}
-
-func (m *Model) renderUsedByFooter() string {
-	if m.usedByList.Mode == filterlist.ModeSearching {
-		prompt := fmt.Sprintf("Filter: %s", m.usedByList.Query)
-		return ui.StatusBarStyle.Render(prompt)
-	}
-
-	total := len(m.usedByList.Items)
-	filtered := len(m.usedByList.Filtered)
-	cursor := m.usedByList.Cursor + 1
-
-	if filtered == 0 {
-		return ui.StatusBarStyle.Render("No services using this network")
-	}
-
-	if len(m.usedByList.Query) > 0 {
-		return ui.StatusBarStyle.Render(fmt.Sprintf("%d/%d (filtered from %d)", cursor, filtered, total))
-	}
-
-	return ui.StatusBarStyle.Render(fmt.Sprintf("%d/%d", cursor, total))
 }
 
 func (m *Model) renderInspectView() string {

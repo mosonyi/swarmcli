@@ -88,6 +88,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// msg.Height is already adjusted by the app to account for the
 		// systeminfo header; avoid subtracting extra lines here.
 		m.configsList.Viewport.Height = msg.Height
+		m.configsList.SetOuterSize(msg.Width, msg.Height)
+		if m.usedByViewActive {
+			m.usedByList.Viewport.Width = msg.Width
+			m.usedByList.Viewport.Height = msg.Height
+			m.usedByList.SetOuterSize(msg.Width, msg.Height)
+		}
 		// On first resize, reset YOffset to 0; on subsequent resizes, only reset if cursor is at top
 		if m.firstResize {
 			m.configsList.Viewport.YOffset = 0
@@ -315,28 +321,15 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				return strings.Contains(strings.ToLower(item.StackName), strings.ToLower(query)) ||
 					strings.Contains(strings.ToLower(item.ServiceName), strings.ToLower(query))
 			},
+			Header: &filterlist.HeaderConfig{
+				Columns: []filterlist.ColumnDef{
+					{Label: "STACK NAME"},
+					{Label: "SERVICE NAME"},
+				},
+			},
+			Footer: &filterlist.FooterConfig{ItemLabel: "Stack"},
 			RenderItem: func(item usedByItem, selected bool, _ int) string {
-				// Compute proportional widths for two columns based on viewport
-				width := vp.Width
-				if width <= 0 {
-					width = 80
-				}
-				cols := 2
-				starts := make([]int, cols)
-				for i := 0; i < cols; i++ {
-					starts[i] = (i * width) / cols
-				}
-				colWidths := make([]int, cols)
-				for i := 0; i < cols; i++ {
-					if i == cols-1 {
-						colWidths[i] = width - starts[i]
-					} else {
-						colWidths[i] = starts[i+1] - starts[i]
-					}
-					if colWidths[i] < 1 {
-						colWidths[i] = 1
-					}
-				}
+				colWidths := m.usedByList.ColWidths()
 
 				// Prepare truncated texts
 				stackText := item.StackName
@@ -351,8 +344,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				// Use bright white for content and reserve a leading space
 				itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
 				// Reserve one leading space for the first column so content aligns with headers
-				var col0 string
-				col0 = itemStyle.Render(fmt.Sprintf(" %-*s", colWidths[0]-1, stackText))
+				col0 := itemStyle.Render(fmt.Sprintf(" %-*s", colWidths[0]-1, stackText))
 				col1 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[1], svcText))
 				line := col0 + col1
 
@@ -367,6 +359,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				return line
 			},
 		}
+		m.usedByList.SetOuterSize(w, h)
 
 		// Important: keep Items as a non-nil slice even when empty.
 		// If Items is nil, FilterableList.VisibleContent bypasses its padded empty-state,
@@ -376,9 +369,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		if m.usedByList.Items == nil {
 			m.usedByList.Items = []usedByItem{}
 		}
-		// Keep viewport sizes in sync
-		m.usedByList.Viewport.Width = vp.Width
-		m.usedByList.Viewport.Height = vp.Height
 		m.usedByList.ApplyFilter()
 
 		m.usedByConfigName = msg.ConfigName
@@ -669,67 +659,7 @@ func (m *Model) setRenderItem() {
 	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
 
 	m.configsList.RenderItem = func(cfg configItem, selected bool, _ int) string {
-		// Recompute proportional column widths on each render to adapt to viewport resizes.
-		width := m.configsList.Viewport.Width
-		if width <= 0 {
-			width = 80
-		}
-
-		// Columns: NAME | ID | USED | LABELS | CREATED | UPDATED
-		cols := 6
-		starts := make([]int, cols)
-		for i := 0; i < cols; i++ {
-			starts[i] = (i * width) / cols
-		}
-		colWidths := make([]int, cols)
-		for i := 0; i < cols; i++ {
-			if i == cols-1 {
-				colWidths[i] = width - starts[i]
-			} else {
-				colWidths[i] = starts[i+1] - starts[i]
-			}
-			if colWidths[i] < 1 {
-				colWidths[i] = 1
-			}
-		}
-
-		// Ensure CREATED and UPDATED columns have at least 19 chars
-		minTime := 19
-		// current sum of created + updated columns
-		cur := colWidths[3] + colWidths[4]
-		if cur < 2*minTime {
-			deficit := 2*minTime - cur
-			// steal space from earlier cols (prefer NAME then ID)
-			for i := 2; i >= 0 && deficit > 0; i-- {
-				take := deficit
-				if colWidths[i] > take+5 { // leave minimum 5 for each
-					colWidths[i] -= take
-					deficit = 0
-				} else {
-					take = colWidths[i] - 5
-					if take > 0 {
-						colWidths[i] -= take
-						deficit -= take
-					}
-				}
-			}
-			// recompute last two to have minTime each if possible
-			if colWidths[3] < minTime {
-				colWidths[3] = minTime
-			}
-			if colWidths[4] < minTime {
-				colWidths[4] = minTime
-			}
-		}
-
-		// Ensure USED column has at least 1 char
-		if colWidths[2] < 1 {
-			colWidths[2] = 1
-		}
-
-		// Update cached widths for header alignment
-		m.colNameWidth = colWidths[0]
-		m.colIDWidth = colWidths[1]
+		colWidths := m.configsList.ColWidths()
 
 		// Prepare cell texts (truncate where necessary)
 		// Reserve one character for the leading space in the first column

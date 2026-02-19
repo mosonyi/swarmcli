@@ -22,7 +22,7 @@ func (m *Model) View() string {
 	}
 
 	// Command help (":help") should render like every other view: full-width framed box.
-	header := ui.FrameHeaderStyle.Render("Available Commands")
+	header := " " + ui.FrameHeaderStyle.Render("Available Commands")
 	footer := ui.StatusBarStyle.Render("Press <esc> to go back")
 
 	frame := ui.ComputeFrameDimensions(
@@ -34,7 +34,9 @@ func (m *Model) View() string {
 		footer,
 	)
 
-	viewportContent := ui.TrimOrPadContentToLines(m.Viewable.View(), frame.DesiredContentLines)
+	viewportContent := " " + strings.ReplaceAll(
+		ui.TrimOrPadContentToLines(m.Viewable.View(), frame.DesiredContentLines),
+		"\n", "\n ")
 	return ui.RenderFramedBox("Help", header, viewportContent, footer, frame.FrameWidth)
 }
 

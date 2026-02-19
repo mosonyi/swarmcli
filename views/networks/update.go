@@ -240,6 +240,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.height = msg.Height
 		m.networksList.Viewport.Width = msg.Width
 		m.networksList.Viewport.Height = msg.Height
+		m.networksList.SetOuterSize(msg.Width, msg.Height)
 
 		// Inspect view uses its own viewport; keep it in sync with the window size.
 		inspectH := msg.Height - 4 // top+bottom borders + header + footer
@@ -252,6 +253,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		if m.usedByViewActive {
 			m.usedByList.Viewport.Width = msg.Width
 			m.usedByList.Viewport.Height = msg.Height
+			m.usedByList.SetOuterSize(msg.Width, msg.Height)
 		}
 
 		if m.firstResize {
@@ -504,7 +506,31 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				return strings.Contains(strings.ToLower(item.StackName), q) ||
 					strings.Contains(strings.ToLower(item.ServiceName), q)
 			},
+			Header: &filterlist.HeaderConfig{
+				Columns: []filterlist.ColumnDef{
+					{Label: "STACK"}, {Label: "SERVICE"},
+				},
+				ColWidthsFunc: func(width int) []int {
+					return []int{32, 50}
+				},
+			},
+			Footer: &filterlist.FooterConfig{
+				ItemLabel: "Service",
+				Override: func(cursor, filteredCount int, mode filterlist.ModeType, query string) string {
+					if mode == filterlist.ModeSearching {
+						return ui.StatusBarStyle.Render(fmt.Sprintf("Filter: %s", query))
+					}
+					if filteredCount == 0 {
+						return ui.StatusBarStyle.Render("No services using this network")
+					}
+					if query != "" {
+						return ui.StatusBarStyle.Render(fmt.Sprintf("%d/%d (filtered from %d)", cursor+1, filteredCount, len(m.usedByList.Items)))
+					}
+					return ui.StatusBarStyle.Render(fmt.Sprintf("%d/%d", cursor+1, len(m.usedByList.Items)))
+				},
+			},
 		}
+		m.usedByList.SetOuterSize(m.width, m.height)
 
 		m.usedByList.Items = msg.Services
 		m.setUsedByRenderItem()
@@ -1134,18 +1160,11 @@ func (m *Model) setRenderItem() {
 				Background(lipgloss.Color("63"))
 		}
 
-		width := colWidth
-		if width <= 0 {
-			width = m.networksList.Viewport.Width
+		colWidths := m.networksList.ColWidths()
+		if len(colWidths) < 5 {
+			return item.Name
 		}
-		if width <= 0 {
-			width = m.width
-		}
-		if width <= 0 {
-			width = 80
-		}
-
-		nameWidth, driverWidth, scopeWidth, usedWidth, idWidth := m.networkColWidths(width)
+		nameWidth, driverWidth, scopeWidth, usedWidth, idWidth := colWidths[0], colWidths[1], colWidths[2], colWidths[3], colWidths[4]
 		// Match header style: keep a small left padding for the first column so
 		// it doesn't touch the frame border.
 		innerNameWidth := nameWidth
