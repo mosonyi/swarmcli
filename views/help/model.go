@@ -80,11 +80,11 @@ func New(width, height int, cmds []CommandInfo) *Model {
 
 	var b strings.Builder
 	if len(cmds) > 0 {
-		header := fmt.Sprintf("%-*s%s%-*s%s%s", cmdW, "COMMAND", gap, descW, "DESCRIPTION", gap, "ALIASES")
+		header := fmt.Sprintf(" %-*s%s%-*s%s%s", cmdW, "COMMAND", gap, descW, "DESCRIPTION", gap, "ALIASES")
 		fmt.Fprintln(&b, headerStyle.Render(header))
 	}
 	for _, c := range cmds {
-		fmt.Fprintf(&b, "%-*s%s%-*s%s%s\n", cmdW, ":"+c.Name, gap, descW, c.Description, gap, strings.Join(c.Aliases, ", "))
+		fmt.Fprintf(&b, " %-*s%s%-*s%s%s\n", cmdW, ":"+c.Name, gap, descW, c.Description, gap, strings.Join(c.Aliases, ", "))
 	}
 
 	vp := viewport.New(width, height)
