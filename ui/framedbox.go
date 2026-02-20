@@ -26,6 +26,15 @@ func RenderViewFrame(title, header, content, footer string, width, height int, f
 		return titleLine + "\n" + content
 	}
 
+	// Pad header, content, and footer uniformly so columns align inside the frame.
+	if header != "" {
+		header = LeftPadContent(header)
+	}
+	content = LeftPadContent(content)
+	if footer != "" {
+		footer = LeftPadContent(footer)
+	}
+
 	frame := ComputeFrameDimensions(width, height, width, height, header, footer)
 	trimmed := TrimOrPadContentToLines(content, frame.DesiredContentLines)
 	return RenderFramedBox(title, header, trimmed, footer, frame.FrameWidth)

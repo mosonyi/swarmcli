@@ -27,6 +27,8 @@ func (m *Model) FrameHeader() string {
 		header = fmt.Sprintf("Error: %s", err)
 	} else if msg := m.GetSuccess(); msg != "" {
 		header = msg
+	} else {
+		return m.List.RenderHeader()
 	}
 	return ui.FrameHeaderStyle.Render(header)
 }

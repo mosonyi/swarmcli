@@ -44,7 +44,6 @@ func (m *Model) View() string {
 	title := m.currentView.FrameTitle()
 	header := m.currentView.FrameHeader()
 	content := m.currentView.FrameContent()
-	content = ui.LeftPadContent(content)
 	footer := m.currentView.FrameFooter()
 	// Subtract help bar (systeminfoview.Height) and stack bar (1 line) from the
 	// viewport height so the frame fits between chrome elements.
