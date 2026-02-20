@@ -218,18 +218,6 @@ func TestKey_P_TogglesExpand(t *testing.T) {
 	require.False(t, m.expandedStacks["s1"])
 }
 
-func TestKey_I_NavigatesToServices(t *testing.T) {
-	m := testModel()
-	loadStacks(m, fakeStacks("mystack"))
-	cmd := m.Update(key("i"))
-	msg := runCmd(cmd)
-	nav, ok := msg.(view.NavigateToMsg)
-	require.True(t, ok)
-	require.Equal(t, "services", nav.ViewName)
-	payload := nav.Payload.(map[string]any)
-	require.Equal(t, "mystack", payload["stackName"])
-}
-
 func TestKey_Enter_NavigatesToServices(t *testing.T) {
 	m := testModel()
 	loadStacks(m, fakeStacks("mystack"))
@@ -240,36 +228,36 @@ func TestKey_Enter_NavigatesToServices(t *testing.T) {
 	require.Equal(t, "services", nav.ViewName)
 }
 
-func TestKey_D_Describe(t *testing.T) {
-	described := ""
+func TestKey_I_Inspect(t *testing.T) {
+	inspected := ""
 	stackMock := noopStackOps()
-	stackMock.describeStackFn = func(name string) (string, error) {
-		described = name
+	stackMock.inspectStackFn = func(name string) (string, error) {
+		inspected = name
 		return "yaml-content", nil
 	}
 	m := testModel(func(m *Model) { m.deps.Stacks = stackMock })
 	loadStacks(m, fakeStacks("mystack"))
-	cmd := m.Update(key("d"))
+	cmd := m.Update(key("i"))
 	msg := runCmd(cmd)
-	require.Equal(t, "mystack", described)
+	require.Equal(t, "mystack", inspected)
 	nav, ok := msg.(view.NavigateToMsg)
 	require.True(t, ok)
 	require.Equal(t, "inspect", nav.ViewName)
 }
 
-func TestKey_D_DescribeError(t *testing.T) {
+func TestKey_I_InspectError(t *testing.T) {
 	stackMock := noopStackOps()
-	stackMock.describeStackFn = func(_ string) (string, error) {
+	stackMock.inspectStackFn = func(_ string) (string, error) {
 		return "", fmt.Errorf("not found")
 	}
 	m := testModel(func(m *Model) { m.deps.Stacks = stackMock })
 	loadStacks(m, fakeStacks("mystack"))
-	cmd := m.Update(key("d"))
+	cmd := m.Update(key("i"))
 	msg := runCmd(cmd)
 	nav, ok := msg.(view.NavigateToMsg)
 	require.True(t, ok)
 	payload := nav.Payload.(map[string]any)
-	require.Contains(t, payload["title"].(string), "describe failed")
+	require.Contains(t, payload["title"].(string), "inspect failed")
 }
 
 func TestKey_Help(t *testing.T) {

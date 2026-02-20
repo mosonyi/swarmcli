@@ -312,7 +312,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 
 		// Enter triggers navigation to services
-		if msg.String() == "i" || msg.String() == "enter" {
+		if msg.String() == "enter" {
 			if m.List.Cursor < len(m.List.Filtered) {
 				selected := m.List.Filtered[m.List.Cursor]
 				return func() tea.Msg {
@@ -346,28 +346,28 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 		}
 
-		// 'd' describes the stack (shows detailed YAML)
-		if msg.String() == "d" {
+		// 'i' inspects the stack (shows detailed JSON)
+		if msg.String() == "i" {
 			if m.List.Cursor < len(m.List.Filtered) {
 				selected := m.List.Filtered[m.List.Cursor]
 				stackName := selected.Name
 				stackOps := m.deps.Stacks
 				return func() tea.Msg {
-					l().Infof("Describing stack: %s", stackName)
-					yamlContent, err := stackOps.DescribeStack(stackName)
+					l().Infof("Inspecting stack: %s", stackName)
+					yamlContent, err := stackOps.InspectStack(stackName)
 					if err != nil {
-						l().Errorf("Failed to describe stack %s: %v", stackName, err)
+						l().Errorf("Failed to inspect stack %s: %v", stackName, err)
 						// Show error in inspect view
 						return view.NavigateToMsg{
 							ViewName: "inspect",
 							Payload: map[string]interface{}{
-								"title":  fmt.Sprintf("Stack: %s (describe failed)", stackName),
-								"json":   fmt.Sprintf("# Error describing stack:\n# %v", err),
+								"title":  fmt.Sprintf("Stack: %s (inspect failed)", stackName),
+								"json":   fmt.Sprintf("# Error inspecting stack:\n# %v", err),
 								"format": "raw",
 							},
 						}
 					}
-					l().Infof("Successfully described stack: %s (%d bytes)", stackName, len(yamlContent))
+					l().Infof("Successfully inspected stack: %s (%d bytes)", stackName, len(yamlContent))
 					return view.NavigateToMsg{
 						ViewName: "inspect",
 						Payload: map[string]interface{}{
@@ -1385,8 +1385,8 @@ func GetStacksHelpContent() []helpview.HelpCategory {
 		{
 			Title: "General",
 			Items: []helpview.HelpItem{
-				{Keys: "<i/enter>", Description: "Show services for Stack"},
-				{Keys: "<d>", Description: "Inspect stack"},
+				{Keys: "<enter>", Description: "Show services for Stack"},
+				{Keys: "<i>", Description: "Inspect stack"},
 				{Keys: "<e>", Description: "Edit stack (opens editor)"},
 				{Keys: "<p>", Description: "Show tasks for Stack"},
 				{Keys: "<n>", Description: "Create new stack"},

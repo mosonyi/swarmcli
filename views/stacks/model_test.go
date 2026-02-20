@@ -18,7 +18,7 @@ type mockStackOps struct {
 	removeStackNetworksFn     func(stackName string) error
 	deployStackFn             func(stackName string, yamlContent string) error
 	validateStackYAMLFn       func(content string) error
-	describeStackFn           func(stackName string) (string, error)
+	inspectStackFn            func(stackName string) (string, error)
 	reconstructStackComposeFn func(stackName string) (string, error)
 }
 
@@ -34,8 +34,8 @@ func (m *mockStackOps) DeployStack(stackName string, yamlContent string) error {
 func (m *mockStackOps) ValidateStackYAML(content string) error {
 	return m.validateStackYAMLFn(content)
 }
-func (m *mockStackOps) DescribeStack(stackName string) (string, error) {
-	return m.describeStackFn(stackName)
+func (m *mockStackOps) InspectStack(stackName string) (string, error) {
+	return m.inspectStackFn(stackName)
 }
 func (m *mockStackOps) ReconstructStackCompose(stackName string) (string, error) {
 	return m.reconstructStackComposeFn(stackName)
@@ -132,7 +132,7 @@ func noopStackOps() *mockStackOps {
 		removeStackNetworksFn:     func(_ string) error { return nil },
 		deployStackFn:             func(_ string, _ string) error { return nil },
 		validateStackYAMLFn:       func(_ string) error { return nil },
-		describeStackFn:           func(_ string) (string, error) { return "", nil },
+		inspectStackFn:            func(_ string) (string, error) { return "", nil },
 		reconstructStackComposeFn: func(_ string) (string, error) { return "", nil },
 	}
 }
@@ -263,7 +263,7 @@ func TestShortHelpItems(t *testing.T) {
 	}
 	require.True(t, keys["n"])
 	require.True(t, keys["e"])
-	require.True(t, keys["d"])
+	require.True(t, keys["i"])
 	require.True(t, keys["ctrl+d"])
 	require.True(t, keys["?"])
 }
