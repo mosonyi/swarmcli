@@ -9,7 +9,7 @@ type StackOps interface {
 	RemoveStackNetworks(stackName string) error
 	DeployStack(stackName string, yamlContent string) error
 	ValidateStackYAML(content string) error
-	DescribeStack(stackName string) (string, error)
+	InspectStack(stackName string) (string, error)
 	ReconstructStackCompose(stackName string) (string, error)
 }
 
@@ -31,8 +31,8 @@ func (defaultStackOps) ValidateStackYAML(content string) error {
 	return ValidateStackYAML(content)
 }
 
-func (defaultStackOps) DescribeStack(stackName string) (string, error) {
-	return DescribeStack(stackName)
+func (defaultStackOps) InspectStack(stackName string) (string, error) {
+	return GetStackInspection(stackName)
 }
 
 func (defaultStackOps) ReconstructStackCompose(stackName string) (string, error) {

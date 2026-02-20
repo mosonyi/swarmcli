@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// StackDescription contains detailed information about a stack
-type StackDescription struct {
+// StackInspection contains detailed information about a stack
+type StackInspection struct {
 	Name         string           `json:"name"`
 	Services     []ServiceSummary `json:"services"`
 	Networks     []string         `json:"networks,omitempty"`
@@ -36,14 +36,14 @@ type ServiceSummary struct {
 	UpdatedAt time.Time         `json:"updated_at"`
 }
 
-// DescribeStack returns detailed information about a stack in JSON format
-func DescribeStack(stackName string) (string, error) {
+// GetStackInspection returns detailed information about a stack in JSON format
+func GetStackInspection(stackName string) (string, error) {
 	snap, err := GetOrRefreshSnapshot()
 	if err != nil {
 		return "", fmt.Errorf("failed to get snapshot: %w", err)
 	}
 
-	desc := StackDescription{
+	desc := StackInspection{
 		Name:     stackName,
 		Services: []ServiceSummary{},
 	}
@@ -180,7 +180,7 @@ func DescribeStack(stackName string) (string, error) {
 	// Marshal to JSON with indentation
 	jsonBytes, err := json.MarshalIndent(desc, "", "  ")
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal stack description: %w", err)
+		return "", fmt.Errorf("failed to marshal stack inspection: %w", err)
 	}
 
 	return string(jsonBytes), nil
