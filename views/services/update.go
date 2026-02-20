@@ -451,6 +451,32 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					}
 				}
 			}
+		case "x":
+			if m.List.Cursor >= len(m.List.Filtered) {
+				return nil
+			}
+			entry := m.List.Filtered[m.List.Cursor]
+			action, ok := view.GetAction("shell")
+			if !ok {
+				m.confirmDialog.Visible = true
+				m.confirmDialog.ErrorMode = true
+				m.confirmDialog.Message = view.BEUnavailableErr("Shell").Error()
+				return nil
+			}
+			return action(entry.ServiceName)
+		case "w":
+			if m.List.Cursor >= len(m.List.Filtered) {
+				return nil
+			}
+			entry := m.List.Filtered[m.List.Cursor]
+			action, ok := view.GetAction("port-forward")
+			if !ok {
+				m.confirmDialog.Visible = true
+				m.confirmDialog.ErrorMode = true
+				m.confirmDialog.Message = view.BEUnavailableErr("Port Forward").Error()
+				return nil
+			}
+			return action(entry.ServiceName)
 		case "q":
 			m.Visible = false
 			// Go back to stacks view
@@ -999,6 +1025,8 @@ func GetServicesHelpContent() []helpview.HelpCategory {
 				{Keys: "<r>", Description: "Restart service"},
 				{Keys: "<ctrl+r>", Description: "Rollback service"},
 				{Keys: "<ctrl+d>", Description: "Remove service"},
+				{Keys: "<x>", Description: view.BEHelpDesc("shell", "Open shell into service container")},
+				{Keys: "<w>", Description: view.BEHelpDesc("port-forward", "Forward service ports to localhost")},
 				{Keys: "</>", Description: "Filter"},
 			},
 		},

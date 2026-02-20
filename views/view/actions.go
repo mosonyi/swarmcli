@@ -20,3 +20,6 @@ func GetAction(name string) (Action, bool) { fn, ok := actionRegistry[name]; ret
 
 // HasAction reports whether an action is registered under the given name.
 func HasAction(name string) bool { _, ok := actionRegistry[name]; return ok }
+
+// UnregisterActionForTest removes a registered action. Test-only; not safe for concurrent use.
+func UnregisterActionForTest(name string) { delete(actionRegistry, name) }

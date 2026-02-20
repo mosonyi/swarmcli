@@ -265,10 +265,7 @@ func (m *Model) HasErrors() bool {
 }
 
 func revealHelpDesc() string {
-	if view.HasAction("reveal-secret") {
-		return "Reveal"
-	}
-	return "Reveal (Pro)"
+	return view.BEHelpDesc("reveal-secret", "Reveal")
 }
 
 // validateSecretName validates a secret name

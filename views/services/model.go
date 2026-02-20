@@ -10,6 +10,7 @@ import (
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	"swarmcli/views/scaledialog"
+	"swarmcli/views/view"
 	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -163,6 +164,8 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "ctrl+r", Desc: "Rollback service"},
 		{Key: "ctrl+d", Desc: "Remove service"},
 		{Key: "l", Desc: "View logs"},
+		{Key: "x", Desc: view.BEHelpDesc("shell", "Shell"), Disabled: !view.HasAction("shell")},
+		{Key: "w", Desc: view.BEHelpDesc("port-forward", "Port Forward"), Disabled: !view.HasAction("port-forward")},
 		{Key: "?", Desc: "Help"},
 		{Key: "q", Desc: "Close"},
 	}
