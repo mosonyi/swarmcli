@@ -5,66 +5,53 @@ package stacksview
 
 import (
 	"fmt"
-	"strings"
 	"swarmcli/ui"
+	"swarmcli/ui/dialog"
 
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Shared dialog styles
-var (
-	dialogTitleStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("15")).
-				Background(lipgloss.Color("63")).
-				Padding(0, 1)
+func (m *Model) FrameTitle() string {
+	return fmt.Sprintf("Stacks on Node (Total: %d)", len(m.List.Items))
+}
 
-	dialogBorderStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("117"))
+func (m *Model) FrameHeader() string { return m.List.RenderHeader() }
+func (m *Model) FrameFooter() string { return m.List.RenderFooter() }
 
-	dialogItemStyle = lipgloss.NewStyle().
-			Padding(0, 1)
+func (m *Model) FrameContent() string {
+	m.setRenderItem()
 
-	dialogSelectedStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("15")).
-				Background(lipgloss.Color("63")).
-				Padding(0, 1)
+	header := m.FrameHeader()
+	footer := m.FrameFooter()
+	frame := ui.ComputeFrameDimensions(
+		m.List.Viewport.Width, m.List.Viewport.Height,
+		m.List.Viewport.Width, m.List.Viewport.Height,
+		header, footer,
+	)
+	content := m.List.VisibleContent(frame.DesiredContentLines)
 
-	dialogHelpStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Padding(0, 1)
+	l().Debugf("Rendering stacks view: createDialogActive=%v step=%s fileBrowserActive=%v",
+		m.createDialogActive, m.createDialogStep, m.fileBrowserActive)
 
-	dialogKeyStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("63")).
-			Bold(true)
-)
+	width := frame.FrameWidth
+	if m.createDialogActive {
+		content = ui.OverlayCentered(content, m.renderCreateDialog(), width, 0)
+	} else if m.fileBrowserActive {
+		fileBrowserDialog := ui.RenderFileBrowserDialog("Select Compose File", m.fileBrowserPath, m.fileBrowserFiles, m.fileBrowserCursor)
+		content = ui.OverlayCentered(content, fileBrowserDialog, width, 0)
+	} else if m.confirmDialog.Visible {
+		content = ui.OverlayCentered(content, m.confirmDialog.View(), width, 0)
+	}
+
+	return content
+}
 
 func (m *Model) View() string {
 	if !m.Visible {
 		return ""
 	}
-
-	// Ensure RenderItem can include expanded inline tasks
-	m.setRenderItem()
-
-	title := fmt.Sprintf("Stacks on Node (Total: %d)", len(m.List.Items))
-	framed, frame := m.List.RenderFramedView(title)
-
-	// Debug: log dialog states
-	l().Debugf("Rendering stacks view: createDialogActive=%v step=%s fileBrowserActive=%v",
-		m.createDialogActive, m.createDialogStep, m.fileBrowserActive)
-
-	if m.createDialogActive {
-		framed = ui.OverlayCentered(framed, m.renderCreateDialog(), frame.FrameWidth, frame.FrameHeight)
-	} else if m.fileBrowserActive {
-		fileBrowserDialog := ui.RenderFileBrowserDialog("Select Compose File", m.fileBrowserPath, m.fileBrowserFiles, m.fileBrowserCursor)
-		framed = ui.OverlayCentered(framed, fileBrowserDialog, frame.FrameWidth, frame.FrameHeight)
-	} else if m.confirmDialog.Visible {
-		framed = ui.OverlayCentered(framed, m.confirmDialog.View(), frame.FrameWidth, frame.FrameHeight)
-	}
-
-	return framed
+	return ui.RenderViewFrame(m.FrameTitle(), m.FrameHeader(), m.FrameContent(), m.FrameFooter(),
+		m.List.Viewport.Width, m.List.Viewport.Height, false)
 }
 
 func (m *Model) renderCreateDialog() string {
@@ -75,34 +62,34 @@ func (m *Model) renderCreateDialog() string {
 
 	switch m.createDialogStep {
 	case "source":
-		lines = append(lines, dialogTitleStyle.Render(" Create Stack - Choose Source "))
-		lines = append(lines, dialogItemStyle.Render(""))
-		lines = append(lines, dialogItemStyle.Render("How would you like to create the stack?"))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.TitleStyle.Render(" Create Stack - Choose Source "))
+		lines = append(lines, dialog.ItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render("How would you like to create the stack?"))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		if m.createStackSource == "file" {
-			lines = append(lines, dialogSelectedStyle.Render("→ From compose file"))
+			lines = append(lines, dialog.SelectedStyle.Render("→ From compose file"))
 		} else {
-			lines = append(lines, dialogItemStyle.Render("  From compose file"))
+			lines = append(lines, dialog.ItemStyle.Render("  From compose file"))
 		}
 
 		if m.createStackSource == "inline" {
-			lines = append(lines, dialogSelectedStyle.Render("→ Inline editor"))
+			lines = append(lines, dialog.SelectedStyle.Render("→ Inline editor"))
 		} else {
-			lines = append(lines, dialogItemStyle.Render("  Inline editor"))
+			lines = append(lines, dialog.ItemStyle.Render("  Inline editor"))
 		}
 
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 		helpText := fmt.Sprintf(" %s Select • %s / %s Navigate • %s Cancel",
-			dialogKeyStyle.Render("<Enter>"),
-			dialogKeyStyle.Render("<↑>"),
-			dialogKeyStyle.Render("<↓>"),
-			dialogKeyStyle.Render("<Esc>"))
-		lines = append(lines, dialogHelpStyle.Render(helpText))
+			dialog.KeyStyle.Render("<Enter>"),
+			dialog.KeyStyle.Render("<↑>"),
+			dialog.KeyStyle.Render("<↓>"),
+			dialog.KeyStyle.Render("<Esc>"))
+		lines = append(lines, dialog.HelpStyle.Render(helpText))
 
 	case "details-file":
-		lines = append(lines, dialogTitleStyle.Render(" Create Stack from Compose File "))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.TitleStyle.Render(" Create Stack from Compose File "))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Show error if present
 		if m.createDialogError != "" {
@@ -111,47 +98,47 @@ func (m *Model) renderCreateDialog() string {
 				Padding(0, 1).
 				Width(70)
 			// Wrap error message to multiple lines if needed
-			wrappedError := wrapText("⚠ "+m.createDialogError, 68) // 70 - 2 for padding
+			wrappedError := ui.WrapText("⚠ "+m.createDialogError, 68) // 70 - 2 for padding
 			for _, line := range wrappedError {
 				lines = append(lines, errorStyle.Render(line))
 			}
-			lines = append(lines, dialogItemStyle.Render(""))
+			lines = append(lines, dialog.ItemStyle.Render(""))
 		}
 
-		lines = append(lines, dialogItemStyle.Render(m.createNameInput.View()))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render(m.createNameInput.View()))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Show file path input with browse indicator when focused
 		// Always reserve space for the hint to prevent dialog resizing
 		fileLine := m.createFileInput.View()
 		if m.createInputFocus == 1 {
-			fileLine += "  " + dialogKeyStyle.Render("[f: Browse]")
+			fileLine += "  " + dialog.KeyStyle.Render("[f: Browse]")
 		} else {
 			// Add invisible spacing to maintain consistent width
 			fileLine += "             " // 13 characters to match "  [f: Browse]"
 		}
-		lines = append(lines, dialogItemStyle.Render(fileLine))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render(fileLine))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Change help text based on error state
 		var helpText string
 		if m.createDialogError != "" {
 			helpText = fmt.Sprintf(" %s Fix error • %s Navigate • %s Cancel",
-				dialogKeyStyle.Render("<Enter>"),
-				dialogKeyStyle.Render("<Tab>"),
-				dialogKeyStyle.Render("<Esc>"))
+				dialog.KeyStyle.Render("<Enter>"),
+				dialog.KeyStyle.Render("<Tab>"),
+				dialog.KeyStyle.Render("<Esc>"))
 		} else {
 			helpText = fmt.Sprintf(" %s Deploy • %s Navigate • %s Browse • %s Cancel",
-				dialogKeyStyle.Render("<Enter>"),
-				dialogKeyStyle.Render("<Tab>"),
-				dialogKeyStyle.Render("<f>"),
-				dialogKeyStyle.Render("<Esc>"))
+				dialog.KeyStyle.Render("<Enter>"),
+				dialog.KeyStyle.Render("<Tab>"),
+				dialog.KeyStyle.Render("<f>"),
+				dialog.KeyStyle.Render("<Esc>"))
 		}
-		lines = append(lines, dialogHelpStyle.Render(helpText))
+		lines = append(lines, dialog.HelpStyle.Render(helpText))
 
 	case "details-inline":
-		lines = append(lines, dialogTitleStyle.Render(" Create Stack - Inline Editor "))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.TitleStyle.Render(" Create Stack - Inline Editor "))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Show error if present
 		if m.createDialogError != "" {
@@ -160,15 +147,15 @@ func (m *Model) renderCreateDialog() string {
 				Padding(0, 1).
 				Width(70)
 			// Wrap error message to multiple lines if needed
-			wrappedError := wrapText("⚠ "+m.createDialogError, 68) // 70 - 2 for padding
+			wrappedError := ui.WrapText("⚠ "+m.createDialogError, 68) // 70 - 2 for padding
 			for _, line := range wrappedError {
 				lines = append(lines, errorStyle.Render(line))
 			}
-			lines = append(lines, dialogItemStyle.Render(""))
+			lines = append(lines, dialog.ItemStyle.Render(""))
 		}
 
-		lines = append(lines, dialogItemStyle.Render(m.createNameInput.View()))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render(m.createNameInput.View()))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Show source file if content was loaded from a file
 		if m.createStackPath != "" {
@@ -176,7 +163,7 @@ func (m *Model) renderCreateDialog() string {
 				Foreground(lipgloss.Color("240")).
 				Padding(0, 1)
 			lines = append(lines, sourceStyle.Render(fmt.Sprintf("Source: %s", m.createStackPath)))
-			lines = append(lines, dialogItemStyle.Render(""))
+			lines = append(lines, dialog.ItemStyle.Render(""))
 		}
 
 		// Show editor status with edit hint when focused
@@ -188,69 +175,31 @@ func (m *Model) renderCreateDialog() string {
 			editorStatus += "(empty)"
 		}
 		if m.createInputFocus == 1 {
-			editorStatus += "  " + dialogKeyStyle.Render("[e: Edit]")
+			editorStatus += "  " + dialog.KeyStyle.Render("[e: Edit]")
 		} else {
 			// Add invisible spacing to maintain consistent width
 			editorStatus += "           " // 11 characters to match "  [e: Edit]"
 		}
-		lines = append(lines, dialogItemStyle.Render(editorStatus))
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render(editorStatus))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Change help text based on error state
 		var helpText string
 		if m.createDialogError != "" {
 			helpText = fmt.Sprintf(" %s Fix error • %s Navigate • %s Cancel",
-				dialogKeyStyle.Render("<Enter>"),
-				dialogKeyStyle.Render("<Tab>"),
-				dialogKeyStyle.Render("<Esc>"))
+				dialog.KeyStyle.Render("<Enter>"),
+				dialog.KeyStyle.Render("<Tab>"),
+				dialog.KeyStyle.Render("<Esc>"))
 		} else {
 			helpText = fmt.Sprintf(" %s Deploy • %s Navigate • %s Edit • %s Cancel",
-				dialogKeyStyle.Render("<Enter>"),
-				dialogKeyStyle.Render("<Tab>"),
-				dialogKeyStyle.Render("<e>"),
-				dialogKeyStyle.Render("<Esc>"))
+				dialog.KeyStyle.Render("<Enter>"),
+				dialog.KeyStyle.Render("<Tab>"),
+				dialog.KeyStyle.Render("<e>"),
+				dialog.KeyStyle.Render("<Esc>"))
 		}
-		lines = append(lines, dialogHelpStyle.Render(helpText))
+		lines = append(lines, dialog.HelpStyle.Render(helpText))
 	}
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	return dialogBorderStyle.Render(content)
-}
-
-// wrapText wraps text to the specified width, breaking on word boundaries
-func wrapText(text string, width int) []string {
-	if len(text) <= width {
-		return []string{text}
-	}
-
-	var lines []string
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return []string{text}
-	}
-
-	currentLine := ""
-	for _, word := range words {
-		// If adding this word would exceed width
-		if len(currentLine)+len(word)+1 > width {
-			if currentLine != "" {
-				lines = append(lines, currentLine)
-				currentLine = word
-			} else {
-				// Word itself is longer than width, just add it
-				lines = append(lines, word)
-			}
-		} else {
-			if currentLine == "" {
-				currentLine = word
-			} else {
-				currentLine += " " + word
-			}
-		}
-	}
-	if currentLine != "" {
-		lines = append(lines, currentLine)
-	}
-
-	return lines
+	return dialog.BorderStyle.Render(content)
 }

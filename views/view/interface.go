@@ -22,4 +22,11 @@ type View interface {
 	OnExit() tea.Cmd  // Called when view is removed/replaced
 
 	HasErrors() bool // Returns true if the view has any errors to display
+
+	// Frame components — views return unframed content,
+	// app wraps with ui.RenderViewFrame.
+	FrameTitle() string   // text for frame title bar
+	FrameHeader() string  // rendered header line(s), "" if none
+	FrameFooter() string  // rendered footer line(s), "" if none
+	FrameContent() string // unframed content (may include dialog overlays)
 }

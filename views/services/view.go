@@ -7,9 +7,13 @@ import (
 	"swarmcli/ui"
 )
 
-func (m *Model) View() string {
-	header := m.List.RenderHeader()
-	footer := m.List.RenderFooter()
+func (m *Model) FrameTitle() string  { return m.title }
+func (m *Model) FrameHeader() string { return m.List.RenderHeader() }
+func (m *Model) FrameFooter() string { return m.List.RenderFooter() }
+
+func (m *Model) FrameContent() string {
+	header := m.FrameHeader()
+	footer := m.FrameFooter()
 
 	frame := ui.ComputeFrameDimensions(
 		m.List.Viewport.Width,
@@ -24,27 +28,23 @@ func (m *Model) View() string {
 	if m.selectedTaskIndex >= 0 && m.List.Cursor < len(m.List.Filtered) {
 		entry := m.List.Filtered[m.List.Cursor]
 		if m.expandedServices[entry.ServiceID] {
-			// Skip VisibleContent's offset adjustment - we'll manage it manually
 			m.List.SkipOffsetAdjustment = true
 
-			// Calculate the line offset for the selected task
 			lineOffset := 0
 			for i := 0; i < m.List.Cursor; i++ {
 				e := m.List.Filtered[i]
-				lineOffset++ // service row
+				lineOffset++
 				if m.expandedServices[e.ServiceID] {
 					tasks := m.serviceTasks[e.ServiceID]
 					if len(tasks) > 0 {
-						lineOffset += 1 + len(tasks) // header + task rows
+						lineOffset += 1 + len(tasks)
 					} else {
-						lineOffset += 1 // "no tasks" row
+						lineOffset += 1
 					}
 				}
 			}
-			// Add service row + header + selected task
 			lineOffset += 2 + m.selectedTaskIndex
 
-			// Ensure the task line is visible
 			if lineOffset < m.List.Viewport.YOffset {
 				m.List.Viewport.YOffset = lineOffset
 			} else if lineOffset >= m.List.Viewport.YOffset+frame.DesiredContentLines {
@@ -55,25 +55,23 @@ func (m *Model) View() string {
 			}
 		}
 	} else {
-		// Not in task navigation - let VisibleContent handle offset
 		m.List.SkipOffsetAdjustment = false
 	}
 
-	// Use VisibleContent to get only the visible portion based on cursor position
-	// This ensures proper scrolling and that the cursor is always visible
-	// VisibleContent already returns exactly desiredContentLines, so we use
-	// RenderFramedBox instead of RenderFramedBoxHeight to avoid double-padding
 	content := m.List.VisibleContent(frame.DesiredContentLines)
 
-	framed := ui.RenderFramedBox(m.title, header, content, footer, frame.FrameWidth)
-
+	width := frame.FrameWidth
 	if m.confirmDialog.Visible {
-		framed = ui.OverlayCentered(framed, m.confirmDialog.View(), frame.FrameWidth, frame.FrameHeight)
+		content = ui.OverlayCentered(content, m.confirmDialog.View(), width, 0)
 	}
-
 	if m.scaleDialog.Visible {
-		framed = ui.OverlayCentered(framed, m.scaleDialog.View(), frame.FrameWidth, frame.FrameHeight)
+		content = ui.OverlayCentered(content, m.scaleDialog.View(), width, 0)
 	}
 
-	return framed
+	return content
+}
+
+func (m *Model) View() string {
+	return ui.RenderViewFrame(m.FrameTitle(), m.FrameHeader(), m.FrameContent(), m.FrameFooter(),
+		m.List.Viewport.Width, m.List.Viewport.Height, false)
 }

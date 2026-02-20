@@ -13,11 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func (m *Model) View() string {
-	if !m.Visible {
-		return ""
-	}
-
+func (m *Model) FrameTitle() string {
 	total := len(m.List.Items)
 	managers := 0
 	for _, n := range m.List.Items {
@@ -25,22 +21,42 @@ func (m *Model) View() string {
 			managers++
 		}
 	}
+	return fmt.Sprintf("Nodes (%d total, %d manager%s)", total, managers, plural(managers))
+}
 
-	title := fmt.Sprintf("Nodes (%d total, %d manager%s)", total, managers, plural(managers))
+func (m *Model) FrameHeader() string { return m.List.RenderHeader() }
+func (m *Model) FrameFooter() string { return m.List.RenderFooter() }
 
-	framed, frame := m.List.RenderFramedView(title)
+func (m *Model) FrameContent() string {
+	header := m.FrameHeader()
+	footer := m.FrameFooter()
+	frame := ui.ComputeFrameDimensions(
+		m.List.Viewport.Width, m.List.Viewport.Height,
+		m.List.Viewport.Width, m.List.Viewport.Height,
+		header, footer,
+	)
+	content := m.List.VisibleContent(frame.DesiredContentLines)
 
+	width := frame.FrameWidth
 	if m.labelInputDialog {
-		framed = ui.OverlayCentered(framed, m.renderLabelInputDialog(), frame.FrameWidth, frame.FrameHeight)
+		content = ui.OverlayCentered(content, m.renderLabelInputDialog(), width, 0)
 	} else if m.labelRemoveDialog {
-		framed = ui.OverlayCentered(framed, m.renderLabelRemoveDialog(), frame.FrameWidth, frame.FrameHeight)
+		content = ui.OverlayCentered(content, m.renderLabelRemoveDialog(), width, 0)
 	} else if m.availabilityDialog {
-		framed = ui.OverlayCentered(framed, m.renderAvailabilityDialog(), frame.FrameWidth, frame.FrameHeight)
+		content = ui.OverlayCentered(content, m.renderAvailabilityDialog(), width, 0)
 	} else if m.confirmDialog.Visible {
-		framed = ui.OverlayCentered(framed, m.confirmDialog.View(), frame.FrameWidth, frame.FrameHeight)
+		content = ui.OverlayCentered(content, m.confirmDialog.View(), width, 0)
 	}
 
-	return framed
+	return content
+}
+
+func (m *Model) View() string {
+	if !m.Visible {
+		return ""
+	}
+	return ui.RenderViewFrame(m.FrameTitle(), m.FrameHeader(), m.FrameContent(), m.FrameFooter(),
+		m.List.Viewport.Width, m.List.Viewport.Height, false)
 }
 
 func plural(n int) string {

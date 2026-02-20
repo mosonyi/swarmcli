@@ -10,53 +10,15 @@ import (
 	"swarmcli/docker"
 	"swarmcli/ui"
 	"swarmcli/ui/components/errordialog"
+	"swarmcli/ui/dialog"
 
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Shared dialog styles
-var (
-	dialogTitleStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("15")).
-				Background(lipgloss.Color("63")).
-				Padding(0, 1)
+func (m *Model) FrameTitle() string { return "Docker Contexts" }
 
-	dialogBorderStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("117"))
-
-	dialogItemStyle = lipgloss.NewStyle().
-			Padding(0, 1)
-
-	dialogSelectedStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("15")).
-				Background(lipgloss.Color("63")).
-				Padding(0, 1)
-
-	dialogHelpStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Padding(0, 1)
-
-	dialogKeyStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("63")).
-			Bold(true)
-)
-
-func (m *Model) View() string {
-	if !m.Visible {
-		return ""
-	}
-
-	width := m.viewport.Width
-	if width <= 0 {
-		width = 80
-	}
-
-	title := "Docker Contexts"
-	// Default header is empty; only show it for loading/switch/error/success
+func (m *Model) FrameHeader() string {
 	header := ""
-
 	if m.IsLoading() {
 		header = "Loading contexts..."
 	} else if m.IsSwitchPending() {
@@ -65,39 +27,39 @@ func (m *Model) View() string {
 		header = fmt.Sprintf("Error: %s", err)
 	} else if msg := m.GetSuccess(); msg != "" {
 		header = msg
+	} else {
+		return m.List.RenderHeader()
+	}
+	return ui.FrameHeaderStyle.Render(header)
+}
+
+func (m *Model) FrameFooter() string { return "" }
+
+func (m *Model) FrameContent() string {
+	width := m.viewport.Width
+	if width <= 0 {
+		width = 80
 	}
 
-	// We'll render the column header in the frame header slot so it
-	// appears directly under the top border and aligns with content.
-	headerRendered := ui.FrameHeaderStyle.Render(header)
-	footerRendered := ""
+	headerRendered := m.FrameHeader()
+	footerRendered := m.FrameFooter()
 
-	// Compute consistent frame sizing (same helper/pattern as stacks/configs).
 	frame := ui.ComputeFrameDimensions(
-		m.viewport.Width,
-		m.viewport.Height,
-		m.viewport.Width,
-		m.viewport.Height,
-		headerRendered,
-		footerRendered,
+		m.viewport.Width, m.viewport.Height,
+		m.viewport.Width, m.viewport.Height,
+		headerRendered, footerRendered,
 	)
 
-	// Use FilterableList for the contexts content. Keep its viewport size
-	// in sync with the inner content area (DesiredContentLines), otherwise
-	// the list can effectively scroll past the top and "hide" the first rows.
 	m.List.Viewport.Width = width
 	m.List.Viewport.Height = frame.DesiredContentLines
 
 	colWidths := m.List.ColWidths()
 
-	// Now define render using those exact column widths so items align
 	m.List.RenderItem = func(ctx docker.ContextInfo, selected bool, _ int) string {
 		current := " "
 		if ctx.Current {
 			current = "*"
 		}
-
-		// Prepare name with room for the current marker and a space
 		nameMax := colWidths[0] - 2
 		if nameMax < 0 {
 			nameMax = 0
@@ -156,8 +118,6 @@ func (m *Model) View() string {
 			}
 		}
 
-		// Build the line with exact column widths and no extra spacing so
-		// each column starts at the expected percent positions.
 		line := fmt.Sprintf("%-*s%-*s%-*s%-*s%-*s",
 			colWidths[0], firstCol,
 			colWidths[1], tlsChar,
@@ -171,25 +131,15 @@ func (m *Model) View() string {
 		return line
 	}
 
-	// If we're still loading, show a loading placeholder to avoid flashing
-	// "No items found." before the async load completes.
 	var content string
 	if m.IsLoading() {
 		loadingLine := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("Loading contexts...")
 		content = ui.TrimOrPadContentToLines(loadingLine, frame.DesiredContentLines)
 	} else {
-		// VisibleContent returns exactly DesiredContentLines and keeps the cursor visible.
-		listContent := m.List.VisibleContent(frame.DesiredContentLines)
-
-		// Column header with sort arrows rendered by FilterableList
-		headerRendered = m.List.RenderHeader()
-
-		content = listContent
+		content = m.List.VisibleContent(frame.DesiredContentLines)
 	}
 
-	// Overlay dialogs on content BEFORE framing
 	if m.certFileBrowserActive {
-		// Cert file browser has highest priority when open
 		certFileBrowserDialog := m.renderCertFileBrowserDialog()
 		content = ui.OverlayCentered(content, certFileBrowserDialog, width, 0)
 	} else if m.createDialogActive {
@@ -212,24 +162,56 @@ func (m *Model) View() string {
 		content = ui.OverlayCentered(content, dialogView, width, 0)
 	}
 
-	rendered := ui.RenderFramedBox(
-		title,
+	return content
+}
+
+func (m *Model) View() string {
+	if !m.Visible {
+		return ""
+	}
+
+	width := m.viewport.Width
+	if width <= 0 {
+		width = 80
+	}
+
+	// Contexts view has a dynamic header that changes based on list loading state
+	headerRendered := m.FrameHeader()
+	footerRendered := m.FrameFooter()
+
+	frame := ui.ComputeFrameDimensions(
+		m.viewport.Width, m.viewport.Height,
+		m.viewport.Width, m.viewport.Height,
+		headerRendered, footerRendered,
+	)
+
+	m.List.Viewport.Width = width
+	m.List.Viewport.Height = frame.DesiredContentLines
+
+	// Get content via FrameContent (which also sets up RenderItem)
+	content := m.FrameContent()
+
+	// After FrameContent, header may have changed to list header
+	if !m.IsLoading() {
+		headerRendered = m.List.RenderHeader()
+	}
+
+	return ui.RenderFramedBox(
+		m.FrameTitle(),
 		headerRendered,
 		content,
 		footerRendered,
 		frame.FrameWidth,
 	)
-
-	return rendered
 }
 
 func (m *Model) renderImportDialog() string {
 	contentWidth := 60
 
-	titleStyleWithWidth := dialogTitleStyle.Width(contentWidth)
-	itemStyleWithWidth := dialogItemStyle.Width(contentWidth)
-	borderStyleWithWidth := dialogBorderStyle.Width(contentWidth + 2)
-	helpStyleWithWidth := dialogHelpStyle.Width(contentWidth)
+	titleStyleWithWidth := dialog.TitleStyle.Width(contentWidth)
+	itemStyleWithWidth := dialog.ItemStyle.Width(contentWidth)
+	borderStyleWithWidth := dialog.BorderStyle.Width(contentWidth + 2)
+	helpStyleWithWidth := dialog.HelpStyle.Width(contentWidth)
 
 	var lines []string
 	lines = append(lines, titleStyleWithWidth.Render(" Import Docker Context "))
@@ -239,8 +221,8 @@ func (m *Model) renderImportDialog() string {
 	lines = append(lines, itemStyleWithWidth.Render(""))
 
 	helpText := fmt.Sprintf(" %s Confirm • %s Cancel",
-		dialogKeyStyle.Render("<Enter>"),
-		dialogKeyStyle.Render("<Esc>"))
+		dialog.KeyStyle.Render("<Enter>"),
+		dialog.KeyStyle.Render("<Esc>"))
 	lines = append(lines, helpStyleWithWidth.Render(helpText))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
@@ -250,19 +232,19 @@ func (m *Model) renderImportDialog() string {
 // renderCreateDialog renders the create context dialog
 func (m *Model) renderCreateDialog() string {
 	var lines []string
-	lines = append(lines, dialogTitleStyle.Render(" Create Docker Context "))
-	lines = append(lines, dialogItemStyle.Render(""))
-	lines = append(lines, dialogItemStyle.Render(m.createNameInput.View()))
-	lines = append(lines, dialogItemStyle.Render(m.createDescInput.View()))
-	lines = append(lines, dialogItemStyle.Render(m.createHostInput.View()))
-	lines = append(lines, dialogItemStyle.Render(""))
+	lines = append(lines, dialog.TitleStyle.Render(" Create Docker Context "))
+	lines = append(lines, dialog.ItemStyle.Render(""))
+	lines = append(lines, dialog.ItemStyle.Render(m.createNameInput.View()))
+	lines = append(lines, dialog.ItemStyle.Render(m.createDescInput.View()))
+	lines = append(lines, dialog.ItemStyle.Render(m.createHostInput.View()))
+	lines = append(lines, dialog.ItemStyle.Render(""))
 
 	// TLS checkbox
 	checkbox := "[ ]"
 	if m.createTLSEnabled {
 		checkbox = "[✓]"
 	}
-	checkboxStyle := dialogItemStyle
+	checkboxStyle := dialog.ItemStyle
 	if m.createInputFocus == 3 {
 		checkboxStyle = lipgloss.NewStyle().
 			Padding(0, 1).
@@ -273,28 +255,28 @@ func (m *Model) renderCreateDialog() string {
 
 	// Show cert file inputs only if TLS is enabled
 	if m.createTLSEnabled {
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// CA file with browse button indicator
 		caLine := m.createCAInput.View()
 		if m.createInputFocus == 4 {
-			caLine += "  " + dialogKeyStyle.Render("[f: Browse]")
+			caLine += "  " + dialog.KeyStyle.Render("[f: Browse]")
 		}
-		lines = append(lines, dialogItemStyle.Render(caLine))
+		lines = append(lines, dialog.ItemStyle.Render(caLine))
 
 		// Cert file with browse button indicator
 		certLine := m.createCertInput.View()
 		if m.createInputFocus == 5 {
-			certLine += "  " + dialogKeyStyle.Render("[f: Browse]")
+			certLine += "  " + dialog.KeyStyle.Render("[f: Browse]")
 		}
-		lines = append(lines, dialogItemStyle.Render(certLine))
+		lines = append(lines, dialog.ItemStyle.Render(certLine))
 
 		// Key file with browse button indicator
 		keyLine := m.createKeyInput.View()
 		if m.createInputFocus == 6 {
-			keyLine += "  " + dialogKeyStyle.Render("[f: Browse]")
+			keyLine += "  " + dialog.KeyStyle.Render("[f: Browse]")
 		}
-		lines = append(lines, dialogItemStyle.Render(keyLine))
+		lines = append(lines, dialog.ItemStyle.Render(keyLine))
 	}
 
 	// Show error message if present
@@ -303,38 +285,38 @@ func (m *Model) renderCreateDialog() string {
 		errorStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("196")).
 			Padding(0, 1)
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 		lines = append(lines, errorStyle.Render(errorMsg))
 	}
 
-	lines = append(lines, dialogItemStyle.Render(""))
+	lines = append(lines, dialog.ItemStyle.Render(""))
 
 	// Adjust help text based on whether error is shown
 	var helpText string
 	if errorMsg != "" {
 		helpText = fmt.Sprintf(" %s Clear Error • %s Cancel",
-			dialogKeyStyle.Render("<Enter>"),
-			dialogKeyStyle.Render("<Esc>"))
+			dialog.KeyStyle.Render("<Enter>"),
+			dialog.KeyStyle.Render("<Esc>"))
 	} else {
 		helpText = fmt.Sprintf(" %s Create • %s Navigate • %s Toggle TLS • %s Browse • %s Cancel",
-			dialogKeyStyle.Render("<Enter>"),
-			dialogKeyStyle.Render("<Tab/↑/↓>"),
-			dialogKeyStyle.Render("<Space>"),
-			dialogKeyStyle.Render("<f>"),
-			dialogKeyStyle.Render("<Esc>"))
+			dialog.KeyStyle.Render("<Enter>"),
+			dialog.KeyStyle.Render("<Tab/↑/↓>"),
+			dialog.KeyStyle.Render("<Space>"),
+			dialog.KeyStyle.Render("<f>"),
+			dialog.KeyStyle.Render("<Esc>"))
 	}
-	lines = append(lines, dialogHelpStyle.Render(helpText))
+	lines = append(lines, dialog.HelpStyle.Render(helpText))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	return dialogBorderStyle.Render(content)
+	return dialog.BorderStyle.Render(content)
 }
 
 // renderEditDialog renders the edit context dialog (description only)
 func (m *Model) renderEditDialog() string {
 	var lines []string
-	lines = append(lines, dialogTitleStyle.Render(" Edit Context: "+m.editContextName+" "))
-	lines = append(lines, dialogItemStyle.Render(""))
-	lines = append(lines, dialogItemStyle.Render(m.editDescInput.View()))
+	lines = append(lines, dialog.TitleStyle.Render(" Edit Context: "+m.editContextName+" "))
+	lines = append(lines, dialog.ItemStyle.Render(""))
+	lines = append(lines, dialog.ItemStyle.Render(m.editDescInput.View()))
 
 	// Show error message if present
 	errorMsg := m.GetError()
@@ -342,27 +324,27 @@ func (m *Model) renderEditDialog() string {
 		errorStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("196")).
 			Padding(0, 1)
-		lines = append(lines, dialogItemStyle.Render(""))
+		lines = append(lines, dialog.ItemStyle.Render(""))
 		lines = append(lines, errorStyle.Render(errorMsg))
 	}
 
-	lines = append(lines, dialogItemStyle.Render(""))
+	lines = append(lines, dialog.ItemStyle.Render(""))
 
 	// Adjust help text based on whether error is shown
 	var helpText string
 	if errorMsg != "" {
 		helpText = fmt.Sprintf(" %s Clear Error • %s Cancel",
-			dialogKeyStyle.Render("<Enter>"),
-			dialogKeyStyle.Render("<Esc>"))
+			dialog.KeyStyle.Render("<Enter>"),
+			dialog.KeyStyle.Render("<Esc>"))
 	} else {
 		helpText = fmt.Sprintf(" %s Update • %s Cancel",
-			dialogKeyStyle.Render("<Enter>"),
-			dialogKeyStyle.Render("<Esc>"))
+			dialog.KeyStyle.Render("<Enter>"),
+			dialog.KeyStyle.Render("<Esc>"))
 	}
-	lines = append(lines, dialogHelpStyle.Render(helpText))
+	lines = append(lines, dialog.HelpStyle.Render(helpText))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	return dialogBorderStyle.Render(content)
+	return dialog.BorderStyle.Render(content)
 }
 
 // renderCertFileBrowserDialog renders the certificate file browser dialog
@@ -384,9 +366,9 @@ func (m *Model) renderCertFileBrowserDialog() string {
 	}
 
 	var lines []string
-	lines = append(lines, dialogTitleStyle.Render(fmt.Sprintf(" Select %s ", fileTypeLabel)))
-	lines = append(lines, dialogItemStyle.Render(fmt.Sprintf("Directory: %s (%d files)", m.fileBrowserPath, fileCount)))
-	lines = append(lines, dialogItemStyle.Render(""))
+	lines = append(lines, dialog.TitleStyle.Render(fmt.Sprintf(" Select %s ", fileTypeLabel)))
+	lines = append(lines, dialog.ItemStyle.Render(fmt.Sprintf("Directory: %s (%d files)", m.fileBrowserPath, fileCount)))
+	lines = append(lines, dialog.ItemStyle.Render(""))
 
 	// Show files with cursor
 	maxVisible := 10
@@ -416,22 +398,22 @@ func (m *Model) renderCertFileBrowserDialog() string {
 			}
 		}
 		if i == m.fileBrowserCursor {
-			lines = append(lines, dialogSelectedStyle.Render("→ "+displayName))
+			lines = append(lines, dialog.SelectedStyle.Render("→ "+displayName))
 		} else {
-			lines = append(lines, dialogItemStyle.Render("  "+displayName))
+			lines = append(lines, dialog.ItemStyle.Render("  "+displayName))
 		}
 	}
 
-	lines = append(lines, dialogItemStyle.Render(""))
+	lines = append(lines, dialog.ItemStyle.Render(""))
 	helpText := fmt.Sprintf(" %s Select/Navigate • %s / %s Move • %s Cancel",
-		dialogKeyStyle.Render("<Enter>"),
-		dialogKeyStyle.Render("<↑/↓>"),
-		dialogKeyStyle.Render("<PgUp/PgDn>"),
-		dialogKeyStyle.Render("<Esc>"))
-	lines = append(lines, dialogHelpStyle.Render(helpText))
+		dialog.KeyStyle.Render("<Enter>"),
+		dialog.KeyStyle.Render("<↑/↓>"),
+		dialog.KeyStyle.Render("<PgUp/PgDn>"),
+		dialog.KeyStyle.Render("<Esc>"))
+	lines = append(lines, dialog.HelpStyle.Render(helpText))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	return dialogBorderStyle.Render(content)
+	return dialog.BorderStyle.Render(content)
 }
 
 // renderErrorDialog renders the error dialog

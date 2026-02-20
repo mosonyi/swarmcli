@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"swarmcli/docker"
+	"swarmcli/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"
@@ -292,8 +293,8 @@ func TestFormatErrorWithScroll(t *testing.T) {
 }
 
 func TestWrapText(t *testing.T) {
-	require.Equal(t, []string{"short"}, wrapText("short", 20))
-	lines := wrapText("this is a longer sentence that wraps", 15)
+	require.Equal(t, []string{"short"}, ui.WrapText("short", 20))
+	lines := ui.WrapText("this is a longer sentence that wraps", 15)
 	require.True(t, len(lines) > 1)
 }
 
