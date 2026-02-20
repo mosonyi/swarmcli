@@ -30,12 +30,12 @@ func TestView_WithEntries(t *testing.T) {
 func TestView_DisabledEntryNotBold(t *testing.T) {
 	m := New(200, 40)
 	m.WithViewHelp([]HelpEntry{
-		{Key: "x", Desc: "Reveal (Pro)", Disabled: true},
+		{Key: "x", Desc: "Reveal (BE)", Disabled: true},
 	})
 	out := m.View("", false)
 	// Disabled entries still appear in output, just styled differently
 	require.Contains(t, out, "x")
-	require.Contains(t, out, "Reveal (Pro)")
+	require.Contains(t, out, "Reveal (BE)")
 }
 
 func TestView_EmptyHelp_ReturnsSystemInfo(t *testing.T) {

@@ -683,3 +683,80 @@ func TestFormatRelativeTime_Hours(t *testing.T) {
 	result := formatRelativeTime(time.Now().Add(-3 * time.Hour))
 	require.Contains(t, result, "h ago")
 }
+
+// --- Business Edition gating tests ---
+
+func TestShortHelpItems_IncludesShellAndPortForward(t *testing.T) {
+	m := testModel()
+	items := m.ShortHelpItems()
+	keys := make(map[string]string)
+	for _, item := range items {
+		keys[item.Key] = item.Desc
+	}
+	require.Contains(t, keys, "x")
+	require.Contains(t, keys["x"], "(BE)")
+	require.Contains(t, keys, "w")
+	require.Contains(t, keys["w"], "(BE)")
+}
+
+func TestKey_X_NoAction_ShowsBEDialog(t *testing.T) {
+	m := testModel()
+	loadServices(m, fakeEntries("web"))
+	m.Update(key("x"))
+	require.True(t, m.confirmDialog.Visible)
+	require.True(t, m.confirmDialog.ErrorMode)
+	require.Contains(t, m.confirmDialog.Message, "Shell")
+	require.Contains(t, m.confirmDialog.Message, "swarmcli.io/be")
+}
+
+func TestKey_W_NoAction_ShowsBEDialog(t *testing.T) {
+	m := testModel()
+	loadServices(m, fakeEntries("web"))
+	m.Update(key("w"))
+	require.True(t, m.confirmDialog.Visible)
+	require.True(t, m.confirmDialog.ErrorMode)
+	require.Contains(t, m.confirmDialog.Message, "Port Forward")
+	require.Contains(t, m.confirmDialog.Message, "swarmcli.io/be")
+}
+
+func TestKey_X_WithAction_CallsAction(t *testing.T) {
+	called := ""
+	view.RegisterAction("shell", func(name string) tea.Cmd {
+		return func() tea.Msg { called = name; return nil }
+	})
+	defer view.UnregisterActionForTest("shell")
+
+	m := testModel()
+	loadServices(m, fakeEntries("web"))
+	cmd := m.Update(key("x"))
+	require.NotNil(t, cmd)
+	runCmd(cmd)
+	require.Equal(t, "web", called)
+}
+
+func TestKey_W_WithAction_CallsAction(t *testing.T) {
+	called := ""
+	view.RegisterAction("port-forward", func(name string) tea.Cmd {
+		return func() tea.Msg { called = name; return nil }
+	})
+	defer view.UnregisterActionForTest("port-forward")
+
+	m := testModel()
+	loadServices(m, fakeEntries("web"))
+	cmd := m.Update(key("w"))
+	require.NotNil(t, cmd)
+	runCmd(cmd)
+	require.Equal(t, "web", called)
+}
+
+func TestGetServicesHelpContent_IncludesBEActions(t *testing.T) {
+	cats := GetServicesHelpContent()
+	found := map[string]bool{}
+	for _, cat := range cats {
+		for _, item := range cat.Items {
+			found[item.Keys] = true
+		}
+	}
+	require.True(t, found["<x>"])
+	require.True(t, found["<w>"])
+}

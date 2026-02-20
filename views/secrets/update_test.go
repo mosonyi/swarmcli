@@ -194,6 +194,8 @@ func TestKey_X_NoAction_ShowsError(t *testing.T) {
 	loadSecrets(m, fakeSecrets("s1"))
 	m.Update(key("x"))
 	require.True(t, m.errorDialogActive)
+	require.Contains(t, m.err.Error(), "Business Edition")
+	require.Contains(t, m.err.Error(), "swarmcli.io/be")
 }
 
 func TestKey_Help_NavigatesToHelp(t *testing.T) {

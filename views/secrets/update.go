@@ -390,7 +390,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			action, ok := view.GetAction("reveal-secret")
 			if !ok {
-				m.err = fmt.Errorf("Reveal Secret is a Pro feature. Upgrade to SwarmCLI Pro for access.")
+				m.err = view.BEUnavailableErr("Reveal Secret")
 				m.errorDialogActive = true
 				return nil
 			}
@@ -1001,10 +1001,7 @@ func (m *Model) handleUsedByViewKey(msg tea.KeyMsg) tea.Cmd {
 }
 
 func revealDetailedHelpDesc() string {
-	if view.HasAction("reveal-secret") {
-		return "Reveal secret content"
-	}
-	return "Reveal secret content (Pro)"
+	return view.BEHelpDesc("reveal-secret", "Reveal secret content")
 }
 
 // GetSecretsHelpContent returns categorized help for the secrets view
