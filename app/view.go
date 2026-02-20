@@ -49,15 +49,18 @@ func (m *Model) View() string {
 	// Subtract help bar (systeminfoview.Height) and stack bar (1 line) from the
 	// viewport height so the frame fits between chrome elements.
 	frameHeight := m.viewport.Height - systeminfoview.Height - 1
-	if frameHeight < 1 {
-		frameHeight = 1
-	}
-	framedView := ui.RenderViewFrame(title, header, content, footer, m.viewport.Width, frameHeight, false)
 
 	if m.commandInput.Visible() {
-		// Render a framed 3-line command box between the header and main view.
+		// Reserve 3 lines for the command frame so the main view shrinks.
+		const cmdFrameHeight = 3
+		frameHeight -= cmdFrameHeight
+		if frameHeight < 1 {
+			frameHeight = 1
+		}
+		framedView := ui.RenderViewFrame(title, header, content, footer, m.viewport.Width, frameHeight, false)
+
 		frameWidth := m.viewport.Width + 4
-		cmdFrame := ui.RenderFramedBoxHeight("", "", m.commandInput.View(), "", frameWidth, 3)
+		cmdFrame := ui.RenderFramedBoxHeight("", "", m.commandInput.View(), "", frameWidth, cmdFrameHeight)
 
 		return lipgloss.JoinVertical(
 			lipgloss.Left,
@@ -67,6 +70,11 @@ func (m *Model) View() string {
 			m.renderStackBar(),
 		)
 	}
+
+	if frameHeight < 1 {
+		frameHeight = 1
+	}
+	framedView := ui.RenderViewFrame(title, header, content, footer, m.viewport.Width, frameHeight, false)
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
