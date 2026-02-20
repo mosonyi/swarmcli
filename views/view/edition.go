@@ -13,7 +13,11 @@ func BEHelpDesc(actionName, desc string) string {
 	return desc + " (BE)"
 }
 
+// BEUnavailableFormat is the format string used by BEUnavailableErr.
+// Contains one %s verb for the feature name. Override in init() to customise.
+var BEUnavailableFormat = "%s is a Business Edition feature.\nFor more information, visit: https://swarmcli.io/be"
+
 // BEUnavailableErr returns an error indicating a feature requires Business Edition.
 func BEUnavailableErr(featureName string) error {
-	return fmt.Errorf("%s is a Business Edition feature.\nFor more information, visit: https://swarmcli.io/be", featureName)
+	return fmt.Errorf(BEUnavailableFormat, featureName)
 }
