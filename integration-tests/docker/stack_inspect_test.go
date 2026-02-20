@@ -13,41 +13,41 @@ import (
 	"testing"
 )
 
-func TestDescribeStack(t *testing.T) {
+func TestInspectStack(t *testing.T) {
 	// This test assumes that the demo stack is already deployed
 	// (done by test-setup/testenv.sh deploy)
 	stackName := "demo"
 
-	jsonOutput, err := docker.DescribeStack(stackName)
+	jsonOutput, err := docker.GetStackInspection(stackName)
 	if err != nil {
-		t.Fatalf("Failed to describe stack: %v", err)
+		t.Fatalf("Failed to inspect stack: %v", err)
 	}
 
 	if jsonOutput == "" {
-		t.Fatal("Description output is empty")
+		t.Fatal("Inspection output is empty")
 	}
 
 	// Verify it's valid JSON
-	var desc docker.StackDescription
-	if err := json.Unmarshal([]byte(jsonOutput), &desc); err != nil {
+	var inspection docker.StackInspection
+	if err := json.Unmarshal([]byte(jsonOutput), &inspection); err != nil {
 		t.Fatalf("Failed to parse JSON output: %v", err)
 	}
 
 	// Verify basic fields
-	if desc.Name != stackName {
-		t.Errorf("Expected stack name %q, got %q", stackName, desc.Name)
+	if inspection.Name != stackName {
+		t.Errorf("Expected stack name %q, got %q", stackName, inspection.Name)
 	}
 
-	if desc.ServiceCount == 0 {
+	if inspection.ServiceCount == 0 {
 		t.Error("Expected non-zero service count")
 	}
 
-	if len(desc.Services) == 0 {
+	if len(inspection.Services) == 0 {
 		t.Error("Expected services to be non-empty")
 	}
 
 	// Check that services have expected fields
-	for _, svc := range desc.Services {
+	for _, svc := range inspection.Services {
 		if svc.Name == "" {
 			t.Error("Service missing name")
 		}
@@ -59,13 +59,13 @@ func TestDescribeStack(t *testing.T) {
 		}
 	}
 
-	t.Logf("Successfully described stack: %d services, %d tasks", desc.ServiceCount, desc.TaskCount)
+	t.Logf("Successfully inspected stack: %d services, %d tasks", inspection.ServiceCount, inspection.TaskCount)
 }
 
-func TestDescribeStack_NonExistent(t *testing.T) {
+func TestInspectStack_NonExistent(t *testing.T) {
 	stackName := "non-existent-stack-xyz123"
 
-	_, err := docker.DescribeStack(stackName)
+	_, err := docker.GetStackInspection(stackName)
 	if err == nil {
 		t.Fatal("Expected error for non-existent stack, got nil")
 	}
