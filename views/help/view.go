@@ -11,36 +11,38 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+func (m *Model) FrameTitle() string { return "Help" }
+
+func (m *Model) FrameHeader() string {
+	if len(m.categories) > 0 {
+		return ""
+	}
+	return ui.FrameHeaderStyle.Render("Available Commands")
+}
+
+func (m *Model) FrameFooter() string {
+	return ui.StatusBarStyle.Render("Press <esc> to go back")
+}
+
+func (m *Model) FrameContent() string {
+	if len(m.categories) > 0 {
+		return m.buildCategorizedContent()
+	}
+	// Command help content
+	header := m.FrameHeader()
+	footer := m.FrameFooter()
+	frame := ui.ComputeFrameDimensions(m.Viewable.Width, m.Viewable.Height, m.width, m.height, header, footer)
+	return ui.TrimOrPadContentToLines(m.Viewable.View(), frame.DesiredContentLines)
+}
+
 func (m *Model) View() string {
 	if !m.Visible {
 		return ""
 	}
-
-	// Use categorized view if categories are provided
-	if len(m.categories) > 0 {
-		return m.renderCategorizedHelp()
-	}
-
-	// Command help (":help") should render like every other view: full-width framed box.
-	header := " " + ui.FrameHeaderStyle.Render("Available Commands")
-	footer := ui.StatusBarStyle.Render("Press <esc> to go back")
-
-	frame := ui.ComputeFrameDimensions(
-		m.Viewable.Width,
-		m.Viewable.Height,
-		m.width,
-		m.height,
-		header,
-		footer,
-	)
-
-	viewportContent := " " + strings.ReplaceAll(
-		ui.TrimOrPadContentToLines(m.Viewable.View(), frame.DesiredContentLines),
-		"\n", "\n ")
-	return ui.RenderFramedBox("Help", header, viewportContent, footer, frame.FrameWidth)
+	return ui.RenderViewFrame(m.FrameTitle(), m.FrameHeader(), m.FrameContent(), m.FrameFooter(), m.Viewable.Width, m.Viewable.Height, false)
 }
 
-func (m *Model) renderCategorizedHelp() string {
+func (m *Model) buildCategorizedContent() string {
 	width := m.Viewable.Width
 	if width <= 0 {
 		width = m.width
@@ -49,27 +51,24 @@ func (m *Model) renderCategorizedHelp() string {
 		width = 80
 	}
 
-	// Styles - use ANSI 256-color codes (k9s uses "green" = color 2)
 	categoryStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("2")) // Standard green
+		Foreground(lipgloss.Color("2"))
 
 	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("33")). // Dodger blue
+		Foreground(lipgloss.Color("33")).
 		Bold(true)
 
 	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("252")) // Light gray
+		Foreground(lipgloss.Color("252"))
 
-	// Calculate column widths
 	numCols := len(m.categories)
 	if numCols == 0 {
 		numCols = 1
 	}
 	colWidth := width / numCols
-	maxKeyWidth := 15 // Fixed width for keys
+	maxKeyWidth := 15
 
-	// Find max rows needed
 	maxRows := 0
 	for _, cat := range m.categories {
 		if len(cat.Items) > maxRows {
@@ -77,35 +76,28 @@ func (m *Model) renderCategorizedHelp() string {
 		}
 	}
 
-	// Build header row with category titles in GREEN
 	var headerParts []string
 	for _, cat := range m.categories {
 		titleText := strings.ToUpper(cat.Title)
-		// Pad to column width first, then apply style
 		paddedTitle := fmt.Sprintf("%-*s", colWidth, titleText)
 		styledTitle := categoryStyle.Render(paddedTitle)
 		headerParts = append(headerParts, styledTitle)
 	}
 	headerRow := strings.Join(headerParts, "")
 
-	// Build content rows
 	var contentLines []string
 	for row := 0; row < maxRows; row++ {
 		var rowParts []string
 		for _, cat := range m.categories {
 			if row < len(cat.Items) {
 				item := cat.Items[row]
-				// Format key and description with proper alignment
 				styledKey := keyStyle.Render(fmt.Sprintf("%-*s", maxKeyWidth, item.Keys))
 				styledDesc := descStyle.Render(item.Description)
 
-				// Combine and pad to column width
-				// Use lipgloss.Width for visual width calculation (handles Unicode properly)
 				plainText := fmt.Sprintf("%-*s %s", maxKeyWidth, item.Keys, item.Description)
 				plainTextWidth := lipgloss.Width(plainText)
 
 				if plainTextWidth > colWidth {
-					// Truncate description if too long
 					descWidth := colWidth - maxKeyWidth - 1
 					if descWidth > 0 && len(item.Description) > descWidth {
 						styledDesc = descStyle.Render(item.Description[:descWidth-3] + "...")
@@ -114,9 +106,7 @@ func (m *Model) renderCategorizedHelp() string {
 					}
 				}
 
-				// Now render styled version maintaining the same width
 				styledLine := styledKey + " " + styledDesc
-				// Add padding to match column width
 				paddingNeeded := colWidth - plainTextWidth
 				if paddingNeeded > 0 {
 					styledLine += strings.Repeat(" ", paddingNeeded)
@@ -124,33 +114,15 @@ func (m *Model) renderCategorizedHelp() string {
 
 				rowParts = append(rowParts, styledLine)
 			} else {
-				// Empty cell
 				rowParts = append(rowParts, strings.Repeat(" ", colWidth))
 			}
 		}
 		contentLines = append(contentLines, strings.Join(rowParts, ""))
 	}
 
-	// Combine header and content
 	fullContent := headerRow + "\n\n" + strings.Join(contentLines, "\n")
 
-	// Render with the shared frame sizing (same pattern as stacks/configs)
-	title := "Help"
-	header := ""
-	footer := ui.StatusBarStyle.Render("Press <esc> to go back")
-
-	frame := ui.ComputeFrameDimensions(
-		m.Viewable.Width,
-		m.Viewable.Height,
-		m.width,
-		m.height,
-		header,
-		footer,
-	)
-
-	// Trim content to fit frame (preserving ANSI codes)
-	viewportContent := ui.TrimOrPadContentToLines(fullContent, frame.DesiredContentLines)
-
-	// Render framed box
-	return ui.RenderFramedBox(title, header, viewportContent, footer, frame.FrameWidth)
+	footer := m.FrameFooter()
+	frame := ui.ComputeFrameDimensions(m.Viewable.Width, m.Viewable.Height, m.width, m.height, "", footer)
+	return ui.TrimOrPadContentToLines(fullContent, frame.DesiredContentLines)
 }

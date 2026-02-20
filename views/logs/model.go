@@ -50,8 +50,6 @@ type Model struct {
 	wrap bool
 	// horizontal scroll offset when wrap is off
 	horizontalOffset int
-	// fullscreen mode
-	fullscreen bool
 	// node filter - if set, only show logs from this node
 	nodeFilter string
 	// node selection dialog
@@ -80,7 +78,6 @@ func New(width, height int, maxLines int, service docker.ServiceEntry) *Model {
 		follow:            true, // auto-follow by default
 		wrap:              true, // wrap lines by default
 		horizontalOffset:  0,
-		fullscreen:        false,
 		nodeFilter:        "", // empty = show all nodes
 		nodeSelectVisible: false,
 		nodeSelectCursor:  0,
@@ -144,23 +141,6 @@ func (m *Model) getWrap() bool {
 	return m.wrap
 }
 
-func (m *Model) setFullscreen(f bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.fullscreen = f
-}
-
-func (m *Model) getFullscreen() bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.fullscreen
-}
-
-// GetFullscreen is exported for app to check fullscreen status
-func (m *Model) GetFullscreen() bool {
-	return m.getFullscreen()
-}
-
 // GetSearchMode is exported for app to check search mode status
 func (m *Model) GetSearchMode() bool {
 	m.mu.Lock()
@@ -189,7 +169,6 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "s", Desc: "Toggle AutoScroll"},
 		{Key: "w", Desc: "Toggle wrap"},
 		{Key: "o", Desc: "Filter node"},
-		{Key: "f", Desc: "Fullscreen"},
 	}
 
 	// Show left/right help only when wrap is off

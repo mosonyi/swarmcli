@@ -5,7 +5,7 @@ package errordialog
 
 import (
 	"fmt"
-	"strings"
+	"swarmcli/ui"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -38,7 +38,7 @@ func Render(errorMsg string) string {
 	lines = append(lines, itemStyle.Render(""))
 
 	maxWidth := 70
-	wrappedLines := wrapText(errorMsg, maxWidth)
+	wrappedLines := ui.WrapText(errorMsg, maxWidth)
 	for _, line := range wrappedLines {
 		lines = append(lines, itemStyle.Render(line))
 	}
@@ -52,35 +52,4 @@ func Render(errorMsg string) string {
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	return borderStyle.Render(content)
-}
-
-func wrapText(text string, width int) []string {
-	if len(text) <= width {
-		return []string{text}
-	}
-
-	var lines []string
-	words := strings.Fields(text)
-	currentLine := ""
-
-	for _, word := range words {
-		if len(currentLine)+len(word)+1 <= width {
-			if currentLine == "" {
-				currentLine = word
-			} else {
-				currentLine += " " + word
-			}
-		} else {
-			if currentLine != "" {
-				lines = append(lines, currentLine)
-			}
-			currentLine = word
-		}
-	}
-
-	if currentLine != "" {
-		lines = append(lines, currentLine)
-	}
-
-	return lines
 }

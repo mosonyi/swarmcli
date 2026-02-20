@@ -15,17 +15,104 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func (m *Model) View() string {
-	// If in UsedBy view, render it instead of the main networks view
+func (m *Model) FrameTitle() string {
 	if m.usedByViewActive {
-		return m.renderUsedByView()
+		return fmt.Sprintf("Network '%s' - Used By (%d)", m.usedByNetworkName, len(m.usedByList.Filtered))
 	}
-
-	// If in inspect view, render it
 	if m.inspectViewActive {
-		return m.renderInspectView()
+		return "Inspect Network"
+	}
+	return fmt.Sprintf("Docker Networks (%d)", len(m.networksList.Filtered))
+}
+
+func (m *Model) FrameHeader() string {
+	if m.usedByViewActive {
+		return m.usedByList.RenderHeader()
+	}
+	if m.inspectViewActive {
+		return ui.FrameHeaderStyle.Render("Network Details (JSON)")
+	}
+	width := 80
+	if m.networksList.Viewport.Width > 0 {
+		width = m.networksList.Viewport.Width
+	} else if m.width > 0 {
+		width = m.width
+	}
+	return m.renderNetworksHeader(m.networksList.Items, width)
+}
+
+func (m *Model) FrameFooter() string {
+	if m.usedByViewActive {
+		return m.usedByList.RenderFooter()
+	}
+	if m.inspectViewActive {
+		footerText := "↑/↓ Scroll | PgUp/PgDn Page | / Search | Esc Back"
+		if m.inspectSearchMode {
+			footerText = fmt.Sprintf("Search: %s  (Enter apply | Esc cancel)", m.inspectSearchTerm)
+		}
+		return ui.StatusBarStyle.Render(footerText)
+	}
+	return m.networksList.RenderFooter()
+}
+
+func (m *Model) FrameContent() string {
+	if m.usedByViewActive {
+		return m.buildUsedByContent()
+	}
+	if m.inspectViewActive {
+		return m.buildInspectContent()
+	}
+	return m.buildMainContent()
+}
+
+func (m *Model) buildUsedByContent() string {
+	width := 80
+	if m.usedByList.Viewport.Width > 0 {
+		width = m.usedByList.Viewport.Width
+	} else if m.width > 0 {
+		width = m.width
 	}
 
+	header := m.usedByList.RenderHeader()
+	footer := m.usedByList.RenderFooter()
+	frame := ui.ComputeFrameDimensions(
+		m.usedByList.Viewport.Width, m.usedByList.Viewport.Height,
+		m.width, m.height, header, footer,
+	)
+	content := m.usedByList.VisibleContent(frame.DesiredContentLines)
+
+	if m.errorDialogActive {
+		errorDialog := errordialog.Render(fmt.Sprintf("%v", m.err))
+		content = ui.OverlayCentered(content, errorDialog, width, 0)
+	}
+	return content
+}
+
+func (m *Model) buildInspectContent() string {
+	width := m.networksList.Viewport.Width
+	if width <= 0 {
+		width = m.width
+	}
+	if width <= 0 {
+		width = 80
+	}
+
+	header := m.FrameHeader()
+	footer := m.FrameFooter()
+	frame := ui.ComputeFrameDimensions(
+		width, m.networksList.Viewport.Height,
+		m.width, m.height, header, footer,
+	)
+	content := ui.TrimOrPadContentToLines(m.inspectViewport.View(), frame.DesiredContentLines)
+
+	if m.errorDialogActive {
+		errorDialog := errordialog.Render(fmt.Sprintf("%v", m.err))
+		content = ui.OverlayCentered(content, errorDialog, width, 0)
+	}
+	return content
+}
+
+func (m *Model) buildMainContent() string {
 	width := 80
 	if m.networksList.Viewport.Width > 0 {
 		width = m.networksList.Viewport.Width
@@ -33,21 +120,15 @@ func (m *Model) View() string {
 		width = m.width
 	}
 
-	header := m.renderNetworksHeader(m.networksList.Items, width)
-	footer := m.networksList.RenderFooter()
-
+	header := m.FrameHeader()
+	footer := m.FrameFooter()
 	frame := ui.ComputeFrameDimensions(
-		m.networksList.Viewport.Width,
-		m.networksList.Viewport.Height,
-		m.width,
-		m.height,
-		header,
-		footer,
+		m.networksList.Viewport.Width, m.networksList.Viewport.Height,
+		m.width, m.height, header, footer,
 	)
 
 	content := m.networksList.VisibleContent(frame.DesiredContentLines)
 	if m.state == stateLoading && len(m.networksList.Items) == 0 && m.networksList.Mode != filterlist.ModeSearching {
-		// Keep the normal frame + header, but show a loading message in the list area.
 		lines := frame.DesiredContentLines
 		if lines < 1 {
 			lines = 1
@@ -60,7 +141,6 @@ func (m *Model) View() string {
 		content = strings.Join(parts, "\n")
 	}
 
-	// Apply overlays to content BEFORE framing
 	if m.createDialogActive {
 		dialogView := m.renderCreateNetworkDialog(width)
 		content = ui.OverlayCentered(content, dialogView, width, 0)
@@ -71,11 +151,18 @@ func (m *Model) View() string {
 		errorDialog := errordialog.Render(fmt.Sprintf("%v", m.err))
 		content = ui.OverlayCentered(content, errorDialog, width, 0)
 	}
+	return content
+}
 
-	title := fmt.Sprintf("Docker Networks (%d)", len(m.networksList.Filtered))
-	view := ui.RenderFramedBox(title, header, content, footer, frame.FrameWidth)
-
-	return view
+func (m *Model) View() string {
+	if m.usedByViewActive {
+		return m.renderUsedByView()
+	}
+	if m.inspectViewActive {
+		return m.renderInspectView()
+	}
+	return ui.RenderViewFrame(m.FrameTitle(), m.FrameHeader(), m.FrameContent(), m.FrameFooter(),
+		m.networksList.Viewport.Width, m.networksList.Viewport.Height, false)
 }
 
 func (m *Model) renderCreateNetworkDialog(width int) string {

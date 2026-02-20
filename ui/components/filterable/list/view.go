@@ -209,8 +209,8 @@ func (f *FilterableList[T]) RenderFooter() string {
 	return statusBar
 }
 
-// RenderFramedView builds the complete framed view: title, header, content, footer.
-// Returns the rendered string and a FrameSpec for dialog overlay positioning.
+// Deprecated: RenderFramedView builds the complete framed view. Use FrameTitle/FrameHeader/
+// FrameFooter/FrameContent on the parent view and let the app assemble the frame instead.
 func (f *FilterableList[T]) RenderFramedView(title string) (string, ui.FrameSpec) {
 	header := f.RenderHeader()
 	footer := f.RenderFooter()

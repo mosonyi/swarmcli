@@ -34,6 +34,9 @@ type Model struct {
 	// Terminal dimensions
 	terminalWidth  int
 	terminalHeight int
+
+	// Fullscreen mode — hides helpbar/stackbar, uses full terminal
+	fullscreen bool
 }
 
 var depsTransform func(docker.Deps) docker.Deps

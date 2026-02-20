@@ -105,13 +105,33 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
+func (m *Model) FrameTitle() string  { return m.title }
+func (m *Model) FrameHeader() string { return m.header }
+func (m *Model) FrameFooter() string { return "" }
+
+func (m *Model) FrameContent() string {
+	if m.isError {
+		// Return empty content with error dialog overlay
+		frameWidth := m.width
+		if frameWidth < 0 {
+			frameWidth = 80
+		}
+		frame := ui.ComputeFrameDimensions(frameWidth-4, m.height, frameWidth-4, m.height, "", "")
+		emptyContent := ui.TrimOrPadContentToLines("", frame.DesiredContentLines)
+		errorDialog := m.renderErrorDialog()
+		return ui.OverlayCentered(emptyContent, errorDialog, frameWidth, 0)
+	}
+	spinnerChar := ui.SpinnerCharAt(m.spinner)
+	return strings.TrimSpace(fmt.Sprintf("%s  %s", spinnerChar, m.message))
+}
+
 func (m *Model) View() string {
 	if !m.visible {
 		return ""
 	}
 
 	if m.isError {
-		// Render error as a styled popup dialog
+		// Render error as a styled popup dialog (legacy path)
 		return m.renderErrorDialog()
 	}
 
@@ -119,7 +139,6 @@ func (m *Model) View() string {
 	spinnerChar := ui.SpinnerCharAt(m.spinner)
 	content := fmt.Sprintf("%s  %s", spinnerChar, m.message)
 	content = strings.TrimSpace(content)
-	// Use height-aware framed box with proper width
 	frameHeight := m.height
 	if frameHeight < 0 {
 		frameHeight = 0
@@ -161,7 +180,7 @@ func (m *Model) renderErrorDialog() string {
 
 	// Wrap error message if too long
 	maxWidth := 70
-	wrappedLines := wrapText(m.message, maxWidth)
+	wrappedLines := ui.WrapText(m.message, maxWidth)
 	for _, line := range wrappedLines {
 		lines = append(lines, itemStyle.Render(line))
 	}
@@ -176,38 +195,6 @@ func (m *Model) renderErrorDialog() string {
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	dialog := borderStyle.Render(content)
 	return dialog
-}
-
-// wrapText wraps text to specified width
-func wrapText(text string, width int) []string {
-	if len(text) <= width {
-		return []string{text}
-	}
-
-	var lines []string
-	words := strings.Fields(text)
-	currentLine := ""
-
-	for _, word := range words {
-		if len(currentLine)+len(word)+1 <= width {
-			if currentLine == "" {
-				currentLine = word
-			} else {
-				currentLine += " " + word
-			}
-		} else {
-			if currentLine != "" {
-				lines = append(lines, currentLine)
-			}
-			currentLine = word
-		}
-	}
-
-	if currentLine != "" {
-		lines = append(lines, currentLine)
-	}
-
-	return lines
 }
 
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {

@@ -11,7 +11,6 @@ import (
 	"swarmcli/views/commandinput"
 	contextsview "swarmcli/views/contexts"
 	loadingview "swarmcli/views/loading"
-	logsview "swarmcli/views/logs"
 	nodesview "swarmcli/views/nodes"
 	stacksview "swarmcli/views/stacks"
 	systeminfoview "swarmcli/views/systeminfo"
@@ -82,14 +81,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		cmd := m.updateForResize(msg)
-		return m, cmd
-
-	case logsview.FullscreenToggledMsg:
-		// Trigger a resize to recalculate the available space
-		cmd := m.updateForResize(tea.WindowSizeMsg{
-			Width:  m.terminalWidth,
-			Height: m.terminalHeight,
-		})
 		return m, cmd
 
 	case tea.KeyMsg:
@@ -206,11 +197,7 @@ func (m *Model) updateForResize(msg tea.WindowSizeMsg) tea.Cmd {
 	m.terminalWidth = msg.Width
 	m.terminalHeight = msg.Height
 
-	// Check if current view is in fullscreen mode
-	isFullscreen := false
-	if logsView, ok := m.currentView.(interface{ GetFullscreen() bool }); ok {
-		isFullscreen = logsView.GetFullscreen()
-	}
+	isFullscreen := m.fullscreen
 
 	var usableWidth, usableHeight int
 	if isFullscreen {
@@ -281,6 +268,16 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	// Check if current view is in fullscreen or search mode before handling global esc
 	if msg.Type == tea.KeyEsc || msg.String() == "esc" {
+		// If in fullscreen, exit fullscreen first
+		if m.fullscreen {
+			m.fullscreen = false
+			cmd := m.updateForResize(tea.WindowSizeMsg{
+				Width:  m.terminalWidth,
+				Height: m.terminalHeight,
+			})
+			return m, cmd
+		}
+
 		// If a view is actively searching/filtering, let it handle ESC (and other keys)
 		if searchView, ok := m.currentView.(interface{ IsSearching() bool }); ok {
 			if searchView.IsSearching() {
@@ -309,13 +306,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		}
-		// Check if logs view is in fullscreen or search mode
+		// Check if logs view is in search mode
 		if logsView, ok := m.currentView.(interface {
-			GetFullscreen() bool
 			GetSearchMode() bool
 		}); ok {
-			if logsView.GetFullscreen() || logsView.GetSearchMode() {
-				// Let the view handle esc to exit fullscreen or search mode
+			if logsView.GetSearchMode() {
+				// Let the view handle esc to exit search mode
 				cmd := m.currentView.Update(msg)
 				return m, cmd
 			}
@@ -357,6 +353,21 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		cmd := m.goBack()
+		return m, cmd
+	}
+
+	// Global fullscreen toggle
+	if msg.String() == "f" {
+		// Don't intercept if view is searching
+		if searchView, ok := m.currentView.(interface{ IsSearching() bool }); ok && searchView.IsSearching() {
+			cmd := m.currentView.Update(msg)
+			return m, cmd
+		}
+		m.fullscreen = !m.fullscreen
+		cmd := m.updateForResize(tea.WindowSizeMsg{
+			Width:  m.terminalWidth,
+			Height: m.terminalHeight,
+		})
 		return m, cmd
 	}
 
