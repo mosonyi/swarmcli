@@ -261,11 +261,8 @@ func ReconstructStackCompose(stackName string) (string, error) {
 		key := sanitizeServiceName(stackName, si.Spec.Name)
 		cs := ComposeService{}
 
-		// Collect labels from service and container specs
-		labels := make(map[string]string)
-		for k, v := range si.Spec.Labels {
-			labels[k] = v
-		}
+		// ServiceSpec.Labels → deploy.labels in Compose
+		deployLabels := filterLabels(si.Spec.Labels)
 
 		if si.Spec.TaskTemplate.ContainerSpec != nil {
 			cspec := si.Spec.TaskTemplate.ContainerSpec
@@ -281,9 +278,9 @@ func ReconstructStackCompose(stackName string) (string, error) {
 				cs.Environment = env
 			}
 
-			// Merge container labels
-			for k, v := range cspec.Labels {
-				labels[k] = v
+			// ContainerSpec.Labels → service-level labels in Compose
+			if cl := filterLabels(cspec.Labels); len(cl) > 0 {
+				cs.Labels = cl
 			}
 
 			// Command / Args
@@ -349,10 +346,6 @@ func ReconstructStackCompose(stackName string) (string, error) {
 				}
 				cs.Configs = append(cs.Configs, ref)
 			}
-		}
-
-		if len(labels) > 0 {
-			cs.Labels = labels
 		}
 
 		// Ports
@@ -458,6 +451,10 @@ func ReconstructStackCompose(stackName string) (string, error) {
 			if len(rp) > 0 {
 				deploy["restart_policy"] = rp
 			}
+		}
+
+		if len(deployLabels) > 0 {
+			deploy["labels"] = deployLabels
 		}
 
 		if len(deploy) > 0 {
@@ -576,6 +573,21 @@ func parseKeyValEnv(env []string) map[string]string {
 		return nil
 	}
 	return m
+}
+
+// filterLabels returns a copy of labels with Docker-internal keys removed.
+// Returns nil if no user labels remain.
+func filterLabels(labels map[string]string) map[string]string {
+	out := make(map[string]string)
+	for k, v := range labels {
+		if !strings.HasPrefix(k, "com.docker.stack.") {
+			out[k] = v
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // sanitizeServiceName removes the stack prefix from service name
