@@ -23,6 +23,9 @@ type Model struct {
 	minColWidth int
 }
 
+// EditionLabel is rendered below the logo. Override in init() to customise.
+var EditionLabel = "Community Edition"
+
 const defaultMinColWidth = 20
 
 func New(width, height int) *Model {
@@ -155,12 +158,13 @@ func (m *Model) View(systemInfo string, hasError bool) string {
 		Render(helpBlock)
 
 	// Add SWC logo on the right side
-	logo := `   ___________      ___________  
- /   _____/  \    /  \_   ___ \ 
- \_____  \\   \/\/   /    \  \/ 
+	logoTop := `  ___________      ___________
+ /   _____/  \    /  \_   ___ \
+ \_____  \\   \/\/   /    \  \/
  /        \\        /\     \____
-/_______  / \__/\  /  \______  /
-        \/       \/          \/`
+/_______  / \__/\__/  \________/`
+
+	logoBottom := `        \/       \/          \/`
 
 	logoColor := lipgloss.Color("214") // yellow by default
 	if hasError {
@@ -170,7 +174,14 @@ func (m *Model) View(systemInfo string, hasError bool) string {
 		Foreground(logoColor).
 		Bold(true)
 
-	swcLogo := logoStyle.Render(logo)
+	editionStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("75")).
+		Bold(true)
+
+	// Right-align edition label on the last line
+	pad := len(logoBottom) - len(EditionLabel)
+	lastLine := logoStyle.Render(logoBottom[:pad]) + editionStyle.Render(EditionLabel)
+	swcLogo := logoStyle.Render(logoTop) + "\n" + lastLine
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, systemInfo, helpAligned, "  ", swcLogo)
 }
