@@ -38,11 +38,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case TickMsg:
 		l().Infof("TasksView: Received TickMsg, visible=%v", m.visible)
-		// Check for changes (this will return either a TasksLoadedMsg or the next TickMsg)
+		// Check for changes (this will return either a TasksLoadedMsg or PollRetryMsg)
 		if m.visible {
 			return CheckTasksCmd(m.lastSnapshot, m.stackName)
 		}
 		// Continue polling even if not visible
+		return tickCmd()
+
+	case PollRetryMsg:
 		return tickCmd()
 
 	case tea.WindowSizeMsg:

@@ -92,6 +92,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// Continue polling even if not visible
 		return tickCmd()
 
+	case PollRetryMsg:
+		return tickCmd()
+
 	case TasksLoadedMsg:
 		// Store loaded tasks - view will automatically re-render
 		m.serviceTasks[msg.ServiceID] = msg.Tasks

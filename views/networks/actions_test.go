@@ -218,10 +218,11 @@ func TestCheckNetworksCmd_NoChange(t *testing.T) {
 	m := testModel(func(m *Model) { m.deps.Networks = mock })
 	cmd := m.checkNetworksCmd(0)
 	msg := runCmd(cmd)
-	// Empty list hashes to a specific value; with lastHash=0 and empty list, it should detect a change
-	// or return nil if hash matches. Since we pass 0 as lastHash, an empty list will likely differ.
-	if msg != nil {
-		_, isLoaded := msg.(NetworksLoadedMsg)
-		require.True(t, isLoaded)
+	require.NotNil(t, msg)
+	// Empty list with lastHash=0: hashes match, so we get PollRetryMsg (not NetworksLoadedMsg)
+	_, isLoaded := msg.(NetworksLoadedMsg)
+	if !isLoaded {
+		_, isPollRetry := msg.(PollRetryMsg)
+		require.True(t, isPollRetry, "should return PollRetryMsg when no change")
 	}
 }

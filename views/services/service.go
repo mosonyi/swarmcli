@@ -6,7 +6,6 @@ package servicesview
 import (
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -71,7 +70,7 @@ func (m *Model) checkServicesCmd(lastHash uint64, filterType FilterType, nodeID,
 		newHash, err := hash.Compute(entries)
 		if err != nil {
 			l().Errorf("checkServicesCmd: Hash computation failed: %v", err)
-			return tickCmd()
+			return PollRetryMsg{}
 		}
 
 		l().Infof("checkServicesCmd: lastHash=%s, newHash=%s, serviceCount=%d",
@@ -90,10 +89,7 @@ func (m *Model) checkServicesCmd(lastHash uint64, filterType FilterType, nodeID,
 		}
 
 		l().Info("checkServicesCmd: No changes detected, scheduling next poll")
-		// Schedule next poll in 5 seconds
-		return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
-			return TickMsg(t)
-		})()
+		return PollRetryMsg{}
 	}
 }
 

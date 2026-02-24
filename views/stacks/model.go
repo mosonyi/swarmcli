@@ -232,7 +232,7 @@ func (m *Model) checkStacksCmd(lastHash uint64, nodeID string) tea.Cmd {
 			s, err := snapOps.RefreshSnapshot()
 			if err != nil {
 				l().Errorf("checkStacksCmd: RefreshSnapshot failed: %v", err)
-				return tickCmd()
+				return PollRetryMsg{}
 			}
 			snap = s
 		}
@@ -242,7 +242,7 @@ func (m *Model) checkStacksCmd(lastHash uint64, nodeID string) tea.Cmd {
 		if err != nil {
 			l().Errorf("checkStacksCmd: Error computing hash: %v", err)
 			// Keep polling on error instead of returning nil which would stop the tick loop
-			return tickCmd()
+			return PollRetryMsg{}
 		}
 
 		l().Infof("checkStacksCmd: lastHash=%s, newHash=%s, stackCount=%d",
@@ -260,7 +260,7 @@ func (m *Model) checkStacksCmd(lastHash uint64, nodeID string) tea.Cmd {
 		}
 
 		l().Info("checkStacksCmd: No changes detected, scheduling next poll")
-		return tickCmd()
+		return PollRetryMsg{}
 	}
 }
 

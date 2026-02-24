@@ -371,6 +371,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		return tickCmd()
 
+	case PollRetryMsg:
+		return tickCmd()
+
 	case NetworkDeletedMsg:
 		if msg.Err != nil {
 			m.errorDialogActive = true
@@ -1277,7 +1280,7 @@ func (m *Model) checkNetworksCmd(lastHash uint64) tea.Cmd {
 		newHash, err := hash.Compute(stableNetworks)
 		if err != nil {
 			l().Errorf("Error computing hash: %v", err)
-			return nil
+			return PollRetryMsg{}
 		}
 
 		// Only reload if hash changed
@@ -1285,6 +1288,6 @@ func (m *Model) checkNetworksCmd(lastHash uint64) tea.Cmd {
 			l().Info("Networks changed, reloading")
 			return NetworksLoadedMsg{Networks: networks}
 		}
-		return nil
+		return PollRetryMsg{}
 	}
 }

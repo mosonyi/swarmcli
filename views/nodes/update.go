@@ -211,11 +211,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case TickMsg:
 		l().Infof("NodesView: Received TickMsg, visible=%v", m.Visible)
-		// Check for changes (this will return either a Msg or the next TickMsg)
+		// Check for changes (this will return either a Msg or PollRetryMsg)
 		if m.Visible {
 			return m.checkNodesCmd(m.lastSnapshot)
 		}
 		// Continue polling even if not visible
+		return tickCmd()
+
+	case PollRetryMsg:
 		return tickCmd()
 
 	case tea.WindowSizeMsg:

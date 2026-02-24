@@ -171,6 +171,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		return tickCmd()
 
+	case PollRetryMsg:
+		return tickCmd()
+
 	case secretDeletedMsg:
 		l().Infof("Secret deleted successfully: %s", msg.Name)
 		return m.loadSecretsCmd()

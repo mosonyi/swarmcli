@@ -68,7 +68,7 @@ func (m *Model) checkSecretsCmd(lastHash uint64) tea.Cmd {
 		secs, err := secretOps.ListSecrets(ctx)
 		if err != nil {
 			l().Errorf("checkSecretsCmd: ListSecrets failed: %v", err)
-			return tickCmd()
+			return PollRetryMsg{}
 		}
 
 		wrapped := make([]docker.SecretWithDecodedData, len(secs))
@@ -95,7 +95,7 @@ func (m *Model) checkSecretsCmd(lastHash uint64) tea.Cmd {
 		if err != nil {
 			l().Errorf("checkSecretsCmd: Error computing hash: %v", err)
 			// Schedule next poll even on error
-			return tickCmd()
+			return PollRetryMsg{}
 		}
 
 		l().Infof("checkSecretsCmd: lastHash=%s, newHash=%s, secretCount=%d",
@@ -108,8 +108,7 @@ func (m *Model) checkSecretsCmd(lastHash uint64) tea.Cmd {
 		}
 
 		l().Info("checkSecretsCmd: No changes detected, scheduling next poll")
-		// Schedule next poll in 5 seconds
-		return tickCmd()
+		return PollRetryMsg{}
 	}
 }
 

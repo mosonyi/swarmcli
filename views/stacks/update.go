@@ -65,7 +65,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case TickMsg:
 		l().Infof("StacksView: Received TickMsg, visible=%v", m.Visible)
-		// Check for changes (this will return either a Msg or the next TickMsg)
+		// Check for changes (this will return either a Msg or PollRetryMsg)
 		if m.Visible {
 			return tea.Batch(
 				m.checkStacksCmd(m.lastSnapshot, m.nodeID),
@@ -73,6 +73,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			)
 		}
 		// Continue polling even if not visible
+		return tickCmd()
+
+	case PollRetryMsg:
 		return tickCmd()
 
 	case RefreshErrorMsg:
