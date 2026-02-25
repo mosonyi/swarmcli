@@ -138,7 +138,7 @@ func TestGetUsedByStacksCmd_ReturnsUsedByMsg(t *testing.T) {
 	require.Equal(t, "mystack", used.UsedBy[0].StackName)
 }
 
-func TestCheckSecretsCmd_NoChange_ReturnsTick(t *testing.T) {
+func TestCheckSecretsCmd_NoChange_ReturnsPollRetry(t *testing.T) {
 	mock := noopSecretOps()
 	mock.listSecretsFn = func(_ context.Context) ([]swarm.Secret, error) {
 		return nil, nil // empty = same as initial hash 0
@@ -147,7 +147,8 @@ func TestCheckSecretsCmd_NoChange_ReturnsTick(t *testing.T) {
 	// lastSnapshot=0 for empty, ListSecrets returns empty too → hashes match
 	cmd := m.checkSecretsCmd(0)
 	msg := runCmd(cmd)
-	// Should be a tick cmd (not secretsLoadedMsg)
 	_, isLoaded := msg.(secretsLoadedMsg)
 	require.False(t, isLoaded, "should not return secretsLoadedMsg when no change")
+	_, isPollRetry := msg.(PollRetryMsg)
+	require.True(t, isPollRetry, "should return PollRetryMsg when no change")
 }

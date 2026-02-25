@@ -177,6 +177,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// Continue ticking even if not visible/ready
 		return tickCmd()
 
+	case PollRetryMsg:
+		return tickCmd()
+
 	case configRotatedMsg:
 		l().Infof("Config rotated: %s → %s", msg.Old.Config.Spec.Name, msg.New.Config.Spec.Name)
 		// After rotating a config, reload the config list so the "Used" state

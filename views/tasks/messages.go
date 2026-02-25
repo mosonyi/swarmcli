@@ -18,6 +18,10 @@ type TasksLoadedMsg struct {
 
 type TickMsg time.Time
 
+// PollRetryMsg signals that polling found no changes; the Update handler
+// should schedule the next tick.
+type PollRetryMsg struct{}
+
 const PollInterval = 2 * time.Second
 
 func LoadTasksCmd(stackName string) tea.Cmd {
@@ -47,13 +51,13 @@ func CheckTasksCmd(lastHash uint64, stackName string) tea.Cmd {
 		tasks, err := docker.GetTasksForStack(stackName)
 		if err != nil {
 			l().Errorf("CheckTasksCmd: Failed to get tasks: %v", err)
-			return tickCmd()
+			return PollRetryMsg{}
 		}
 
 		newHash, err := hash.Compute(tasks)
 		if err != nil {
 			l().Errorf("CheckTasksCmd: Hash computation failed: %v", err)
-			return tickCmd()
+			return PollRetryMsg{}
 		}
 
 		l().Infof("CheckTasksCmd: lastHash=%s, newHash=%s, taskCount=%d",
@@ -69,9 +73,6 @@ func CheckTasksCmd(lastHash uint64, stackName string) tea.Cmd {
 		}
 
 		l().Info("CheckTasksCmd: No changes detected, scheduling next poll")
-		// Schedule next poll
-		return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
-			return TickMsg(t)
-		})()
+		return PollRetryMsg{}
 	}
 }

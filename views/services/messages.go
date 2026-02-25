@@ -19,6 +19,10 @@ type Msg struct {
 
 type TickMsg time.Time
 
+// PollRetryMsg signals that polling found no changes; the Update handler
+// should schedule the next tick.
+type PollRetryMsg struct{}
+
 const PollInterval = 2 * time.Second
 
 // RestartErrorMsg is sent when a service restart fails

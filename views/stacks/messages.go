@@ -20,6 +20,10 @@ type RefreshErrorMsg struct {
 
 type TickMsg time.Time
 
+// PollRetryMsg signals that polling found no changes; the Update handler
+// should schedule the next tick.
+type PollRetryMsg struct{}
+
 const PollInterval = 5 * time.Second
 
 // StackTasksLoadedMsg is sent when tasks for a stack are loaded

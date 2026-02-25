@@ -15,6 +15,10 @@ type Msg struct {
 // TickMsg triggers periodic node list check
 type TickMsg time.Time
 
+// PollRetryMsg signals that polling found no changes; the Update handler
+// should schedule the next tick.
+type PollRetryMsg struct{}
+
 // Poll interval for checking node changes
 const PollInterval = 5 * time.Second
 

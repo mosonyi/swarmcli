@@ -16,6 +16,11 @@ import (
 const PollInterval = 5 * time.Second
 
 type TickMsg time.Time
+
+// PollRetryMsg signals that polling found no changes; the Update handler
+// should schedule the next tick.
+type PollRetryMsg struct{}
+
 type SpinnerTickMsg time.Time
 
 type NetworksLoadedMsg struct {

@@ -66,7 +66,7 @@ func (m *Model) checkConfigsCmd(lastHash uint64) tea.Cmd {
 		cfgs, err := configOps.ListConfigs(ctx)
 		if err != nil {
 			l().Errorf("checkConfigsCmd: ListConfigs failed: %v", err)
-			return tickCmd()
+			return PollRetryMsg{}
 		}
 
 		wrapped := make([]docker.ConfigWithDecodedData, len(cfgs))
@@ -93,7 +93,7 @@ func (m *Model) checkConfigsCmd(lastHash uint64) tea.Cmd {
 		if err != nil {
 			l().Errorf("checkConfigsCmd: Error computing hash: %v", err)
 			// Schedule next poll even on error
-			return tickCmd()
+			return PollRetryMsg{}
 		}
 
 		l().Infof("checkConfigsCmd: lastHash=%s, newHash=%s, configCount=%d",
@@ -106,8 +106,7 @@ func (m *Model) checkConfigsCmd(lastHash uint64) tea.Cmd {
 		}
 
 		l().Info("checkConfigsCmd: No changes detected, scheduling next poll")
-		// Schedule next poll in 5 seconds
-		return tickCmd()
+		return PollRetryMsg{}
 	}
 }
 

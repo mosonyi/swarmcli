@@ -173,7 +173,7 @@ func (m *Model) checkNodesCmd(lastHash uint64) tea.Cmd {
 		newHash, err := hash.Compute(entries)
 		if err != nil {
 			l().Errorf("CheckNodesCmd: Compute hash failed: %v", err)
-			return tickCmd()
+			return PollRetryMsg{}
 		}
 
 		l().Infof("CheckNodesCmd: lastHash=%s, newHash=%s, nodeCount=%d",
@@ -188,7 +188,7 @@ func (m *Model) checkNodesCmd(lastHash uint64) tea.Cmd {
 		}
 
 		l().Info("CheckNodesCmd: No changes detected, scheduling next poll")
-		return tickCmd()
+		return PollRetryMsg{}
 	}
 }
 

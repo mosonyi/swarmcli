@@ -185,7 +185,7 @@ func TestCreateConfigFromContentCmd_Error(t *testing.T) {
 	require.True(t, ok)
 }
 
-func TestCheckConfigsCmd_NoChange_ReturnsTick(t *testing.T) {
+func TestCheckConfigsCmd_NoChange_ReturnsPollRetry(t *testing.T) {
 	mock := noopConfigOps()
 	mock.listConfigsFn = func(_ context.Context) ([]swarm.Config, error) {
 		return nil, nil
@@ -195,6 +195,8 @@ func TestCheckConfigsCmd_NoChange_ReturnsTick(t *testing.T) {
 	msg := runCmd(cmd)
 	_, isLoaded := msg.(configsLoadedMsg)
 	require.False(t, isLoaded, "should not return configsLoadedMsg when no change")
+	_, isPollRetry := msg.(PollRetryMsg)
+	require.True(t, isPollRetry, "should return PollRetryMsg when no change")
 }
 
 func TestRotateConfigCmd_Success(t *testing.T) {
