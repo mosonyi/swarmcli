@@ -230,12 +230,16 @@ func ImportContext(filePath string) (string, error) {
 		return "", fmt.Errorf("file path is required")
 	}
 
-	// Extract context name from filename
-	parts := strings.Split(filePath, "/")
-	fileName := parts[len(parts)-1]
+	// Extract context name from filename and support multiple archive types
+	fileName := filepath.Base(filePath)
 	contextName := fileName
-	if idx := len(contextName) - 4; idx > 0 && contextName[idx:] == ".tar" {
-		contextName = contextName[:idx]
+
+	// Remove known extensions if present (order matters for multi-part extensions)
+	for _, ext := range []string{".tar.gz", ".tgz", ".tar", ".dockercontext"} {
+		if strings.HasSuffix(strings.ToLower(contextName), ext) {
+			contextName = contextName[:len(contextName)-len(ext)]
+			break
+		}
 	}
 
 	cmd := exec.Command("docker", "context", "import", contextName, filePath)
