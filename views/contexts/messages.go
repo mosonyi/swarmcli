@@ -20,8 +20,7 @@ import (
 // isContextArchive checks if a filename is a context archive (supports multiple formats)
 func isContextArchive(filename string) bool {
 	lowerName := strings.ToLower(filename)
-	archiveExts := []string{".dockercontext", ".tar.gz", ".tgz", ".tar"}
-	for _, ext := range archiveExts {
+	for _, ext := range docker.ContextArchiveExts {
 		if strings.HasSuffix(lowerName, ext) {
 			return true
 		}
@@ -204,14 +203,14 @@ func (m *Model) deleteContextCmd(contextName string) tea.Cmd {
 	}
 }
 
-// FilesLoadedMsg contains the list of tar files in a directory
+// FilesLoadedMsg contains the list of context archive files in a directory
 type FilesLoadedMsg struct {
 	Path  string
 	Files []string
 	Error error
 }
 
-// LoadFilesCmd loads tar files and directories from a path for browsing
+// LoadFilesCmd loads context archive files and directories from a path for browsing
 func LoadFilesCmd(dirPath string) tea.Cmd {
 	return func() tea.Msg {
 		files := []string{}
