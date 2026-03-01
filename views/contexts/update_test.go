@@ -186,7 +186,7 @@ func TestUpdate_FilesLoaded_Empty(t *testing.T) {
 	m := testModel()
 	m.importInputActive = true
 	m.Update(FilesLoadedMsg{Path: "/empty", Files: []string{}})
-	require.Contains(t, m.GetError(), "No .tar files")
+	require.Contains(t, m.GetError(), "No context archive files found")
 	require.False(t, m.fileBrowserActive)
 }
 

@@ -17,6 +17,17 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// isContextArchive checks if a filename is a context archive (supports multiple formats)
+func isContextArchive(filename string) bool {
+	lowerName := strings.ToLower(filename)
+	for _, ext := range docker.ContextArchiveExts {
+		if strings.HasSuffix(lowerName, ext) {
+			return true
+		}
+	}
+	return false
+}
+
 type ContextsLoadedMsg struct {
 	Contexts []docker.ContextInfo
 	Error    error
@@ -192,14 +203,14 @@ func (m *Model) deleteContextCmd(contextName string) tea.Cmd {
 	}
 }
 
-// FilesLoadedMsg contains the list of tar files in a directory
+// FilesLoadedMsg contains the list of context archive files in a directory
 type FilesLoadedMsg struct {
 	Path  string
 	Files []string
 	Error error
 }
 
-// LoadFilesCmd loads tar files and directories from a path for browsing
+// LoadFilesCmd loads context archive files and directories from a path for browsing
 func LoadFilesCmd(dirPath string) tea.Cmd {
 	return func() tea.Msg {
 		files := []string{}
@@ -225,22 +236,22 @@ func LoadFilesCmd(dirPath string) tea.Cmd {
 			}
 		}
 
-		// Separate directories and .tar files
+		// Separate directories and context archive files
 		var dirs []string
-		var tarFiles []string
+		var contextFiles []string
 
 		for _, entry := range entries {
 			if entry.IsDir() {
 				// Add directory with trailing slash
 				dirs = append(dirs, filepath.Join(dirPath, entry.Name())+"/")
-			} else if strings.HasSuffix(entry.Name(), ".tar") {
-				tarFiles = append(tarFiles, filepath.Join(dirPath, entry.Name()))
+			} else if isContextArchive(entry.Name()) {
+				contextFiles = append(contextFiles, filepath.Join(dirPath, entry.Name()))
 			}
 		}
 
-		// Add directories first, then .tar files
+		// Add directories first, then context archive files
 		files = append(files, dirs...)
-		files = append(files, tarFiles...)
+		files = append(files, contextFiles...)
 
 		return FilesLoadedMsg{
 			Path:  dirPath,

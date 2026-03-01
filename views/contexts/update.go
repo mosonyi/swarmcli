@@ -173,9 +173,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		if len(msg.Files) == 0 {
 			// For cert browser, empty is ok (just ".." entry)
-			// For import browser, need .tar files
+			// For import browser, need context archive files
 			if !m.certFileBrowserActive {
-				m.SetError("No .tar files found in " + msg.Path)
+				m.SetError("No context archive files found in " + msg.Path)
 				m.fileBrowserActive = false
 				m.importInputActive = false
 				m.importInput.Blur()

@@ -15,6 +15,10 @@ import (
 	"strings"
 )
 
+// ContextArchiveExts lists supported Docker context archive extensions.
+// Keep multi-part extensions before shorter suffixes when order matters.
+var ContextArchiveExts = []string{".dockercontext", ".tar.gz", ".tgz", ".tar"}
+
 // ContextInfo represents a Docker context with its metadata
 type ContextInfo struct {
 	Name        string
@@ -223,19 +227,23 @@ func DeleteContext(contextName string) error {
 	return nil
 }
 
-// ImportContext imports a Docker context from a tar file
+// ImportContext imports a Docker context from an archive file
 // Returns the name of the imported context
 func ImportContext(filePath string) (string, error) {
 	if filePath == "" {
 		return "", fmt.Errorf("file path is required")
 	}
 
-	// Extract context name from filename
-	parts := strings.Split(filePath, "/")
-	fileName := parts[len(parts)-1]
+	// Extract context name from filename and support multiple archive types
+	fileName := filepath.Base(filePath)
 	contextName := fileName
-	if idx := len(contextName) - 4; idx > 0 && contextName[idx:] == ".tar" {
-		contextName = contextName[:idx]
+
+	// Remove known extensions if present (order matters for multi-part extensions)
+	for _, ext := range ContextArchiveExts {
+		if strings.HasSuffix(strings.ToLower(contextName), ext) {
+			contextName = contextName[:len(contextName)-len(ext)]
+			break
+		}
 	}
 
 	cmd := exec.Command("docker", "context", "import", contextName, filePath)
