@@ -5,10 +5,12 @@ package logsview
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"os/exec"
 	"strings"
 	"swarmcli/docker"
 	"sync"
@@ -59,6 +61,13 @@ func (m *Model) startStreamingCmd(ctx context.Context, service docker.ServiceEnt
 			// call ServiceLogs (streams a multiplexed stream)
 			reader, err := cli.ServiceLogs(ctx, service.ServiceID, opts)
 			if err != nil {
+				if strings.Contains(strings.ToLower(err.Error()), "tty service logs only supported with --raw") {
+					l().With("service", service.ServiceID).Warn("ServiceLogs requires --raw for tty service; falling back to docker CLI")
+					if cliErr := m.streamServiceLogsRawCLI(ctx, service, opts.Tail, lines); cliErr != nil {
+						errs <- cliErr
+					}
+					return
+				}
 				l().With("service", service.ServiceID).Errorf("ServiceLogs error: %v", err)
 				errs <- err
 				return
@@ -110,8 +119,14 @@ func (m *Model) startStreamingCmd(ctx context.Context, service docker.ServiceEnt
 				level := l().With("service", service.ServiceID)
 				if errors.Is(scErr, context.Canceled) {
 					level.Debug("log stream closed normally (context canceled)")
+				} else if shouldFallbackToRawFromStdCopy(scErr) {
+					level.Warnf("stdcopy failed (%v); falling back to docker CLI raw logs", scErr)
+					if cliErr := m.streamServiceLogsRawCLI(ctx, service, opts.Tail, lines); cliErr != nil {
+						errs <- cliErr
+					}
 				} else {
 					level.Warnf("stdcopy finished with error: %v", scErr)
+					errs <- scErr
 				}
 				return
 			}
@@ -124,6 +139,85 @@ func (m *Model) startStreamingCmd(ctx context.Context, service docker.ServiceEnt
 			MaxLines: maxLines,
 		}
 	}
+}
+
+func (m *Model) streamServiceLogsRawCLI(ctx context.Context, service docker.ServiceEntry, tail string, lines chan<- string) error {
+	ctxName, err := docker.GetContextFromEnv()
+	if err != nil {
+		return fmt.Errorf("failed to determine docker context: %w", err)
+	}
+
+	args := make([]string, 0, 12)
+	if strings.TrimSpace(ctxName) != "" {
+		args = append(args, "--context", ctxName)
+	}
+	args = append(args,
+		"service", "logs",
+		"--raw",
+		"--follow",
+		"--details",
+		"--tail", tail,
+		service.ServiceID,
+	)
+
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to open docker logs stdout pipe: %w", err)
+	}
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start docker service logs command: %w", err)
+	}
+
+	sc := bufio.NewScanner(stdout)
+	for sc.Scan() {
+		line := sc.Text()
+		formattedLine, nodeName := m.formatLogLineWithNode(service.ServiceName, line)
+		select {
+		case lines <- nodeName + "\x00" + formattedLine:
+		case <-ctx.Done():
+			_ = cmd.Wait()
+			return nil
+		}
+	}
+
+	if err := sc.Err(); err != nil {
+		return fmt.Errorf("failed reading docker service logs output: %w", err)
+	}
+
+	if err := cmd.Wait(); err != nil {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return nil
+		}
+		msg := strings.TrimSpace(stderr.String())
+		if msg != "" {
+			return fmt.Errorf("docker service logs command failed: %w: %s", err, msg)
+		}
+		return fmt.Errorf("docker service logs command failed: %w", err)
+	}
+
+	return nil
+}
+
+func shouldFallbackToRawFromStdCopy(err error) bool {
+	if err == nil {
+		return false
+	}
+	errText := strings.ToLower(err.Error())
+	if strings.Contains(errText, "tty service logs only supported with --raw") {
+		return true
+	}
+	if strings.Contains(errText, "unrecognized input header") {
+		return true
+	}
+	if errors.Is(err, io.ErrShortWrite) {
+		return true
+	}
+	return false
 }
 
 // StopStreamingCmd returns a cmd that cancels the streaming context (if set on model).

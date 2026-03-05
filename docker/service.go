@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -528,6 +529,9 @@ func GetServiceLogs(ctx context.Context, serviceID string) (string, error) {
 
 	reader, err := client.ServiceLogs(ctx, serviceID, logOptions)
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "tty service logs only supported with --raw") {
+			return getServiceLogsRawCLI(ctx, serviceID)
+		}
 		return "", fmt.Errorf("failed to get service logs: %w", err)
 	}
 	defer func() {
@@ -543,6 +547,34 @@ func GetServiceLogs(ctx context.Context, serviceID string) (string, error) {
 	// Log for debugging
 	l().Infof("GetServiceLogs: raw=%d bytes, cleaned=%d bytes", len(logs), len(result))
 	return result, nil
+}
+
+func getServiceLogsRawCLI(ctx context.Context, serviceID string) (string, error) {
+	ctxName, err := GetContextFromEnv()
+	if err != nil {
+		return "", fmt.Errorf("failed to determine docker context: %w", err)
+	}
+
+	args := make([]string, 0, 8)
+	if strings.TrimSpace(ctxName) != "" {
+		args = append(args, "--context", ctxName)
+	}
+	args = append(args, "service", "logs", "--raw", serviceID)
+
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg != "" {
+			return "", fmt.Errorf("failed to get service logs via docker CLI: %w: %s", err, msg)
+		}
+		return "", fmt.Errorf("failed to get service logs via docker CLI: %w", err)
+	}
+
+	return stdout.String(), nil
 }
 
 // stripDockerLogHeaders decodes Docker's multiplexed log stream.
