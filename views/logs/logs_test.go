@@ -1,6 +1,8 @@
 package logsview
 
 import (
+	"errors"
+	"io"
 	"testing"
 
 	"swarmcli/docker"
@@ -499,4 +501,27 @@ func TestSetContent_MaxLines(t *testing.T) {
 	require.Equal(t, "c", m.lines[0])
 	require.Equal(t, "d", m.lines[1])
 	m.mu.Unlock()
+}
+
+// --- shouldFallbackToRawFromStdCopy tests ---
+
+func TestShouldFallbackToRawFromStdCopy(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil error", nil, false},
+		{"tty error", errors.New("tty service logs only supported with --raw"), true},
+		{"tty error mixed case", errors.New("TTY Service Logs Only Supported With --raw"), true},
+		{"unrecognized header", errors.New("unrecognized input header"), true},
+		{"short write is not a fallback", io.ErrShortWrite, false},
+		{"context canceled", errors.New("context canceled"), false},
+		{"random error", errors.New("something went wrong"), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, shouldFallbackToRawFromStdCopy(tc.err))
+		})
+	}
 }

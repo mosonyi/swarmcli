@@ -61,6 +61,7 @@ func (m *Model) startStreamingCmd(ctx context.Context, service docker.ServiceEnt
 			// call ServiceLogs (streams a multiplexed stream)
 			reader, err := cli.ServiceLogs(ctx, service.ServiceID, opts)
 			if err != nil {
+				// NOTE: This matches a Docker daemon error string. Update if Docker changes the message.
 				if strings.Contains(strings.ToLower(err.Error()), "tty service logs only supported with --raw") {
 					l().With("service", service.ServiceID).Warn("ServiceLogs requires --raw for tty service; falling back to docker CLI")
 					if cliErr := m.streamServiceLogsRawCLI(ctx, service, opts.Tail, lines); cliErr != nil {
@@ -147,18 +148,7 @@ func (m *Model) streamServiceLogsRawCLI(ctx context.Context, service docker.Serv
 		return fmt.Errorf("failed to determine docker context: %w", err)
 	}
 
-	args := make([]string, 0, 12)
-	if strings.TrimSpace(ctxName) != "" {
-		args = append(args, "--context", ctxName)
-	}
-	args = append(args,
-		"service", "logs",
-		"--raw",
-		"--follow",
-		"--details",
-		"--tail", tail,
-		service.ServiceID,
-	)
+	args := docker.BuildRawLogArgs(ctxName, service.ServiceID, "--follow", "--details", "--tail", tail)
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	stdout, err := cmd.StdoutPipe()
@@ -174,6 +164,7 @@ func (m *Model) streamServiceLogsRawCLI(ctx context.Context, service docker.Serv
 	}
 
 	sc := bufio.NewScanner(stdout)
+	sc.Buffer(make([]byte, 0, 256*1024), 256*1024) // 256 KB to handle long TTY lines
 	for sc.Scan() {
 		line := sc.Text()
 		formattedLine, nodeName := m.formatLogLineWithNode(service.ServiceName, line)
@@ -203,6 +194,9 @@ func (m *Model) streamServiceLogsRawCLI(ctx context.Context, service docker.Serv
 	return nil
 }
 
+// shouldFallbackToRawFromStdCopy returns true when a stdcopy error indicates
+// the service uses TTY mode and needs raw log streaming instead.
+// NOTE: Error strings are coupled to Docker daemon messages — update if Docker changes them.
 func shouldFallbackToRawFromStdCopy(err error) bool {
 	if err == nil {
 		return false
@@ -212,9 +206,6 @@ func shouldFallbackToRawFromStdCopy(err error) bool {
 		return true
 	}
 	if strings.Contains(errText, "unrecognized input header") {
-		return true
-	}
-	if errors.Is(err, io.ErrShortWrite) {
 		return true
 	}
 	return false
