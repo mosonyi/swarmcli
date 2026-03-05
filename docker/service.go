@@ -529,6 +529,7 @@ func GetServiceLogs(ctx context.Context, serviceID string) (string, error) {
 
 	reader, err := client.ServiceLogs(ctx, serviceID, logOptions)
 	if err != nil {
+		// NOTE: This matches a Docker daemon error string. Update if Docker changes the message.
 		if strings.Contains(strings.ToLower(err.Error()), "tty service logs only supported with --raw") {
 			return getServiceLogsRawCLI(ctx, serviceID)
 		}
@@ -549,17 +550,26 @@ func GetServiceLogs(ctx context.Context, serviceID string) (string, error) {
 	return result, nil
 }
 
+// BuildRawLogArgs constructs the docker CLI arguments for "service logs --raw".
+// Extra flags (e.g. "--follow", "--details", "--tail", "100") are inserted before the serviceID.
+func BuildRawLogArgs(ctxName, serviceID string, extra ...string) []string {
+	args := make([]string, 0, 8+len(extra))
+	if strings.TrimSpace(ctxName) != "" {
+		args = append(args, "--context", ctxName)
+	}
+	args = append(args, "service", "logs", "--raw")
+	args = append(args, extra...)
+	args = append(args, serviceID)
+	return args
+}
+
 func getServiceLogsRawCLI(ctx context.Context, serviceID string) (string, error) {
 	ctxName, err := GetContextFromEnv()
 	if err != nil {
 		return "", fmt.Errorf("failed to determine docker context: %w", err)
 	}
 
-	args := make([]string, 0, 8)
-	if strings.TrimSpace(ctxName) != "" {
-		args = append(args, "--context", ctxName)
-	}
-	args = append(args, "service", "logs", "--raw", serviceID)
+	args := BuildRawLogArgs(ctxName, serviceID)
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	var stdout, stderr bytes.Buffer
