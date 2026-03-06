@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/docker/docker/api/types/mount"
 )
 
 // StackInspection contains detailed information about a stack
@@ -15,6 +17,7 @@ type StackInspection struct {
 	Name         string           `json:"name"`
 	Services     []ServiceSummary `json:"services"`
 	Networks     []string         `json:"networks,omitempty"`
+	Volumes      []string         `json:"volumes,omitempty"`
 	Secrets      []string         `json:"secrets,omitempty"`
 	Configs      []string         `json:"configs,omitempty"`
 	ServiceCount int              `json:"service_count"`
@@ -48,8 +51,16 @@ func GetStackInspection(stackName string) (string, error) {
 		Services: []ServiceSummary{},
 	}
 
-	// Collect unique networks, secrets, and configs
+	// Build network ID to name mapping
+	netID2Name, err := dockerNetworkIDToNameMap()
+	if err != nil {
+		l().Warnf("Could not build network ID->name map: %v", err)
+		netID2Name = map[string]string{}
+	}
+
+	// Collect unique networks, volumes, secrets, and configs
 	networksMap := make(map[string]bool)
+	volumesMap := make(map[string]bool)
 	secretsMap := make(map[string]bool)
 	configsMap := make(map[string]bool)
 
@@ -111,14 +122,19 @@ func GetStackInspection(stackName string) (string, error) {
 			}
 		}
 
-		// Collect networks
+		// Collect networks (check both locations; some Docker versions use one or the other)
 		for _, net := range svc.Spec.TaskTemplate.Networks {
 			if net.Target != "" {
 				networksMap[net.Target] = true
 			}
 		}
+		for _, net := range svc.Spec.Networks {
+			if net.Target != "" {
+				networksMap[net.Target] = true
+			}
+		}
 
-		// Collect secrets
+		// Collect secrets, configs, and volumes
 		if svc.Spec.TaskTemplate.ContainerSpec != nil {
 			for _, s := range svc.Spec.TaskTemplate.ContainerSpec.Secrets {
 				if s.SecretName != "" {
@@ -126,10 +142,15 @@ func GetStackInspection(stackName string) (string, error) {
 				}
 			}
 
-			// Collect configs
 			for _, c := range svc.Spec.TaskTemplate.ContainerSpec.Configs {
 				if c.ConfigName != "" {
 					configsMap[c.ConfigName] = true
+				}
+			}
+
+			for _, m := range svc.Spec.TaskTemplate.ContainerSpec.Mounts {
+				if m.Type == mount.TypeVolume && m.Source != "" {
+					volumesMap[m.Source] = true
 				}
 			}
 		}
@@ -156,11 +177,20 @@ func GetStackInspection(stackName string) (string, error) {
 	desc.CreatedAt = earliestCreated
 	desc.UpdatedAt = latestUpdated
 
-	// Convert maps to sorted slices
-	for net := range networksMap {
-		desc.Networks = append(desc.Networks, net)
+	// Convert maps to sorted slices, resolving network IDs to names
+	for netID := range networksMap {
+		name := netID2Name[netID]
+		if name == "" {
+			name = netID
+		}
+		desc.Networks = append(desc.Networks, name)
 	}
 	sort.Strings(desc.Networks)
+
+	for vol := range volumesMap {
+		desc.Volumes = append(desc.Volumes, vol)
+	}
+	sort.Strings(desc.Volumes)
 
 	for sec := range secretsMap {
 		desc.Secrets = append(desc.Secrets, sec)

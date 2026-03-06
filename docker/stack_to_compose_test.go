@@ -205,3 +205,36 @@ func TestComposeFile_DefaultNetworkOmitted(t *testing.T) {
 	require.NotContains(t, yamlStr, "networks:")
 	require.NotContains(t, yamlStr, "default")
 }
+
+func TestComposeFile_NetworkManagedNotExternal(t *testing.T) {
+	// Stack-managed networks (prefix was stripped) should not be external
+	cf := ComposeFile{
+		Version: "3.8",
+		Services: map[string]ComposeService{
+			"web": {Image: "nginx", Networks: []string{"mynet"}},
+		},
+		Networks: map[string]map[string]any{"mynet": {}},
+	}
+	out, err := yaml.Marshal(&cf)
+	require.NoError(t, err)
+	yamlStr := string(out)
+	require.Contains(t, yamlStr, "networks:")
+	require.Contains(t, yamlStr, "mynet:")
+	require.NotContains(t, yamlStr, "external")
+}
+
+func TestComposeFile_NetworkExternalTrue(t *testing.T) {
+	// External networks (no prefix stripped) should have external: true
+	cf := ComposeFile{
+		Version: "3.8",
+		Services: map[string]ComposeService{
+			"web": {Image: "nginx", Networks: []string{"shared_net"}},
+		},
+		Networks: map[string]map[string]any{"shared_net": {"external": true}},
+	}
+	out, err := yaml.Marshal(&cf)
+	require.NoError(t, err)
+	yamlStr := string(out)
+	require.Contains(t, yamlStr, "shared_net:")
+	require.Contains(t, yamlStr, "external: true")
+}

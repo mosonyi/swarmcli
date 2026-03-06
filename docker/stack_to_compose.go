@@ -214,12 +214,16 @@ func ReconstructStackCompose(stackName string) (string, error) {
 	}
 
 	// Helper functions for declaring resources
-	declareExternalNet := func(netName string) {
+	declareNet := func(netName string, external bool) {
 		if netName == "" {
 			return
 		}
 		if _, ok := cf.Networks[netName]; !ok {
-			cf.Networks[netName] = map[string]any{"external": true}
+			props := map[string]any{}
+			if external {
+				props["external"] = true
+			}
+			cf.Networks[netName] = props
 		}
 	}
 
@@ -395,9 +399,10 @@ func ReconstructStackCompose(stackName string) (string, error) {
 			if nm == "" {
 				continue
 			}
-			nm = stripStackPrefix(stackName, nm)
-			netNames[nm] = struct{}{}
-			declareExternalNet(nm)
+			stripped := stripStackPrefix(stackName, nm)
+			isExternal := stripped == nm // no prefix removed → external
+			netNames[stripped] = struct{}{}
+			declareNet(stripped, isExternal)
 		}
 		if len(netNames) > 0 {
 			var nets []string
