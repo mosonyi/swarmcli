@@ -272,6 +272,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return m.confirmDialog.Update(msg)
 		}
 
+		// --- if in search mode, handle all keys via FilterableList ---
+		if m.List.Mode == filterlist.ModeSearching {
+			m.List.HandleKey(msg)
+			return nil
+		}
+
 		// Handle keyboard shortcuts
 		if msg.String() == "c" {
 			m.createDialogActive = true
@@ -281,12 +287,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.createFileInput.SetValue("")
 			m.createDialogContent = defaultStackTemplate
 			m.createDialogError = ""
-			return nil
-		}
-
-		// --- if in search mode, handle all keys via FilterableList ---
-		if m.List.Mode == filterlist.ModeSearching {
-			m.List.HandleKey(msg)
 			return nil
 		}
 
