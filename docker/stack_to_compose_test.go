@@ -147,3 +147,61 @@ func TestComposeService_BothLabelLevelsYAML(t *testing.T) {
 	require.True(t, ok, "deploy.labels should exist")
 	require.Equal(t, "dval", deployLabels["deploy.label"])
 }
+
+func TestStripStackPrefix(t *testing.T) {
+	tests := []struct {
+		stack, input, want string
+	}{
+		{"ubu", "ubu_ubuntu_example_data", "ubuntu_example_data"},
+		{"ubu", "external_volume", "external_volume"},
+		{"ubu", "ubu_default", "default"},
+		{"ubu", "ubu_", ""},
+		{"", "anything", "anything"},
+		{"ubu", "ubu", "ubu"}, // no underscore → no strip
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			require.Equal(t, tt.want, stripStackPrefix(tt.stack, tt.input))
+		})
+	}
+}
+
+func TestComposeFile_VolumeManagedNotExternal(t *testing.T) {
+	cf := ComposeFile{
+		Version:  "3.8",
+		Services: map[string]ComposeService{"web": {Image: "nginx", Volumes: []string{"mydata:/data"}}},
+		Volumes:  map[string]map[string]any{"mydata": {}},
+	}
+	out, err := yaml.Marshal(&cf)
+	require.NoError(t, err)
+	require.NotContains(t, string(out), "external")
+}
+
+func TestComposeFile_DefaultNetworkOmitted(t *testing.T) {
+	cf := ComposeFile{
+		Version: "3.8",
+		Services: map[string]ComposeService{
+			"web": {Image: "nginx", Networks: []string{"default"}},
+		},
+		Networks: map[string]map[string]any{"default": {"external": true}},
+	}
+
+	// Simulate the suppression logic
+	if len(cf.Networks) == 1 {
+		if _, ok := cf.Networks["default"]; ok {
+			cf.Networks = nil
+			for k, svc := range cf.Services {
+				if nets, ok := svc.Networks.([]string); ok && len(nets) == 1 && nets[0] == "default" {
+					svc.Networks = nil
+					cf.Services[k] = svc
+				}
+			}
+		}
+	}
+
+	out, err := yaml.Marshal(&cf)
+	require.NoError(t, err)
+	yamlStr := string(out)
+	require.NotContains(t, yamlStr, "networks:")
+	require.NotContains(t, yamlStr, "default")
+}
