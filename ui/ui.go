@@ -17,7 +17,7 @@ var (
 			Bold(true)
 
 	FrameHeaderStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("75")).
+				Foreground(lipgloss.Color("15")).
 				Bold(true)
 
 	FrameBorderColor = lipgloss.Color("117")
