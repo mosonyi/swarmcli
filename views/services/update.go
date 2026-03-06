@@ -10,6 +10,7 @@ import (
 	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
+	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	helpview "swarmcli/views/help"
@@ -898,7 +899,7 @@ func (m *Model) setRenderItem() {
 			errText = truncateWithEllipsis(m.serviceErrorText[e.ServiceID], colWidths[9])
 		}
 
-		itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
+		itemStyle := ui.ListItemStyle
 
 		// Build format string with all columns at once (like CONFIG view)
 		formatStr := fmt.Sprintf(" %%-%ds%%-%ds%%-%ds%%-%ds%%-%ds%%-%ds%%-%ds%%-%ds%%-%ds%%-%ds",
@@ -908,8 +909,7 @@ func (m *Model) setRenderItem() {
 		var lineStr string
 		if selected && m.selectedTaskIndex == -1 {
 			// Only highlight service row if no task is selected
-			selBg := lipgloss.Color("25") // Lighter blue
-			selBase := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
+			selBase := ui.ListSelectedStyle
 			lineStr = selBase.Render(fmt.Sprintf(formatStr,
 				serviceName, stackName, replicasText, statusText, modeText, imageText, portsText, created, updated, errText))
 
