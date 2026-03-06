@@ -12,6 +12,7 @@ import (
 	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
+	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	helpview "swarmcli/views/help"
@@ -1189,7 +1190,7 @@ func (m *Model) setRenderItem() {
 		}
 	}()
 	// Build RenderItem to match the header layout used by the view (4 columns: STACK, SERVICES, TASKS, ERROR)
-	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
+	itemStyle := ui.ListItemStyle
 
 	m.List.RenderItem = func(s docker.StackEntry, selected bool, _ int) string {
 		colWidths := m.List.ColWidths()
@@ -1235,8 +1236,7 @@ func (m *Model) setRenderItem() {
 
 		// Render all columns in one format string using precision to truncate if needed
 		if selected {
-			selBg := lipgloss.Color("63")
-			selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
+			selStyle := ui.ListSelectedStyle
 			line := selStyle.Render(fmt.Sprintf(" %-*.*s%-*.*s%-*.*s%-*.*s",
 				colWidths[0]-1, colWidths[0]-1, name,
 				colWidths[1], colWidths[1], svcStr,

@@ -19,7 +19,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // parseLabels parses a comma-separated list of key=value pairs into a map
@@ -344,22 +343,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					svcText = svcText[:colWidths[1]-1] + "…"
 				}
 
-				// Use bright white for content and reserve a leading space
-				itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
-				// Reserve one leading space for the first column so content aligns with headers
-				col0 := itemStyle.Render(fmt.Sprintf(" %-*s", colWidths[0]-1, stackText))
-				col1 := itemStyle.Render(fmt.Sprintf("%-*s", colWidths[1], svcText))
+				col0 := fmt.Sprintf(" %-*s", colWidths[0]-1, stackText)
+				col1 := fmt.Sprintf("%-*s", colWidths[1], svcText)
 				line := col0 + col1
 
 				if selected {
-					selBg := lipgloss.Color("63")
-					selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
-					// Keep leading space for first column when selected as well
-					col0 = selStyle.Render(fmt.Sprintf(" %-*s", colWidths[0]-1, stackText))
-					col1 = selStyle.Render(fmt.Sprintf("%-*s", colWidths[1], svcText))
-					return col0 + col1
+					return ui.ListSelectedStyle.Render(line)
 				}
-				return line
+				return ui.ListItemStyle.Render(line)
 			},
 		}
 		m.usedByList.SetOuterSize(w, h)
@@ -658,8 +649,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) setRenderItem() {
-	// Use bright white for content (color 15) for better contrast
-	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
+	itemStyle := ui.ListItemStyle
 
 	m.configsList.RenderItem = func(cfg configItem, selected bool, _ int) string {
 		colWidths := m.configsList.ColWidths()
@@ -695,9 +685,7 @@ func (m *Model) setRenderItem() {
 
 		// Render all columns in one format string (no explicit separators, like secrets view)
 		if selected {
-			selBg := lipgloss.Color("63")
-			selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
-			return selStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s",
+			return ui.ListSelectedStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s",
 				colWidths[0]-1, nameText,
 				colWidths[1], idText,
 				colWidths[2], usedText,

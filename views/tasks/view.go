@@ -124,7 +124,7 @@ func (m *Model) renderTasks() string {
 			colWidths[4], desiredState,
 			colWidths[5], status)
 
-		lines = append(lines, line)
+		lines = append(lines, ui.ListItemStyle.Render(line))
 	}
 
 	return strings.Join(lines, "\n")

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
+	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	helpview "swarmcli/views/help"
@@ -18,7 +19,6 @@ import (
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/docker/docker/api/types/swarm"
 )
 
@@ -534,7 +534,7 @@ func (m *Model) SetContent(msg Msg) {
 
 func (m *Model) setRenderItem() {
 	// Use bright white for content and reserve leading space in first column
-	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
+	itemStyle := ui.ListItemStyle
 
 	m.List.RenderItem = func(n docker.NodeEntry, selected bool, _ int) string {
 		colWidths := m.List.ColWidths()
@@ -585,8 +585,7 @@ func (m *Model) setRenderItem() {
 		}
 		// Use the pre-calculated column widths instead of the single colWidth
 		if selected {
-			selBg := lipgloss.Color("63")
-			selStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(selBg).Bold(true)
+			selStyle := ui.ListSelectedStyle
 			// Preserve leading space for hostname when selected
 			return selStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s",
 				colWidths[0]-1, idStr,

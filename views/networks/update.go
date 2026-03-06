@@ -1153,14 +1153,12 @@ func (m *Model) applySorting() {
 }
 
 func (m *Model) setRenderItem() {
-	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
+	itemStyle := ui.ListItemStyle
 
 	m.networksList.RenderItem = func(item networkItem, selected bool, colWidth int) string {
 		style := itemStyle
 		if selected {
-			style = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("0")).
-				Background(lipgloss.Color("63"))
+			style = ui.ListSelectedStyle
 		}
 
 		colWidths := m.networksList.ColWidths()
@@ -1206,14 +1204,10 @@ func (m *Model) setRenderItem() {
 }
 
 func (m *Model) setUsedByRenderItem() {
-	itemStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
-
 	m.usedByList.RenderItem = func(item usedByItem, selected bool, colWidth int) string {
-		style := itemStyle
+		style := ui.ListItemStyle
 		if selected {
-			style = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("0")).
-				Background(lipgloss.Color("63"))
+			style = ui.ListSelectedStyle
 		}
 
 		stackWidth := 30

@@ -126,9 +126,9 @@ func (m *Model) FrameContent() string {
 			colWidths[4], errStr,
 		)
 		if selected {
-			return lipgloss.NewStyle().Background(lipgloss.Color("63")).Foreground(lipgloss.Color("230")).Render(line)
+			return ui.ListSelectedStyle.Render(line)
 		}
-		return line
+		return ui.ListItemStyle.Render(line)
 	}
 
 	var content string

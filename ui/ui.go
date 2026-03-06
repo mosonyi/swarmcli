@@ -17,10 +17,18 @@ var (
 			Bold(true)
 
 	FrameHeaderStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("75")).
+				Foreground(lipgloss.Color("15")).
 				Bold(true)
 
 	FrameBorderColor = lipgloss.Color("117")
+
+	ListItemStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("117"))
+
+	ListSelectedStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("230")).
+				Background(lipgloss.Color("63")).
+				Bold(true)
 )
 
 // RenderFramedBox draws a bordered frame with title, optional header, and content.
