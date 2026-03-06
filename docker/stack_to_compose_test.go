@@ -44,6 +44,39 @@ func TestFilterLabels_NilInput(t *testing.T) {
 	require.Nil(t, filterLabels(nil))
 }
 
+func TestComposeFile_VolumesExternalTrue(t *testing.T) {
+	cf := ComposeFile{
+		Version:  "3.8",
+		Services: map[string]ComposeService{"web": {Image: "nginx"}},
+		Volumes: map[string]map[string]any{
+			"mydata": {"external": true},
+		},
+	}
+	out, err := yaml.Marshal(&cf)
+	require.NoError(t, err)
+	yamlStr := string(out)
+	require.Contains(t, yamlStr, "external: true")
+}
+
+func TestComposeFile_VolumeWithDriver(t *testing.T) {
+	cf := ComposeFile{
+		Version:  "3.8",
+		Services: map[string]ComposeService{"web": {Image: "nginx", Volumes: []string{"nfs_data:/data"}}},
+		Volumes: map[string]map[string]any{
+			"nfs_data": {
+				"driver":      "local",
+				"driver_opts": map[string]string{"type": "nfs", "device": ":/export"},
+			},
+		},
+	}
+	out, err := yaml.Marshal(&cf)
+	require.NoError(t, err)
+	yamlStr := string(out)
+	require.Contains(t, yamlStr, "driver: local")
+	require.Contains(t, yamlStr, "driver_opts:")
+	require.NotContains(t, yamlStr, "external")
+}
+
 func TestComposeService_DeployLabelsYAML(t *testing.T) {
 	cs := ComposeService{
 		Image: "nginx:latest",

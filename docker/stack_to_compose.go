@@ -223,13 +223,25 @@ func ReconstructStackCompose(stackName string) (string, error) {
 		}
 	}
 
-	declareVolume := func(volName string) {
+	declareVolume := func(volName string, m *Mount) {
 		if volName == "" {
 			return
 		}
-		if _, ok := cf.Volumes[volName]; !ok {
-			cf.Volumes[volName] = map[string]any{}
+		if _, ok := cf.Volumes[volName]; ok {
+			return
 		}
+		vol := map[string]any{"external": true}
+		if m != nil && m.VolumeOptions != nil && m.VolumeOptions.DriverConfig != nil {
+			dc := m.VolumeOptions.DriverConfig
+			if dc.Name != "" {
+				vol["driver"] = dc.Name
+				delete(vol, "external")
+			}
+			if len(dc.Options) > 0 {
+				vol["driver_opts"] = dc.Options
+			}
+		}
+		cf.Volumes[volName] = vol
 	}
 
 	declareSecretExternal := func(name string) {
@@ -307,9 +319,9 @@ func ReconstructStackCompose(stackName string) (string, error) {
 				case "volume":
 					src := m.Source
 					if src == "" {
-						src = fmt.Sprintf("%s_%s", stackName, strings.ReplaceAll(strings.TrimPrefix(m.Target, "/"), "/", "_"))
+						continue // anonymous volume, cannot round-trip
 					}
-					declareVolume(src)
+					declareVolume(src, &m)
 					cs.Volumes = append(cs.Volumes, fmt.Sprintf("%s:%s%s", src, m.Target, ro))
 				case "tmpfs":
 					if cs.Extra == nil {
