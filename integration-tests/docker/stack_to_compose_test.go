@@ -97,16 +97,28 @@ func TestReconstructStackCompose_RoundTrip(t *testing.T) {
 		t.Fatalf("Failed to parse reconstructed YAML: %v", err)
 	}
 
-	// 2. Write to temp file and deploy as a new stack
+	// 2. Strip published ports to avoid conflicts with the running demo stack
+	for k, svc := range srcCF.Services {
+		svc.Ports = nil
+		srcCF.Services[k] = svc
+	}
+	deployYAML, err := yamlPkg.Marshal(&srcCF)
+	if err != nil {
+		t.Fatalf("Failed to marshal deploy YAML: %v", err)
+	}
+
+	// Write to temp file and deploy as a new stack
 	tmpFile, err := os.CreateTemp("", "compose-rt-*.yml")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
-	if _, err := tmpFile.WriteString(yamlStr); err != nil {
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	if _, err := tmpFile.Write(deployYAML); err != nil {
 		t.Fatalf("Failed to write compose file: %v", err)
 	}
-	tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("Failed to close compose file: %v", err)
+	}
 
 	// Deploy round-trip stack
 	deployCmd := exec.Command("docker", "stack", "deploy", "-c", tmpFile.Name(), rtStack)
