@@ -238,3 +238,29 @@ func TestComposeFile_NetworkExternalTrue(t *testing.T) {
 	require.Contains(t, yamlStr, "shared_net:")
 	require.Contains(t, yamlStr, "external: true")
 }
+
+func TestEscapeComposeInterpolation(t *testing.T) {
+	tests := []struct {
+		name, input, want string
+	}{
+		{"no dollars", "echo hello", "echo hello"},
+		{"single dollar", "echo $HOME", "echo $$HOME"},
+		{"double dollar passthrough", "echo $$HOME", "echo $$$$HOME"},
+		{"subshell", "sh -c '$(date)'", "sh -c '$$(date)'"},
+		{"arithmetic", "i=$((i+1))", "i=$$((i+1))"},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, escapeComposeInterpolation(tt.input))
+		})
+	}
+}
+
+func TestEscapeComposeArgs(t *testing.T) {
+	in := []string{"sh", "-c", "echo $HOME; date=$(date)"}
+	got := escapeComposeArgs(in)
+	require.Equal(t, []string{"sh", "-c", "echo $$HOME; date=$$(date)"}, got)
+	// original slice must not be modified
+	require.Equal(t, "echo $HOME; date=$(date)", in[2])
+}

@@ -7,9 +7,14 @@
 package docker_test
 
 import (
+	"bytes"
+	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"swarmcli/docker"
 	"testing"
+	"time"
 
 	yamlPkg "gopkg.in/yaml.v3"
 )
@@ -76,72 +81,149 @@ func TestReconstructStackCompose(t *testing.T) {
 }
 
 func TestReconstructStackCompose_RoundTrip(t *testing.T) {
-	// Round-trip: reconstruct → parse → verify volumes/networks survive structurally.
-	// Full deploy round-trip is blocked by $$ escaping in commands (separate issue).
-	stackName := "demo"
+	// Full round-trip: reconstruct demo → deploy as demo_rt → reconstruct demo_rt → compare.
+	const srcStack = "demo"
+	const rtStack = "demo_rt"
 
-	yamlStr, err := docker.ReconstructStackCompose(stackName)
+	// 1. Reconstruct the original stack
+	yamlStr, err := docker.ReconstructStackCompose(srcStack)
 	if err != nil {
-		t.Fatalf("Failed to reconstruct stack compose: %v", err)
+		t.Fatalf("Failed to reconstruct source stack: %v", err)
 	}
+	t.Logf("Reconstructed YAML:\n%s", yamlStr)
 
-	var cf docker.ComposeFile
-	if err := yamlPkg.Unmarshal([]byte(yamlStr), &cf); err != nil {
+	var srcCF docker.ComposeFile
+	if err := yamlPkg.Unmarshal([]byte(yamlStr), &srcCF); err != nil {
 		t.Fatalf("Failed to parse reconstructed YAML: %v", err)
 	}
 
-	// Verify top-level volumes survived reconstruction
-	if _, ok := cf.Volumes["whoami_data"]; !ok {
-		t.Errorf("Volume 'whoami_data' missing from reconstructed compose, got keys: %v", mapKeys(cf.Volumes))
+	// 2. Write to temp file and deploy as a new stack
+	tmpFile, err := os.CreateTemp("", "compose-rt-*.yml")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	if _, err := tmpFile.WriteString(yamlStr); err != nil {
+		t.Fatalf("Failed to write compose file: %v", err)
+	}
+	tmpFile.Close()
+
+	// Deploy round-trip stack
+	deployCmd := exec.Command("docker", "stack", "deploy", "-c", tmpFile.Name(), rtStack)
+	var deployErr bytes.Buffer
+	deployCmd.Stderr = &deployErr
+	if out, err := deployCmd.Output(); err != nil {
+		t.Fatalf("Failed to deploy round-trip stack: %v\nstderr: %s\nstdout: %s", err, deployErr.String(), string(out))
 	}
 
-	// Verify top-level networks survived reconstruction
-	if _, ok := cf.Networks["backend"]; !ok {
-		t.Errorf("Network 'backend' missing from reconstructed compose, got keys: %v", mapKeys(cf.Networks))
-	}
-
-	// Verify backend is not external
-	if props, ok := cf.Networks["backend"]; ok {
-		if _, hasExternal := props["external"]; hasExternal {
-			t.Error("Stack-managed network 'backend' should not be marked as external after reconstruction")
-		}
-	}
-
-	// Verify service-level volume mount
-	if svc, ok := cf.Services["whoami"]; ok {
-		found := false
-		for _, v := range svc.Volumes {
-			if strings.Contains(v, "whoami_data:") {
-				found = true
+	// Cleanup: remove the round-trip stack when done
+	t.Cleanup(func() {
+		rmCmd := exec.Command("docker", "stack", "rm", rtStack)
+		_ = rmCmd.Run()
+		// Wait for removal to complete
+		for range 30 {
+			check := exec.Command("docker", "stack", "services", rtStack, "--format", "{{.Name}}")
+			if out, _ := check.Output(); len(bytes.TrimSpace(out)) == 0 {
+				break
 			}
+			time.Sleep(time.Second)
 		}
-		if !found {
-			t.Errorf("Service 'whoami' missing volume mount for 'whoami_data', got: %v", svc.Volumes)
-		}
-	} else {
-		t.Error("Service 'whoami' missing from reconstructed compose")
+	})
+
+	// 3. Wait for convergence
+	if err := waitForStackConvergence(rtStack, len(srcCF.Services), 60*time.Second); err != nil {
+		t.Fatalf("Round-trip stack failed to converge: %v", err)
 	}
 
-	// Verify service-level network attachment
-	if svc, ok := cf.Services["whoami"]; ok {
-		nets, ok := svc.Networks.([]any)
+	// 4. Reconstruct the round-trip stack
+	rtYAML, err := docker.ReconstructStackCompose(rtStack)
+	if err != nil {
+		t.Fatalf("Failed to reconstruct round-trip stack: %v", err)
+	}
+
+	var rtCF docker.ComposeFile
+	if err := yamlPkg.Unmarshal([]byte(rtYAML), &rtCF); err != nil {
+		t.Fatalf("Failed to parse round-trip YAML: %v", err)
+	}
+
+	// 5. Compare: volumes
+	for volName := range srcCF.Volumes {
+		if _, ok := rtCF.Volumes[volName]; !ok {
+			t.Errorf("Volume %q present in source but missing from round-trip, got keys: %v",
+				volName, mapKeys(rtCF.Volumes))
+		}
+	}
+
+	// 6. Compare: networks
+	for netName := range srcCF.Networks {
+		if _, ok := rtCF.Networks[netName]; !ok {
+			t.Errorf("Network %q present in source but missing from round-trip, got keys: %v",
+				netName, mapKeys(rtCF.Networks))
+		}
+	}
+
+	// 7. Compare: service volume mounts
+	for svcName, srcSvc := range srcCF.Services {
+		rtSvc, ok := rtCF.Services[svcName]
 		if !ok {
-			t.Errorf("Service 'whoami' networks not a list, got %T", svc.Networks)
-		} else {
+			t.Errorf("Service %q present in source but missing from round-trip", svcName)
+			continue
+		}
+		for _, srcVol := range srcSvc.Volumes {
 			found := false
-			for _, n := range nets {
-				if n == "backend" {
+			for _, rtVol := range rtSvc.Volumes {
+				if rtVol == srcVol {
 					found = true
+					break
 				}
 			}
 			if !found {
-				t.Errorf("Service 'whoami' missing network 'backend', got: %v", nets)
+				t.Errorf("Service %q: volume mount %q missing from round-trip, got: %v",
+					svcName, srcVol, rtSvc.Volumes)
 			}
 		}
 	}
 
-	t.Logf("Round-trip structural test passed: volumes=%v, networks=%v",
-		mapKeys(cf.Volumes), mapKeys(cf.Networks))
+	t.Logf("Round-trip deploy test passed: volumes=%v, networks=%v",
+		mapKeys(rtCF.Volumes), mapKeys(rtCF.Networks))
+}
+
+// waitForStackConvergence waits until all services in the stack have running tasks.
+func waitForStackConvergence(stack string, expectedServices int, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		cmd := exec.Command("docker", "stack", "services", stack, "--format", "{{.Name}} {{.Replicas}}")
+		out, err := cmd.Output()
+		if err != nil {
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+		if len(lines) < expectedServices {
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		allReady := true
+		for _, line := range lines {
+			// Format: "stack_svc 2/2" — check N/M where N==M
+			parts := strings.Fields(line)
+			if len(parts) < 2 {
+				allReady = false
+				break
+			}
+			replicas := parts[len(parts)-1]
+			slash := strings.Index(replicas, "/")
+			if slash < 0 || replicas[:slash] != replicas[slash+1:] {
+				allReady = false
+				break
+			}
+		}
+		if allReady {
+			return nil
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("stack %q did not converge within %v", stack, timeout)
 }
 
 func mapKeys[V any](m map[string]V) []string {

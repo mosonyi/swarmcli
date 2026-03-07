@@ -302,11 +302,11 @@ func ReconstructStackCompose(stackName string) (string, error) {
 				cs.Labels = cl
 			}
 
-			// Command / Args
+			// Command / Args — escape $ → $$ for Compose variable interpolation
 			if len(cspec.Args) > 0 {
-				cs.Command = cspec.Args
+				cs.Command = escapeComposeArgs(cspec.Args)
 			} else if len(cspec.Command) > 0 {
-				cs.Command = cspec.Command
+				cs.Command = escapeComposeArgs(cspec.Command)
 			}
 
 			// Mounts -> volumes
@@ -622,6 +622,21 @@ func filterLabels(labels map[string]string) map[string]string {
 	}
 	if len(out) == 0 {
 		return nil
+	}
+	return out
+}
+
+// escapeComposeInterpolation escapes $ as $$ so that Compose does not
+// attempt variable interpolation on reconstructed command strings.
+func escapeComposeInterpolation(s string) string {
+	return strings.ReplaceAll(s, "$", "$$")
+}
+
+// escapeComposeArgs applies escapeComposeInterpolation to each element.
+func escapeComposeArgs(args []string) []string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		out[i] = escapeComposeInterpolation(a)
 	}
 	return out
 }

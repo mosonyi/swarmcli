@@ -136,4 +136,4 @@ Add all three labels when creating a PR: `gh pr edit <number> --add-label "A0-ui
 
 ## Go Version & Build
 
-Go 1.25. No Makefile — use `go build` directly. GoReleaser handles releases with `-trimpath -s -w` ldflags and version injection.
+Go 1.26. No Makefile — use `go build` directly. GoReleaser handles releases with `-trimpath -s -w` ldflags and version injection.
