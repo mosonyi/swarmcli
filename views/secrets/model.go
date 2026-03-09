@@ -178,12 +178,27 @@ func (m *Model) HasActiveFilter() bool {
 	return m.secretsList.Query != ""
 }
 
-// IsSearching reports whether the secrets or UsedBy list is in search mode.
+// IsSearching reports whether the secrets view is in a sub-view that should
+// capture keys (e.g. usedBy sub-list).
 func (m *Model) IsSearching() bool {
 	if m.usedByViewActive {
-		return m.usedByList.Mode == filterlist.ModeSearching
+		return true
 	}
-	return m.secretsList.Mode == filterlist.ModeSearching
+	return false
+}
+
+// ApplySearchQuery sets the filter query on the primary secrets list.
+func (m *Model) ApplySearchQuery(query string) {
+	m.secretsList.Query = query
+	m.secretsList.ApplyFilter()
+}
+
+// ClearSearchQuery clears the filter on the primary secrets list.
+func (m *Model) ClearSearchQuery() {
+	m.secretsList.Query = ""
+	m.secretsList.ApplyFilter()
+	m.secretsList.Cursor = 0
+	m.secretsList.Viewport.GotoTop()
 }
 
 func (m *Model) Init() tea.Cmd {

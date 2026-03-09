@@ -223,11 +223,9 @@ func (m *Model) HasActiveDialog() bool {
 	return false
 }
 
-// IsSearching reports whether the networks or UsedBy list is in search mode.
+// IsSearching reports whether the networks view is in a sub-view that should
+// capture keys (inspect, usedBy, createDialog).
 func (m *Model) IsSearching() bool {
-	// Important: app-level key handling uses IsSearching() to decide whether ESC/Q
-	// should be handled by the view or should pop the global view stack.
-	// Networks has internal sub-views (inspect/used-by) that must consume ESC/Q.
 	if m.inspectViewActive {
 		return true
 	}
@@ -237,7 +235,21 @@ func (m *Model) IsSearching() bool {
 	if m.createDialogActive {
 		return true
 	}
-	return m.networksList.Mode == filterlist.ModeSearching
+	return false
+}
+
+// ApplySearchQuery sets the filter query on the primary networks list.
+func (m *Model) ApplySearchQuery(query string) {
+	m.networksList.Query = query
+	m.networksList.ApplyFilter()
+}
+
+// ClearSearchQuery clears the filter on the primary networks list.
+func (m *Model) ClearSearchQuery() {
+	m.networksList.Query = ""
+	m.networksList.ApplyFilter()
+	m.networksList.Cursor = 0
+	m.networksList.Viewport.GotoTop()
 }
 
 func (m *Model) Init() tea.Cmd {

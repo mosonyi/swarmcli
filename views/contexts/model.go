@@ -389,7 +389,21 @@ func (m *Model) HasActiveFilter() bool {
 
 // IsSearching reports whether the list is currently in search mode.
 func (m *Model) IsSearching() bool {
-	return m.List.Mode == filterlist.ModeSearching
+	return false
+}
+
+// ApplySearchQuery sets the filter query and applies it.
+func (m *Model) ApplySearchQuery(query string) {
+	m.List.Query = query
+	m.List.ApplyFilter()
+}
+
+// ClearSearchQuery clears the filter query and resets the view.
+func (m *Model) ClearSearchQuery() {
+	m.List.Query = ""
+	m.List.ApplyFilter()
+	m.List.Cursor = 0
+	m.List.Viewport.GotoTop()
 }
 
 // updateCreateFocus updates focus state for create dialog inputs
@@ -427,6 +441,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "m", Desc: "Import"},
 		{Key: "c", Desc: "Create"},
 		{Key: "d", Desc: "Delete"},
+		{Key: "/", Desc: "Filter"},
 		{Key: "?", Desc: "Help"},
 		{Key: "Esc", Desc: "Back"},
 	}

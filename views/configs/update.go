@@ -445,16 +445,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return m.confirmDialog.Update(msg)
 		}
 
-		// --- if in search mode, handle all keys via FilterableList ---
-		if m.configsList.Mode == filterlist.ModeSearching {
-			m.configsList.HandleKey(msg)
-			return nil
-		}
-
 		// --- normal mode ---
 		if msg.Type == tea.KeyEsc && m.configsList.Query != "" {
 			m.configsList.Query = ""
-			m.configsList.Mode = filterlist.ModeNormal
 			m.configsList.ApplyFilter()
 			m.configsList.Cursor = 0
 			m.configsList.Viewport.GotoTop()

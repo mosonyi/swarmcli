@@ -36,10 +36,10 @@ tail -f ~/.local/state/swarmcli/app.log          # prod mode (JSON)
 main.go                    Entry point; version injection via ldflags, tea.NewProgram()
 app/
   app.go                   View factory registry, Init(), command autoload via _ "swarmcli/commands"
-  model.go                 Central state: Model struct (viewport, currentView, viewStack, commandInput, systemInfo)
+  model.go                 Central state: Model struct (viewport, currentView, viewStack, commandInput, searchInput, systemInfo)
   update.go                Main message router: navigation, resize, events, key dispatch
 views/
-  view/interface.go        View contract: Update/View/Init/Name/OnEnter/OnExit/HasErrors/ShortHelpItems
+  view/interface.go        View contract: Update/View/Init/Name/OnEnter/OnExit/HasErrors/ShortHelpItems + Filterable interface
   stacks/                  Stack list → drill into services
   services/                Service list (filterable by stack/node/all), scale/restart actions
   tasks/                   Task list per service/stack
@@ -53,6 +53,7 @@ views/
   networks/                Network list
   loading/                 Loading spinner
   commandinput/            ":" command bar
+  searchinput/             "/" search filter bar (app-level, drives Filterable views)
   confirmdialog/           Confirmation prompts
   scaledialog/             Scale replica input
   helpbar/                 Dynamic keybinding bar

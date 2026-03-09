@@ -12,6 +12,7 @@ import (
 	contextsview "swarmcli/views/contexts"
 	loadingview "swarmcli/views/loading"
 	nodesview "swarmcli/views/nodes"
+	"swarmcli/views/searchinput"
 	stacksview "swarmcli/views/stacks"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
@@ -83,6 +84,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := m.updateForResize(msg)
 		return m, cmd
 
+	case searchinput.SearchQueryMsg:
+		if fv, ok := m.currentView.(view.Filterable); ok {
+			fv.ApplySearchQuery(msg.Query)
+		}
+		return m, nil
+
+	case searchinput.SearchClearedMsg:
+		if fv, ok := m.currentView.(view.Filterable); ok {
+			fv.ClearSearchQuery()
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		if msg.String() == ":" {
 			// Check if current view has an active dialog - if so, don't intercept
@@ -94,6 +107,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmd := m.currentView.Update(msg)
 					return m, cmd
 				}
+			}
+
+			if m.searchInput.Visible() {
+				return m, nil
 			}
 
 			if !m.commandInput.Visible() {
@@ -111,6 +128,51 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		if msg.String() == "/" {
+			// If view has an active dialog, let it handle
+			if viewWithDialog, ok := m.currentView.(interface {
+				HasActiveDialog() bool
+			}); ok {
+				if viewWithDialog.HasActiveDialog() {
+					cmd := m.currentView.Update(msg)
+					return m, cmd
+				}
+			}
+			// If view doesn't implement Filterable, let it handle / itself
+			// (logs and inspect views have their own / search)
+			if _, ok := m.currentView.(view.Filterable); !ok {
+				cmd := m.currentView.Update(msg)
+				return m, cmd
+			}
+			// If view is in a sub-view (IsSearching returns true for sub-views),
+			// let the view handle it
+			if searchView, ok := m.currentView.(interface{ IsSearching() bool }); ok {
+				if searchView.IsSearching() {
+					cmd := m.currentView.Update(msg)
+					return m, cmd
+				}
+			}
+			// Don't open search if command input is visible
+			if m.commandInput.Visible() {
+				return m, nil
+			}
+			// If search box is passive (visible but not editing), resume editing
+			if m.searchInput.Visible() && !m.searchInput.Editing() {
+				cmd := m.searchInput.Resume()
+				return m, cmd
+			}
+			if !m.searchInput.Visible() {
+				cmd := m.searchInput.Show()
+				adjHeight := m.viewport.Height - 3
+				if adjHeight < 0 {
+					adjHeight = 0
+				}
+				resizeCmd := handleViewResize(m.currentView, m.viewport.Width, adjHeight, false)
+				return m, tea.Batch(cmd, resizeCmd)
+			}
+			return m, nil
+		}
+
 		// If command input is visible, forward all keys to it exclusively.
 		// When the command input hides (e.g., on Enter or Esc) we need to
 		// trigger a resize so the current view regains its full height. The
@@ -122,6 +184,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// If visibility changed from true -> false, trigger resize to restore height
 			if prevVisible && !m.commandInput.Visible() {
 				// Command input just hid: restore the full usable viewport height.
+				resizeCmd := handleViewResize(m.currentView, m.viewport.Width, m.viewport.Height, false)
+				return m, tea.Batch(cmd, resizeCmd)
+			}
+			return m, cmd
+		}
+
+		// If search input is actively being edited, forward all keys to it exclusively.
+		if m.searchInput.Visible() && m.searchInput.Editing() {
+			prevVisible := m.searchInput.Visible()
+			cmd := m.searchInput.Update(msg)
+			if prevVisible && !m.searchInput.Visible() {
 				resizeCmd := handleViewResize(m.currentView, m.viewport.Width, m.viewport.Height, false)
 				return m, tea.Batch(cmd, resizeCmd)
 			}
@@ -220,6 +293,12 @@ func (m *Model) updateForResize(msg tea.WindowSizeMsg) tea.Cmd {
 				usableHeight = 0
 			}
 		}
+		if m.searchInput != nil && m.searchInput.Visible() {
+			usableHeight = usableHeight - 3
+			if usableHeight < 0 {
+				usableHeight = 0
+			}
+		}
 	}
 
 	m.viewport.Width = usableWidth
@@ -284,6 +363,16 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				cmd := m.currentView.Update(msg)
 				return m, cmd
 			}
+		}
+
+		// If search box is passive (visible but not editing), Esc clears and hides it
+		if m.searchInput.Visible() && !m.searchInput.Editing() {
+			m.searchInput.Hide()
+			if fv, ok := m.currentView.(view.Filterable); ok {
+				fv.ClearSearchQuery()
+			}
+			resizeCmd := handleViewResize(m.currentView, m.viewport.Width, m.viewport.Height, false)
+			return m, resizeCmd
 		}
 
 		// Check if stacks view has an active filter

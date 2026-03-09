@@ -30,3 +30,10 @@ type View interface {
 	FrameFooter() string  // rendered footer line(s), "" if none
 	FrameContent() string // unframed content (may include dialog overlays)
 }
+
+// Filterable is an opt-in interface for views that support app-level "/"
+// search filtering. Checked via type assertion in app/update.go.
+type Filterable interface {
+	ApplySearchQuery(query string)
+	ClearSearchQuery()
+}

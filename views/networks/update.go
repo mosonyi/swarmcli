@@ -579,32 +579,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 
-		// Handle filter/search mode
-		if m.networksList.Mode == filterlist.ModeSearching {
-			// Preserve the currently selected item so exiting search doesn't
-			// jump the cursor back to the first filtered row.
-			prevSelectedID := ""
-			if m.networksList.Cursor >= 0 && m.networksList.Cursor < len(m.networksList.Filtered) {
-				prevSelectedID = m.networksList.Filtered[m.networksList.Cursor].ID
-			}
-
-			m.networksList.HandleKey(msg)
-			if m.networksList.Mode != filterlist.ModeSearching {
-				// User exited search mode
-				m.setRenderItem()
-				if prevSelectedID != "" {
-					for i := range m.networksList.Filtered {
-						if m.networksList.Filtered[i].ID == prevSelectedID {
-							m.networksList.Cursor = i
-							break
-						}
-					}
-					m.networksList.Viewport.SetContent(m.networksList.View())
-				}
-			}
-			return nil
-		}
-
 		// Handle regular navigation and commands
 		return m.handleNormalKeys(msg)
 	}
@@ -913,6 +887,17 @@ func (m *Model) handleCreateDialogKeys(msg tea.KeyMsg) tea.Cmd {
 }
 
 func (m *Model) handleNormalKeys(msg tea.KeyMsg) tea.Cmd {
+	// Clear active filter with ESC
+	if msg.Type == tea.KeyEsc && m.networksList.Query != "" {
+		m.networksList.Query = ""
+		m.networksList.ApplyFilter()
+		m.networksList.Cursor = 0
+		m.networksList.Viewport.GotoTop()
+		m.setRenderItem()
+		m.networksList.Viewport.SetContent(m.networksList.View())
+		return nil
+	}
+
 	switch msg.String() {
 	case "esc", "q":
 		// Networks is a root view, no back navigation
