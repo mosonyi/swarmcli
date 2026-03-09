@@ -13,6 +13,7 @@ import (
 func TestNew(t *testing.T) {
 	m := New()
 	require.False(t, m.Visible())
+	require.False(t, m.Editing())
 	require.Equal(t, "", m.Query())
 	require.Equal(t, "", m.View())
 }
@@ -21,10 +22,12 @@ func TestShowHide(t *testing.T) {
 	m := New()
 	cmd := m.Show()
 	require.True(t, m.Visible())
+	require.True(t, m.Editing())
 	require.NotNil(t, cmd) // textinput.Blink
 
 	m.Hide()
 	require.False(t, m.Visible())
+	require.False(t, m.Editing())
 	require.Equal(t, "", m.Query())
 }
 
@@ -56,14 +59,16 @@ func TestTypingEmitsSearchQueryMsg(t *testing.T) {
 	require.True(t, found, "expected SearchQueryMsg in batch")
 }
 
-func TestEnterHidesWithoutClearing(t *testing.T) {
+func TestEnterConfirmsToPassiveMode(t *testing.T) {
 	m := New()
 	m.Show()
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
 
 	cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	require.False(t, m.Visible())
-	require.Nil(t, cmd) // no message on Enter
+	require.True(t, m.Visible(), "box should stay visible")
+	require.False(t, m.Editing(), "should no longer be editing")
+	require.Equal(t, "x", m.Query(), "query should be preserved")
+	require.Nil(t, cmd)
 }
 
 func TestEscEmitsSearchClearedMsg(t *testing.T) {
@@ -124,4 +129,60 @@ func TestViewRendersWhenActive(t *testing.T) {
 	v := m.View()
 	require.NotEmpty(t, v)
 	require.Contains(t, v, "/")
+}
+
+func TestPassiveModeIgnoresKeys(t *testing.T) {
+	m := New()
+	m.Show()
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	m.Confirm()
+
+	require.True(t, m.Visible())
+	require.False(t, m.Editing())
+
+	// Keys should be ignored in passive mode
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+	require.Nil(t, cmd)
+	require.Equal(t, "a", m.Query(), "query should not change in passive mode")
+}
+
+func TestResumeTransitionsToEditing(t *testing.T) {
+	m := New()
+	m.Show()
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	m.Confirm()
+	require.False(t, m.Editing())
+
+	cmd := m.Resume()
+	require.True(t, m.Visible())
+	require.True(t, m.Editing())
+	require.NotNil(t, cmd, "Resume should return blink command")
+	require.Equal(t, "a", m.Query(), "query should be preserved after resume")
+}
+
+func TestViewRendersInPassiveMode(t *testing.T) {
+	m := New()
+	m.Show()
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	m.Confirm()
+
+	v := m.View()
+	require.NotEmpty(t, v, "passive mode should still render")
+	require.Contains(t, v, "/")
+	require.Contains(t, v, "x")
+}
+
+func TestConfirmThenHide(t *testing.T) {
+	m := New()
+	m.Show()
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	m.Confirm()
+
+	require.True(t, m.Visible())
+	require.Equal(t, "q", m.Query())
+
+	m.Hide()
+	require.False(t, m.Visible())
+	require.False(t, m.Editing())
+	require.Equal(t, "", m.Query())
 }

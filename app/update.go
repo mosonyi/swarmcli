@@ -156,6 +156,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.commandInput.Visible() {
 				return m, nil
 			}
+			// If search box is passive (visible but not editing), resume editing
+			if m.searchInput.Visible() && !m.searchInput.Editing() {
+				cmd := m.searchInput.Resume()
+				return m, cmd
+			}
 			if !m.searchInput.Visible() {
 				cmd := m.searchInput.Show()
 				adjHeight := m.viewport.Height - 3
@@ -185,8 +190,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
-		// If search input is visible, forward all keys to it exclusively.
-		if m.searchInput.Visible() {
+		// If search input is actively being edited, forward all keys to it exclusively.
+		if m.searchInput.Visible() && m.searchInput.Editing() {
 			prevVisible := m.searchInput.Visible()
 			cmd := m.searchInput.Update(msg)
 			if prevVisible && !m.searchInput.Visible() {
@@ -358,6 +363,16 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				cmd := m.currentView.Update(msg)
 				return m, cmd
 			}
+		}
+
+		// If search box is passive (visible but not editing), Esc clears and hides it
+		if m.searchInput.Visible() && !m.searchInput.Editing() {
+			m.searchInput.Hide()
+			if fv, ok := m.currentView.(view.Filterable); ok {
+				fv.ClearSearchQuery()
+			}
+			resizeCmd := handleViewResize(m.currentView, m.viewport.Width, m.viewport.Height, false)
+			return m, resizeCmd
 		}
 
 		// Check if stacks view has an active filter

@@ -204,9 +204,6 @@ func (f *FilterableList[T]) RenderFooter() string {
 		return statusBar + "\n" + filterLine
 	}
 
-	if f.Query != "" {
-		status += " (filtered)"
-	}
 	return ui.StatusBarStyle.Render(status)
 }
 

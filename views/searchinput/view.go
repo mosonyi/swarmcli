@@ -11,9 +11,14 @@ func (m *Model) View() string {
 		return ""
 	}
 
+	fg := lipgloss.Color("#00d7ff") // cyan (active/editing)
+	if !m.editing {
+		fg = lipgloss.Color("#808080") // gray (passive/locked)
+	}
+
 	style := lipgloss.NewStyle().
 		Background(lipgloss.Color("#303030")).
-		Foreground(lipgloss.Color("#00d7ff")).
+		Foreground(fg).
 		Padding(0, 1)
 
 	return style.Render("/ " + m.input.Value())

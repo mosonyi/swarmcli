@@ -11,14 +11,19 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 
+	// Passive mode: ignore all input (app handles / and Esc at its level).
+	if !m.editing {
+		return nil
+	}
+
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyEnter:
-			// Close the box; the query remains active on the view.
-			m.Hide()
+			// Lock the box into passive mode; query stays visible.
+			m.Confirm()
 			return nil
 
 		case tea.KeyEsc:
