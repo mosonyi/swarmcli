@@ -165,12 +165,27 @@ func (m *Model) HasActiveFilter() bool {
 	return m.configsList.Query != ""
 }
 
-// IsSearching reports whether the configs or UsedBy list is in search mode.
+// IsSearching reports whether the configs view is in a sub-view that should
+// capture keys (e.g. usedBy sub-list).
 func (m *Model) IsSearching() bool {
 	if m.usedByViewActive {
-		return m.usedByList.Mode == filterlist.ModeSearching
+		return true
 	}
-	return m.configsList.Mode == filterlist.ModeSearching
+	return false
+}
+
+// ApplySearchQuery sets the filter query on the primary configs list.
+func (m *Model) ApplySearchQuery(query string) {
+	m.configsList.Query = query
+	m.configsList.ApplyFilter()
+}
+
+// ClearSearchQuery clears the filter on the primary configs list.
+func (m *Model) ClearSearchQuery() {
+	m.configsList.Query = ""
+	m.configsList.ApplyFilter()
+	m.configsList.Cursor = 0
+	m.configsList.Viewport.GotoTop()
 }
 
 func (m *Model) Init() tea.Cmd {

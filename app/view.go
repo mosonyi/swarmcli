@@ -70,6 +70,26 @@ func (m *Model) View() string {
 		)
 	}
 
+	if m.searchInput.Visible() {
+		const searchFrameHeight = 3
+		frameHeight -= searchFrameHeight
+		if frameHeight < 1 {
+			frameHeight = 1
+		}
+		framedView := ui.RenderViewFrame(title, header, content, footer, m.viewport.Width, frameHeight, false)
+
+		frameWidth := m.viewport.Width + 4
+		searchFrame := ui.RenderFramedBoxHeight("", "", m.searchInput.View(), "", frameWidth, searchFrameHeight)
+
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			help,
+			searchFrame,
+			framedView,
+			m.renderStackBar(),
+		)
+	}
+
 	if frameHeight < 1 {
 		frameHeight = 1
 	}

@@ -13,7 +13,6 @@ import (
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	"swarmcli/ui"
-	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	helpview "swarmcli/views/help"
 	servicesview "swarmcli/views/services"
@@ -272,12 +271,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return m.confirmDialog.Update(msg)
 		}
 
-		// --- if in search mode, handle all keys via FilterableList ---
-		if m.List.Mode == filterlist.ModeSearching {
-			m.List.HandleKey(msg)
-			return nil
-		}
-
 		// Handle keyboard shortcuts
 		if msg.String() == "c" {
 			m.createDialogActive = true
@@ -294,7 +287,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// If ESC is pressed and there's an active filter, clear it instead of quitting
 		if msg.Type == tea.KeyEsc && m.List.Query != "" {
 			m.List.Query = ""
-			m.List.Mode = filterlist.ModeNormal
 			m.List.ApplyFilter()
 			m.List.Cursor = 0
 			m.List.Viewport.GotoTop()

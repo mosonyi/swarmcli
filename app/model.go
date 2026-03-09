@@ -9,6 +9,7 @@ import (
 	"swarmcli/ui"
 	"swarmcli/views/commandinput"
 	loadingview "swarmcli/views/loading"
+	"swarmcli/views/searchinput"
 	systeminfoview "swarmcli/views/systeminfo"
 	"swarmcli/views/view"
 	"swarmcli/views/viewstack"
@@ -30,6 +31,7 @@ type Model struct {
 	viewStack   viewstack.Stack
 
 	commandInput *commandinput.Model
+	searchInput  *searchinput.Model
 
 	// Terminal dimensions
 	terminalWidth  int
@@ -80,6 +82,7 @@ func InitialModel() *Model {
 		systemInfo:     systeminfoview.New(deps, version),
 		viewStack:      viewstack.Stack{},
 		commandInput:   cmdBar(),
+		searchInput:    searchinput.New(),
 		terminalWidth:  terminalWidth,
 		terminalHeight: terminalHeight,
 	}

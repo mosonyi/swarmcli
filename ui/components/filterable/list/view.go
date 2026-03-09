@@ -194,19 +194,20 @@ func (f *FilterableList[T]) RenderFooter() string {
 	} else {
 		status = fmt.Sprintf("%s %d of %d", label, f.Cursor+1, len(f.Filtered))
 	}
-	statusBar := ui.StatusBarStyle.Render(status)
 
-	var filterLine string
+	// Show filter state inline: sub-lists still use ModeSearching with a
+	// dedicated filter line; primary lists (driven by the app-level search
+	// box) only add a compact "(filtered)" suffix to the status bar.
 	if f.Mode == ModeSearching {
-		filterLine = ui.StatusBarStyle.Render("Filter (type then Enter): " + f.Query)
-	} else if f.Query != "" {
-		filterLine = ui.StatusBarStyle.Render("Filter: " + f.Query)
-	}
-
-	if filterLine != "" {
+		statusBar := ui.StatusBarStyle.Render(status)
+		filterLine := ui.StatusBarStyle.Render("Filter (type then Enter): " + f.Query)
 		return statusBar + "\n" + filterLine
 	}
-	return statusBar
+
+	if f.Query != "" {
+		status += " (filtered)"
+	}
+	return ui.StatusBarStyle.Render(status)
 }
 
 // Deprecated: RenderFramedView builds the complete framed view. Use FrameTitle/FrameHeader/

@@ -11,7 +11,6 @@ import (
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	"swarmcli/ui"
-	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"
@@ -252,16 +251,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return m.confirmDialog.Update(msg)
 		}
 
-		// --- if in search mode, handle all keys via FilterableList ---
-		if m.List.Mode == filterlist.ModeSearching {
-			m.List.HandleKey(msg)
-			return nil
-		}
-
 		// --- normal mode ---
 		if msg.Type == tea.KeyEsc && m.List.Query != "" {
 			m.List.Query = ""
-			m.List.Mode = filterlist.ModeNormal
 			m.List.ApplyFilter()
 			m.List.Cursor = 0
 			m.List.Viewport.GotoTop()
