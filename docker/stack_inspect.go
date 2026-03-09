@@ -183,12 +183,12 @@ func GetStackInspection(stackName string) (string, error) {
 		if name == "" {
 			name = netID
 		}
-		desc.Networks = append(desc.Networks, name)
+		desc.Networks = append(desc.Networks, stripStackPrefix(stackName, name))
 	}
 	sort.Strings(desc.Networks)
 
 	for vol := range volumesMap {
-		desc.Volumes = append(desc.Volumes, vol)
+		desc.Volumes = append(desc.Volumes, stripStackPrefix(stackName, vol))
 	}
 	sort.Strings(desc.Volumes)
 

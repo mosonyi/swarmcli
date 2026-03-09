@@ -59,21 +59,21 @@ func TestInspectStack(t *testing.T) {
 		}
 	}
 
-	// Verify volumes are present (Docker prefixes with stack name: demo_whoami_data)
+	// Verify volumes are present (stack prefix stripped: whoami_data, not demo_whoami_data)
 	if len(inspection.Volumes) == 0 {
 		t.Error("Expected non-empty volumes")
 	}
 	foundVolume := false
 	for _, v := range inspection.Volumes {
-		if v == "demo_whoami_data" {
+		if v == "whoami_data" {
 			foundVolume = true
 		}
 	}
 	if !foundVolume {
-		t.Errorf("Expected volume 'demo_whoami_data' in volumes, got %v", inspection.Volumes)
+		t.Errorf("Expected volume 'whoami_data' in volumes, got %v", inspection.Volumes)
 	}
 
-	// Verify networks are present with names (not hex IDs) and include demo_backend
+	// Verify networks are present with names (not hex IDs), stack prefix stripped
 	if len(inspection.Networks) == 0 {
 		t.Error("Expected non-empty networks")
 	}
@@ -83,12 +83,12 @@ func TestInspectStack(t *testing.T) {
 		if len(n) == 64 && !strings.ContainsAny(n, "ghijklmnopqrstuvwxyz_-") {
 			t.Errorf("Network appears to be an unresolved ID: %s", n)
 		}
-		if n == "demo_backend" {
+		if n == "backend" {
 			foundNetwork = true
 		}
 	}
 	if !foundNetwork {
-		t.Errorf("Expected network 'demo_backend' in networks, got %v", inspection.Networks)
+		t.Errorf("Expected network 'backend' in networks, got %v", inspection.Networks)
 	}
 
 	t.Logf("Successfully inspected stack: %d services, %d tasks", inspection.ServiceCount, inspection.TaskCount)
