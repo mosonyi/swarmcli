@@ -43,6 +43,8 @@ type Model struct {
 	categories []HelpCategory
 	width      int
 	height     int
+	// app-level "/" filter query
+	query string
 }
 
 type CommandInfo struct {
@@ -135,4 +137,77 @@ func (m *Model) OnExit() tea.Cmd {
 
 func (m *Model) HasErrors() bool {
 	return false
+}
+
+// ApplySearchQuery implements view.Filterable — filters commands/keybindings.
+func (m *Model) ApplySearchQuery(query string) {
+	m.query = query
+	if len(m.commands) > 0 {
+		m.rebuildCommandContent()
+	}
+	// Categorized content is rebuilt dynamically in buildCategorizedContent()
+}
+
+// ClearSearchQuery implements view.Filterable — clears the filter.
+func (m *Model) ClearSearchQuery() {
+	m.query = ""
+	if len(m.commands) > 0 {
+		m.rebuildCommandContent()
+	}
+}
+
+// rebuildCommandContent re-renders the command list with the current filter.
+func (m *Model) rebuildCommandContent() {
+	cmds := m.filteredCommands()
+
+	cmdW := 16
+	descW := 20
+	for _, c := range m.commands {
+		if w := len(c.Name) + 1; w > cmdW {
+			cmdW = w
+		}
+		if w := len(c.Description); w > descW {
+			descW = w
+		}
+	}
+
+	const gap = "   "
+	headerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("33")).
+		Bold(true)
+
+	var b strings.Builder
+	if len(m.commands) > 0 {
+		header := fmt.Sprintf("%-*s%s%-*s%s%s", cmdW, "COMMAND", gap, descW, "DESCRIPTION", gap, "ALIASES")
+		fmt.Fprintln(&b, headerStyle.Render(header))
+	}
+	for _, c := range cmds {
+		fmt.Fprintf(&b, "%-*s%s%-*s%s%s\n", cmdW, ":"+c.Name, gap, descW, c.Description, gap, strings.Join(c.Aliases, ", "))
+	}
+
+	m.content = b.String()
+	m.Viewable.SetContent(m.content)
+}
+
+// filteredCommands returns commands matching the current query.
+func (m *Model) filteredCommands() []CommandInfo {
+	if m.query == "" {
+		return m.commands
+	}
+	lower := strings.ToLower(m.query)
+	var filtered []CommandInfo
+	for _, c := range m.commands {
+		if strings.Contains(strings.ToLower(c.Name), lower) ||
+			strings.Contains(strings.ToLower(c.Description), lower) {
+			filtered = append(filtered, c)
+			continue
+		}
+		for _, alias := range c.Aliases {
+			if strings.Contains(strings.ToLower(alias), lower) {
+				filtered = append(filtered, c)
+				break
+			}
+		}
+	}
+	return filtered
 }

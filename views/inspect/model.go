@@ -38,6 +38,11 @@ type Model struct {
 	Format     Format // "yml" or "raw"
 	RawContent string
 	ParseError string
+
+	// app-level "/" filter — hides non-matching lines
+	filterQuery   string
+	searchMatches []int
+	searchIndex   int
 }
 
 func New(width, height int, format Format) *Model {
@@ -72,6 +77,28 @@ func LoadInspectItem(title, jsonStr string) tea.Cmd {
 	return func() tea.Msg { return Msg{Title: title, Content: jsonStr} }
 }
 
+// ApplySearchQuery implements view.Filterable — sets the app-level "/" filter.
+func (m *Model) ApplySearchQuery(query string) {
+	m.filterQuery = query
+	m.updateViewport()
+}
+
+// ClearSearchQuery implements view.Filterable — clears the app-level "/" filter.
+func (m *Model) ClearSearchQuery() {
+	m.filterQuery = ""
+	m.updateViewport()
+}
+
+// IsSearching returns true when the ctrl+f search input is active.
+func (m *Model) IsSearching() bool {
+	return m.searchMode
+}
+
+// HasActiveFilter returns true when the app-level "/" filter is active.
+func (m *Model) HasActiveFilter() bool {
+	return m.filterQuery != ""
+}
+
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	if m.searchMode {
 		return []helpbar.HelpEntry{
@@ -79,12 +106,18 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 			{Key: "esc", Desc: "Cancel"},
 		}
 	}
-	return []helpbar.HelpEntry{
-		{Key: "/", Desc: "Search"},
+	entries := []helpbar.HelpEntry{
+		{Key: "ctrl+f", Desc: "Search"},
 		{Key: "j/k", Desc: "Down/up"},
-		{Key: "r", Desc: "Toggle raw"},
-		{Key: "q", Desc: "Close"},
 	}
+	if m.SearchTerm != "" && len(m.searchMatches) > 0 {
+		entries = append(entries, helpbar.HelpEntry{Key: "n/N", Desc: "Next/prev"})
+	}
+	entries = append(entries,
+		helpbar.HelpEntry{Key: "r", Desc: "Toggle raw"},
+		helpbar.HelpEntry{Key: "q", Desc: "Close"},
+	)
+	return entries
 }
 
 func (m *Model) OnEnter() tea.Cmd {

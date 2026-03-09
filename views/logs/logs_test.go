@@ -55,6 +55,8 @@ func key(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyPgUp}
 	case "pgdown":
 		return tea.KeyMsg{Type: tea.KeyPgDown}
+	case "ctrl+f":
+		return tea.KeyMsg{Type: tea.KeyCtrlF}
 	}
 	if len(s) == 1 {
 		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
@@ -130,7 +132,7 @@ func TestShortHelpItems_NormalMode(t *testing.T) {
 	for _, item := range items {
 		keys[item.Key] = true
 	}
-	require.True(t, keys["/"])
+	require.True(t, keys["ctrl+f"])
 	require.True(t, keys["s"])
 	require.True(t, keys["w"])
 	require.True(t, keys["o"])
@@ -260,10 +262,10 @@ func TestUpdate_WindowSizeMsg(t *testing.T) {
 
 // --- Key handling: normal mode ---
 
-func TestKey_Slash_EntersSearch(t *testing.T) {
+func TestKey_CtrlF_EntersSearch(t *testing.T) {
 	m := testModel()
 	m.Visible = true
-	m.Update(key("/"))
+	m.Update(key("ctrl+f"))
 	require.Equal(t, "search", m.mode)
 	require.Equal(t, "", m.searchTerm)
 }
@@ -309,7 +311,7 @@ func TestSearchMode_TypeAndConfirm(t *testing.T) {
 	m.mu.Lock()
 	m.lines = []string{"hello world", "foo bar"}
 	m.mu.Unlock()
-	m.Update(key("/"))
+	m.Update(key("ctrl+f"))
 	require.Equal(t, "search", m.mode)
 	m.Update(key("h"))
 	m.Update(key("e"))
@@ -322,7 +324,7 @@ func TestSearchMode_TypeAndConfirm(t *testing.T) {
 func TestSearchMode_EscCancels(t *testing.T) {
 	m := testModel()
 	m.Visible = true
-	m.Update(key("/"))
+	m.Update(key("ctrl+f"))
 	m.Update(key("t"))
 	m.Update(key("esc"))
 	require.Equal(t, "normal", m.mode)
@@ -331,7 +333,7 @@ func TestSearchMode_EscCancels(t *testing.T) {
 func TestSearchMode_Backspace(t *testing.T) {
 	m := testModel()
 	m.Visible = true
-	m.Update(key("/"))
+	m.Update(key("ctrl+f"))
 	m.Update(key("a"))
 	m.Update(key("b"))
 	require.Equal(t, "ab", m.searchTerm)
@@ -504,6 +506,103 @@ func TestSetContent_MaxLines(t *testing.T) {
 }
 
 // --- shouldFallbackToRawFromStdCopy tests ---
+
+// --- Filterable (app-level "/" filter) tests ---
+
+func TestApplySearchQuery(t *testing.T) {
+	m := testModel()
+	m.mu.Lock()
+	m.lines = []string{"hello world", "foo bar", "hello again"}
+	m.mu.Unlock()
+	m.ApplySearchQuery("hello")
+	require.Equal(t, "hello", m.getFilterQuery())
+	content := m.buildContent()
+	require.Contains(t, content, "hello world")
+	require.NotContains(t, content, "foo bar")
+	require.Contains(t, content, "hello again")
+}
+
+func TestClearSearchQuery(t *testing.T) {
+	m := testModel()
+	m.mu.Lock()
+	m.lines = []string{"hello world", "foo bar"}
+	m.mu.Unlock()
+	m.ApplySearchQuery("hello")
+	require.Equal(t, "hello", m.getFilterQuery())
+	m.ClearSearchQuery()
+	require.Equal(t, "", m.getFilterQuery())
+	content := m.buildContent()
+	require.Contains(t, content, "hello world")
+	require.Contains(t, content, "foo bar")
+}
+
+func TestHasActiveFilter_Default(t *testing.T) {
+	m := testModel()
+	require.False(t, m.HasActiveFilter())
+}
+
+func TestHasActiveFilter_WithQuery(t *testing.T) {
+	m := testModel()
+	m.ApplySearchQuery("test")
+	require.True(t, m.HasActiveFilter())
+}
+
+func TestHasActiveDialog(t *testing.T) {
+	m := testModel()
+	require.False(t, m.HasActiveDialog())
+	m.setNodeSelectVisible(true)
+	require.True(t, m.HasActiveDialog())
+}
+
+func TestBuildContent_WithFilterQuery(t *testing.T) {
+	m := testModel()
+	m.mu.Lock()
+	m.lines = []string{"error: something", "info: all good", "error: another"}
+	m.mu.Unlock()
+	m.mu.Lock()
+	m.filterQuery = "error"
+	m.mu.Unlock()
+	content := m.buildContent()
+	require.Contains(t, content, "error: something")
+	require.NotContains(t, content, "info: all good")
+	require.Contains(t, content, "error: another")
+}
+
+func TestFilterAndNodeFilter_Combined(t *testing.T) {
+	m := testModel()
+	m.mu.Lock()
+	m.lines = []string{"error on node1", "info on node1", "error on node2", "info on node2"}
+	m.lineNodes = []string{"node1", "node1", "node2", "node2"}
+	m.mu.Unlock()
+	m.setNodeFilter("node1")
+	m.mu.Lock()
+	m.filterQuery = "error"
+	m.mu.Unlock()
+	content := m.buildContent()
+	require.Contains(t, content, "error on node1")
+	require.NotContains(t, content, "info on node1")
+	require.NotContains(t, content, "error on node2")
+	require.NotContains(t, content, "info on node2")
+}
+
+func TestEsc_ClearsFilterBeforeClosing(t *testing.T) {
+	m := testModel()
+	m.Visible = true
+	m.mu.Lock()
+	m.filterQuery = "test"
+	m.mu.Unlock()
+	m.Update(key("esc"))
+	// Filter should be cleared but view stays visible
+	require.True(t, m.Visible)
+	require.Equal(t, "", m.getFilterQuery())
+}
+
+func TestEsc_ClosesViewWhenNoFilter(t *testing.T) {
+	m := testModel()
+	m.Visible = true
+	m.Update(key("esc"))
+	require.False(t, m.Visible)
+}
 
 func TestShouldFallbackToRawFromStdCopy(t *testing.T) {
 	tests := []struct {

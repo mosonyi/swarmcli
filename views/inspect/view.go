@@ -28,6 +28,10 @@ func (m *Model) FrameHeader() string {
 	header := fmt.Sprintf("Inspecting %s%s", formatIndicator, errorHint)
 	if m.searchMode {
 		header = fmt.Sprintf("%s — Search: %s", header, m.SearchTerm)
+	} else if m.SearchTerm != "" && len(m.searchMatches) > 0 {
+		matchCount := len(m.searchMatches)
+		currentMatch := m.searchIndex + 1
+		header = fmt.Sprintf("%s — Found %d matches (%d/%d) • 'n'/'N' to navigate", header, matchCount, currentMatch, matchCount)
 	}
 	return ui.FrameHeaderStyle.Render(header)
 }
