@@ -214,22 +214,41 @@ func ReconstructStackCompose(stackName string) (string, error) {
 	}
 
 	// Helper functions for declaring resources
-	declareExternalNet := func(netName string) {
+	declareNet := func(netName string, external bool) {
 		if netName == "" {
 			return
 		}
 		if _, ok := cf.Networks[netName]; !ok {
-			cf.Networks[netName] = map[string]any{"external": true}
+			props := map[string]any{}
+			if external {
+				props["external"] = true
+			}
+			cf.Networks[netName] = props
 		}
 	}
 
-	declareVolume := func(volName string) {
+	declareVolume := func(volName string, m *Mount, external bool) {
 		if volName == "" {
 			return
 		}
-		if _, ok := cf.Volumes[volName]; !ok {
-			cf.Volumes[volName] = map[string]any{}
+		if _, ok := cf.Volumes[volName]; ok {
+			return
 		}
+		vol := map[string]any{}
+		if external {
+			vol["external"] = true
+		}
+		if m != nil && m.VolumeOptions != nil && m.VolumeOptions.DriverConfig != nil {
+			dc := m.VolumeOptions.DriverConfig
+			if dc.Name != "" {
+				vol["driver"] = dc.Name
+				delete(vol, "external")
+			}
+			if len(dc.Options) > 0 {
+				vol["driver_opts"] = dc.Options
+			}
+		}
+		cf.Volumes[volName] = vol
 	}
 
 	declareSecretExternal := func(name string) {
@@ -258,7 +277,7 @@ func ReconstructStackCompose(stackName string) (string, error) {
 			continue
 		}
 
-		key := sanitizeServiceName(stackName, si.Spec.Name)
+		key := stripStackPrefix(stackName, si.Spec.Name)
 		cs := ComposeService{}
 
 		// ServiceSpec.Labels → deploy.labels in Compose
@@ -283,11 +302,11 @@ func ReconstructStackCompose(stackName string) (string, error) {
 				cs.Labels = cl
 			}
 
-			// Command / Args
+			// Command / Args — escape $ → $$ for Compose variable interpolation
 			if len(cspec.Args) > 0 {
-				cs.Command = cspec.Args
+				cs.Command = escapeComposeArgs(cspec.Args)
 			} else if len(cspec.Command) > 0 {
-				cs.Command = cspec.Command
+				cs.Command = escapeComposeArgs(cspec.Command)
 			}
 
 			// Mounts -> volumes
@@ -307,10 +326,12 @@ func ReconstructStackCompose(stackName string) (string, error) {
 				case "volume":
 					src := m.Source
 					if src == "" {
-						src = fmt.Sprintf("%s_%s", stackName, strings.ReplaceAll(strings.TrimPrefix(m.Target, "/"), "/", "_"))
+						continue // anonymous volume, cannot round-trip
 					}
-					declareVolume(src)
-					cs.Volumes = append(cs.Volumes, fmt.Sprintf("%s:%s%s", src, m.Target, ro))
+					stripped := stripStackPrefix(stackName, src)
+					isExternal := stripped == src // no prefix removed → external
+					declareVolume(stripped, &m, isExternal)
+					cs.Volumes = append(cs.Volumes, fmt.Sprintf("%s:%s%s", stripped, m.Target, ro))
 				case "tmpfs":
 					if cs.Extra == nil {
 						cs.Extra = map[string]any{}
@@ -378,8 +399,10 @@ func ReconstructStackCompose(stackName string) (string, error) {
 			if nm == "" {
 				continue
 			}
-			netNames[nm] = struct{}{}
-			declareExternalNet(nm)
+			stripped := stripStackPrefix(stackName, nm)
+			isExternal := stripped == nm // no prefix removed → external
+			netNames[stripped] = struct{}{}
+			declareNet(stripped, isExternal)
 		}
 		if len(netNames) > 0 {
 			var nets []string
@@ -464,6 +487,19 @@ func ReconstructStackCompose(stackName string) (string, error) {
 		cf.Services[key] = cs
 	}
 
+	// If the only declared network is "default" (implicit), suppress it
+	if len(cf.Networks) == 1 {
+		if _, ok := cf.Networks["default"]; ok {
+			cf.Networks = nil
+			for k, svc := range cf.Services {
+				if nets, ok := svc.Networks.([]string); ok && len(nets) == 1 && nets[0] == "default" {
+					svc.Networks = nil
+					cf.Services[k] = svc
+				}
+			}
+		}
+	}
+
 	// Remove empty top-level sections
 	if len(cf.Networks) == 0 {
 		cf.Networks = nil
@@ -531,7 +567,7 @@ func inspectService(serviceName string) (*ServiceInspect, error) {
 
 // dockerNetworkIDToNameMap builds a map of network IDs to names
 func dockerNetworkIDToNameMap() (map[string]string, error) {
-	cmd := exec.Command("docker", "network", "ls", "--format", "{{.ID}}\t{{.Name}}")
+	cmd := exec.Command("docker", "network", "ls", "--no-trunc", "--format", "{{.ID}}\t{{.Name}}")
 	var out bytes.Buffer
 	var errb bytes.Buffer
 	cmd.Stdout = &out
@@ -590,8 +626,23 @@ func filterLabels(labels map[string]string) map[string]string {
 	return out
 }
 
-// sanitizeServiceName removes the stack prefix from service name
-func sanitizeServiceName(stack, full string) string {
+// escapeComposeInterpolation escapes $ as $$ so that Compose does not
+// attempt variable interpolation on reconstructed command strings.
+func escapeComposeInterpolation(s string) string {
+	return strings.ReplaceAll(s, "$", "$$")
+}
+
+// escapeComposeArgs applies escapeComposeInterpolation to each element.
+func escapeComposeArgs(args []string) []string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		out[i] = escapeComposeInterpolation(a)
+	}
+	return out
+}
+
+// stripStackPrefix removes the "<stack>_" prefix from a resource name
+func stripStackPrefix(stack, full string) string {
 	prefix := stack + "_"
 	if strings.HasPrefix(full, prefix) {
 		return strings.TrimPrefix(full, prefix)

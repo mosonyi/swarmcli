@@ -44,6 +44,39 @@ func TestFilterLabels_NilInput(t *testing.T) {
 	require.Nil(t, filterLabels(nil))
 }
 
+func TestComposeFile_VolumesExternalTrue(t *testing.T) {
+	cf := ComposeFile{
+		Version:  "3.8",
+		Services: map[string]ComposeService{"web": {Image: "nginx"}},
+		Volumes: map[string]map[string]any{
+			"mydata": {"external": true},
+		},
+	}
+	out, err := yaml.Marshal(&cf)
+	require.NoError(t, err)
+	yamlStr := string(out)
+	require.Contains(t, yamlStr, "external: true")
+}
+
+func TestComposeFile_VolumeWithDriver(t *testing.T) {
+	cf := ComposeFile{
+		Version:  "3.8",
+		Services: map[string]ComposeService{"web": {Image: "nginx", Volumes: []string{"nfs_data:/data"}}},
+		Volumes: map[string]map[string]any{
+			"nfs_data": {
+				"driver":      "local",
+				"driver_opts": map[string]string{"type": "nfs", "device": ":/export"},
+			},
+		},
+	}
+	out, err := yaml.Marshal(&cf)
+	require.NoError(t, err)
+	yamlStr := string(out)
+	require.Contains(t, yamlStr, "driver: local")
+	require.Contains(t, yamlStr, "driver_opts:")
+	require.NotContains(t, yamlStr, "external")
+}
+
 func TestComposeService_DeployLabelsYAML(t *testing.T) {
 	cs := ComposeService{
 		Image: "nginx:latest",
@@ -113,4 +146,121 @@ func TestComposeService_BothLabelLevelsYAML(t *testing.T) {
 	deployLabels, ok := deploy["labels"].(map[string]any)
 	require.True(t, ok, "deploy.labels should exist")
 	require.Equal(t, "dval", deployLabels["deploy.label"])
+}
+
+func TestStripStackPrefix(t *testing.T) {
+	tests := []struct {
+		stack, input, want string
+	}{
+		{"ubu", "ubu_ubuntu_example_data", "ubuntu_example_data"},
+		{"ubu", "external_volume", "external_volume"},
+		{"ubu", "ubu_default", "default"},
+		{"ubu", "ubu_", ""},
+		{"", "anything", "anything"},
+		{"ubu", "ubu", "ubu"}, // no underscore → no strip
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			require.Equal(t, tt.want, stripStackPrefix(tt.stack, tt.input))
+		})
+	}
+}
+
+func TestComposeFile_VolumeManagedNotExternal(t *testing.T) {
+	cf := ComposeFile{
+		Version:  "3.8",
+		Services: map[string]ComposeService{"web": {Image: "nginx", Volumes: []string{"mydata:/data"}}},
+		Volumes:  map[string]map[string]any{"mydata": {}},
+	}
+	out, err := yaml.Marshal(&cf)
+	require.NoError(t, err)
+	require.NotContains(t, string(out), "external")
+}
+
+func TestComposeFile_DefaultNetworkOmitted(t *testing.T) {
+	cf := ComposeFile{
+		Version: "3.8",
+		Services: map[string]ComposeService{
+			"web": {Image: "nginx", Networks: []string{"default"}},
+		},
+		Networks: map[string]map[string]any{"default": {"external": true}},
+	}
+
+	// Simulate the suppression logic
+	if len(cf.Networks) == 1 {
+		if _, ok := cf.Networks["default"]; ok {
+			cf.Networks = nil
+			for k, svc := range cf.Services {
+				if nets, ok := svc.Networks.([]string); ok && len(nets) == 1 && nets[0] == "default" {
+					svc.Networks = nil
+					cf.Services[k] = svc
+				}
+			}
+		}
+	}
+
+	out, err := yaml.Marshal(&cf)
+	require.NoError(t, err)
+	yamlStr := string(out)
+	require.NotContains(t, yamlStr, "networks:")
+	require.NotContains(t, yamlStr, "default")
+}
+
+func TestComposeFile_NetworkManagedNotExternal(t *testing.T) {
+	// Stack-managed networks (prefix was stripped) should not be external
+	cf := ComposeFile{
+		Version: "3.8",
+		Services: map[string]ComposeService{
+			"web": {Image: "nginx", Networks: []string{"mynet"}},
+		},
+		Networks: map[string]map[string]any{"mynet": {}},
+	}
+	out, err := yaml.Marshal(&cf)
+	require.NoError(t, err)
+	yamlStr := string(out)
+	require.Contains(t, yamlStr, "networks:")
+	require.Contains(t, yamlStr, "mynet:")
+	require.NotContains(t, yamlStr, "external")
+}
+
+func TestComposeFile_NetworkExternalTrue(t *testing.T) {
+	// External networks (no prefix stripped) should have external: true
+	cf := ComposeFile{
+		Version: "3.8",
+		Services: map[string]ComposeService{
+			"web": {Image: "nginx", Networks: []string{"shared_net"}},
+		},
+		Networks: map[string]map[string]any{"shared_net": {"external": true}},
+	}
+	out, err := yaml.Marshal(&cf)
+	require.NoError(t, err)
+	yamlStr := string(out)
+	require.Contains(t, yamlStr, "shared_net:")
+	require.Contains(t, yamlStr, "external: true")
+}
+
+func TestEscapeComposeInterpolation(t *testing.T) {
+	tests := []struct {
+		name, input, want string
+	}{
+		{"no dollars", "echo hello", "echo hello"},
+		{"single dollar", "echo $HOME", "echo $$HOME"},
+		{"double dollar passthrough", "echo $$HOME", "echo $$$$HOME"},
+		{"subshell", "sh -c '$(date)'", "sh -c '$$(date)'"},
+		{"arithmetic", "i=$((i+1))", "i=$$((i+1))"},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, escapeComposeInterpolation(tt.input))
+		})
+	}
+}
+
+func TestEscapeComposeArgs(t *testing.T) {
+	in := []string{"sh", "-c", "echo $HOME; date=$(date)"}
+	got := escapeComposeArgs(in)
+	require.Equal(t, []string{"sh", "-c", "echo $$HOME; date=$$(date)"}, got)
+	// original slice must not be modified
+	require.Equal(t, "echo $HOME; date=$(date)", in[2])
 }

@@ -108,10 +108,11 @@ The OSS repo must not contain pro implementation details — no pro-specific log
 
 - Tests in `integration-tests/` use `//go:build integration` tag
 - `test-setup/docker-compose.yml`: DinD multi-node Swarm (1 manager on tcp://localhost:22375, 2 workers)
-- `test-setup/test-stack.yml`: Demo services (whoami, whoami_single, etc.)
+- `test-setup/test-stack.yml`: Demo services (whoami, whoami_single, log_ticker) with volumes, networks, and configs
 - `test-setup/testenv.sh`: Orchestrator script
 - Tests use `gotestsum` as test runner (with `--format=testname` locally, `--format=github-actions` in CI)
 - Docker context name for tests: `swarmcli`
+- When adding new resource types (volumes, networks, secrets, configs), update `test-setup/test-stack.yml` and add integration test assertions to ensure inspect and compose reconstruction cover them
 
 ## Pull Requests
 
@@ -135,4 +136,4 @@ Add all three labels when creating a PR: `gh pr edit <number> --add-label "A0-ui
 
 ## Go Version & Build
 
-Go 1.25. No Makefile — use `go build` directly. GoReleaser handles releases with `-trimpath -s -w` ldflags and version injection.
+Go 1.26. No Makefile — use `go build` directly. GoReleaser handles releases with `-trimpath -s -w` ldflags and version injection.

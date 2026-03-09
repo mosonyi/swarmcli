@@ -7,9 +7,16 @@
 package docker_test
 
 import (
+	"bytes"
+	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"swarmcli/docker"
 	"testing"
+	"time"
+
+	yamlPkg "gopkg.in/yaml.v3"
 )
 
 func TestReconstructStackCompose(t *testing.T) {
@@ -41,7 +48,202 @@ func TestReconstructStackCompose(t *testing.T) {
 		t.Error("Reconstructed YAML missing expected service 'whoami'")
 	}
 
+	// Verify volumes section
+	if !strings.Contains(yaml, "volumes:") {
+		t.Error("Reconstructed YAML missing volumes section")
+	}
+	if !strings.Contains(yaml, "whoami_data:") {
+		t.Error("Reconstructed YAML missing volume 'whoami_data' (should be stripped of 'demo_' prefix)")
+	}
+
+	// Verify networks section
+	if !strings.Contains(yaml, "networks:") {
+		t.Error("Reconstructed YAML missing networks section")
+	}
+	if !strings.Contains(yaml, "backend:") {
+		t.Error("Reconstructed YAML missing network 'backend' (should be stripped of 'demo_' prefix)")
+	}
+
+	// Parse YAML and verify backend network is not marked external
+	var composed docker.ComposeFile
+	if err := yamlPkg.Unmarshal([]byte(yaml), &composed); err != nil {
+		t.Fatalf("Failed to parse reconstructed YAML: %v", err)
+	}
+	if netProps, ok := composed.Networks["backend"]; ok {
+		if _, hasExternal := netProps["external"]; hasExternal {
+			t.Error("Stack-managed network 'backend' should not be marked as external")
+		}
+	} else {
+		t.Error("Parsed YAML missing 'backend' network key")
+	}
+
 	t.Logf("Successfully reconstructed stack YAML (%d bytes)", len(yaml))
+}
+
+func TestReconstructStackCompose_RoundTrip(t *testing.T) {
+	// Full round-trip: reconstruct demo → deploy as demo_rt → reconstruct demo_rt → compare.
+	const srcStack = "demo"
+	const rtStack = "demo_rt"
+
+	// 1. Reconstruct the original stack
+	yamlStr, err := docker.ReconstructStackCompose(srcStack)
+	if err != nil {
+		t.Fatalf("Failed to reconstruct source stack: %v", err)
+	}
+	t.Logf("Reconstructed YAML:\n%s", yamlStr)
+
+	var srcCF docker.ComposeFile
+	if err := yamlPkg.Unmarshal([]byte(yamlStr), &srcCF); err != nil {
+		t.Fatalf("Failed to parse reconstructed YAML: %v", err)
+	}
+
+	// 2. Strip published ports to avoid conflicts with the running demo stack
+	for k, svc := range srcCF.Services {
+		svc.Ports = nil
+		srcCF.Services[k] = svc
+	}
+	deployYAML, err := yamlPkg.Marshal(&srcCF)
+	if err != nil {
+		t.Fatalf("Failed to marshal deploy YAML: %v", err)
+	}
+
+	// Write to temp file and deploy as a new stack
+	tmpFile, err := os.CreateTemp("", "compose-rt-*.yml")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	if _, err := tmpFile.Write(deployYAML); err != nil {
+		t.Fatalf("Failed to write compose file: %v", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("Failed to close compose file: %v", err)
+	}
+
+	// Deploy round-trip stack
+	deployCmd := exec.Command("docker", "stack", "deploy", "-c", tmpFile.Name(), rtStack)
+	var deployErr bytes.Buffer
+	deployCmd.Stderr = &deployErr
+	if out, err := deployCmd.Output(); err != nil {
+		t.Fatalf("Failed to deploy round-trip stack: %v\nstderr: %s\nstdout: %s", err, deployErr.String(), string(out))
+	}
+
+	// Cleanup: remove the round-trip stack when done
+	t.Cleanup(func() {
+		rmCmd := exec.Command("docker", "stack", "rm", rtStack)
+		_ = rmCmd.Run()
+		// Wait for removal to complete
+		for range 30 {
+			check := exec.Command("docker", "stack", "services", rtStack, "--format", "{{.Name}}")
+			if out, _ := check.Output(); len(bytes.TrimSpace(out)) == 0 {
+				break
+			}
+			time.Sleep(time.Second)
+		}
+	})
+
+	// 3. Wait for convergence
+	if err := waitForStackConvergence(rtStack, len(srcCF.Services), 60*time.Second); err != nil {
+		t.Fatalf("Round-trip stack failed to converge: %v", err)
+	}
+
+	// 4. Reconstruct the round-trip stack
+	rtYAML, err := docker.ReconstructStackCompose(rtStack)
+	if err != nil {
+		t.Fatalf("Failed to reconstruct round-trip stack: %v", err)
+	}
+
+	var rtCF docker.ComposeFile
+	if err := yamlPkg.Unmarshal([]byte(rtYAML), &rtCF); err != nil {
+		t.Fatalf("Failed to parse round-trip YAML: %v", err)
+	}
+
+	// 5. Compare: volumes
+	for volName := range srcCF.Volumes {
+		if _, ok := rtCF.Volumes[volName]; !ok {
+			t.Errorf("Volume %q present in source but missing from round-trip, got keys: %v",
+				volName, mapKeys(rtCF.Volumes))
+		}
+	}
+
+	// 6. Compare: networks
+	for netName := range srcCF.Networks {
+		if _, ok := rtCF.Networks[netName]; !ok {
+			t.Errorf("Network %q present in source but missing from round-trip, got keys: %v",
+				netName, mapKeys(rtCF.Networks))
+		}
+	}
+
+	// 7. Compare: service volume mounts
+	for svcName, srcSvc := range srcCF.Services {
+		rtSvc, ok := rtCF.Services[svcName]
+		if !ok {
+			t.Errorf("Service %q present in source but missing from round-trip", svcName)
+			continue
+		}
+		for _, srcVol := range srcSvc.Volumes {
+			found := false
+			for _, rtVol := range rtSvc.Volumes {
+				if rtVol == srcVol {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("Service %q: volume mount %q missing from round-trip, got: %v",
+					svcName, srcVol, rtSvc.Volumes)
+			}
+		}
+	}
+
+	t.Logf("Round-trip deploy test passed: volumes=%v, networks=%v",
+		mapKeys(rtCF.Volumes), mapKeys(rtCF.Networks))
+}
+
+// waitForStackConvergence waits until all services in the stack have running tasks.
+func waitForStackConvergence(stack string, expectedServices int, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		cmd := exec.Command("docker", "stack", "services", stack, "--format", "{{.Name}} {{.Replicas}}")
+		out, err := cmd.Output()
+		if err != nil {
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+		if len(lines) < expectedServices {
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		allReady := true
+		for _, line := range lines {
+			// Format: "stack_svc 2/2" — check N/M where N==M
+			parts := strings.Fields(line)
+			if len(parts) < 2 {
+				allReady = false
+				break
+			}
+			replicas := parts[len(parts)-1]
+			slash := strings.Index(replicas, "/")
+			if slash < 0 || replicas[:slash] != replicas[slash+1:] {
+				allReady = false
+				break
+			}
+		}
+		if allReady {
+			return nil
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("stack %q did not converge within %v", stack, timeout)
+}
+
+func mapKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 func TestReconstructStackCompose_NonExistentStack(t *testing.T) {

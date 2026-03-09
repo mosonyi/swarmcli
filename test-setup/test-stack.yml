@@ -1,5 +1,11 @@
 version: "3.9"
 
+networks:
+  backend:
+
+volumes:
+  whoami_data:
+
 configs:
   whoami_config:
     file: ./configs/whoami.conf
@@ -9,6 +15,10 @@ configs:
 services:
   whoami:
     image: alpine:latest
+    networks:
+      - backend
+    volumes:
+      - whoami_data:/data
     configs:
       - source: whoami_config
         target: /etc/whoami/config

@@ -43,6 +43,19 @@ func Inspect(ctx context.Context, t InspectType, id string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("service inspect: %w", err)
 		}
+		// Resolve network IDs to names for readability
+		if netMap, _ := dockerNetworkIDToNameMap(); netMap != nil {
+			for i, n := range svc.Spec.Networks {
+				if name := netMap[n.Target]; name != "" {
+					svc.Spec.Networks[i].Target = name
+				}
+			}
+			for i, n := range svc.Spec.TaskTemplate.Networks {
+				if name := netMap[n.Target]; name != "" {
+					svc.Spec.TaskTemplate.Networks[i].Target = name
+				}
+			}
+		}
 		obj = svc
 
 	case InspectContainer:
