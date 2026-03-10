@@ -59,8 +59,17 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 
 		// update searchMatches incrementally
-		if m.searchTerm != "" && strings.Contains(strings.ToLower(actualLine), strings.ToLower(m.searchTerm)) {
-			m.searchMatches = append(m.searchMatches, len(m.lines)-1)
+		if m.searchTerm != "" {
+			if linesDropped > 0 && m.searchMatches != nil {
+				// Lines dropped from top invalidate visible indices; recompute on next n/N
+				m.searchMatches = nil
+			} else if m.nodeFilter == "" && m.filterQuery == "" {
+				// Simple case: no filters, raw index equals visible index
+				if strings.Contains(strings.ToLower(actualLine), strings.ToLower(m.searchTerm)) {
+					m.searchMatches = append(m.searchMatches, len(m.lines)-1)
+				}
+			}
+			// When filters are active, skip incremental update; highlightContent will recompute
 		}
 		totalLines := len(m.lines)
 		shouldFollow := m.follow
@@ -273,10 +282,20 @@ func (m *Model) highlightContent() {
 		m.searchMatches = []int{}
 		lower := strings.ToLower(m.searchTerm)
 		m.mu.Lock()
+		visibleIdx := 0
 		for i, L := range m.lines {
-			if strings.Contains(strings.ToLower(L), lower) {
-				m.searchMatches = append(m.searchMatches, i)
+			// Skip lines hidden by node filter
+			if m.nodeFilter != "" && (i >= len(m.lineNodes) || m.lineNodes[i] != m.nodeFilter) {
+				continue
 			}
+			// Skip lines hidden by filterQuery
+			if m.filterQuery != "" && !strings.Contains(strings.ToLower(L), strings.ToLower(m.filterQuery)) {
+				continue
+			}
+			if strings.Contains(strings.ToLower(L), lower) {
+				m.searchMatches = append(m.searchMatches, visibleIdx)
+			}
+			visibleIdx++
 		}
 		m.mu.Unlock()
 		if len(m.searchMatches) > 0 {
@@ -310,6 +329,18 @@ func (m *Model) buildContent() string {
 	} else {
 		// No filter, use all lines
 		filteredLines = m.lines
+	}
+
+	// Apply text filter (app-level "/" search)
+	if m.filterQuery != "" {
+		lower := strings.ToLower(m.filterQuery)
+		var textFiltered []string
+		for _, line := range filteredLines {
+			if strings.Contains(strings.ToLower(line), lower) {
+				textFiltered = append(textFiltered, line)
+			}
+		}
+		filteredLines = textFiltered
 	}
 
 	// Join lines first

@@ -1,6 +1,7 @@
 package inspectview
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -25,6 +26,8 @@ func key(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyPgUp}
 	case "pgdown":
 		return tea.KeyMsg{Type: tea.KeyPgDown}
+	case "ctrl+f":
+		return tea.KeyMsg{Type: tea.KeyCtrlF}
 	}
 	if len(s) == 1 {
 		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
@@ -108,7 +111,7 @@ func TestShortHelpItems_Normal(t *testing.T) {
 	for _, item := range items {
 		keys[item.Key] = true
 	}
-	require.True(t, keys["/"])
+	require.True(t, keys["ctrl+f"])
 	require.True(t, keys["r"])
 	require.True(t, keys["q"])
 }
@@ -165,10 +168,10 @@ func TestKey_R_ToggleFormat(t *testing.T) {
 	require.Equal(t, FormatYAML, m.Format)
 }
 
-func TestKey_Slash_EntersSearch(t *testing.T) {
+func TestKey_CtrlF_EntersSearch(t *testing.T) {
 	m := testModel()
 	m.ready = true
-	m.Update(key("/"))
+	m.Update(key("ctrl+f"))
 	require.True(t, m.searchMode)
 	require.Equal(t, "", m.SearchTerm)
 }
@@ -179,7 +182,7 @@ func TestSearch_TypeAndConfirm(t *testing.T) {
 	m := testModel()
 	m.SetContent(testJSON)
 	m.ready = true
-	m.Update(key("/"))
+	m.Update(key("ctrl+f"))
 	m.Update(key("n"))
 	m.Update(key("a"))
 	require.Equal(t, "na", m.SearchTerm)
@@ -191,7 +194,7 @@ func TestSearch_TypeAndConfirm(t *testing.T) {
 func TestSearch_EscCancels(t *testing.T) {
 	m := testModel()
 	m.ready = true
-	m.Update(key("/"))
+	m.Update(key("ctrl+f"))
 	m.Update(key("x"))
 	m.Update(key("esc"))
 	require.False(t, m.searchMode)
@@ -201,7 +204,7 @@ func TestSearch_EscCancels(t *testing.T) {
 func TestSearch_Backspace(t *testing.T) {
 	m := testModel()
 	m.ready = true
-	m.Update(key("/"))
+	m.Update(key("ctrl+f"))
 	m.Update(key("a"))
 	m.Update(key("b"))
 	require.Equal(t, "ab", m.SearchTerm)
@@ -245,4 +248,91 @@ func TestView_YAML(t *testing.T) {
 	m.viewport.Height = 24
 	out := m.viewport.View()
 	require.NotEmpty(t, out)
+}
+
+// --- Filterable (app-level "/" filter) tests ---
+
+func TestApplySearchQuery_FiltersLines(t *testing.T) {
+	m := testModel()
+	m.SetContent(testJSON)
+	m.ready = true
+	m.ApplySearchQuery("test")
+	// After filtering, only lines containing "test" should remain
+	visible := m.visiblePlainLines()
+	for _, line := range visible {
+		require.Contains(t, strings.ToLower(line), "test")
+	}
+}
+
+func TestClearSearchQuery_RestoresAll(t *testing.T) {
+	m := testModel()
+	m.SetContent(testJSON)
+	m.ready = true
+	allBefore := m.visiblePlainLines()
+	m.ApplySearchQuery("test")
+	m.ClearSearchQuery()
+	allAfter := m.visiblePlainLines()
+	require.Equal(t, len(allBefore), len(allAfter))
+}
+
+func TestHasActiveFilter_Default(t *testing.T) {
+	m := testModel()
+	require.False(t, m.HasActiveFilter())
+}
+
+func TestIsSearching_Default(t *testing.T) {
+	m := testModel()
+	require.False(t, m.IsSearching())
+}
+
+func TestIsSearching_SearchMode(t *testing.T) {
+	m := testModel()
+	m.searchMode = true
+	require.True(t, m.IsSearching())
+}
+
+func TestSearch_NNavigation(t *testing.T) {
+	m := testModel()
+	m.SetContent(`{"name":"test","count":42,"nested":{"name":"test2"}}`)
+	m.ready = true
+	m.viewport.Width = 80
+	m.viewport.Height = 24
+	// Enter search, type "name", confirm
+	m.Update(key("ctrl+f"))
+	m.Update(key("n"))
+	m.Update(key("a"))
+	m.Update(key("m"))
+	m.Update(key("e"))
+	m.Update(key("enter"))
+	require.False(t, m.searchMode)
+	require.Equal(t, "name", m.SearchTerm)
+	require.Greater(t, len(m.searchMatches), 0)
+
+	// Navigate with n
+	if len(m.searchMatches) > 1 {
+		m.Update(key("n"))
+		require.Equal(t, 1, m.searchIndex)
+		m.Update(key("N"))
+		require.Equal(t, 0, m.searchIndex)
+	}
+}
+
+func TestEsc_ClearsFilterBeforeGoBack(t *testing.T) {
+	m := testModel()
+	m.ready = true
+	m.filterQuery = "test"
+	m.Update(key("esc"))
+	// Filter should be cleared
+	require.Equal(t, "", m.filterQuery)
+	require.False(t, m.HasActiveFilter())
+}
+
+func TestApplySearchQuery_RawMode(t *testing.T) {
+	m := New(80, 24, FormatRaw)
+	m.SetContent("line one\nline two\nline three")
+	m.ready = true
+	m.ApplySearchQuery("two")
+	visible := m.visiblePlainLines()
+	require.Len(t, visible, 1)
+	require.Contains(t, visible[0], "two")
 }

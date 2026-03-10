@@ -116,10 +116,18 @@ func HandleKey(m *Model, k tea.KeyMsg) tea.Cmd {
 		m.Visible = false
 		return nil
 	case "esc":
+		// If app-level filter is active, clear it instead of closing
+		if m.getFilterQuery() != "" {
+			m.mu.Lock()
+			m.filterQuery = ""
+			m.mu.Unlock()
+			m.highlightContent()
+			return nil
+		}
 		// Close the view
 		m.Visible = false
 		return nil
-	case "/":
+	case "ctrl+f":
 		m.mode = "search"
 		m.searchTerm = ""
 		m.searchIndex = 0

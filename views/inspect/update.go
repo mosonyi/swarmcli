@@ -63,11 +63,31 @@ func (m *Model) SetContent(content string) {
 // updateViewport updates viewport content, preserving scroll if possible
 func (m *Model) updateViewport() {
 	if m.Format == "raw" {
-		// content is directly used, do nothing here
+		content := m.RawContent
+		if m.filterQuery != "" {
+			lower := strings.ToLower(m.filterQuery)
+			var filtered []string
+			for _, line := range strings.Split(content, "\n") {
+				if strings.Contains(strings.ToLower(line), lower) {
+					filtered = append(filtered, line)
+				}
+			}
+			content = strings.Join(filtered, "\n")
+		}
+		if m.SearchTerm != "" {
+			content = highlightInContent(content, m.SearchTerm)
+		}
+		m.viewport.SetContent(content)
 		return
 	}
 	content := m.renderYAML()
 	m.viewport.SetContent(content)
+}
+
+// renderedLine holds both the plain-text and styled versions of a YAML line.
+type renderedLine struct {
+	plainText string
+	styled    string
 }
 
 var keyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("33"))                                             // blueish keys
@@ -78,40 +98,70 @@ func (m *Model) renderYAML() string {
 		return ""
 	}
 
-	var build func(n *Node, indent int) []string
-	build = func(n *Node, indent int) []string {
-		var lines []string
-		prefix := strings.Repeat("  ", indent)
+	// Pass 1: build all lines with plain text and styled versions
+	allLines := m.buildYAMLLines(m.Root, 0)
 
-		key := n.Key
-		value := n.ValueStr
-
-		// highlight search term in key
-		if m.SearchTerm != "" {
-			key = highlightMatches(key, m.SearchTerm, keyStyle)
-		} else {
-			key = keyStyle.Render(key)
+	// Pass 2: filter by filterQuery on plain text
+	var visible []renderedLine
+	if m.filterQuery != "" {
+		lower := strings.ToLower(m.filterQuery)
+		for _, rl := range allLines {
+			if strings.Contains(strings.ToLower(rl.plainText), lower) {
+				visible = append(visible, rl)
+			}
 		}
-
-		// highlight search term in value
-		if value != "" && m.SearchTerm != "" {
-			value = highlightMatches(value, m.SearchTerm, lipgloss.NewStyle()) // default value style
-		}
-
-		line := fmt.Sprintf("%s%s", prefix, key)
-		if value != "" {
-			line += fmt.Sprintf(": %s", value)
-		}
-		lines = append(lines, line)
-
-		// recursively render children
-		for _, c := range n.Children {
-			lines = append(lines, build(c, indent+1)...)
-		}
-		return lines
+	} else {
+		visible = allLines
 	}
 
-	return strings.Join(build(m.Root, 0), "\n")
+	// Pass 3: join styled lines
+	result := make([]string, len(visible))
+	for i, rl := range visible {
+		result[i] = rl.styled
+	}
+	return strings.Join(result, "\n")
+}
+
+// buildYAMLLines recursively builds renderedLine entries for the YAML tree.
+func (m *Model) buildYAMLLines(n *Node, indent int) []renderedLine {
+	var lines []renderedLine
+	prefix := strings.Repeat("  ", indent)
+
+	key := n.Key
+	value := n.ValueStr
+
+	// Build plain text version (no ANSI styles)
+	plainLine := prefix + key
+	if value != "" {
+		plainLine += ": " + value
+	}
+
+	// Build styled version
+	var styledKey string
+	if m.SearchTerm != "" {
+		styledKey = highlightMatches(key, m.SearchTerm, keyStyle)
+	} else {
+		styledKey = keyStyle.Render(key)
+	}
+
+	var styledValue string
+	if value != "" && m.SearchTerm != "" {
+		styledValue = highlightMatches(value, m.SearchTerm, lipgloss.NewStyle())
+	} else {
+		styledValue = value
+	}
+
+	styledLine := fmt.Sprintf("%s%s", prefix, styledKey)
+	if value != "" {
+		styledLine += fmt.Sprintf(": %s", styledValue)
+	}
+
+	lines = append(lines, renderedLine{plainText: plainLine, styled: styledLine})
+
+	for _, c := range n.Children {
+		lines = append(lines, m.buildYAMLLines(c, indent+1)...)
+	}
+	return lines
 }
 
 // highlightMatches highlights all occurrences of term in text with yellow background
@@ -132,4 +182,94 @@ func highlightMatches(text, term string, style lipgloss.Style) string {
 		offset += idx + len(term)
 	}
 	return result
+}
+
+// highlightInContent highlights search term in raw content string
+func highlightInContent(content, term string) string {
+	lowerContent := strings.ToLower(content)
+	lowerTerm := strings.ToLower(term)
+
+	result := ""
+	offset := 0
+	for {
+		idx := strings.Index(lowerContent[offset:], lowerTerm)
+		if idx == -1 {
+			result += content[offset:]
+			break
+		}
+		result += content[offset : offset+idx]
+		result += searchHighlightStyle.Render(content[offset+idx : offset+idx+len(term)])
+		offset += idx + len(term)
+	}
+	return result
+}
+
+// visiblePlainLines returns the plain-text lines visible after filtering.
+func (m *Model) visiblePlainLines() []string {
+	if m.Format == "raw" {
+		lines := strings.Split(m.RawContent, "\n")
+		if m.filterQuery == "" {
+			return lines
+		}
+		lower := strings.ToLower(m.filterQuery)
+		var filtered []string
+		for _, line := range lines {
+			if strings.Contains(strings.ToLower(line), lower) {
+				filtered = append(filtered, line)
+			}
+		}
+		return filtered
+	}
+
+	if m.Root == nil {
+		return nil
+	}
+
+	allLines := m.buildYAMLLines(m.Root, 0)
+	if m.filterQuery != "" {
+		lower := strings.ToLower(m.filterQuery)
+		var filtered []string
+		for _, rl := range allLines {
+			if strings.Contains(strings.ToLower(rl.plainText), lower) {
+				filtered = append(filtered, rl.plainText)
+			}
+		}
+		return filtered
+	}
+
+	result := make([]string, len(allLines))
+	for i, rl := range allLines {
+		result[i] = rl.plainText
+	}
+	return result
+}
+
+// computeSearchMatches finds all visible lines containing the search term.
+func (m *Model) computeSearchMatches() {
+	m.searchMatches = nil
+	m.searchIndex = 0
+	if m.SearchTerm == "" {
+		return
+	}
+	lower := strings.ToLower(m.SearchTerm)
+	for i, line := range m.visiblePlainLines() {
+		if strings.Contains(strings.ToLower(line), lower) {
+			m.searchMatches = append(m.searchMatches, i)
+		}
+	}
+}
+
+// scrollToMatch centers the viewport on the selected match
+func (m *Model) scrollToMatch() {
+	if len(m.searchMatches) == 0 {
+		return
+	}
+	idx := m.searchMatches[m.searchIndex]
+	offset := idx - m.viewport.Height/2
+	if offset < 0 {
+		offset = 0
+	}
+	m.updateViewport()
+	m.viewport.GotoTop()
+	m.viewport.SetYOffset(offset)
 }

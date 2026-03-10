@@ -52,6 +52,8 @@ type Model struct {
 	horizontalOffset int
 	// node filter - if set, only show logs from this node
 	nodeFilter string
+	// app-level "/" filter — hides non-matching lines
+	filterQuery string
 	// node selection dialog
 	nodeSelectVisible bool
 	nodeSelectCursor  int
@@ -153,6 +155,46 @@ func (m *Model) IsSearching() bool {
 	return m.GetSearchMode()
 }
 
+// HasActiveDialog returns true when a modal dialog is open (node selection).
+func (m *Model) HasActiveDialog() bool {
+	return m.getNodeSelectVisible()
+}
+
+func (m *Model) getFilterQuery() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.filterQuery
+}
+
+// ApplySearchQuery implements view.Filterable — sets the app-level "/" filter.
+func (m *Model) ApplySearchQuery(query string) {
+	m.mu.Lock()
+	m.filterQuery = query
+	m.mu.Unlock()
+	m.highlightContent()
+	if m.ready && m.getFollow() {
+		m.viewport.GotoBottom()
+	}
+}
+
+// ClearSearchQuery implements view.Filterable — clears the app-level "/" filter.
+func (m *Model) ClearSearchQuery() {
+	m.mu.Lock()
+	m.filterQuery = ""
+	m.mu.Unlock()
+	m.highlightContent()
+	if m.ready && m.getFollow() {
+		m.viewport.GotoBottom()
+	}
+}
+
+// HasActiveFilter returns true when the app-level "/" filter is active.
+func (m *Model) HasActiveFilter() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.filterQuery != ""
+}
+
 // ShortHelpItems stays compatible with your helpbar interface.
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	if m.mode == "search" {
@@ -164,7 +206,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	}
 
 	entries := []helpbar.HelpEntry{
-		{Key: "/", Desc: "Search"},
+		{Key: "ctrl+f", Desc: "Search"},
 		{Key: "n/N", Desc: "Next/prev"},
 		{Key: "s", Desc: "Toggle AutoScroll"},
 		{Key: "w", Desc: "Toggle wrap"},

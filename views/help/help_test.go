@@ -145,3 +145,71 @@ func TestView_EmptyCategories_CommandList(t *testing.T) {
 	// Should render command list path (even if empty)
 	require.Contains(t, out, "Help")
 }
+
+// --- Filterable (app-level "/" filter) tests ---
+
+func TestApplySearchQuery_CommandMode(t *testing.T) {
+	cmds := []CommandInfo{
+		{Name: "stacks", Description: "List stacks"},
+		{Name: "help", Description: "Show help"},
+		{Name: "contexts", Description: "List contexts", Aliases: []string{"ctx"}},
+	}
+	m := New(120, 24, cmds)
+	m.ApplySearchQuery("stack")
+	require.Contains(t, m.content, ":stacks")
+	require.NotContains(t, m.content, ":help")
+	require.NotContains(t, m.content, ":contexts")
+}
+
+func TestClearSearchQuery_CommandMode(t *testing.T) {
+	cmds := []CommandInfo{
+		{Name: "stacks", Description: "List stacks"},
+		{Name: "help", Description: "Show help"},
+	}
+	m := New(120, 24, cmds)
+	m.ApplySearchQuery("stack")
+	m.ClearSearchQuery()
+	require.Contains(t, m.content, ":stacks")
+	require.Contains(t, m.content, ":help")
+}
+
+func TestApplySearchQuery_CommandMode_ByAlias(t *testing.T) {
+	cmds := []CommandInfo{
+		{Name: "contexts", Description: "List contexts", Aliases: []string{"ctx"}},
+		{Name: "help", Description: "Show help"},
+	}
+	m := New(120, 24, cmds)
+	m.ApplySearchQuery("ctx")
+	require.Contains(t, m.content, ":contexts")
+	require.NotContains(t, m.content, ":help")
+}
+
+func TestApplySearchQuery_CategorizedMode(t *testing.T) {
+	cats := []HelpCategory{
+		{Title: "Navigation", Items: []HelpItem{
+			{Keys: "<esc>", Description: "Go back"},
+			{Keys: "<q>", Description: "Quit"},
+		}},
+		{Title: "Actions", Items: []HelpItem{
+			{Keys: "<n>", Description: "New item"},
+		}},
+	}
+	m := NewDetailed(120, 40, cats)
+	m.ApplySearchQuery("quit")
+	out := m.View()
+	require.Contains(t, out, "Quit")
+	require.NotContains(t, out, "Go back")
+}
+
+func TestClearSearchQuery_CategorizedMode(t *testing.T) {
+	cats := []HelpCategory{
+		{Title: "Navigation", Items: []HelpItem{
+			{Keys: "<esc>", Description: "Go back"},
+		}},
+	}
+	m := NewDetailed(120, 40, cats)
+	m.ApplySearchQuery("nonexistent")
+	m.ClearSearchQuery()
+	out := m.View()
+	require.Contains(t, out, "Go back")
+}

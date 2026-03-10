@@ -62,7 +62,27 @@ func (m *Model) buildCategorizedContent() string {
 	descStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("252"))
 
-	numCols := len(m.categories)
+	// Apply query filter to categories
+	categories := m.categories
+	if m.query != "" {
+		lower := strings.ToLower(m.query)
+		var filtered []HelpCategory
+		for _, cat := range categories {
+			var items []HelpItem
+			for _, item := range cat.Items {
+				if strings.Contains(strings.ToLower(item.Keys), lower) ||
+					strings.Contains(strings.ToLower(item.Description), lower) {
+					items = append(items, item)
+				}
+			}
+			if len(items) > 0 {
+				filtered = append(filtered, HelpCategory{Title: cat.Title, Items: items})
+			}
+		}
+		categories = filtered
+	}
+
+	numCols := len(categories)
 	if numCols == 0 {
 		numCols = 1
 	}
@@ -70,14 +90,14 @@ func (m *Model) buildCategorizedContent() string {
 	maxKeyWidth := 15
 
 	maxRows := 0
-	for _, cat := range m.categories {
+	for _, cat := range categories {
 		if len(cat.Items) > maxRows {
 			maxRows = len(cat.Items)
 		}
 	}
 
 	var headerParts []string
-	for _, cat := range m.categories {
+	for _, cat := range categories {
 		titleText := strings.ToUpper(cat.Title)
 		paddedTitle := fmt.Sprintf("%-*s", colWidth, titleText)
 		styledTitle := categoryStyle.Render(paddedTitle)
@@ -88,7 +108,7 @@ func (m *Model) buildCategorizedContent() string {
 	var contentLines []string
 	for row := 0; row < maxRows; row++ {
 		var rowParts []string
-		for _, cat := range m.categories {
+		for _, cat := range categories {
 			if row < len(cat.Items) {
 				item := cat.Items[row]
 				styledKey := keyStyle.Render(fmt.Sprintf("%-*s", maxKeyWidth, item.Keys))
