@@ -13,6 +13,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/docker/docker/api/types/swarm"
 )
 
 // ContextArchiveExts lists supported Docker context archive extensions.
@@ -173,6 +175,17 @@ func ValidateContext(contextName string) error {
 		// Switch back to original context
 		_ = UseContext(currentCtx)
 		return fmt.Errorf("failed to ping context %s: %w", contextName, err)
+	}
+
+	// Verify the node is part of a Swarm cluster
+	info, err := cli.Info(ctx)
+	if err != nil {
+		_ = UseContext(currentCtx)
+		return fmt.Errorf("failed to query info for context %s: %w", contextName, err)
+	}
+	if info.Swarm.LocalNodeState != swarm.LocalNodeStateActive {
+		_ = UseContext(currentCtx)
+		return fmt.Errorf("context %s is not part of a Docker Swarm cluster", contextName)
 	}
 
 	return nil
