@@ -12,16 +12,17 @@ import (
 )
 
 // RenderBreadcrumbs produces the breadcrumb bar string from a list of view names.
-// Returns "" when the current (last) view is top-level.
-// Trims to the nearest top-level ancestor, then caps visible items at maxDisplay
-// (prepending "…" when items were trimmed).
+// Top-level views show only their own name. Nested views are trimmed to the
+// nearest top-level ancestor, then capped at maxDisplay items (with "…" prefix).
 func RenderBreadcrumbs(names []string, maxDisplay int) string {
 	if len(names) == 0 {
 		return ""
 	}
-	// Current view is the last element
-	if view.IsTopLevel(names[len(names)-1]) {
-		return ""
+	// Current view is top-level → show just that view
+	current := names[len(names)-1]
+	if view.IsTopLevel(current) {
+		style := ui.Rainbow[0]
+		return style.Render(fmt.Sprintf(" %s ", current))
 	}
 
 	// Walk backward to find nearest top-level ancestor; slice from there

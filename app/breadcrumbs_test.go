@@ -9,11 +9,19 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestRenderBreadcrumbs_TopLevelHidden(t *testing.T) {
-	// Current view is top-level → empty
-	assert.Equal(t, "", RenderBreadcrumbs([]string{"stacks"}, 3))
-	assert.Equal(t, "", RenderBreadcrumbs([]string{"services", "stacks"}, 3))
-	assert.Equal(t, "", RenderBreadcrumbs([]string{"configs"}, 3))
+func TestRenderBreadcrumbs_TopLevelShowsSelf(t *testing.T) {
+	// Current view is top-level → shows just that view name
+	result := RenderBreadcrumbs([]string{"stacks"}, 3)
+	assert.NotEmpty(t, result)
+	assert.Contains(t, result, "stacks")
+
+	result = RenderBreadcrumbs([]string{"services", "stacks"}, 3)
+	assert.Contains(t, result, "stacks")
+	// Should not show prior history
+	assert.NotContains(t, result, "services")
+
+	result = RenderBreadcrumbs([]string{"configs"}, 3)
+	assert.Contains(t, result, "configs")
 }
 
 func TestRenderBreadcrumbs_Empty(t *testing.T) {
