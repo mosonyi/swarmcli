@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sort"
 	hash "swarmcli/core/primitives/hash"
-	"swarmcli/docker"
 	"swarmcli/ui"
 	helpview "swarmcli/views/help"
 	view "swarmcli/views/view"
@@ -20,9 +19,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case TasksLoadedMsg:
 		if msg.Error != nil {
 			l().Errorf("Error loading tasks: %v", msg.Error)
-			m.tasks = []docker.TaskEntry{}
-			m.viewport.SetContent(fmt.Sprintf("Error loading tasks: %v\n\nPress Esc or q to go back.", msg.Error))
-			return nil
+			return func() tea.Msg {
+				return view.AppErrorMsg{
+					Error: fmt.Sprintf("Error loading tasks: %v", msg.Error),
+				}
+			}
 		}
 		m.tasks = msg.Tasks
 		// Compute and store hash for change detection

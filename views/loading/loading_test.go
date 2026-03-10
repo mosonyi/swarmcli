@@ -40,11 +40,6 @@ func TestNew_NilPayload(t *testing.T) {
 	require.Equal(t, "Please wait...", m.message)
 }
 
-func TestNew_ErrorMessage_SetsErrorMode(t *testing.T) {
-	m := New(80, 24, true, "Error: connection refused")
-	require.True(t, m.isError)
-}
-
 func TestVisible(t *testing.T) {
 	m := New(80, 24, false, nil)
 	require.False(t, m.Visible())
@@ -72,21 +67,6 @@ func TestWindowSizeMsg(t *testing.T) {
 	require.Equal(t, 50, m.height)
 }
 
-func TestErrorMode_EnterDismisses(t *testing.T) {
-	m := New(80, 24, true, "Error: timeout")
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	require.NotNil(t, cmd)
-	msg := cmd()
-	_, ok := msg.(ErrorDismissedMsg)
-	require.True(t, ok)
-}
-
-func TestNonError_EnterIgnored(t *testing.T) {
-	m := New(80, 24, true, "Loading...")
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	require.Nil(t, cmd)
-}
-
 func TestView_NotVisible_Empty(t *testing.T) {
 	m := New(80, 24, false, nil)
 	require.Equal(t, "", m.View())
@@ -96,13 +76,6 @@ func TestView_Visible_ContainsMessage(t *testing.T) {
 	m := New(80, 24, true, "Loading secrets...")
 	out := m.View()
 	require.Contains(t, out, "Loading secrets...")
-}
-
-func TestView_ErrorMode_ContainsError(t *testing.T) {
-	m := New(80, 24, true, "Error: cannot connect")
-	out := m.View()
-	require.Contains(t, out, "Error")
-	require.Contains(t, out, "cannot connect")
 }
 
 func TestShortHelpItems(t *testing.T) {

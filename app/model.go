@@ -6,6 +6,7 @@ package app
 import (
 	"swarmcli/docker"
 	"swarmcli/views/commandinput"
+	"swarmcli/views/confirmdialog"
 	loadingview "swarmcli/views/loading"
 	"swarmcli/views/searchinput"
 	systeminfoview "swarmcli/views/systeminfo"
@@ -29,6 +30,12 @@ type Model struct {
 
 	commandInput *commandinput.Model
 	searchInput  *searchinput.Model
+
+	// App-level error dialog for loading/navigation errors.
+	// Per-view confirmdialog stays for operation errors (scale, restart, etc.).
+	errorDialog          *confirmdialog.Model
+	appErrorDialogActive bool
+	errorFallbackView    string // view to navigate to on dismiss; "" = goBack()
 
 	// Terminal dimensions
 	terminalWidth  int
@@ -80,6 +87,7 @@ func InitialModel() *Model {
 		viewStack:      viewstack.Stack{},
 		commandInput:   cmdBar(),
 		searchInput:    searchinput.New(),
+		errorDialog:    confirmdialog.New(terminalWidth, terminalHeight),
 		terminalWidth:  terminalWidth,
 		terminalHeight: terminalHeight,
 	}
@@ -153,4 +161,12 @@ func (m *Model) renderStackBar() string {
 func cmdBar() *commandinput.Model {
 	cmdBar := commandinput.New()
 	return cmdBar
+}
+
+func (m *Model) showAppError(errMsg string, fallbackView string) {
+	m.errorDialog.Visible = true
+	m.errorDialog.ErrorMode = true
+	m.errorDialog.Message = errMsg
+	m.appErrorDialogActive = true
+	m.errorFallbackView = fallbackView
 }

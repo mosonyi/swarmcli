@@ -11,16 +11,12 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 const ViewName = "loading"
 
 // SpinnerTickMsg for animating the spinner
 type SpinnerTickMsg time.Time
-
-// ErrorDismissedMsg is sent when user presses Enter on an error screen
-type ErrorDismissedMsg struct{}
 
 type Model struct {
 	width, height int
@@ -29,7 +25,6 @@ type Model struct {
 	message       string
 	spinner       int // frame counter for spinner animation
 	visible       bool
-	isError       bool
 }
 
 func New(width, height int, visible bool, payload any) *Model {
@@ -65,8 +60,7 @@ func New(width, height int, visible bool, payload any) *Model {
 		}
 	}
 
-	isError := strings.HasPrefix(message, "Error")
-	return &Model{width: width, height: height, title: title, header: header, message: message, spinner: 0, visible: visible, isError: isError}
+	return &Model{width: width, height: height, title: title, header: header, message: message, spinner: 0, visible: visible}
 }
 
 func (m *Model) Visible() bool        { return m.visible }
@@ -94,13 +88,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.width = msg.Width + 4
 		m.height = msg.Height
 		return nil
-	case tea.KeyMsg:
-		if m.isError && msg.String() == "enter" {
-			// Emit generic error dismissed message
-			return func() tea.Msg {
-				return ErrorDismissedMsg{}
-			}
-		}
 	}
 	return nil
 }
@@ -110,17 +97,6 @@ func (m *Model) FrameHeader() string { return m.header }
 func (m *Model) FrameFooter() string { return "" }
 
 func (m *Model) FrameContent() string {
-	if m.isError {
-		// Return empty content with error dialog overlay
-		frameWidth := m.width
-		if frameWidth < 0 {
-			frameWidth = 80
-		}
-		frame := ui.ComputeFrameDimensions(frameWidth-4, m.height, frameWidth-4, m.height, "", "")
-		emptyContent := ui.TrimOrPadContentToLines("", frame.DesiredContentLines)
-		errorDialog := m.renderErrorDialog()
-		return ui.OverlayCentered(emptyContent, errorDialog, frameWidth, 0)
-	}
 	spinnerChar := ui.SpinnerCharAt(m.spinner)
 	return strings.TrimSpace(fmt.Sprintf("%s  %s", spinnerChar, m.message))
 }
@@ -130,12 +106,6 @@ func (m *Model) View() string {
 		return ""
 	}
 
-	if m.isError {
-		// Render error as a styled popup dialog (legacy path)
-		return m.renderErrorDialog()
-	}
-
-	// Normal loading view
 	spinnerChar := ui.SpinnerCharAt(m.spinner)
 	content := fmt.Sprintf("%s  %s", spinnerChar, m.message)
 	content = strings.TrimSpace(content)
@@ -149,52 +119,6 @@ func (m *Model) View() string {
 	}
 	box := ui.RenderFramedBoxHeight(m.title, m.header, content, "", frameWidth, frameHeight)
 	return box
-}
-
-// renderErrorDialog renders the error dialog with red styling
-func (m *Model) renderErrorDialog() string {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("196")). // Red background for error
-		Padding(0, 1)
-
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("196")) // Red border
-
-	itemStyle := lipgloss.NewStyle().
-		Padding(0, 1)
-
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Padding(0, 1)
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("63")).
-		Bold(true)
-
-	var lines []string
-	lines = append(lines, titleStyle.Render(" Error "))
-	lines = append(lines, itemStyle.Render(""))
-
-	// Wrap error message if too long
-	maxWidth := 70
-	wrappedLines := ui.WrapText(m.message, maxWidth)
-	for _, line := range wrappedLines {
-		lines = append(lines, itemStyle.Render(line))
-	}
-
-	lines = append(lines, itemStyle.Render(""))
-	helpText := fmt.Sprintf("%s %s %s",
-		helpStyle.Render("Press"),
-		keyStyle.Render("<Enter>"),
-		helpStyle.Render("to go to contexts view"))
-	lines = append(lines, helpText)
-
-	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	dialog := borderStyle.Render(content)
-	return dialog
 }
 
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {

@@ -11,3 +11,11 @@ type NavigateToMsg struct {
 	// the view manager should push the new view onto the history stack.
 	Replace bool
 }
+
+// AppErrorMsg signals that a view (or the app layer) encountered a loading
+// error. The app shows a modal error dialog. On dismiss it navigates to
+// FallbackView (if non-empty) or calls goBack().
+type AppErrorMsg struct {
+	Error        string
+	FallbackView string
+}
