@@ -1,6 +1,7 @@
 package viewstack
 
 import (
+	"fmt"
 	"swarmcli/views/helpbar"
 	"testing"
 
@@ -72,4 +73,27 @@ func TestReset(t *testing.T) {
 	s.Reset()
 	require.Equal(t, 0, s.Len())
 	require.Nil(t, s.Pop())
+}
+
+func TestPush_PreservesTopLevelInHistory(t *testing.T) {
+	s := &Stack{}
+	s.Push(&mockView{name: "stacks"})
+	s.Push(&mockView{name: "secrets"})
+	s.Push(&mockView{name: "contexts"})
+	// All three should be preserved for back-navigation
+	require.Equal(t, 3, s.Len())
+	require.Equal(t, "stacks", s.Views()[0].Name())
+	require.Equal(t, "secrets", s.Views()[1].Name())
+	require.Equal(t, "contexts", s.Views()[2].Name())
+}
+
+func TestPush_CapsAt10(t *testing.T) {
+	s := &Stack{}
+	for i := 0; i < 12; i++ {
+		s.Push(&mockView{name: fmt.Sprintf("v%d", i)})
+	}
+	require.Equal(t, 10, s.Len())
+	// Oldest entries trimmed, newest kept
+	require.Equal(t, "v2", s.Views()[0].Name())
+	require.Equal(t, "v11", s.Views()[9].Name())
 }
