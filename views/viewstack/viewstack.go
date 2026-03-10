@@ -9,9 +9,12 @@ type Stack struct {
 	stack []view.View
 }
 
-// Push a view onto the stack
+// Push a view onto the stack, capping at 10 entries.
 func (s *Stack) Push(v view.View) {
 	s.stack = append(s.stack, v)
+	if len(s.stack) > 10 {
+		s.stack = s.stack[len(s.stack)-10:]
+	}
 }
 
 // Pop returns the last view and removes it from the stack

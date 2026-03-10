@@ -18,3 +18,12 @@ const (
 	NameLoading  = "loading"
 	NameNetworks = "networks"
 )
+
+var topLevelViews = map[string]bool{
+	NameStacks: true, NameNodes: true, NameConfigs: true,
+	NameSecrets: true, NameNetworks: true, NameContexts: true,
+	NameLoading: true, NameHelp: true,
+}
+
+// IsTopLevel reports whether a view name is a top-level (root) view.
+func IsTopLevel(name string) bool { return topLevelViews[name] }
