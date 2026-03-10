@@ -75,31 +75,25 @@ func TestReset(t *testing.T) {
 	require.Nil(t, s.Pop())
 }
 
-func TestPush_TrimsToTopLevel(t *testing.T) {
+func TestPush_PreservesTopLevelInHistory(t *testing.T) {
 	s := &Stack{}
 	s.Push(&mockView{name: "stacks"})
-	s.Push(&mockView{name: "services"})
-	s.Push(&mockView{name: "logs"})
-	// Now push a top-level view — everything before it should be trimmed
-	s.Push(&mockView{name: "configs"})
-	require.Equal(t, 1, s.Len())
-	require.Equal(t, "configs", s.Views()[0].Name())
-
-	// Push nested views after the new top-level
-	s.Push(&mockView{name: "services"})
-	s.Push(&mockView{name: "tasks"})
+	s.Push(&mockView{name: "secrets"})
+	s.Push(&mockView{name: "contexts"})
+	// All three should be preserved for back-navigation
 	require.Equal(t, 3, s.Len())
-	require.Equal(t, "configs", s.Views()[0].Name())
-	require.Equal(t, "services", s.Views()[1].Name())
-	require.Equal(t, "tasks", s.Views()[2].Name())
+	require.Equal(t, "stacks", s.Views()[0].Name())
+	require.Equal(t, "secrets", s.Views()[1].Name())
+	require.Equal(t, "contexts", s.Views()[2].Name())
 }
 
 func TestPush_CapsAt10(t *testing.T) {
 	s := &Stack{}
-	// Push a top-level view first so trimming doesn't remove entries
-	s.Push(&mockView{name: "stacks"})
-	for i := 0; i < 11; i++ {
+	for i := 0; i < 12; i++ {
 		s.Push(&mockView{name: fmt.Sprintf("v%d", i)})
 	}
 	require.Equal(t, 10, s.Len())
+	// Oldest entries trimmed, newest kept
+	require.Equal(t, "v2", s.Views()[0].Name())
+	require.Equal(t, "v11", s.Views()[9].Name())
 }
