@@ -1,6 +1,7 @@
 package viewstack
 
 import (
+	"fmt"
 	"swarmcli/views/helpbar"
 	"testing"
 
@@ -72,4 +73,33 @@ func TestReset(t *testing.T) {
 	s.Reset()
 	require.Equal(t, 0, s.Len())
 	require.Nil(t, s.Pop())
+}
+
+func TestPush_TrimsToTopLevel(t *testing.T) {
+	s := &Stack{}
+	s.Push(&mockView{name: "stacks"})
+	s.Push(&mockView{name: "services"})
+	s.Push(&mockView{name: "logs"})
+	// Now push a top-level view — everything before it should be trimmed
+	s.Push(&mockView{name: "configs"})
+	require.Equal(t, 1, s.Len())
+	require.Equal(t, "configs", s.Views()[0].Name())
+
+	// Push nested views after the new top-level
+	s.Push(&mockView{name: "services"})
+	s.Push(&mockView{name: "tasks"})
+	require.Equal(t, 3, s.Len())
+	require.Equal(t, "configs", s.Views()[0].Name())
+	require.Equal(t, "services", s.Views()[1].Name())
+	require.Equal(t, "tasks", s.Views()[2].Name())
+}
+
+func TestPush_CapsAt10(t *testing.T) {
+	s := &Stack{}
+	// Push a top-level view first so trimming doesn't remove entries
+	s.Push(&mockView{name: "stacks"})
+	for i := 0; i < 11; i++ {
+		s.Push(&mockView{name: fmt.Sprintf("v%d", i)})
+	}
+	require.Equal(t, 10, s.Len())
 }

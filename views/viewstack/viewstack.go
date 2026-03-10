@@ -9,9 +9,21 @@ type Stack struct {
 	stack []view.View
 }
 
-// Push a view onto the stack
+// Push a view onto the stack, trimming to the nearest top-level view
+// and capping the stack at 10 entries.
 func (s *Stack) Push(v view.View) {
 	s.stack = append(s.stack, v)
+	// Trim to nearest top-level view
+	for i := len(s.stack) - 1; i >= 0; i-- {
+		if view.IsTopLevel(s.stack[i].Name()) {
+			s.stack = s.stack[i:]
+			break
+		}
+	}
+	// Cap at 10
+	if len(s.stack) > 10 {
+		s.stack = s.stack[len(s.stack)-10:]
+	}
 }
 
 // Pop returns the last view and removes it from the stack

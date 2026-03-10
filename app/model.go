@@ -4,9 +4,7 @@
 package app
 
 import (
-	"fmt"
 	"swarmcli/docker"
-	"swarmcli/ui"
 	"swarmcli/views/commandinput"
 	loadingview "swarmcli/views/loading"
 	"swarmcli/views/searchinput"
@@ -16,7 +14,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // Model holds app state
@@ -145,21 +142,12 @@ func (m *Model) replaceView(name string, data any) tea.Cmd {
 }
 
 func (m *Model) renderStackBar() string {
-	// Combine stack and current view
-	stack := append(m.viewStack.Views(), m.currentView)
-
-	var parts []string
-	for i, v := range stack {
-		if i > 0 {
-			parts = append(parts, lipgloss.NewStyle().Faint(true).Render(" → "))
-
-		}
-		style := ui.Rainbow[i%len(ui.Rainbow)]
-		label := v.Name()
-		parts = append(parts, style.Render(fmt.Sprintf(" %s ", label)))
+	names := make([]string, 0, m.viewStack.Len()+1)
+	for _, v := range m.viewStack.Views() {
+		names = append(names, v.Name())
 	}
-
-	return lipgloss.JoinHorizontal(lipgloss.Left, parts...)
+	names = append(names, m.currentView.Name())
+	return RenderBreadcrumbs(names, 3)
 }
 
 func cmdBar() *commandinput.Model {
