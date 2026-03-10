@@ -206,25 +206,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		return m.handleTick(msg)
 
-	case systeminfoview.Msg:
-		var cmd tea.Cmd
-		cmd = m.systemInfo.Update(msg)
-		return m, cmd
-
-	case systeminfoview.SlowStatusMsg:
-		var cmd tea.Cmd
-		cmd = m.systemInfo.Update(msg)
-		return m, cmd
-
-	case systeminfoview.TickMsg:
-		var cmd tea.Cmd
-		cmd = m.systemInfo.Update(msg)
-		return m, cmd
-
-	case systeminfoview.SpinnerTickMsg:
-		var cmd tea.Cmd
-		cmd = m.systemInfo.Update(msg)
-		return m, cmd
+	case systeminfoview.SystemInfoMsg:
+		return m, m.systemInfo.Update(msg)
 
 	case contextsview.ContextChangedNotification:
 		// Context has changed - show loading view then navigate to stacks

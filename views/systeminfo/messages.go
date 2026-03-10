@@ -5,6 +5,17 @@ package systeminfoview
 
 import "time"
 
+// SystemInfoMsg is implemented by all messages owned by the systeminfo component.
+// The app-level router uses this to forward messages without listing each type.
+type SystemInfoMsg interface {
+	systemInfoMsg()
+}
+
+func (Msg) systemInfoMsg()            {}
+func (SlowStatusMsg) systemInfoMsg()  {}
+func (TickMsg) systemInfoMsg()        {}
+func (SpinnerTickMsg) systemInfoMsg() {}
+
 type Msg struct {
 	context     string
 	cpu         string
