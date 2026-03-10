@@ -18,7 +18,8 @@ func (m *Model) View() string {
 		title := m.currentView.FrameTitle()
 		header := m.currentView.FrameHeader()
 		content := m.currentView.FrameContent()
-		return ui.RenderViewFrame(title, header, content, "", m.terminalWidth, m.terminalHeight, true)
+		out := ui.RenderViewFrame(title, header, content, "", m.terminalWidth, m.terminalHeight, true)
+		return m.overlayAppError(out)
 	}
 
 	systemInfo := m.systemInfo.View()
@@ -61,13 +62,14 @@ func (m *Model) View() string {
 		frameWidth := m.viewport.Width + 4
 		cmdFrame := ui.RenderFramedBoxHeight("", "", m.commandInput.View(), "", frameWidth, cmdFrameHeight)
 
-		return lipgloss.JoinVertical(
+		out := lipgloss.JoinVertical(
 			lipgloss.Left,
 			help,
 			cmdFrame,
 			framedView,
 			m.renderStackBar(),
 		)
+		return m.overlayAppError(out)
 	}
 
 	if m.searchInput.Visible() {
@@ -81,13 +83,14 @@ func (m *Model) View() string {
 		frameWidth := m.viewport.Width + 4
 		searchFrame := ui.RenderFramedBoxHeight("", "", m.searchInput.View(), "", frameWidth, searchFrameHeight)
 
-		return lipgloss.JoinVertical(
+		out := lipgloss.JoinVertical(
 			lipgloss.Left,
 			help,
 			searchFrame,
 			framedView,
 			m.renderStackBar(),
 		)
+		return m.overlayAppError(out)
 	}
 
 	if frameHeight < 1 {
@@ -95,10 +98,19 @@ func (m *Model) View() string {
 	}
 	framedView := ui.RenderViewFrame(title, header, content, footer, m.viewport.Width, frameHeight, false)
 
-	return lipgloss.JoinVertical(
+	out := lipgloss.JoinVertical(
 		lipgloss.Left,
 		help,
 		framedView,
 		m.renderStackBar(),
 	)
+	return m.overlayAppError(out)
+}
+
+// overlayAppError overlays the app-level error dialog on top of the rendered output.
+func (m *Model) overlayAppError(base string) string {
+	if !m.errorDialog.Visible {
+		return base
+	}
+	return ui.OverlayCentered(base, m.errorDialog.View(), m.terminalWidth, 0)
 }

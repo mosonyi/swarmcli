@@ -9,6 +9,7 @@ import (
 	"swarmcli/commands/api"
 	"swarmcli/docker"
 	"swarmcli/views/commandinput"
+	"swarmcli/views/confirmdialog"
 	contextsview "swarmcli/views/contexts"
 	loadingview "swarmcli/views/loading"
 	nodesview "swarmcli/views/nodes"
@@ -48,9 +49,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, watchEventsCmd()
 	case snapshotLoadedMsg:
 		if msg.Err != nil {
-			// Replace with error message in the loading view
-			cmd := m.replaceView(loadingview.ViewName, fmt.Sprintf("Error loading snapshot: %v", msg.Err))
-			return m, cmd
+			m.showAppError(fmt.Sprintf("Error loading snapshot: %v", msg.Err), contextsview.ViewName)
+			return m, nil
 		}
 		// Replace loading with stacks view
 		cmd := m.replaceView(stacksview.ViewName, nil)
@@ -97,6 +97,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		// If app-level error dialog is active, route all keys to handleKey
+		// which forwards them to the dialog exclusively.
+		if m.appErrorDialogActive {
+			return m.handleKey(msg)
+		}
+
 		if msg.String() == ":" {
 			// Check if current view has an active dialog - if so, don't intercept
 			if viewWithDialog, ok := m.currentView.(interface {
@@ -227,9 +233,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			loadSnapshotAndNavigateToStacksCmd(),
 		)
 
-	case loadingview.ErrorDismissedMsg:
-		// Navigate to contexts view from loading error screen
-		cmd := m.replaceView(contextsview.ViewName, nil)
+	case view.AppErrorMsg:
+		m.showAppError(msg.Error, msg.FallbackView)
+		return m, nil
+
+	case confirmdialog.ResultMsg:
+		if m.appErrorDialogActive {
+			m.appErrorDialogActive = false
+			m.errorDialog.Visible = false
+			fallback := m.errorFallbackView
+			m.errorFallbackView = ""
+			if fallback != "" {
+				cmd := m.replaceView(fallback, nil)
+				return m, cmd
+			}
+			cmd := m.goBack()
+			return m, cmd
+		}
+		cmd := m.delegateToCurrentView(msg)
 		return m, cmd
 
 	default:
@@ -321,6 +342,12 @@ func (m *Model) updateViewports(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// If app-level error dialog is active, forward keys to it exclusively
+	if m.appErrorDialogActive {
+		cmd := m.errorDialog.Update(msg)
+		return m, cmd
+	}
+
 	// If current view has an active dialog, forward keys to it first
 	if viewWithDialog, ok := m.currentView.(interface{ HasActiveDialog() bool }); ok {
 		if viewWithDialog.HasActiveDialog() {
