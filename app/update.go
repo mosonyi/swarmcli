@@ -28,7 +28,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
-	case docker.EventMsg:
+	case docker.Event:
 		// On Docker events, trigger a background refresh and, if currently
 		// viewing stacks/nodes, trigger a reload so the UI updates quickly using cached data.
 		docker.TriggerRefreshIfNeeded()
@@ -36,16 +36,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.Type {
 		case "node":
 			if nv, ok := m.currentView.(*nodesview.Model); ok {
-				return m, tea.Batch(nv.LoadNodesCmd(), docker.WatchEventsCmd())
+				return m, tea.Batch(nv.LoadNodesCmd(), watchEventsCmd())
 			}
 		case "service", "config", "network":
 			if sv, ok := m.currentView.(*stacksview.Model); ok {
 				// Use cached snapshot to update stacks quickly
-				return m, tea.Batch(sv.LoadStacksCmd(""), docker.WatchEventsCmd())
+				return m, tea.Batch(sv.LoadStacksCmd(""), watchEventsCmd())
 			}
 		}
 		// Re-issue watcher after handling
-		return m, docker.WatchEventsCmd()
+		return m, watchEventsCmd()
 	case snapshotLoadedMsg:
 		if msg.Err != nil {
 			// Replace with error message in the loading view
@@ -499,4 +499,11 @@ func (m *Model) goBack() tea.Cmd {
 
 	// Execute all lifecycle commands
 	return tea.Batch(exitCmd, enterCmd, resizeCmd)
+}
+
+// watchEventsCmd wraps docker.WatchEvent in a tea.Cmd for the Bubble Tea event loop.
+func watchEventsCmd() tea.Cmd {
+	return func() tea.Msg {
+		return docker.WatchEvent()
+	}
 }

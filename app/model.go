@@ -94,7 +94,7 @@ func (m *Model) Init() tea.Cmd {
 		loadSnapshotAsync(),
 		m.systemInfo.LoadStatus(),
 		m.systemInfo.Init(), // Initialize systeminfo's tick commands
-		docker.WatchEventsCmd(),
+		watchEventsCmd(),
 	)
 }
 
