@@ -415,12 +415,12 @@ func OverlayCentered(base, overlay string, width, height int) string {
 			newLine.WriteString(dialogLine)
 		} else {
 			// Overlay dialog in the middle using width-aware truncation
-			leftPart := truncateANSI(baseLine, startCol)
+			leftPart := TruncateANSI(baseLine, startCol)
 			rightStart := startCol + dialogWidth
 			rightPart := ""
 			if rightStart < baseWidth {
 				// Skip the overlay width and get the rest
-				rightPart = truncateANSIAfter(baseLine, rightStart)
+				rightPart = TruncateANSIAfter(baseLine, rightStart)
 			}
 
 			newLine.WriteString(leftPart)
@@ -434,8 +434,8 @@ func OverlayCentered(base, overlay string, width, height int) string {
 	return strings.Join(baseLines, "\n")
 }
 
-// truncateANSI truncates a string with ANSI codes to a specific visual width
-func truncateANSI(s string, width int) string {
+// TruncateANSI truncates a string with ANSI codes to a specific visual width.
+func TruncateANSI(s string, width int) string {
 	if width <= 0 {
 		return ""
 	}
@@ -467,8 +467,8 @@ func truncateANSI(s string, width int) string {
 	return result.String()
 }
 
-// truncateANSIAfter skips characters up to a width and returns the rest
-func truncateANSIAfter(s string, skipWidth int) string {
+// TruncateANSIAfter skips characters up to a visual width and returns the rest.
+func TruncateANSIAfter(s string, skipWidth int) string {
 	if skipWidth <= 0 {
 		return s
 	}

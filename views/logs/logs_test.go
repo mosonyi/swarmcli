@@ -604,6 +604,61 @@ func TestEsc_ClosesViewWhenNoFilter(t *testing.T) {
 	require.False(t, m.Visible)
 }
 
+func TestLineMsg_StripsCR(t *testing.T) {
+	m := testModel()
+	m.Visible = true
+	lines := make(chan string, 10)
+	errs := make(chan error, 1)
+	m.linesChan = lines
+	m.errChan = errs
+
+	m.Update(LineMsg{Line: "node1\x00downloading 50%\rprogress"})
+
+	m.mu.Lock()
+	require.Len(t, m.lines, 1)
+	require.Equal(t, "downloading 50%progress", m.lines[0])
+	require.NotContains(t, m.lines[0], "\r")
+	m.mu.Unlock()
+	close(lines)
+	close(errs)
+}
+
+func TestSetContent_StripsCR(t *testing.T) {
+	m := testModel()
+	m.SetContent("line1\r\nline2\r\nline3")
+	m.mu.Lock()
+	for _, line := range m.lines {
+		require.NotContains(t, line, "\r")
+	}
+	require.Len(t, m.lines, 3)
+	require.Equal(t, "line1", m.lines[0])
+	require.Equal(t, "line2", m.lines[1])
+	require.Equal(t, "line3", m.lines[2])
+	m.mu.Unlock()
+}
+
+func TestBuildContent_NoWrap_ANSIAware(t *testing.T) {
+	m := testModel()
+	m.viewport.Width = 20
+	m.setWrap(false)
+
+	// Line with ANSI color codes (like formatLogLineWithNode produces)
+	ansiLine := "\033[38;5;117mweb.task@node\033[0m | hello world message here"
+	m.mu.Lock()
+	m.lines = []string{ansiLine}
+	m.lineNodes = []string{"node1"}
+	m.mu.Unlock()
+
+	content := m.buildContent()
+
+	// Content should not contain broken ANSI sequences (partial escape without 'm')
+	// A broken sequence would look like \033[38;5; without the closing digit+m
+	require.NotContains(t, content, "\033[38;5;1>")
+	require.NotContains(t, content, "\033[38;5;11>")
+	// The truncated content should end with > indicator since the line is long
+	require.Contains(t, content, ">")
+}
+
 func TestShouldFallbackToRawFromStdCopy(t *testing.T) {
 	tests := []struct {
 		name string
