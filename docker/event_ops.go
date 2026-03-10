@@ -3,13 +3,11 @@
 
 package docker
 
-import tea "github.com/charmbracelet/bubbletea"
-
 // EventOps abstracts Docker event watching for testability and extensibility.
 type EventOps interface {
-	WatchEventsCmd() tea.Cmd
+	WatchEvent() Event
 }
 
 type defaultEventOps struct{}
 
-func (defaultEventOps) WatchEventsCmd() tea.Cmd { return WatchEventsCmd() }
+func (defaultEventOps) WatchEvent() Event { return WatchEvent() }
