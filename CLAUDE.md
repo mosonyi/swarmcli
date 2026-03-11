@@ -127,6 +127,8 @@ Every PR to `main` must pass the `check_labels.yml` workflow which requires one 
 
 Add all three labels when creating a PR: `gh pr edit <number> --add-label "A0-ui,B0-low-priority,C0-breaks-nothing"` (or use the REST API if `gh pr edit` fails due to classic projects deprecation).
 
+When a PR fixes a GitHub issue, copy the issue's labels to the PR and add any missing required group labels (A, B, C). Use `gh api repos/OWNER/REPO/issues/<pr-number>/labels -f "labels[]=LABEL"` to add labels via API.
+
 ## CI Workflows (.github/workflows/)
 
 - `ci.yml`: go fmt, golangci-lint, go build, Docker image build

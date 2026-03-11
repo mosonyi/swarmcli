@@ -6,9 +6,11 @@ package logsview
 import (
 	"fmt"
 	"strings"
+	"swarmcli/ui"
 	"swarmcli/utils"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/reflow/wordwrap"
 )
 
@@ -34,6 +36,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		} else {
 			actualLine = msg.Line
 		}
+
+		// Strip carriage returns that break frame rendering (progress bars, CRLF)
+		actualLine = strings.ReplaceAll(actualLine, "\r", "")
 
 		// append line into bounded buffer (store both line and node)
 		m.mu.Lock()
@@ -254,6 +259,7 @@ func (m *Model) readOneLineCmd() tea.Cmd {
 
 func (m *Model) SetContent(content string) {
 	m.mu.Lock()
+	content = strings.ReplaceAll(content, "\r", "")
 	m.lines = strings.Split(content, "\n")
 	if m.MaxLines > 0 && len(m.lines) > m.MaxLines {
 		// keep only last MaxLines
@@ -352,21 +358,21 @@ func (m *Model) buildContent() string {
 		// Wrap the entire content to viewport width
 		full = wordwrap.String(full, m.viewport.Width)
 	} else if (!m.wrap || m.nodeSelectVisible) && m.viewport.Width > 0 {
-		// When wrap is off, apply horizontal scrolling
+		// When wrap is off, apply horizontal scrolling using ANSI-aware operations
+		// to avoid splitting escape sequences in colored log lines.
 		processedLines := make([]string, len(filteredLines))
 
 		for i, line := range filteredLines {
-			if len(line) <= m.horizontalOffset {
-				// Line is shorter than offset, show empty
+			lineWidth := lipgloss.Width(line)
+			if lineWidth <= m.horizontalOffset {
 				processedLines[i] = ""
 			} else {
-				// Apply horizontal offset
-				visiblePart := line[m.horizontalOffset:]
+				visiblePart := ui.TruncateANSIAfter(line, m.horizontalOffset)
+				visibleWidth := lipgloss.Width(visiblePart)
 
-				if len(visiblePart) > m.viewport.Width {
-					// Truncate and add > indicator
+				if visibleWidth > m.viewport.Width {
 					if m.viewport.Width > 1 {
-						processedLines[i] = visiblePart[:m.viewport.Width-1] + ">"
+						processedLines[i] = ui.TruncateANSI(visiblePart, m.viewport.Width-1) + ">"
 					} else {
 						processedLines[i] = ">"
 					}
