@@ -41,6 +41,9 @@ type Model struct {
 	terminalWidth  int
 	terminalHeight int
 
+	// Previous context name, set on context switch for revert on failure
+	previousContext string
+
 	// Fullscreen mode — hides helpbar/stackbar, uses full terminal
 	fullscreen bool
 }

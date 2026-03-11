@@ -107,11 +107,19 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		m.SetError("")
 		m.SetSuccess("")
+		// Find the previous context before refreshing the list
+		var previousCtx string
+		for _, ctx := range m.List.Items {
+			if ctx.Current {
+				previousCtx = ctx.Name
+				break
+			}
+		}
 		// Refresh contexts list and then navigate to stacks view
 		m.SetLoading(true)
 		return tea.Batch(
 			m.loadContextsCmd(),
-			func() tea.Msg { return ContextChangedNotification{} },
+			func() tea.Msg { return ContextChangedNotification{PreviousContext: previousCtx} },
 		)
 
 	case ContextExportedMsg:
