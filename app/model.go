@@ -86,7 +86,7 @@ func InitialModel() *Model {
 		deps:           deps,
 		viewport:       vp,
 		currentView:    loading,
-		systemInfo:     systeminfoview.New(deps, version),
+		systemInfo:     systeminfoview.New(deps, version, edition),
 		viewStack:      viewstack.Stack{},
 		commandInput:   cmdBar(),
 		searchInput:    searchinput.New(),

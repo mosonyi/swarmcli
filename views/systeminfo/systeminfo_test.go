@@ -1,6 +1,9 @@
 package systeminfoview
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"swarmcli/docker"
@@ -68,7 +71,7 @@ func testDeps() docker.Deps {
 // --- Tests ---
 
 func TestNew(t *testing.T) {
-	m := New(testDeps(), "1.0.0")
+	m := New(testDeps(), "1.0.0", "ce")
 	require.NotNil(t, m)
 	require.Equal(t, "1.0.0", m.version)
 	require.Equal(t, "default", m.context)
@@ -80,7 +83,7 @@ func TestLoadStatus(t *testing.T) {
 	ops.getCurrentContextFn = func() (string, error) { return "test-ctx", nil }
 	ops.getContainerCountFn = func() (int, error) { return 10, nil }
 	ops.getServiceCountFn = func() (int, error) { return 5, nil }
-	m := New(docker.Deps{ClusterInfo: ops}, "1.0.0")
+	m := New(docker.Deps{ClusterInfo: ops}, "1.0.0", "ce")
 	cmd := m.LoadStatus()
 	msg := cmd()
 	statusMsg, ok := msg.(Msg)
@@ -94,7 +97,7 @@ func TestLoadSlowStatus(t *testing.T) {
 	ops := noopClusterInfoOps()
 	ops.getSwarmCPUUsageFn = func() (string, error) { return "25.0%", nil }
 	ops.getSwarmMemUsageFn = func() (string, error) { return "50.0%", nil }
-	m := New(docker.Deps{ClusterInfo: ops}, "1.0.0")
+	m := New(docker.Deps{ClusterInfo: ops}, "1.0.0", "ce")
 	cmd := m.LoadSlowStatus()
 	msg := cmd()
 	slow, ok := msg.(SlowStatusMsg)
@@ -104,7 +107,7 @@ func TestLoadSlowStatus(t *testing.T) {
 }
 
 func TestUpdate_Msg(t *testing.T) {
-	m := New(testDeps(), "1.0.0")
+	m := New(testDeps(), "1.0.0", "ce")
 	cmd := m.Update(Msg{
 		context:    "ctx",
 		cpu:        "10%",
@@ -119,7 +122,7 @@ func TestUpdate_Msg(t *testing.T) {
 }
 
 func TestUpdate_SlowStatusMsg(t *testing.T) {
-	m := New(testDeps(), "1.0.0")
+	m := New(testDeps(), "1.0.0", "ce")
 	cmd := m.Update(SlowStatusMsg{cpu: "15.0%", mem: "30.0%"})
 	require.Equal(t, "15.0%", m.cpuUsage)
 	require.Equal(t, "30.0%", m.memUsage)
@@ -130,13 +133,13 @@ func TestUpdate_SlowStatusMsg(t *testing.T) {
 }
 
 func TestUpdate_TickMsg(t *testing.T) {
-	m := New(testDeps(), "1.0.0")
+	m := New(testDeps(), "1.0.0", "ce")
 	cmd := m.Update(TickMsg{})
 	require.NotNil(t, cmd) // LoadSlowStatus
 }
 
 func TestUpdate_SpinnerTickMsg(t *testing.T) {
-	m := New(testDeps(), "1.0.0")
+	m := New(testDeps(), "1.0.0", "ce")
 	m.loadingCPU = true
 	oldSpinner := m.spinner
 	cmd := m.Update(SpinnerTickMsg{})
@@ -155,7 +158,7 @@ func TestContent_Format(t *testing.T) {
 }
 
 func TestUpdateCPUMem_TrendArrows(t *testing.T) {
-	m := New(testDeps(), "1.0.0")
+	m := New(testDeps(), "1.0.0", "ce")
 	// First update sets baseline
 	m.Update(SlowStatusMsg{cpu: "10.0%", mem: "20.0%"})
 	require.Equal(t, float64(10), m.prevCPU)
@@ -167,4 +170,131 @@ func TestUpdateCPUMem_TrendArrows(t *testing.T) {
 	require.Contains(t, m.memUsage, "25.0%")
 	require.Equal(t, "up", m.prevCPUTrend)
 	require.Equal(t, "up", m.prevMemTrend)
+}
+
+func TestCheckLatestVersion_SendsVersionAndEdition(t *testing.T) {
+	t.Cleanup(func() {
+		versionCheckURL = "https://swarmcli.io/api/v1/version"
+	})
+
+	var received versionCheckRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+		err := json.NewDecoder(r.Body).Decode(&received)
+		require.NoError(t, err)
+
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"latestVersion":"1.3.3","message":"An upgrade available"}`))
+	}))
+	defer server.Close()
+
+	versionCheckURL = server.URL
+
+	m := New(testDeps(), "1.2.2", "ce")
+	msg := m.CheckLatestVersion()()
+
+	latestMsg, ok := msg.(LatestVersionMsg)
+	require.True(t, ok)
+	require.Equal(t, "1.3.3", latestMsg.latestVersion)
+	require.Equal(t, "An upgrade available", latestMsg.message)
+	require.Equal(t, "1.2.2", received.Version)
+	require.Equal(t, "ce", received.Edition)
+}
+
+func TestCheckLatestVersion_NoMessageWhenNotNewer(t *testing.T) {
+	t.Cleanup(func() {
+		versionCheckURL = "https://swarmcli.io/api/v1/version"
+	})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"latestVersion":"1.2.2","message":"same"}`))
+	}))
+	defer server.Close()
+
+	versionCheckURL = server.URL
+
+	m := New(testDeps(), "1.2.2", "ce")
+	require.Nil(t, m.CheckLatestVersion()())
+}
+
+func TestCheckLatestVersion_FailureReturnsNilMsg(t *testing.T) {
+	t.Cleanup(func() {
+		versionCheckURL = "https://swarmcli.io/api/v1/version"
+	})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("boom"))
+	}))
+	defer server.Close()
+
+	versionCheckURL = server.URL
+
+	m := New(testDeps(), "1.2.2", "ce")
+	require.Nil(t, m.CheckLatestVersion()())
+}
+
+func TestCheckLatestVersion_DevBuildShowsLatest(t *testing.T) {
+	t.Cleanup(func() {
+		versionCheckURL = "https://swarmcli.io/api/v1/version"
+	})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"latestVersion":"1.3.3","message":"upgrade"}`))
+	}))
+	defer server.Close()
+
+	versionCheckURL = server.URL
+
+	m := New(testDeps(), "dev", "ce")
+	msg := m.CheckLatestVersion()()
+	latestMsg, ok := msg.(LatestVersionMsg)
+	require.True(t, ok)
+	require.Equal(t, "1.3.3", latestMsg.latestVersion)
+}
+
+func TestCheckLatestVersion_UsesOverriddenEdition(t *testing.T) {
+	t.Cleanup(func() {
+		versionCheckURL = "https://swarmcli.io/api/v1/version"
+	})
+
+	var received versionCheckRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := json.NewDecoder(r.Body).Decode(&received)
+		require.NoError(t, err)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"latestVersion":"1.3.3","message":"upgrade"}`))
+	}))
+	defer server.Close()
+
+	versionCheckURL = server.URL
+
+	m := New(testDeps(), "1.2.2", "be")
+	msg := m.CheckLatestVersion()()
+	_, ok := msg.(LatestVersionMsg)
+	require.True(t, ok)
+	require.Equal(t, "be", received.Edition)
+}
+
+func TestIsNewerVersion(t *testing.T) {
+	require.True(t, isNewerVersion("1.2.2", "1.2.3"))
+	require.True(t, isNewerVersion("v1.2.2", "1.3.0"))
+	require.False(t, isNewerVersion("1.2.2", "1.2.2"))
+	require.False(t, isNewerVersion("1.2.2", "1.2.1"))
+	require.False(t, isNewerVersion("dev", "1.2.3"))
+}
+
+func TestUpdate_LatestVersionMsg(t *testing.T) {
+	m := New(testDeps(), "1.2.2", "ce")
+	cmd := m.Update(LatestVersionMsg{latestVersion: "1.3.3", message: "upgrade"})
+	require.Nil(t, cmd)
+	require.Equal(t, "1.3.3", m.latest)
+	require.Equal(t, "upgrade", m.message)
+	require.Contains(t, m.content, "1.2.2")
+	require.Contains(t, m.content, "v1.3.3")
+	require.Contains(t, m.content, "⚡")
 }
