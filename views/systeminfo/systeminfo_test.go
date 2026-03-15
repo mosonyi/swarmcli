@@ -173,10 +173,6 @@ func TestUpdateCPUMem_TrendArrows(t *testing.T) {
 }
 
 func TestCheckLatestVersion_SendsVersionAndEdition(t *testing.T) {
-	t.Cleanup(func() {
-		versionCheckURL = "https://swarmcli.io/api/v1/version"
-	})
-
 	var received versionCheckRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodPost, r.Method)
@@ -190,67 +186,52 @@ func TestCheckLatestVersion_SendsVersionAndEdition(t *testing.T) {
 	}))
 	defer server.Close()
 
-	versionCheckURL = server.URL
-
 	m := New(testDeps(), "1.2.2", "ce")
+	m.versionCheckURL = server.URL
 	msg := m.CheckLatestVersion()()
 
 	latestMsg, ok := msg.(LatestVersionMsg)
 	require.True(t, ok)
 	require.Equal(t, "1.3.3", latestMsg.latestVersion)
-	require.Equal(t, "An upgrade available", latestMsg.message)
 	require.Equal(t, "1.2.2", received.Version)
 	require.Equal(t, "ce", received.Edition)
 }
 
 func TestCheckLatestVersion_NoMessageWhenNotNewer(t *testing.T) {
-	t.Cleanup(func() {
-		versionCheckURL = "https://swarmcli.io/api/v1/version"
-	})
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"latestVersion":"1.2.2","message":"same"}`))
 	}))
 	defer server.Close()
 
-	versionCheckURL = server.URL
-
 	m := New(testDeps(), "1.2.2", "ce")
-	require.Nil(t, m.CheckLatestVersion()())
+	m.versionCheckURL = server.URL
+	_, ok := m.CheckLatestVersion()().(NoVersionUpdateMsg)
+	require.True(t, ok)
 }
 
 func TestCheckLatestVersion_FailureReturnsNilMsg(t *testing.T) {
-	t.Cleanup(func() {
-		versionCheckURL = "https://swarmcli.io/api/v1/version"
-	})
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("boom"))
 	}))
 	defer server.Close()
 
-	versionCheckURL = server.URL
-
 	m := New(testDeps(), "1.2.2", "ce")
-	require.Nil(t, m.CheckLatestVersion()())
+	m.versionCheckURL = server.URL
+	_, ok := m.CheckLatestVersion()().(NoVersionUpdateMsg)
+	require.True(t, ok)
 }
 
 func TestCheckLatestVersion_DevBuildShowsLatest(t *testing.T) {
-	t.Cleanup(func() {
-		versionCheckURL = "https://swarmcli.io/api/v1/version"
-	})
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"latestVersion":"1.3.3","message":"upgrade"}`))
 	}))
 	defer server.Close()
 
-	versionCheckURL = server.URL
-
 	m := New(testDeps(), "dev", "ce")
+	m.versionCheckURL = server.URL
 	msg := m.CheckLatestVersion()()
 	latestMsg, ok := msg.(LatestVersionMsg)
 	require.True(t, ok)
@@ -258,10 +239,6 @@ func TestCheckLatestVersion_DevBuildShowsLatest(t *testing.T) {
 }
 
 func TestCheckLatestVersion_UsesOverriddenEdition(t *testing.T) {
-	t.Cleanup(func() {
-		versionCheckURL = "https://swarmcli.io/api/v1/version"
-	})
-
 	var received versionCheckRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := json.NewDecoder(r.Body).Decode(&received)
@@ -271,29 +248,37 @@ func TestCheckLatestVersion_UsesOverriddenEdition(t *testing.T) {
 	}))
 	defer server.Close()
 
-	versionCheckURL = server.URL
-
 	m := New(testDeps(), "1.2.2", "be")
+	m.versionCheckURL = server.URL
 	msg := m.CheckLatestVersion()()
 	_, ok := msg.(LatestVersionMsg)
 	require.True(t, ok)
 	require.Equal(t, "be", received.Edition)
 }
 
+func TestCheckLatestVersion_DisabledReturnsNilCmd(t *testing.T) {
+	t.Setenv(versionCheckDisableEnv, "true")
+
+	m := New(testDeps(), "1.2.2", "ce")
+	require.Nil(t, m.CheckLatestVersion())
+}
+
 func TestIsNewerVersion(t *testing.T) {
 	require.True(t, isNewerVersion("1.2.2", "1.2.3"))
 	require.True(t, isNewerVersion("v1.2.2", "1.3.0"))
+	require.True(t, isNewerVersion("1.3.0-rc.1", "1.3.0"))
+	require.True(t, isNewerVersion("1.3.0-beta.1", "1.3.0-rc.1"))
 	require.False(t, isNewerVersion("1.2.2", "1.2.2"))
 	require.False(t, isNewerVersion("1.2.2", "1.2.1"))
+	require.False(t, isNewerVersion("1.3.0", "1.3.0-rc.1"))
 	require.False(t, isNewerVersion("dev", "1.2.3"))
 }
 
 func TestUpdate_LatestVersionMsg(t *testing.T) {
 	m := New(testDeps(), "1.2.2", "ce")
-	cmd := m.Update(LatestVersionMsg{latestVersion: "1.3.3", message: "upgrade"})
+	cmd := m.Update(LatestVersionMsg{latestVersion: "1.3.3"})
 	require.Nil(t, cmd)
 	require.Equal(t, "1.3.3", m.latest)
-	require.Equal(t, "upgrade", m.message)
 	require.Contains(t, m.content, "1.2.2")
 	require.Contains(t, m.content, "v1.3.3")
 	require.Contains(t, m.content, "⚡")

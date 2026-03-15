@@ -21,8 +21,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case LatestVersionMsg:
 		m.latest = msg.latestVersion
-		m.message = msg.message
 		m.content = m.buildContent()
+		return nil
+
+	case NoVersionUpdateMsg:
 		return nil
 
 	case SlowStatusMsg:

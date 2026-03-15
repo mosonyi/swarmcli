@@ -23,6 +23,15 @@ var (
 	edition string = "ce"
 )
 
+func normalizeEdition(e string) string {
+	normalized := strings.ToLower(strings.TrimSpace(e))
+	if normalized == "" {
+		return "ce"
+	}
+
+	return normalized
+}
+
 // SetVersion sets the application version (called from main)
 func SetVersion(v string) {
 	version = v
@@ -30,25 +39,18 @@ func SetVersion(v string) {
 
 // SetEdition sets the application edition (called from main).
 func SetEdition(e string) {
-	if e == "" {
-		edition = "ce"
-	} else {
-		edition = e
-	}
-	helpbar.EditionLabel = editionLabel(edition)
+	edition = normalizeEdition(e)
+	helpbar.SetEditionLabel(editionLabel(edition))
 }
 
 func editionLabel(e string) string {
-	switch strings.ToLower(strings.TrimSpace(e)) {
+	switch normalizeEdition(e) {
 	case "ce":
 		return "Community Edition"
 	case "be":
 		return "Business Edition"
 	default:
-		if e == "" {
-			return "Community Edition"
-		}
-		return strings.ToUpper(e) + " Edition"
+		return strings.ToUpper(strings.TrimSpace(e)) + " Edition"
 	}
 }
 

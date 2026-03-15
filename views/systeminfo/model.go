@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/briandowns/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"golang.org/x/mod/semver"
 )
 
 type Model struct {
@@ -24,10 +26,10 @@ type Model struct {
 	// We don't need a viewport here, as we will use a fixed size for the content.
 	content string
 
-	version string
-	edition string
-	latest  string
-	message string
+	version         string
+	edition         string
+	latest          string
+	versionCheckURL string
 
 	context        string
 	cpuUsage       string
@@ -56,11 +58,11 @@ type Model struct {
 	memBlinkCount int
 }
 
-var versionCheckURL = "https://swarmcli.io/api/v1/version"
-
 const (
-	defaultEdition      = "ce"
-	versionCheckTimeout = 4 * time.Second
+	defaultEdition         = "ce"
+	defaultVersionCheckURL = "https://swarmcli.io/api/v1/version"
+	versionCheckDisableEnv = "SWARMCLI_DISABLE_VERSION_CHECK"
+	versionCheckTimeout    = 4 * time.Second
 )
 
 type versionCheckRequest struct {
@@ -70,59 +72,75 @@ type versionCheckRequest struct {
 
 type versionCheckResponse struct {
 	LatestVersion string `json:"latestVersion"`
-	Message       string `json:"message"`
 }
 
 // Create a new instance
 func New(deps docker.Deps, version, edition string) *Model {
 	// Get initial context synchronously to display immediately
 	context, _ := deps.ClusterInfo.GetCurrentContext()
-	normalizedEdition := strings.TrimSpace(edition)
-	if normalizedEdition == "" {
-		normalizedEdition = defaultEdition
-	}
+	normalizedEdition := normalizeEdition(edition)
 
 	return &Model{
-		deps:           deps,
-		content:        content(context, version, "", "", 0, 0),
-		version:        version,
-		edition:        normalizedEdition,
-		context:        context,
-		updateInterval: 8 * time.Second,
-		lastUpdate:     time.Now(),
-		loadingCPU:     true,
-		loadingMem:     true,
-		firstLoad:      true,
+		deps:            deps,
+		content:         content(context, version, "", "", 0, 0),
+		version:         version,
+		edition:         normalizedEdition,
+		versionCheckURL: defaultVersionCheckURL,
+		context:         context,
+		updateInterval:  8 * time.Second,
+		lastUpdate:      time.Now(),
+		loadingCPU:      true,
+		loadingMem:      true,
+		firstLoad:       true,
 	}
 }
 
 func (m *Model) Init() tea.Cmd {
-	return tea.Batch(m.tickCmd(), m.spinnerTickCmd(), m.CheckLatestVersion())
+	cmds := []tea.Cmd{m.tickCmd(), m.spinnerTickCmd()}
+	if cmd := m.CheckLatestVersion(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
+	return tea.Batch(cmds...)
 }
 
 func (m *Model) CheckLatestVersion() tea.Cmd {
 	currentVersion := strings.TrimSpace(m.version)
-	currentEdition := strings.TrimSpace(m.edition)
-	if currentEdition == "" {
-		currentEdition = defaultEdition
+	currentEdition := normalizeEdition(m.edition)
+	if versionCheckDisabled() {
+		l().Infow("startup version check disabled", "env", versionCheckDisableEnv)
+		return nil
 	}
 
 	return func() tea.Msg {
-		latestVersion, message, err := fetchLatestVersion(currentVersion, currentEdition)
+		latestVersion, err := fetchLatestVersion(m.versionCheckURL, currentVersion, currentEdition)
 		if err != nil {
 			l().Infow("startup version check failed", "version", currentVersion, "edition", currentEdition, "error", err)
-			return nil
+			return NoVersionUpdateMsg{}
 		}
 
 		if !shouldShowLatestVersion(currentVersion, latestVersion) {
-			return nil
+			return NoVersionUpdateMsg{}
 		}
 
 		return LatestVersionMsg{
 			latestVersion: latestVersion,
-			message:       message,
 		}
 	}
+}
+
+func normalizeEdition(edition string) string {
+	normalizedEdition := strings.TrimSpace(strings.ToLower(edition))
+	if normalizedEdition == "" {
+		return defaultEdition
+	}
+
+	return normalizedEdition
+}
+
+func versionCheckDisabled() bool {
+	disabled, err := strconv.ParseBool(strings.TrimSpace(os.Getenv(versionCheckDisableEnv)))
+	return err == nil && disabled
 }
 
 func shouldShowLatestVersion(currentVersion, latestVersion string) bool {
@@ -136,8 +154,8 @@ func shouldShowLatestVersion(currentVersion, latestVersion string) bool {
 	}
 
 	// For dev/non-semver builds, still surface latest stable release.
-	_, currentOK := parseVersion(currentVersion)
-	_, latestOK := parseVersion(latestVersion)
+	currentOK := isSemver(currentVersion)
+	latestOK := isSemver(latestVersion)
 	if !currentOK && latestOK {
 		return true
 	}
@@ -145,10 +163,11 @@ func shouldShowLatestVersion(currentVersion, latestVersion string) bool {
 	return false
 }
 
-func fetchLatestVersion(currentVersion, edition string) (string, string, error) {
-	edition = strings.TrimSpace(edition)
-	if edition == "" {
-		edition = defaultEdition
+func fetchLatestVersion(checkURL, currentVersion, edition string) (string, error) {
+	edition = normalizeEdition(edition)
+	checkURL = strings.TrimSpace(checkURL)
+	if checkURL == "" {
+		return "", fmt.Errorf("version API URL is empty")
 	}
 
 	payload := versionCheckRequest{
@@ -158,19 +177,19 @@ func fetchLatestVersion(currentVersion, edition string) (string, string, error) 
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return "", "", fmt.Errorf("marshal version payload: %w", err)
+		return "", fmt.Errorf("marshal version payload: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, versionCheckURL, bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, checkURL, bytes.NewReader(body))
 	if err != nil {
-		return "", "", fmt.Errorf("build version request: %w", err)
+		return "", fmt.Errorf("build version request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: versionCheckTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", "", fmt.Errorf("send version request: %w", err)
+		return "", fmt.Errorf("send version request: %w", err)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
@@ -179,15 +198,15 @@ func fetchLatestVersion(currentVersion, edition string) (string, string, error) 
 	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", "", fmt.Errorf("version API status: %s", resp.Status)
+		return "", fmt.Errorf("version API status: %s", resp.Status)
 	}
 
 	var decoded versionCheckResponse
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-		return "", "", fmt.Errorf("decode version response: %w", err)
+		return "", fmt.Errorf("decode version response: %w", err)
 	}
 
-	return strings.TrimSpace(decoded.LatestVersion), strings.TrimSpace(decoded.Message), nil
+	return strings.TrimSpace(decoded.LatestVersion), nil
 }
 
 func isNewerVersion(currentVersion, latestVersion string) bool {
@@ -196,69 +215,40 @@ func isNewerVersion(currentVersion, latestVersion string) bool {
 }
 
 func compareVersionStrings(a, b string) (int, bool) {
-	aParts, ok := parseVersion(a)
+	normalizedA, ok := normalizeSemver(a)
 	if !ok {
 		return 0, false
 	}
-	bParts, ok := parseVersion(b)
+	normalizedB, ok := normalizeSemver(b)
 	if !ok {
 		return 0, false
 	}
 
-	maxLen := len(aParts)
-	if len(bParts) > maxLen {
-		maxLen = len(bParts)
-	}
-
-	for i := 0; i < maxLen; i++ {
-		var av, bv int
-		if i < len(aParts) {
-			av = aParts[i]
-		}
-		if i < len(bParts) {
-			bv = bParts[i]
-		}
-
-		if av > bv {
-			return 1, true
-		}
-		if av < bv {
-			return -1, true
-		}
-	}
-
-	return 0, true
+	return semver.Compare(normalizedA, normalizedB), true
 }
 
-func parseVersion(version string) ([]int, bool) {
-	normalized := strings.TrimSpace(strings.TrimPrefix(strings.ToLower(version), "v"))
+func isSemver(version string) bool {
+	_, ok := normalizeSemver(version)
+	return ok
+}
+
+func normalizeSemver(version string) (string, bool) {
+	normalized := strings.TrimSpace(version)
 	if normalized == "" {
-		return nil, false
+		return "", false
 	}
 
-	if idx := strings.IndexByte(normalized, '-'); idx >= 0 {
-		normalized = normalized[:idx]
+	if strings.HasPrefix(normalized, "V") {
+		normalized = "v" + normalized[1:]
+	} else if !strings.HasPrefix(normalized, "v") {
+		normalized = "v" + normalized
 	}
 
-	parts := strings.Split(normalized, ".")
-	if len(parts) == 0 {
-		return nil, false
+	if !semver.IsValid(normalized) {
+		return "", false
 	}
 
-	parsed := make([]int, 0, len(parts))
-	for _, p := range parts {
-		if p == "" {
-			return nil, false
-		}
-
-		n, err := strconv.Atoi(p)
-		if err != nil {
-			return nil, false
-		}
-		parsed = append(parsed, n)
-	}
-
-	return parsed, true
+	return normalized, true
 }
 
 func (m *Model) tickCmd() tea.Cmd {
