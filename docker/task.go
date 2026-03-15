@@ -254,5 +254,3 @@ func formatTaskDuration(d time.Duration) string {
 		}
 	}
 }
-
-
