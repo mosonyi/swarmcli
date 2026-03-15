@@ -742,15 +742,27 @@ func (m *Model) refreshServiceErrorsFromSnapshot() {
 func latestTasksByServiceKey(tasks []swarm.Task) []swarm.Task {
 	latest := make(map[string]swarm.Task)
 	latestAt := make(map[string]time.Time)
+	latestWantsRunning := make(map[string]bool)
 	for _, t := range tasks {
 		key := taskKeyForService(t)
 		at := t.Status.Timestamp
 		if at.IsZero() {
 			at = t.CreatedAt
 		}
-		if prevAt, ok := latestAt[key]; !ok || at.After(prevAt) {
-			latestAt[key] = at
+		wantsRunning := t.DesiredState == swarm.TaskStateRunning
+		if _, seen := latest[key]; !seen {
 			latest[key] = t
+			latestAt[key] = at
+			latestWantsRunning[key] = wantsRunning
+		} else if wantsRunning && !latestWantsRunning[key] {
+			// Upgrade: current best is terminal, this one wants running.
+			latest[key] = t
+			latestAt[key] = at
+			latestWantsRunning[key] = true
+		} else if wantsRunning == latestWantsRunning[key] && at.After(latestAt[key]) {
+			// Same priority tier: keep the more recent task.
+			latest[key] = t
+			latestAt[key] = at
 		}
 	}
 
