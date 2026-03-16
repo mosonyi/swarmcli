@@ -11,10 +11,12 @@ type SystemInfoMsg interface {
 	systemInfoMsg()
 }
 
-func (Msg) systemInfoMsg()            {}
-func (SlowStatusMsg) systemInfoMsg()  {}
-func (TickMsg) systemInfoMsg()        {}
-func (SpinnerTickMsg) systemInfoMsg() {}
+func (Msg) systemInfoMsg()                {}
+func (SlowStatusMsg) systemInfoMsg()      {}
+func (TickMsg) systemInfoMsg()            {}
+func (SpinnerTickMsg) systemInfoMsg()     {}
+func (LatestVersionMsg) systemInfoMsg()   {}
+func (NoVersionUpdateMsg) systemInfoMsg() {}
 
 type Msg struct {
 	context     string
@@ -34,3 +36,9 @@ type SlowStatusMsg struct {
 type TickMsg time.Time
 
 type SpinnerTickMsg time.Time
+
+type LatestVersionMsg struct {
+	latestVersion string
+}
+
+type NoVersionUpdateMsg struct{}

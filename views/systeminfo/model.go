@@ -4,13 +4,20 @@
 package systeminfoview
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"swarmcli/docker"
 
 	"github.com/briandowns/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"golang.org/x/mod/semver"
 )
 
 type Model struct {
@@ -19,7 +26,10 @@ type Model struct {
 	// We don't need a viewport here, as we will use a fixed size for the content.
 	content string
 
-	version string
+	version         string
+	edition         string
+	latest          string
+	versionCheckURL string
 
 	context        string
 	cpuUsage       string
@@ -48,25 +58,197 @@ type Model struct {
 	memBlinkCount int
 }
 
+const (
+	defaultEdition         = "ce"
+	defaultVersionCheckURL = "https://swarmcli.io/api/v1/version"
+	versionCheckDisableEnv = "SWARMCLI_DISABLE_VERSION_CHECK"
+	versionCheckTimeout    = 4 * time.Second
+)
+
+type versionCheckRequest struct {
+	Version string `json:"version"`
+	Edition string `json:"edition"`
+}
+
+type versionCheckResponse struct {
+	LatestVersion string `json:"latestVersion"`
+}
+
 // Create a new instance
-func New(deps docker.Deps, version string) *Model {
+func New(deps docker.Deps, version, edition string) *Model {
 	// Get initial context synchronously to display immediately
 	context, _ := deps.ClusterInfo.GetCurrentContext()
+	normalizedEdition := normalizeEdition(edition)
+
 	return &Model{
-		deps:           deps,
-		content:        content(context, version, "", "", 0, 0),
-		version:        version,
-		context:        context,
-		updateInterval: 8 * time.Second,
-		lastUpdate:     time.Now(),
-		loadingCPU:     true,
-		loadingMem:     true,
-		firstLoad:      true,
+		deps:            deps,
+		content:         content(context, version, "", "", 0, 0),
+		version:         version,
+		edition:         normalizedEdition,
+		versionCheckURL: defaultVersionCheckURL,
+		context:         context,
+		updateInterval:  8 * time.Second,
+		lastUpdate:      time.Now(),
+		loadingCPU:      true,
+		loadingMem:      true,
+		firstLoad:       true,
 	}
 }
 
 func (m *Model) Init() tea.Cmd {
-	return tea.Batch(m.tickCmd(), m.spinnerTickCmd())
+	cmds := []tea.Cmd{m.tickCmd(), m.spinnerTickCmd()}
+	if cmd := m.CheckLatestVersion(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
+	return tea.Batch(cmds...)
+}
+
+func (m *Model) CheckLatestVersion() tea.Cmd {
+	currentVersion := strings.TrimSpace(m.version)
+	currentEdition := normalizeEdition(m.edition)
+	if versionCheckDisabled() {
+		l().Infow("startup version check disabled", "env", versionCheckDisableEnv)
+		return nil
+	}
+
+	return func() tea.Msg {
+		latestVersion, err := fetchLatestVersion(m.versionCheckURL, currentVersion, currentEdition)
+		if err != nil {
+			l().Infow("startup version check failed", "version", currentVersion, "edition", currentEdition, "error", err)
+			return NoVersionUpdateMsg{}
+		}
+
+		if !shouldShowLatestVersion(currentVersion, latestVersion) {
+			return NoVersionUpdateMsg{}
+		}
+
+		return LatestVersionMsg{
+			latestVersion: latestVersion,
+		}
+	}
+}
+
+func normalizeEdition(edition string) string {
+	normalizedEdition := strings.TrimSpace(strings.ToLower(edition))
+	if normalizedEdition == "" {
+		return defaultEdition
+	}
+
+	return normalizedEdition
+}
+
+func versionCheckDisabled() bool {
+	disabled, err := strconv.ParseBool(strings.TrimSpace(os.Getenv(versionCheckDisableEnv)))
+	return err == nil && disabled
+}
+
+func shouldShowLatestVersion(currentVersion, latestVersion string) bool {
+	latestVersion = strings.TrimSpace(latestVersion)
+	if latestVersion == "" {
+		return false
+	}
+
+	if isNewerVersion(currentVersion, latestVersion) {
+		return true
+	}
+
+	// For dev/non-semver builds, still surface latest stable release.
+	currentOK := isSemver(currentVersion)
+	latestOK := isSemver(latestVersion)
+	if !currentOK && latestOK {
+		return true
+	}
+
+	return false
+}
+
+func fetchLatestVersion(checkURL, currentVersion, edition string) (string, error) {
+	edition = normalizeEdition(edition)
+	checkURL = strings.TrimSpace(checkURL)
+	if checkURL == "" {
+		return "", fmt.Errorf("version API URL is empty")
+	}
+
+	payload := versionCheckRequest{
+		Version: currentVersion,
+		Edition: edition,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal version payload: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, checkURL, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("build version request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: versionCheckTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("send version request: %w", err)
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			l().Debugw("version response body close failed", "error", closeErr)
+		}
+	}()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("version API status: %s", resp.Status)
+	}
+
+	var decoded versionCheckResponse
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		return "", fmt.Errorf("decode version response: %w", err)
+	}
+
+	return strings.TrimSpace(decoded.LatestVersion), nil
+}
+
+func isNewerVersion(currentVersion, latestVersion string) bool {
+	cmp, ok := compareVersionStrings(latestVersion, currentVersion)
+	return ok && cmp > 0
+}
+
+func compareVersionStrings(a, b string) (int, bool) {
+	normalizedA, ok := normalizeSemver(a)
+	if !ok {
+		return 0, false
+	}
+	normalizedB, ok := normalizeSemver(b)
+	if !ok {
+		return 0, false
+	}
+
+	return semver.Compare(normalizedA, normalizedB), true
+}
+
+func isSemver(version string) bool {
+	_, ok := normalizeSemver(version)
+	return ok
+}
+
+func normalizeSemver(version string) (string, bool) {
+	normalized := strings.TrimSpace(version)
+	if normalized == "" {
+		return "", false
+	}
+
+	if strings.HasPrefix(normalized, "V") {
+		normalized = "v" + normalized[1:]
+	} else if !strings.HasPrefix(normalized, "v") {
+		normalized = "v" + normalized
+	}
+
+	if !semver.IsValid(normalized) {
+		return "", false
+	}
+
+	return normalized, true
 }
 
 func (m *Model) tickCmd() tea.Cmd {

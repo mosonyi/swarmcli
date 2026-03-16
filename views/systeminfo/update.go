@@ -5,6 +5,7 @@ package systeminfoview
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/briandowns/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -17,6 +18,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.SetContent(msg)
 		// Trigger slow status load right after fast values
 		return m.LoadSlowStatus()
+
+	case LatestVersionMsg:
+		m.latest = msg.latestVersion
+		m.content = m.buildContent()
+		return nil
+
+	case NoVersionUpdateMsg:
+		return nil
 
 	case SlowStatusMsg:
 		m.updateCPUMem(msg)
@@ -94,8 +103,26 @@ func (m *Model) buildContent() string {
 	}
 
 	return content(
-		m.context, m.version, cpu, mem, m.containerCount, m.serviceCount,
+		m.context, m.versionDisplay(), cpu, mem, m.containerCount, m.serviceCount,
 	)
+}
+
+func (m *Model) versionDisplay() string {
+	if strings.TrimSpace(m.latest) == "" {
+		return m.version
+	}
+
+	latest := strings.TrimSpace(m.latest)
+	if !strings.HasPrefix(strings.ToLower(latest), "v") {
+		latest = "v" + latest
+	}
+
+	hint := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("214")).
+		Bold(true).
+		Render("⚡" + latest)
+
+	return m.version + " " + hint
 }
 
 func content(context, version, cpu, mem string, containers, services int) string {

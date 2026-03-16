@@ -26,6 +26,10 @@ type Model struct {
 // EditionLabel is rendered below the logo. Override in init() to customise.
 var EditionLabel = "Community Edition"
 
+func SetEditionLabel(label string) {
+	EditionLabel = label
+}
+
 const defaultMinColWidth = 20
 
 func New(width, height int) *Model {

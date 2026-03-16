@@ -49,9 +49,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, watchEventsCmd()
 	case snapshotLoadedMsg:
 		if msg.Err != nil {
-			m.showAppError(fmt.Sprintf("Error loading snapshot: %v", msg.Err), contextsview.ViewName)
+			if m.previousContext != "" {
+				_ = docker.UseContext(m.previousContext)
+				docker.ResetClient()
+				m.previousContext = ""
+				m.showAppError(
+					fmt.Sprintf("Error loading snapshot: %v\n\nReverted to previous context.", msg.Err),
+					contextsview.ViewName,
+				)
+			} else {
+				m.showAppError(fmt.Sprintf("Error loading snapshot: %v", msg.Err), contextsview.ViewName)
+			}
 			return m, nil
 		}
+		m.previousContext = ""
 		// Replace loading with stacks view
 		cmd := m.replaceView(stacksview.ViewName, nil)
 		return m, cmd
@@ -217,6 +228,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case contextsview.ContextChangedNotification:
 		// Context has changed - show loading view then navigate to stacks
+		m.previousContext = msg.PreviousContext
 		// Close cached Docker client so a fresh one is created for the new context
 		docker.ResetClient()
 		// Invalidate snapshot cache so stacks load fresh data for new context
@@ -247,8 +259,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmd := m.replaceView(fallback, nil)
 				return m, cmd
 			}
-			cmd := m.goBack()
-			return m, cmd
+			return m, nil
 		}
 		cmd := m.delegateToCurrentView(msg)
 		return m, cmd

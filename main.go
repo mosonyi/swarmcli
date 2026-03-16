@@ -14,15 +14,17 @@ import (
 // Version information, set by GoReleaser at build time
 var (
 	version = "dev"
+	edition = "ce"
 	commit  = "none"
 	date    = "unknown"
 )
 
 func init() {
 	app.SetVersion(version)
+	app.SetEdition(edition)
 	app.Init()
 	// Log version info for debugging
-	swarmlog.L().Infof("swarmcli version=%s commit=%s date=%s", version, commit, date)
+	swarmlog.L().Infof("swarmcli version=%s edition=%s commit=%s date=%s", version, edition, commit, date)
 }
 
 func main() {

@@ -120,6 +120,10 @@ $ LOG_LEVEL=debug SWARMCLI_ENV=dev go run .
 
 - `SWARMCLI_ENV`: `dev` enables pretty debug logs (default is `prod`).
 - `LOG_LEVEL`: `debug`, `info`, `warn`, `error`, …
+- `SWARMCLI_DISABLE_VERSION_CHECK=true`: disables the startup request to `https://swarmcli.io/api/v1/version` that checks whether a newer release is available.
+
+On startup, SwarmCLI checks for a newer release by sending the current version and edition to `https://swarmcli.io/api/v1/version`. Set `SWARMCLI_DISABLE_VERSION_CHECK=true` to opt out.
+
 Colorize log tails. Not perfect but simple:
 
 ```bash

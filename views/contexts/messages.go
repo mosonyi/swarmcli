@@ -72,7 +72,9 @@ type ContextUpdatedMsg struct {
 
 // ContextChangedNotification is sent to notify the app that the Docker context has changed
 // and should navigate to stacks view
-type ContextChangedNotification struct{}
+type ContextChangedNotification struct {
+	PreviousContext string
+}
 
 // loadContextsCmd loads all Docker contexts
 func (m *Model) loadContextsCmd() func() tea.Msg {
