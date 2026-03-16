@@ -737,6 +737,64 @@ func (m *Model) refreshServiceErrorsFromSnapshot() {
 			}
 		}
 	}
+
+	// Also detect active deployment failures: slots where the newest error task
+	// is more recent than the newest running task, even when running >= desired.
+	// This catches a failed rolling update where old tasks are still running.
+	for svcID, errMsg := range activeDeploymentErrorsByService(snap.Tasks) {
+		if !m.serviceHasError[svcID] {
+			m.serviceHasError[svcID] = true
+			m.serviceErrorText[svcID] = errMsg
+		}
+	}
+}
+
+// activeDeploymentErrorsByService returns a map of serviceID -> error text for
+// services with at least one slot where an error task is newer than the most
+// recent running task (or where there is no running task for the slot).
+// This detects a failed rolling update while the old replicas are still alive.
+func activeDeploymentErrorsByService(tasks []swarm.Task) map[string]string {
+	type slotInfo struct {
+		serviceID string
+		runningAt time.Time
+		errAt     time.Time
+		errMsg    string
+	}
+	bySlot := make(map[string]*slotInfo)
+	for _, t := range tasks {
+		key := taskKeyForService(t)
+		if bySlot[key] == nil {
+			bySlot[key] = &slotInfo{serviceID: t.ServiceID}
+		}
+		s := bySlot[key]
+		at := t.Status.Timestamp
+		if at.IsZero() {
+			at = t.CreatedAt
+		}
+		if t.DesiredState == swarm.TaskStateRunning && t.Status.State == swarm.TaskStateRunning {
+			if s.runningAt.IsZero() || at.After(s.runningAt) {
+				s.runningAt = at
+			}
+		}
+		if t.Status.Err != "" || t.Status.State == swarm.TaskStateFailed || t.Status.State == swarm.TaskStateRejected {
+			if s.errAt.IsZero() || at.After(s.errAt) {
+				s.errAt = at
+				s.errMsg = t.Status.Err
+			}
+		}
+	}
+	result := make(map[string]string)
+	for _, s := range bySlot {
+		if s.errAt.IsZero() {
+			continue
+		}
+		if s.runningAt.IsZero() || s.errAt.After(s.runningAt) {
+			if _, seen := result[s.serviceID]; !seen {
+				result[s.serviceID] = s.errMsg
+			}
+		}
+	}
+	return result
 }
 
 func latestTasksByServiceKey(tasks []swarm.Task) []swarm.Task {
