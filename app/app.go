@@ -44,13 +44,13 @@ func SetEdition(e string) {
 }
 
 func editionLabel(e string) string {
-	switch normalizeEdition(e) {
+	switch e {
 	case "ce":
 		return "Community Edition"
 	case "be":
 		return "Business Edition"
 	default:
-		return strings.ToUpper(strings.TrimSpace(e)) + " Edition"
+		return strings.ToUpper(e) + " Edition"
 	}
 }
 
