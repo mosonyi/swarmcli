@@ -16,6 +16,7 @@ import (
 	"swarmcli/views/confirmdialog"
 	helpview "swarmcli/views/help"
 	servicesview "swarmcli/views/services"
+	"swarmcli/views/taskutil"
 	"swarmcli/views/view"
 	"time"
 
@@ -1006,7 +1007,7 @@ func (m *Model) setStacks(stacks []docker.StackEntry) {
 			svcRunning[svc.ID] = 0
 		}
 
-		latestTasks := latestTasksByServiceKey(snap.Tasks)
+		latestTasks := taskutil.LatestTasksByServiceKey(snap.Tasks)
 
 		for _, t := range latestTasks {
 			if t.DesiredState == swarm.TaskStateRunning && t.Status.State == swarm.TaskStateRunning {
@@ -1101,7 +1102,7 @@ func (m *Model) setStacks(stacks []docker.StackEntry) {
 
 		// Also detect active deployment failures: slots where newest error task
 		// is more recent than the newest running task, even when service is at capacity.
-		for svcID, errMsg := range activeDeploymentErrorsByService(snap.Tasks) {
+		for svcID, errMsg := range taskutil.ActiveDeploymentErrorsByService(snap.Tasks) {
 			stackName := svcToStack[svcID]
 			if stackName == "" || m.stackHasError[stackName] {
 				continue
@@ -1153,95 +1154,6 @@ func (m *Model) setStacks(stacks []docker.StackEntry) {
 	} else {
 		l().Warn("StacksView.setStacks: View not ready yet")
 	}
-}
-
-// activeDeploymentErrorsByService returns a map of serviceID -> error text for
-// services with at least one slot where an error task is newer than the most
-// recent running task (or where there is no running task for the slot).
-// This detects a failed rolling update while the old replicas are still alive.
-func activeDeploymentErrorsByService(tasks []swarm.Task) map[string]string {
-	type slotInfo struct {
-		serviceID string
-		runningAt time.Time
-		errAt     time.Time
-		errMsg    string
-	}
-	bySlot := make(map[string]*slotInfo)
-	for _, t := range tasks {
-		key := taskKeyForService(t)
-		if bySlot[key] == nil {
-			bySlot[key] = &slotInfo{serviceID: t.ServiceID}
-		}
-		s := bySlot[key]
-		at := t.Status.Timestamp
-		if at.IsZero() {
-			at = t.CreatedAt
-		}
-		if t.DesiredState == swarm.TaskStateRunning && t.Status.State == swarm.TaskStateRunning {
-			if s.runningAt.IsZero() || at.After(s.runningAt) {
-				s.runningAt = at
-			}
-		}
-		if t.Status.Err != "" || t.Status.State == swarm.TaskStateFailed || t.Status.State == swarm.TaskStateRejected {
-			if s.errAt.IsZero() || at.After(s.errAt) {
-				s.errAt = at
-				s.errMsg = t.Status.Err
-			}
-		}
-	}
-	result := make(map[string]string)
-	for _, s := range bySlot {
-		if s.errAt.IsZero() {
-			continue
-		}
-		if s.runningAt.IsZero() || s.errAt.After(s.runningAt) {
-			if _, seen := result[s.serviceID]; !seen {
-				result[s.serviceID] = s.errMsg
-			}
-		}
-	}
-	return result
-}
-
-func latestTasksByServiceKey(tasks []swarm.Task) []swarm.Task {
-	latest := make(map[string]swarm.Task)
-	latestAt := make(map[string]time.Time)
-	latestWantsRunning := make(map[string]bool)
-	for _, t := range tasks {
-		key := taskKeyForService(t)
-		at := t.Status.Timestamp
-		if at.IsZero() {
-			at = t.CreatedAt
-		}
-		wantsRunning := t.DesiredState == swarm.TaskStateRunning
-		if _, seen := latest[key]; !seen {
-			latest[key] = t
-			latestAt[key] = at
-			latestWantsRunning[key] = wantsRunning
-		} else if wantsRunning && !latestWantsRunning[key] {
-			// Upgrade: current best is terminal, this one wants running.
-			latest[key] = t
-			latestAt[key] = at
-			latestWantsRunning[key] = true
-		} else if wantsRunning == latestWantsRunning[key] && at.After(latestAt[key]) {
-			// Same priority tier: keep the more recent task.
-			latest[key] = t
-			latestAt[key] = at
-		}
-	}
-
-	res := make([]swarm.Task, 0, len(latest))
-	for _, t := range latest {
-		res = append(res, t)
-	}
-	return res
-}
-
-func taskKeyForService(t swarm.Task) string {
-	if t.Slot > 0 {
-		return fmt.Sprintf("%s:%d", t.ServiceID, t.Slot)
-	}
-	return fmt.Sprintf("%s:%s", t.ServiceID, t.NodeID)
 }
 
 // After loading stacks, set RenderItem dynamically with correct column width
