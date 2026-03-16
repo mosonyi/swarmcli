@@ -16,6 +16,7 @@ import (
 	inspectview "swarmcli/views/inspect"
 	logsview "swarmcli/views/logs"
 	"swarmcli/views/scaledialog"
+	"swarmcli/views/taskutil"
 	"swarmcli/views/view"
 	"time"
 
@@ -653,7 +654,7 @@ func (m *Model) refreshServiceErrorsFromSnapshot() {
 		svcRunning[svc.ID] = 0
 	}
 
-	latestTasks := latestTasksByServiceKey(snap.Tasks)
+	latestTasks := taskutil.LatestTasksByServiceKey(snap.Tasks)
 
 	for _, t := range latestTasks {
 		if t.DesiredState == swarm.TaskStateRunning && t.Status.State == swarm.TaskStateRunning {
@@ -737,47 +738,16 @@ func (m *Model) refreshServiceErrorsFromSnapshot() {
 			}
 		}
 	}
-}
 
-func latestTasksByServiceKey(tasks []swarm.Task) []swarm.Task {
-	latest := make(map[string]swarm.Task)
-	latestAt := make(map[string]time.Time)
-	latestWantsRunning := make(map[string]bool)
-	for _, t := range tasks {
-		key := taskKeyForService(t)
-		at := t.Status.Timestamp
-		if at.IsZero() {
-			at = t.CreatedAt
-		}
-		wantsRunning := t.DesiredState == swarm.TaskStateRunning
-		if _, seen := latest[key]; !seen {
-			latest[key] = t
-			latestAt[key] = at
-			latestWantsRunning[key] = wantsRunning
-		} else if wantsRunning && !latestWantsRunning[key] {
-			// Upgrade: current best is terminal, this one wants running.
-			latest[key] = t
-			latestAt[key] = at
-			latestWantsRunning[key] = true
-		} else if wantsRunning == latestWantsRunning[key] && at.After(latestAt[key]) {
-			// Same priority tier: keep the more recent task.
-			latest[key] = t
-			latestAt[key] = at
+	// Also detect active deployment failures: slots where the newest error task
+	// is more recent than the newest running task, even when running >= desired.
+	// This catches a failed rolling update where old tasks are still running.
+	for svcID, errMsg := range taskutil.ActiveDeploymentErrorsByService(snap.Tasks) {
+		if !m.serviceHasError[svcID] {
+			m.serviceHasError[svcID] = true
+			m.serviceErrorText[svcID] = errMsg
 		}
 	}
-
-	res := make([]swarm.Task, 0, len(latest))
-	for _, t := range latest {
-		res = append(res, t)
-	}
-	return res
-}
-
-func taskKeyForService(t swarm.Task) string {
-	if t.Slot > 0 {
-		return fmt.Sprintf("%s:%d", t.ServiceID, t.Slot)
-	}
-	return fmt.Sprintf("%s:%s", t.ServiceID, t.NodeID)
 }
 
 // computeColWidths centralizes column width calculation so header and rows
