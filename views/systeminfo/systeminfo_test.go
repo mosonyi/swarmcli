@@ -210,7 +210,7 @@ func TestCheckLatestVersion_NoMessageWhenNotNewer(t *testing.T) {
 	require.True(t, ok)
 }
 
-func TestCheckLatestVersion_FailureReturnsNilMsg(t *testing.T) {
+func TestCheckLatestVersion_FailureReturnsNoUpdate(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("boom"))
