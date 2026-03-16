@@ -259,8 +259,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmd := m.replaceView(fallback, nil)
 				return m, cmd
 			}
-			cmd := m.goBack()
-			return m, cmd
+			return m, nil
 		}
 		cmd := m.delegateToCurrentView(msg)
 		return m, cmd
