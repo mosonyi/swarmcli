@@ -54,3 +54,8 @@ type TasksLoadedMsg struct {
 	ServiceID string
 	Tasks     []docker.TaskEntry
 }
+
+// AllTasksLoadedMsg carries refreshed tasks for all expanded services at once.
+type AllTasksLoadedMsg struct {
+	Tasks map[string][]docker.TaskEntry
+}

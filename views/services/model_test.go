@@ -302,6 +302,21 @@ func TestTasksLoadedMsg_StoresTasks(t *testing.T) {
 	require.Len(t, m.serviceTasks["id-web"], 1)
 }
 
+func TestAllTasksLoadedMsg_StoresAllTasks(t *testing.T) {
+	m := testModel()
+	loadServices(m, fakeEntries("web", "api"))
+	m.expandedServices["id-web"] = true
+	m.expandedServices["id-api"] = true
+	m.Update(AllTasksLoadedMsg{
+		Tasks: map[string][]docker.TaskEntry{
+			"id-web": {{ID: "t1", Name: "web.1"}},
+			"id-api": {{ID: "t2", Name: "api.1"}, {ID: "t3", Name: "api.2"}},
+		},
+	})
+	require.Len(t, m.serviceTasks["id-web"], 1)
+	require.Len(t, m.serviceTasks["id-api"], 2)
+}
+
 // --- Key routing tests ---
 
 func TestKey_S_OpensScaleDialog(t *testing.T) {

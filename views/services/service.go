@@ -93,37 +93,43 @@ func (m *Model) checkServicesCmd(lastHash uint64, filterType FilterType, nodeID,
 	}
 }
 
-// refreshExpandedTasksCmd refreshes tasks for all expanded services
+// refreshExpandedTasksCmd refreshes tasks for all expanded services.
+// It ensures the snapshot is fresh before reading tasks so that expanded
+// task rows update on the fly instead of showing stale cached data.
 func (m *Model) refreshExpandedTasksCmd(expandedServices map[string]bool) tea.Cmd {
 	if len(expandedServices) == 0 {
 		return nil
 	}
 
+	snapshotOps := m.deps.Snapshot
 	taskOps := m.deps.Tasks
 
-	// Create a batch of commands to fetch tasks for each expanded service
-	var cmds []tea.Cmd
-	for serviceID, expanded := range expandedServices {
+	// Copy expanded service IDs to avoid closing over the mutable map.
+	var serviceIDs []string
+	for sid, expanded := range expandedServices {
 		if expanded {
-			// Capture serviceID in closure
-			sid := serviceID
-			cmds = append(cmds, func() tea.Msg {
-				tasks, err := taskOps.GetTasksForService(sid)
-				if err != nil {
-					l().Errorf("Failed to refresh tasks for service %s: %v", sid, err)
-					tasks = []docker.TaskEntry{}
-				}
-				return TasksLoadedMsg{
-					ServiceID: sid,
-					Tasks:     tasks,
-				}
-			})
+			serviceIDs = append(serviceIDs, sid)
 		}
 	}
-
-	if len(cmds) == 0 {
+	if len(serviceIDs) == 0 {
 		return nil
 	}
 
-	return tea.Batch(cmds...)
+	return func() tea.Msg {
+		// Ensure the snapshot is fresh before reading tasks.
+		if _, err := snapshotOps.GetOrRefreshSnapshot(); err != nil {
+			l().Errorf("refreshExpandedTasksCmd: GetOrRefreshSnapshot failed: %v", err)
+		}
+
+		result := make(map[string][]docker.TaskEntry, len(serviceIDs))
+		for _, sid := range serviceIDs {
+			tasks, err := taskOps.GetTasksForService(sid)
+			if err != nil {
+				l().Errorf("Failed to refresh tasks for service %s: %v", sid, err)
+				tasks = []docker.TaskEntry{}
+			}
+			result[sid] = tasks
+		}
+		return AllTasksLoadedMsg{Tasks: result}
+	}
 }
