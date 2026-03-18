@@ -102,6 +102,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.setRenderItem()
 		return nil
 
+	case AllTasksLoadedMsg:
+		for sid, tasks := range msg.Tasks {
+			m.serviceTasks[sid] = tasks
+		}
+		m.setRenderItem()
+		return nil
+
 	case tea.WindowSizeMsg:
 		m.List.Viewport.Width = msg.Width
 		m.List.Viewport.Height = msg.Height

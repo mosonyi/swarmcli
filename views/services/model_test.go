@@ -291,6 +291,16 @@ func TestTickMsg_NotVisible_SchedulesTick(t *testing.T) {
 	require.NotNil(t, cmd)
 }
 
+func TestOnEnter_RestartsTickLoop(t *testing.T) {
+	m := testModel()
+	m.Visible = true
+	loadServices(m, fakeEntries("web"))
+
+	// Simulate returning from another view (e.g. logs) via goBack → OnEnter.
+	cmd := m.OnEnter()
+	require.NotNil(t, cmd, "OnEnter must return a tick command to restart polling")
+}
+
 func TestTasksLoadedMsg_StoresTasks(t *testing.T) {
 	m := testModel()
 	loadServices(m, fakeEntries("web"))
@@ -300,6 +310,21 @@ func TestTasksLoadedMsg_StoresTasks(t *testing.T) {
 		Tasks:     []docker.TaskEntry{{ID: "t1", Name: "web.1"}},
 	})
 	require.Len(t, m.serviceTasks["id-web"], 1)
+}
+
+func TestAllTasksLoadedMsg_StoresAllTasks(t *testing.T) {
+	m := testModel()
+	loadServices(m, fakeEntries("web", "api"))
+	m.expandedServices["id-web"] = true
+	m.expandedServices["id-api"] = true
+	m.Update(AllTasksLoadedMsg{
+		Tasks: map[string][]docker.TaskEntry{
+			"id-web": {{ID: "t1", Name: "web.1"}},
+			"id-api": {{ID: "t2", Name: "api.1"}, {ID: "t3", Name: "api.2"}},
+		},
+	})
+	require.Len(t, m.serviceTasks["id-web"], 1)
+	require.Len(t, m.serviceTasks["id-api"], 2)
 }
 
 // --- Key routing tests ---
