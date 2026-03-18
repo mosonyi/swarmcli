@@ -291,6 +291,16 @@ func TestTickMsg_NotVisible_SchedulesTick(t *testing.T) {
 	require.NotNil(t, cmd)
 }
 
+func TestOnEnter_RestartsTickLoop(t *testing.T) {
+	m := testModel()
+	m.Visible = true
+	loadServices(m, fakeEntries("web"))
+
+	// Simulate returning from another view (e.g. logs) via goBack → OnEnter.
+	cmd := m.OnEnter()
+	require.NotNil(t, cmd, "OnEnter must return a tick command to restart polling")
+}
+
 func TestTasksLoadedMsg_StoresTasks(t *testing.T) {
 	m := testModel()
 	loadServices(m, fakeEntries("web"))

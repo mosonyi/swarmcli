@@ -173,7 +173,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 }
 
 func (m *Model) OnEnter() tea.Cmd {
-	return nil
+	return tickCmd()
 }
 
 func (m *Model) OnExit() tea.Cmd {
