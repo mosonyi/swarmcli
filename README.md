@@ -164,6 +164,25 @@ Impeccable project hygiene is the backbone of a thriving ecosystem.
 - **[Code of Conduct](CODE_OF_CONDUCT.md)**: Expectations for our community.
 - **[License](LICENSE)**: Apache 2.0.
 
+## Releasing
+
+Releases are fully automated — **no manual version file to update**. The git tag is the single source of truth.
+
+```bash
+git tag v1.5.0
+git push origin v1.5.0
+```
+
+Pushing a `v*` tag triggers the [release workflow](.github/workflows/release.yml) which:
+
+1. Injects the tag into the binary via GoReleaser ldflags (`-X main.version=1.5.0`)
+2. Builds for Linux, macOS, Windows, and FreeBSD (multiple architectures)
+3. Publishes a GitHub release with auto-generated changelog
+4. Pushes multi-arch Docker images to Docker Hub
+5. Updates the [Homebrew tap](https://github.com/Eldara-Tech/homebrew-tap) and [Scoop bucket](https://github.com/Eldara-Tech/scoop-bucket)
+
+The in-app `Version:` header reads from the injected value. Local builds without GoReleaser show `dev`.
+
 ---
 
 <div align="center">
