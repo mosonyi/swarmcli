@@ -126,6 +126,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+			// If command input is already visible, forward ":" as text
+			if m.commandInput.Visible() {
+				cmd := m.commandInput.Update(msg)
+				return m, cmd
+			}
+			// If search input is actively being edited, forward ":" as text
+			if m.searchInput.Visible() && m.searchInput.Editing() {
+				cmd := m.searchInput.Update(msg)
+				return m, cmd
+			}
+			// If view has active internal search (ctrl+f), let it handle ":"
+			if searchView, ok := m.currentView.(interface{ IsSearching() bool }); ok {
+				if searchView.IsSearching() {
+					cmd := m.currentView.Update(msg)
+					return m, cmd
+				}
+			}
+
 			if m.searchInput.Visible() {
 				return m, nil
 			}
@@ -141,7 +159,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				resizeCmd := handleViewResize(m.currentView, m.viewport.Width, adjHeight, false)
 				return m, tea.Batch(cmd, resizeCmd)
 			}
-			// If already visible, consume it and do nothing
 			return m, nil
 		}
 
@@ -154,6 +171,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmd := m.currentView.Update(msg)
 					return m, cmd
 				}
+			}
+			// If command input is visible, forward "/" as text
+			if m.commandInput.Visible() {
+				cmd := m.commandInput.Update(msg)
+				return m, cmd
+			}
+			// If search input is actively being edited, forward "/" as text
+			if m.searchInput.Visible() && m.searchInput.Editing() {
+				cmd := m.searchInput.Update(msg)
+				return m, cmd
 			}
 			// If view doesn't implement Filterable, let it handle / itself
 			// (logs and inspect views have their own / search)
@@ -168,10 +195,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmd := m.currentView.Update(msg)
 					return m, cmd
 				}
-			}
-			// Don't open search if command input is visible
-			if m.commandInput.Visible() {
-				return m, nil
 			}
 			// If search box is passive (visible but not editing), resume editing
 			if m.searchInput.Visible() && !m.searchInput.Editing() {
