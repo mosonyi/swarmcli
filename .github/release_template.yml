@@ -9,17 +9,20 @@ categories:
   - title: '⚡ Breaking API Changes'
     labels:
       - 'C1-breaking-change'
-  - title: ' [Bug Fixes] '
-    label:
-      - 'A2-bugfix'
   - title: '[UI]'
     labels:
       - 'A0-ui'
   - title: ' [Feature] '
-    label:
+    labels:
       - 'A1-feature'
+  - title: ' [Bug Fixes] '
+    labels:
+      - 'A2-bugfix'
+  - title: ' [Dependencies] '
+    labels:
+      - 'D0-dependency'
   - title: ' [Technical] '
-    label:
+    labels:
       - 'A3-technical'
 change-template: '- $TITLE (#$NUMBER) @$AUTHOR '
 change-title-escapes: '\<*_&' # You can add # and @ to disable mentions, and add ` to disable code blocks.
