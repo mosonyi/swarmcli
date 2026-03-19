@@ -9,6 +9,7 @@ updates:
       - A3-technical
       - B0-low-priority
       - C0-breaks-nothing
+      - D0-dependency
 
   - package-ecosystem: github-actions
     directory: /
@@ -18,6 +19,7 @@ updates:
       - A3-technical
       - B0-low-priority
       - C0-breaks-nothing
+      - D0-dependency
 
   - package-ecosystem: docker
     directory: /
@@ -27,3 +29,4 @@ updates:
       - A3-technical
       - B0-low-priority
       - C0-breaks-nothing
+      - D0-dependency
