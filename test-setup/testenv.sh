@@ -160,23 +160,7 @@ cmd_down() {
   # Bring down compose services and volumes
   run_or_warn $DOCKER_COMPOSE down -v
 
-  # Remove stopped containers
-  info "🗑 Removing all stopped containers..."
-  docker container prune -f || warn "Failed to prune containers"
-
-  # Remove unused volumes
-  info "🗑 Removing unused volumes..."
-  docker volume prune -f || warn "Failed to prune volumes"
-
-  # Remove unused networks
-  info "🗑 Removing unused networks..."
-  docker network prune -f || warn "Failed to prune networks"
-
-  # Remove dangling images
-  info "🗑 Removing dangling images..."
-  docker image prune -f || warn "Failed to prune images"
-
-  ok "Swarm environment and unused resources cleaned up."
+  ok "Swarm environment torn down."
 }
 
 cmd_clean() {
