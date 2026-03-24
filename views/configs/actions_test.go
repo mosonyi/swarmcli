@@ -199,6 +199,31 @@ func TestCheckConfigsCmd_NoChange_ReturnsPollRetry(t *testing.T) {
 	require.True(t, isPollRetry, "should return PollRetryMsg when no change")
 }
 
+func TestCheckConfigsCmd_HashMatchesAfterLoad(t *testing.T) {
+	configs := []swarm.Config{
+		{ID: "id1", Meta: swarm.Meta{Version: swarm.Version{Index: 1}}, Spec: swarm.ConfigSpec{Annotations: swarm.Annotations{Name: "alpha"}}},
+		{ID: "id2", Meta: swarm.Meta{Version: swarm.Version{Index: 2}}, Spec: swarm.ConfigSpec{Annotations: swarm.Annotations{Name: "bravo"}}},
+	}
+	mock := noopConfigOps()
+	mock.listConfigsFn = func(_ context.Context) ([]swarm.Config, error) {
+		return configs, nil
+	}
+	m := testModel(func(m *Model) { m.deps.Configs = mock })
+
+	// Simulate initial load so m.lastSnapshot is set
+	wrapped := make([]docker.ConfigWithDecodedData, len(configs))
+	for i, c := range configs {
+		wrapped[i] = docker.ConfigWithDecodedData{Config: c}
+	}
+	m.Update(configsLoadedMsg(wrapped))
+
+	// Poll with the stored snapshot — same data must NOT trigger a reload
+	cmd := m.checkConfigsCmd(m.lastSnapshot)
+	msg := runCmd(cmd)
+	_, isLoaded := msg.(configsLoadedMsg)
+	require.False(t, isLoaded, "hash from configsLoadedMsg must match hash from checkConfigsCmd for identical data")
+}
+
 func TestRotateConfigCmd_Success(t *testing.T) {
 	rotated := false
 	mock := noopConfigOps()

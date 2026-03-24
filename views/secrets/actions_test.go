@@ -152,3 +152,28 @@ func TestCheckSecretsCmd_NoChange_ReturnsPollRetry(t *testing.T) {
 	_, isPollRetry := msg.(PollRetryMsg)
 	require.True(t, isPollRetry, "should return PollRetryMsg when no change")
 }
+
+func TestCheckSecretsCmd_HashMatchesAfterLoad(t *testing.T) {
+	secrets := []swarm.Secret{
+		{ID: "id1", Meta: swarm.Meta{Version: swarm.Version{Index: 1}}, Spec: swarm.SecretSpec{Annotations: swarm.Annotations{Name: "alpha"}}},
+		{ID: "id2", Meta: swarm.Meta{Version: swarm.Version{Index: 2}}, Spec: swarm.SecretSpec{Annotations: swarm.Annotations{Name: "bravo"}}},
+	}
+	mock := noopSecretOps()
+	mock.listSecretsFn = func(_ context.Context) ([]swarm.Secret, error) {
+		return secrets, nil
+	}
+	m := testModel(func(m *Model) { m.deps.Secrets = mock })
+
+	// Simulate initial load so m.lastSnapshot is set
+	wrapped := make([]docker.SecretWithDecodedData, len(secrets))
+	for i, s := range secrets {
+		wrapped[i] = docker.SecretWithDecodedData{Secret: s}
+	}
+	m.Update(secretsLoadedMsg(wrapped))
+
+	// Poll with the stored snapshot — same data must NOT trigger a reload
+	cmd := m.checkSecretsCmd(m.lastSnapshot)
+	msg := runCmd(cmd)
+	_, isLoaded := msg.(secretsLoadedMsg)
+	require.False(t, isLoaded, "hash from secretsLoadedMsg must match hash from checkSecretsCmd for identical data")
+}
