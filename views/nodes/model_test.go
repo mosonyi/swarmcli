@@ -203,33 +203,33 @@ func TestName(t *testing.T) {
 	require.Equal(t, "nodes", m.Name())
 }
 
-func TestHasActiveDialog_Default(t *testing.T) {
+func TestCapturesInput_Default(t *testing.T) {
 	m := testModel()
-	require.False(t, m.HasActiveDialog())
+	require.False(t, m.CapturesInput())
 }
 
-func TestHasActiveDialog_ConfirmVisible(t *testing.T) {
+func TestCapturesInput_ConfirmVisible(t *testing.T) {
 	m := testModel()
 	m.confirmDialog.Visible = true
-	require.True(t, m.HasActiveDialog())
+	require.True(t, m.CapturesInput())
 }
 
-func TestHasActiveDialog_AvailabilityDialog(t *testing.T) {
+func TestCapturesInput_AvailabilityDialog(t *testing.T) {
 	m := testModel()
 	m.availabilityDialog = true
-	require.True(t, m.HasActiveDialog())
+	require.True(t, m.CapturesInput())
 }
 
-func TestHasActiveDialog_LabelInputDialog(t *testing.T) {
+func TestCapturesInput_LabelInputDialog(t *testing.T) {
 	m := testModel()
 	m.labelInputDialog = true
-	require.True(t, m.HasActiveDialog())
+	require.True(t, m.CapturesInput())
 }
 
-func TestHasActiveDialog_LabelRemoveDialog(t *testing.T) {
+func TestCapturesInput_LabelRemoveDialog(t *testing.T) {
 	m := testModel()
 	m.labelRemoveDialog = true
-	require.True(t, m.HasActiveDialog())
+	require.True(t, m.CapturesInput())
 }
 
 func TestHasActiveFilter_Default(t *testing.T) {

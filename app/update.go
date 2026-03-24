@@ -91,6 +91,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := m.switchToView(msg.ViewName, msg.Payload)
 		return m, cmd
 
+	case view.GoBackMsg:
+		cmd := m.goBack()
+		return m, cmd
+
 	case tea.WindowSizeMsg:
 		cmd := m.updateForResize(msg)
 		return m, cmd
@@ -115,11 +119,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.String() == ":" {
-			// Check if current view has an active dialog - if so, don't intercept
+			// If current view is capturing input, don't intercept
 			if viewWithDialog, ok := m.currentView.(interface {
-				HasActiveDialog() bool
+				CapturesInput() bool
 			}); ok {
-				if viewWithDialog.HasActiveDialog() {
+				if viewWithDialog.CapturesInput() {
 					// Let the view handle it
 					cmd := m.currentView.Update(msg)
 					return m, cmd
@@ -163,11 +167,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.String() == "/" {
-			// If view has an active dialog, let it handle
+			// If current view is capturing input, let it handle
 			if viewWithDialog, ok := m.currentView.(interface {
-				HasActiveDialog() bool
+				CapturesInput() bool
 			}); ok {
-				if viewWithDialog.HasActiveDialog() {
+				if viewWithDialog.CapturesInput() {
 					cmd := m.currentView.Update(msg)
 					return m, cmd
 				}
@@ -382,9 +386,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	// If current view has an active dialog, forward keys to it first
-	if viewWithDialog, ok := m.currentView.(interface{ HasActiveDialog() bool }); ok {
-		if viewWithDialog.HasActiveDialog() {
+	// If current view is capturing input, forward keys to it first
+	if viewWithDialog, ok := m.currentView.(interface{ CapturesInput() bool }); ok {
+		if viewWithDialog.CapturesInput() {
 			cmd := m.currentView.Update(msg)
 			return m, cmd
 		}
@@ -429,12 +433,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		}
-		// Check if logs view has dialog open
+		// Check if logs view has node select open
 		if logsView, ok := m.currentView.(interface {
 			GetNodeSelectVisible() bool
 		}); ok {
 			if logsView.GetNodeSelectVisible() {
-				// Let the view handle esc to close the dialog
+				// Let the view handle esc
 				cmd := m.currentView.Update(msg)
 				return m, cmd
 			}
@@ -449,12 +453,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		}
-		// Check if contexts view has an active dialog
+		// Check if current view is capturing input
 		if contextsView, ok := m.currentView.(interface {
-			HasActiveDialog() bool
+			CapturesInput() bool
 		}); ok {
-			if contextsView.HasActiveDialog() {
-				// Let the view handle esc to close the dialog
+			if contextsView.CapturesInput() {
+				// Let the view handle esc
 				cmd := m.currentView.Update(msg)
 				return m, cmd
 			}

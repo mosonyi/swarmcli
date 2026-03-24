@@ -155,8 +155,8 @@ func (m *Model) IsSearching() bool {
 	return m.GetSearchMode()
 }
 
-// HasActiveDialog returns true when a modal dialog is open (node selection).
-func (m *Model) HasActiveDialog() bool {
+// CapturesInput returns true when the view is capturing all keyboard input.
+func (m *Model) CapturesInput() bool {
 	return m.getNodeSelectVisible()
 }
 

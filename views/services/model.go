@@ -204,8 +204,8 @@ func (m *Model) ClearSearchQuery() {
 	m.List.Viewport.GotoTop()
 }
 
-// HasActiveDialog reports whether a dialog is currently visible.
-func (m *Model) HasActiveDialog() bool {
+// CapturesInput reports whether the view is currently capturing all keyboard input.
+func (m *Model) CapturesInput() bool {
 	return m.confirmDialog.Visible || m.scaleDialog.Visible
 }
 

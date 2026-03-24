@@ -547,11 +547,11 @@ func TestHasActiveFilter_WithQuery(t *testing.T) {
 	require.True(t, m.HasActiveFilter())
 }
 
-func TestHasActiveDialog(t *testing.T) {
+func TestCapturesInput(t *testing.T) {
 	m := testModel()
-	require.False(t, m.HasActiveDialog())
+	require.False(t, m.CapturesInput())
 	m.setNodeSelectVisible(true)
-	require.True(t, m.HasActiveDialog())
+	require.True(t, m.CapturesInput())
 }
 
 func TestBuildContent_WithFilterQuery(t *testing.T) {

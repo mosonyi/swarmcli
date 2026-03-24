@@ -36,7 +36,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case RefreshTickMsg:
 		// Auto-refresh contexts list every 5 seconds when visible and no dialogs open
-		if m.Visible && !m.HasActiveDialog() && !m.loading {
+		if m.Visible && !m.CapturesInput() && !m.loading {
 			return tea.Batch(
 				m.loadContextsCmd(),
 				tickCmd(),

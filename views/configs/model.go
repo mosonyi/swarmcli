@@ -264,8 +264,8 @@ func (m *Model) OnExit() tea.Cmd {
 	return nil
 }
 
-// HasActiveDialog returns true if a dialog is currently visible
-func (m *Model) HasActiveDialog() bool {
+// CapturesInput reports whether the view is currently capturing all keyboard input.
+func (m *Model) CapturesInput() bool {
 	return m.confirmDialog.Visible || m.errorDialogActive || m.createDialogActive || m.fileBrowserActive
 }
 

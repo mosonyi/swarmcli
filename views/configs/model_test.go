@@ -162,9 +162,9 @@ func TestName(t *testing.T) {
 	require.Equal(t, "configs", m.Name())
 }
 
-func TestHasActiveDialog_Default(t *testing.T) {
+func TestCapturesInput_Default(t *testing.T) {
 	m := testModel()
-	require.False(t, m.HasActiveDialog())
+	require.False(t, m.CapturesInput())
 }
 
 func TestHasActiveFilter_Default(t *testing.T) {

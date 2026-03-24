@@ -19,3 +19,6 @@ type AppErrorMsg struct {
 	Error        string
 	FallbackView string
 }
+
+// GoBackMsg requests the app to pop the current view and return to the previous one.
+type GoBackMsg struct{}
