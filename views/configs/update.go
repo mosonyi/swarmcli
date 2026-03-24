@@ -115,6 +115,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			stableConfigs[i] = stableConfig{
 				ID:      c.Config.ID,
 				Version: c.Config.Version.Index,
+				Name:    c.Config.Spec.Name,
 			}
 		}
 		var err error

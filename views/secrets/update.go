@@ -116,6 +116,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			stableSecrets[i] = stableSecret{
 				ID:      s.Secret.ID,
 				Version: s.Secret.Version.Index,
+				Name:    s.Secret.Spec.Name,
 			}
 		}
 		var err error
