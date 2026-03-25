@@ -1,5 +1,5 @@
 {
-  "name": "Swarm Agent Dev",
+  "name": "SwarmCLI CE Dev Container",
   "build": {
     "dockerfile": "Dockerfile",
     "context": "..",
