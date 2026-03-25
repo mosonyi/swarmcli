@@ -25,5 +25,9 @@ var topLevelViews = map[string]bool{
 	NameLoading: true, NameHelp: true,
 }
 
+// RegisterTopLevel marks a view name as top-level. Called from init() by
+// extension modules to register additional root views.
+func RegisterTopLevel(name string) { topLevelViews[name] = true }
+
 // IsTopLevel reports whether a view name is a top-level (root) view.
 func IsTopLevel(name string) bool { return topLevelViews[name] }
