@@ -30,9 +30,6 @@ func (m *Model) FrameContent() string {
 	)
 	content := m.List.VisibleContent(frame.DesiredContentLines)
 
-	l().Debugf("Rendering stacks view: createDialogActive=%v step=%s fileBrowserActive=%v",
-		m.createDialogActive, m.createDialogStep, m.fileBrowserActive)
-
 	width := frame.FrameWidth
 	if m.createDialogActive {
 		content = ui.OverlayCentered(content, m.renderCreateDialog(), width, 0)
@@ -56,9 +53,6 @@ func (m *Model) View() string {
 
 func (m *Model) renderCreateDialog() string {
 	var lines []string
-
-	l().Debugf("renderCreateDialog: step=%s content=%d bytes path=%s",
-		m.createDialogStep, len(m.createDialogContent), m.createStackPath)
 
 	switch m.createDialogStep {
 	case "source":
