@@ -345,8 +345,8 @@ func (m *Model) IsSwitchPending() bool {
 	return m.switchPending
 }
 
-// HasActiveDialog returns true if any dialog is currently active
-func (m *Model) HasActiveDialog() bool {
+// CapturesInput reports whether the view is currently capturing all keyboard input.
+func (m *Model) CapturesInput() bool {
 	return m.confirmDialog.Visible || m.importInputActive || m.fileBrowserActive || m.errorDialogActive || m.createDialogActive || m.certFileBrowserActive || m.editDialogActive
 }
 

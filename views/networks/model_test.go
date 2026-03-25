@@ -176,27 +176,27 @@ func TestName(t *testing.T) {
 	require.Equal(t, "networks", m.Name())
 }
 
-func TestHasActiveDialog_Default(t *testing.T) {
+func TestCapturesInput_Default(t *testing.T) {
 	m := testModel()
-	require.False(t, m.HasActiveDialog())
+	require.False(t, m.CapturesInput())
 }
 
-func TestHasActiveDialog_ConfirmVisible(t *testing.T) {
+func TestCapturesInput_ConfirmVisible(t *testing.T) {
 	m := testModel()
 	m.confirmDialog.Visible = true
-	require.True(t, m.HasActiveDialog())
+	require.True(t, m.CapturesInput())
 }
 
-func TestHasActiveDialog_CreateDialogActive(t *testing.T) {
+func TestCapturesInput_CreateDialogActive(t *testing.T) {
 	m := testModel()
 	m.createDialogActive = true
-	require.True(t, m.HasActiveDialog())
+	require.True(t, m.CapturesInput())
 }
 
-func TestHasActiveDialog_ErrorDialogActive(t *testing.T) {
+func TestCapturesInput_ErrorDialogActive(t *testing.T) {
 	m := testModel()
 	m.errorDialogActive = true
-	require.True(t, m.HasActiveDialog())
+	require.True(t, m.CapturesInput())
 }
 
 func TestHasActiveFilter_Default(t *testing.T) {

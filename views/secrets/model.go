@@ -161,8 +161,8 @@ func New(width, height int) *Model {
 	return m
 }
 
-// HasActiveDialog returns true if any dialog is currently active
-func (m *Model) HasActiveDialog() bool {
+// CapturesInput reports whether the view is currently capturing all keyboard input.
+func (m *Model) CapturesInput() bool {
 	return m.createDialogActive || m.fileBrowserActive || m.confirmDialog.Visible || m.errorDialogActive
 }
 

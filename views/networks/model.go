@@ -207,10 +207,8 @@ func (m *Model) HasActiveFilter() bool {
 	return m.networksList.Query != ""
 }
 
-// HasActiveDialog reports whether Networks currently has a modal dialog open.
-// The app uses this to route key handling to the view instead of performing
-// global navigation on ESC.
-func (m *Model) HasActiveDialog() bool {
+// CapturesInput reports whether the view is currently capturing all keyboard input.
+func (m *Model) CapturesInput() bool {
 	if m.confirmDialog != nil && m.confirmDialog.Visible {
 		return true
 	}
