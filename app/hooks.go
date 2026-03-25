@@ -16,3 +16,19 @@ var preUpdateHooks []PreUpdateHook
 func RegisterPreUpdateHook(hook PreUpdateHook) {
 	preUpdateHooks = append(preUpdateHooks, hook)
 }
+
+// StartupOverlay is a component displayed on top of the initial TUI view.
+// While Active, the app routes KeyMsg exclusively to its Update and
+// composites its View on top of the rendered output.
+type StartupOverlay interface {
+	Active() bool
+	Update(tea.Msg) tea.Cmd
+	View() string
+}
+
+var startupOverlay StartupOverlay
+
+// SetStartupOverlay registers a startup overlay. Must be called from init().
+func SetStartupOverlay(o StartupOverlay) {
+	startupOverlay = o
+}

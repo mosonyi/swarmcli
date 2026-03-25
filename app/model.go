@@ -4,12 +4,16 @@
 package app
 
 import (
+	"strings"
+
 	"swarmcli/docker"
 	"swarmcli/views/commandinput"
 	"swarmcli/views/confirmdialog"
 	loadingview "swarmcli/views/loading"
 	"swarmcli/views/searchinput"
 	systeminfoview "swarmcli/views/systeminfo"
+
+	"github.com/charmbracelet/lipgloss"
 	"swarmcli/views/view"
 	"swarmcli/views/viewstack"
 
@@ -152,13 +156,29 @@ func (m *Model) replaceView(name string, data any) tea.Cmd {
 	return tea.Batch(exitCmd, resizeCmd, loadCmd, enterCmd)
 }
 
+// StackBarSuffix is optional right-aligned text on the breadcrumb bar.
+// Set from init() to display persistent status (e.g., license mode).
+var StackBarSuffix string
+
 func (m *Model) renderStackBar() string {
 	names := make([]string, 0, m.viewStack.Len()+1)
 	for _, v := range m.viewStack.Views() {
 		names = append(names, v.Name())
 	}
 	names = append(names, m.currentView.Name())
-	return RenderBreadcrumbs(names, 3)
+	result := RenderBreadcrumbs(names, 3)
+	if StackBarSuffix == "" {
+		return result
+	}
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
+	suffix := style.Render(StackBarSuffix)
+	crumbWidth := lipgloss.Width(result)
+	suffixWidth := lipgloss.Width(suffix)
+	gap := m.terminalWidth - crumbWidth - suffixWidth
+	if gap < 2 {
+		return result
+	}
+	return result + strings.Repeat(" ", gap) + suffix
 }
 
 func cmdBar() *commandinput.Model {

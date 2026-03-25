@@ -10,16 +10,39 @@ import tea "github.com/charmbracelet/bubbletea"
 // Registered during init() by extension packages, read-only after startup.
 type Action func(name string) tea.Cmd
 
-var actionRegistry = map[string]Action{}
+type registeredAction struct {
+	guard func() bool // nil = always available
+	fn    Action
+}
+
+var actionRegistry = map[string]registeredAction{}
 
 // RegisterAction registers a named action. Must only be called from init() functions.
-func RegisterAction(name string, fn Action) { actionRegistry[name] = fn }
+func RegisterAction(name string, fn Action) {
+	actionRegistry[name] = registeredAction{fn: fn}
+}
 
-// GetAction returns the action for the given name, if registered.
-func GetAction(name string) (Action, bool) { fn, ok := actionRegistry[name]; return fn, ok }
+// RegisterGatedAction registers an action with a runtime guard.
+// GetAction and HasAction return false when the guard returns false.
+// Must only be called from init() functions.
+func RegisterGatedAction(name string, guard func() bool, fn Action) {
+	actionRegistry[name] = registeredAction{guard: guard, fn: fn}
+}
 
-// HasAction reports whether an action is registered under the given name.
-func HasAction(name string) bool { _, ok := actionRegistry[name]; return ok }
+// GetAction returns the action for the given name, if registered and its guard passes.
+func GetAction(name string) (Action, bool) {
+	a, ok := actionRegistry[name]
+	if !ok || (a.guard != nil && !a.guard()) {
+		return nil, false
+	}
+	return a.fn, true
+}
+
+// HasAction reports whether an action is registered and its guard passes.
+func HasAction(name string) bool {
+	a, ok := actionRegistry[name]
+	return ok && (a.guard == nil || a.guard())
+}
 
 // UnregisterActionForTest removes a registered action. Test-only; not safe for concurrent use.
 func UnregisterActionForTest(name string) { delete(actionRegistry, name) }

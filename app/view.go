@@ -19,7 +19,7 @@ func (m *Model) View() string {
 		header := m.currentView.FrameHeader()
 		content := m.currentView.FrameContent()
 		out := ui.RenderViewFrame(title, header, content, "", m.terminalWidth, m.terminalHeight, true)
-		return m.overlayAppError(out)
+		return m.overlayStartup(m.overlayAppError(out))
 	}
 
 	systemInfo := m.systemInfo.View()
@@ -30,6 +30,10 @@ func (m *Model) View() string {
 		{Key: "?", Desc: "Help"},
 	}
 	if m.currentView.Name() == view.NameHelp {
+		globalHelp = []helpbar.HelpEntry{}
+	}
+	// Suppress global keys when the view captures all input (e.g., shell).
+	if vc, ok := m.currentView.(interface{ CapturesInput() bool }); ok && vc.CapturesInput() {
 		globalHelp = []helpbar.HelpEntry{}
 	}
 
@@ -69,7 +73,7 @@ func (m *Model) View() string {
 			framedView,
 			m.renderStackBar(),
 		)
-		return m.overlayAppError(out)
+		return m.overlayStartup(m.overlayAppError(out))
 	}
 
 	if m.searchInput.Visible() {
@@ -90,7 +94,7 @@ func (m *Model) View() string {
 			framedView,
 			m.renderStackBar(),
 		)
-		return m.overlayAppError(out)
+		return m.overlayStartup(m.overlayAppError(out))
 	}
 
 	if frameHeight < 1 {
@@ -104,7 +108,7 @@ func (m *Model) View() string {
 		framedView,
 		m.renderStackBar(),
 	)
-	return m.overlayAppError(out)
+	return m.overlayStartup(m.overlayAppError(out))
 }
 
 // overlayAppError overlays the app-level error dialog on top of the rendered output.
@@ -113,4 +117,12 @@ func (m *Model) overlayAppError(base string) string {
 		return base
 	}
 	return ui.OverlayCentered(base, m.errorDialog.View(), m.terminalWidth, 0)
+}
+
+// overlayStartup composites the startup overlay on top of the rendered output.
+func (m *Model) overlayStartup(base string) string {
+	if startupOverlay == nil || !startupOverlay.Active() {
+		return base
+	}
+	return ui.OverlayCentered(base, startupOverlay.View(), m.terminalWidth, 0)
 }
