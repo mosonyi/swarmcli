@@ -22,6 +22,17 @@ import (
 )
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Startup overlay captures KeyMsg exclusively while active.
+	if startupOverlay != nil && startupOverlay.Active() {
+		if _, isKey := msg.(tea.KeyMsg); isKey {
+			return m, startupOverlay.Update(msg)
+		}
+		if wsm, ok := msg.(tea.WindowSizeMsg); ok {
+			_ = startupOverlay.Update(wsm)
+			// Fall through — app also handles resize
+		}
+	}
+
 	for _, hook := range preUpdateHooks {
 		if handled, cmd := hook(m.currentView.Name(), msg); handled {
 			return m, cmd
