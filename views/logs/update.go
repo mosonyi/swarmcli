@@ -76,7 +76,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			// When filters are active, skip incremental update; highlightContent will recompute
 		}
-		totalLines := len(m.lines)
 		shouldFollow := m.follow
 		m.mu.Unlock()
 
@@ -85,7 +84,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			if shouldFollow {
 				m.viewport.SetContent(m.buildContent())
 				m.viewport.GotoBottom()
-				l().Debugf("[logsview] auto-scrolled to bottom (follow=true)")
 			} else {
 				// Save current offset before updating content
 				savedOffset := m.viewport.YOffset
@@ -110,10 +108,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				}
 
 				m.viewport.YOffset = newOffset
-				l().Debugf("[logsview] NOT scrolling (follow=false), YOffset=%d->%d (dropped %d lines)", savedOffset, newOffset, linesDropped)
 			}
-			l().Debugf("[logsview] appended line; total=%d YOffset=%d Height=%d TotalLineCount=%d follow=%v",
-				totalLines, m.viewport.YOffset, m.viewport.Height, m.viewport.TotalLineCount(), shouldFollow)
 		}
 		return m.readOneLineCmd()
 
