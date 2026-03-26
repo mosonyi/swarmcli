@@ -112,6 +112,11 @@ func (m *Model) CheckLatestVersion() tea.Cmd {
 		return nil
 	}
 
+	if currentVersion == "dev" {
+		l().Infow("startup version check skipped for dev build")
+		return nil
+	}
+
 	return func() tea.Msg {
 		latestVersion, err := fetchLatestVersion(m.versionCheckURL, currentVersion, currentEdition)
 		if err != nil {
