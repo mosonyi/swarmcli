@@ -223,19 +223,9 @@ func TestCheckLatestVersion_FailureReturnsNoUpdate(t *testing.T) {
 	require.True(t, ok)
 }
 
-func TestCheckLatestVersion_DevBuildShowsLatest(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"latestVersion":"1.3.3","message":"upgrade"}`))
-	}))
-	defer server.Close()
-
+func TestCheckLatestVersion_DevBuildSkipsCheck(t *testing.T) {
 	m := New(testDeps(), "dev", "ce")
-	m.versionCheckURL = server.URL
-	msg := m.CheckLatestVersion()()
-	latestMsg, ok := msg.(LatestVersionMsg)
-	require.True(t, ok)
-	require.Equal(t, "1.3.3", latestMsg.latestVersion)
+	require.Nil(t, m.CheckLatestVersion())
 }
 
 func TestCheckLatestVersion_UsesOverriddenEdition(t *testing.T) {
