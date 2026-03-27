@@ -14,15 +14,15 @@ import (
 // --- mock ---
 
 type mockClusterInfoOps struct {
-	getCurrentContextFn      func() (string, error)
-	getContainerCountFn      func() (int, error)
-	getServiceCountFn        func() (int, error)
-	getSwarmCPUCapacityFn    func() (float64, error)
-	getSwarmMemCapacityFn    func() (int64, error)
-	getSwarmCPUUsageFn       func() (string, error)
-	getSwarmMemUsageFn       func() (string, error)
-	getSwarmResourceUsageFn  func() (string, string, error)
-	getDockerVersionFn       func() (string, error)
+	getCurrentContextFn     func() (string, error)
+	getContainerCountFn     func() (int, error)
+	getServiceCountFn       func() (int, error)
+	getSwarmCPUCapacityFn   func() (float64, error)
+	getSwarmMemCapacityFn   func() (int64, error)
+	getSwarmCPUUsageFn      func() (string, error)
+	getSwarmMemUsageFn      func() (string, error)
+	getSwarmResourceUsageFn func() (string, string, error)
+	getDockerVersionFn      func() (string, error)
 }
 
 func (m *mockClusterInfoOps) GetCurrentContext() (string, error) {
@@ -57,11 +57,11 @@ var _ docker.ClusterInfoOps = (*mockClusterInfoOps)(nil)
 
 func noopClusterInfoOps() *mockClusterInfoOps {
 	return &mockClusterInfoOps{
-		getCurrentContextFn:   func() (string, error) { return "default", nil },
-		getContainerCountFn:   func() (int, error) { return 5, nil },
-		getServiceCountFn:     func() (int, error) { return 3, nil },
-		getSwarmCPUCapacityFn: func() (float64, error) { return 4.0, nil },
-		getSwarmMemCapacityFn: func() (int64, error) { return 8 * 1024 * 1024 * 1024, nil },
+		getCurrentContextFn:     func() (string, error) { return "default", nil },
+		getContainerCountFn:     func() (int, error) { return 5, nil },
+		getServiceCountFn:       func() (int, error) { return 3, nil },
+		getSwarmCPUCapacityFn:   func() (float64, error) { return 4.0, nil },
+		getSwarmMemCapacityFn:   func() (int64, error) { return 8 * 1024 * 1024 * 1024, nil },
 		getSwarmCPUUsageFn:      func() (string, error) { return "12.5%", nil },
 		getSwarmMemUsageFn:      func() (string, error) { return "45.3%", nil },
 		getSwarmResourceUsageFn: func() (string, string, error) { return "12.5%", "45.3%", nil },
