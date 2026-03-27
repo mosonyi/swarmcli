@@ -14,14 +14,15 @@ import (
 // --- mock ---
 
 type mockClusterInfoOps struct {
-	getCurrentContextFn   func() (string, error)
-	getContainerCountFn   func() (int, error)
-	getServiceCountFn     func() (int, error)
-	getSwarmCPUCapacityFn func() (float64, error)
-	getSwarmMemCapacityFn func() (int64, error)
-	getSwarmCPUUsageFn    func() (string, error)
-	getSwarmMemUsageFn    func() (string, error)
-	getDockerVersionFn    func() (string, error)
+	getCurrentContextFn      func() (string, error)
+	getContainerCountFn      func() (int, error)
+	getServiceCountFn        func() (int, error)
+	getSwarmCPUCapacityFn    func() (float64, error)
+	getSwarmMemCapacityFn    func() (int64, error)
+	getSwarmCPUUsageFn       func() (string, error)
+	getSwarmMemUsageFn       func() (string, error)
+	getSwarmResourceUsageFn  func() (string, string, error)
+	getDockerVersionFn       func() (string, error)
 }
 
 func (m *mockClusterInfoOps) GetCurrentContext() (string, error) {
@@ -45,6 +46,9 @@ func (m *mockClusterInfoOps) GetSwarmCPUUsage() (string, error) {
 func (m *mockClusterInfoOps) GetSwarmMemUsage() (string, error) {
 	return m.getSwarmMemUsageFn()
 }
+func (m *mockClusterInfoOps) GetSwarmResourceUsage() (string, string, error) {
+	return m.getSwarmResourceUsageFn()
+}
 func (m *mockClusterInfoOps) GetDockerVersion() (string, error) {
 	return m.getDockerVersionFn()
 }
@@ -58,9 +62,10 @@ func noopClusterInfoOps() *mockClusterInfoOps {
 		getServiceCountFn:     func() (int, error) { return 3, nil },
 		getSwarmCPUCapacityFn: func() (float64, error) { return 4.0, nil },
 		getSwarmMemCapacityFn: func() (int64, error) { return 8 * 1024 * 1024 * 1024, nil },
-		getSwarmCPUUsageFn:    func() (string, error) { return "12.5%", nil },
-		getSwarmMemUsageFn:    func() (string, error) { return "45.3%", nil },
-		getDockerVersionFn:    func() (string, error) { return "27.0.0", nil },
+		getSwarmCPUUsageFn:      func() (string, error) { return "12.5%", nil },
+		getSwarmMemUsageFn:      func() (string, error) { return "45.3%", nil },
+		getSwarmResourceUsageFn: func() (string, string, error) { return "12.5%", "45.3%", nil },
+		getDockerVersionFn:      func() (string, error) { return "27.0.0", nil },
 	}
 }
 
@@ -95,8 +100,7 @@ func TestLoadStatus(t *testing.T) {
 
 func TestLoadSlowStatus(t *testing.T) {
 	ops := noopClusterInfoOps()
-	ops.getSwarmCPUUsageFn = func() (string, error) { return "25.0%", nil }
-	ops.getSwarmMemUsageFn = func() (string, error) { return "50.0%", nil }
+	ops.getSwarmResourceUsageFn = func() (string, string, error) { return "25.0%", "50.0%", nil }
 	m := New(docker.Deps{ClusterInfo: ops}, "1.0.0", "ce")
 	cmd := m.LoadSlowStatus()
 	msg := cmd()
