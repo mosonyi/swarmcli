@@ -187,6 +187,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			// Edit mode: redeploy the stack with updated YAML
 			stackName := m.editStackName
 			m.editStackName = "" // Clear edit mode
+
+			if msg.Content == msg.OriginalContent {
+				l().Infof("No changes to stack %s, skipping redeploy", stackName)
+				return nil
+			}
+
 			stackOps := m.deps.Stacks
 			snapOps := m.deps.Snapshot
 			checkCmd := m.checkStacksCmd(m.lastSnapshot, m.nodeID)

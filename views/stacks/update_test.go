@@ -158,11 +158,27 @@ func TestUpdate_EditorContentMsg_EditMode(t *testing.T) {
 	}
 	m := testModel(func(m *Model) { m.deps.Stacks = stackMock })
 	m.editStackName = "mystack"
-	cmd := m.Update(editorContentMsg{Content: "version: '3'"})
+	cmd := m.Update(editorContentMsg{Content: "version: '3'", OriginalContent: "version: '2'"})
 	require.Equal(t, "", m.editStackName) // cleared
 	require.NotNil(t, cmd)
 	runCmd(cmd)
 	require.Equal(t, "mystack", deployed)
+}
+
+func TestUpdate_EditorContentMsg_EditMode_NoChange(t *testing.T) {
+	deployed := false
+	stackMock := noopStackOps()
+	stackMock.deployStackFn = func(name string, content string) error {
+		deployed = true
+		return nil
+	}
+	m := testModel(func(m *Model) { m.deps.Stacks = stackMock })
+	m.editStackName = "mystack"
+	yaml := "version: '3'\nservices:\n  web:\n    image: nginx"
+	cmd := m.Update(editorContentMsg{Content: yaml, OriginalContent: yaml})
+	require.Equal(t, "", m.editStackName) // cleared
+	require.Nil(t, cmd)                   // no redeploy
+	require.False(t, deployed)
 }
 
 func TestUpdate_FilesLoadedMsg_Success(t *testing.T) {
