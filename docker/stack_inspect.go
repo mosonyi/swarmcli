@@ -142,14 +142,14 @@ func GetStackInspection(stackName string) (string, error) {
 			for _, s := range svc.Spec.TaskTemplate.ContainerSpec.Secrets {
 				if s.SecretName != "" {
 					secretsMap[s.SecretName] = true
-					svcSecrets = append(svcSecrets, s.SecretName)
+					svcSecrets = append(svcSecrets, stripStackPrefix(stackName, s.SecretName))
 				}
 			}
 
 			for _, c := range svc.Spec.TaskTemplate.ContainerSpec.Configs {
 				if c.ConfigName != "" {
 					configsMap[c.ConfigName] = true
-					svcConfigs = append(svcConfigs, c.ConfigName)
+					svcConfigs = append(svcConfigs, stripStackPrefix(stackName, c.ConfigName))
 				}
 			}
 
@@ -202,12 +202,12 @@ func GetStackInspection(stackName string) (string, error) {
 	sort.Strings(desc.Volumes)
 
 	for sec := range secretsMap {
-		desc.Secrets = append(desc.Secrets, sec)
+		desc.Secrets = append(desc.Secrets, stripStackPrefix(stackName, sec))
 	}
 	sort.Strings(desc.Secrets)
 
 	for cfg := range configsMap {
-		desc.Configs = append(desc.Configs, cfg)
+		desc.Configs = append(desc.Configs, stripStackPrefix(stackName, cfg))
 	}
 	sort.Strings(desc.Configs)
 
