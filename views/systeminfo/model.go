@@ -11,12 +11,14 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"swarmcli/docker"
 
 	"github.com/briandowns/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/docker/docker/api/types/swarm"
 	"golang.org/x/mod/semver"
 )
 
@@ -270,32 +272,42 @@ func (m *Model) spinnerTickCmd() tea.Cmd {
 
 func (m *Model) LoadStatus() tea.Cmd {
 	clusterInfo := m.deps.ClusterInfo
+	snapOps := m.deps.Snapshot
 	return func() tea.Msg {
-		// Get fast values immediately
 		context, _ := clusterInfo.GetCurrentContext()
-		containers, _ := clusterInfo.GetContainerCount()
-		services, _ := clusterInfo.GetServiceCount()
 
-		// Get capacity (fast) - show immediately
-		cpuCapacity, _ := clusterInfo.GetSwarmCPUCapacity()
-		memCapacity, _ := clusterInfo.GetSwarmMemCapacity()
+		// Parallelize container and service counts.
+		var containers, services int
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() { defer wg.Done(); containers, _ = clusterInfo.GetContainerCount() }()
+		go func() { defer wg.Done(); services, _ = clusterInfo.GetServiceCount() }()
+		wg.Wait()
 
-		cpuCapStr := ""
+		// Derive capacity from cached snapshot — avoids two extra NodeList API calls.
+		var cpuCapacity float64
+		var memCapacity int64
+		if snapOps != nil {
+			if snap := snapOps.GetSnapshot(); snap != nil {
+				for _, node := range snap.Nodes {
+					if node.Status.State == swarm.NodeStateReady {
+						cpuCapacity += float64(node.Description.Resources.NanoCPUs) / 1e9
+						memCapacity += node.Description.Resources.MemoryBytes
+					}
+				}
+			}
+		}
+
+		cpuCapStr := "-- cores"
 		if cpuCapacity > 0 {
 			cpuCapStr = fmt.Sprintf("%.0f cores", cpuCapacity)
-		} else {
-			cpuCapStr = "-- cores"
 		}
 
-		memCapStr := ""
+		memCapStr := "--- GB"
 		if memCapacity > 0 {
 			memCapStr = fmt.Sprintf("%.0f GB", float64(memCapacity)/1024/1024/1024)
-		} else {
-			memCapStr = "--- GB"
 		}
 
-		// Return immediately with fast values, spinner marker for CPU/MEM usage
-		// Using first frame of spinner charset 14 as marker
 		spinnerMarker := spinner.CharSets[14][0]
 		return Msg{
 			context:     context,
@@ -314,28 +326,20 @@ func (m *Model) LoadSlowStatus() tea.Cmd {
 	return func() tea.Msg {
 		l().Info("LoadSlowStatus: Starting background stats collection")
 
-		// Get CPU/MEM - these are slow
-		cpu, err := clusterInfo.GetSwarmCPUUsage()
+		// Single pass: one ContainerList + one ContainerStats per container
+		// instead of two separate passes for CPU and memory.
+		cpu, mem, err := clusterInfo.GetSwarmResourceUsage()
 		if err != nil {
-			l().Error("LoadSlowStatus: GetSwarmCPUUsage failed: %v", err)
-			cpu = "N/A"
+			l().Error("LoadSlowStatus: GetSwarmResourceUsage failed: %v", err)
 		}
 		if cpu == "" {
-			cpu = "0.0%"
-		}
-		l().Info("LoadSlowStatus: CPU usage collected: %s", cpu)
-
-		mem, err := clusterInfo.GetSwarmMemUsage()
-		if err != nil {
-			l().Error("LoadSlowStatus: GetSwarmMemUsage failed: %v", err)
-			mem = "N/A"
+			cpu = "N/A"
 		}
 		if mem == "" {
-			mem = "0.0%"
+			mem = "N/A"
 		}
-		l().Info("LoadSlowStatus: Memory usage collected: %s", mem)
+		l().Info("LoadSlowStatus: CPU=%s MEM=%s", cpu, mem)
 
-		// Return only CPU/MEM update
 		return SlowStatusMsg{
 			cpu: cpu,
 			mem: mem,

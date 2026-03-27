@@ -9,10 +9,15 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/swarm"
 )
+
+// apiTimeout is the default timeout for Docker API calls. Prevents indefinite
+// hangs when the Docker daemon is behind a slow proxy (e.g. RBAC proxy in BE).
+const apiTimeout = 10 * time.Second
 
 // ---------- Swarm Node / Service Info ----------
 
@@ -36,7 +41,9 @@ func GetContainerCount() (int, error) {
 		return 0, err
 	}
 
-	containers, err := c.ContainerList(context.Background(), container.ListOptions{All: true})
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
+	defer cancel()
+	containers, err := c.ContainerList(ctx, container.ListOptions{All: true})
 	if err != nil {
 		return 0, err
 	}
@@ -49,7 +56,9 @@ func GetServiceCount() (int, error) {
 		return 0, err
 	}
 
-	services, err := c.ServiceList(context.Background(), swarm.ServiceListOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
+	defer cancel()
+	services, err := c.ServiceList(ctx, swarm.ServiceListOptions{})
 	if err != nil {
 		return 0, err
 	}
@@ -65,7 +74,9 @@ func GetSwarmCPUCapacity() (float64, error) {
 		return 0, err
 	}
 
-	nodes, err := c.NodeList(context.Background(), swarm.NodeListOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
+	defer cancel()
+	nodes, err := c.NodeList(ctx, swarm.NodeListOptions{})
 	if err != nil {
 		return 0, err
 	}
@@ -86,7 +97,9 @@ func GetSwarmMemCapacity() (int64, error) {
 		return 0, err
 	}
 
-	nodes, err := c.NodeList(context.Background(), swarm.NodeListOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
+	defer cancel()
+	nodes, err := c.NodeList(ctx, swarm.NodeListOptions{})
 	if err != nil {
 		return 0, err
 	}
@@ -108,7 +121,8 @@ func GetSwarmCPUUsage() (string, error) {
 		return "N/A", err
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
+	defer cancel()
 	containers, err := c.ContainerList(ctx, container.ListOptions{})
 	if err != nil {
 		l().Infof("GetSwarmCPUUsage: ContainerList error: %v", err)
@@ -135,7 +149,7 @@ func GetSwarmCPUUsage() (string, error) {
 		go func(containerID string) {
 			defer wg.Done()
 
-			stats, err := c.ContainerStats(context.Background(), containerID, false)
+			stats, err := c.ContainerStats(ctx, containerID, false)
 			if err != nil {
 				l().Infof("GetSwarmCPUUsage: ContainerStats error for %s: %v", containerID[:12], err)
 				results <- cpuResult{err: err}
@@ -210,7 +224,8 @@ func GetSwarmMemUsage() (string, error) {
 		return "N/A", err
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
+	defer cancel()
 	containers, err := c.ContainerList(ctx, container.ListOptions{})
 	if err != nil {
 		l().Infof("GetSwarmMemUsage: ContainerList error: %v", err)
@@ -237,7 +252,7 @@ func GetSwarmMemUsage() (string, error) {
 		go func(containerID string) {
 			defer wg.Done()
 
-			stats, err := c.ContainerStats(context.Background(), containerID, false)
+			stats, err := c.ContainerStats(ctx, containerID, false)
 			if err != nil {
 				l().Infof("GetSwarmMemUsage: ContainerStats error for %s: %v", containerID[:12], err)
 				results <- memResult{err: err}
@@ -293,9 +308,113 @@ func GetDockerVersion() (string, error) {
 		return "unknown", err
 	}
 
-	info, err := c.ServerVersion(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
+	defer cancel()
+	info, err := c.ServerVersion(ctx)
 	if err != nil {
 		return "unknown", err
 	}
 	return info.Version, nil
+}
+
+// GetSwarmResourceUsage returns CPU and memory usage in a single pass,
+// making one ContainerList call and one ContainerStats call per container
+// instead of two separate passes. This halves the Docker API calls compared
+// to calling GetSwarmCPUUsage + GetSwarmMemUsage independently.
+func GetSwarmResourceUsage() (cpuPct string, memPct string, err error) {
+	c, err := GetClient()
+	if err != nil {
+		return "N/A", "N/A", err
+	}
+
+	totalCapacity, capErr := GetSwarmMemCapacity()
+	if capErr != nil || totalCapacity == 0 {
+		l().Infof("GetSwarmResourceUsage: failed to get mem capacity: %v", capErr)
+		totalCapacity = 0 // continue — CPU can still be reported
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
+	defer cancel()
+	containers, err := c.ContainerList(ctx, container.ListOptions{})
+	if err != nil {
+		return "N/A", "N/A", err
+	}
+
+	if len(containers) == 0 {
+		memStr := "0.0%"
+		if totalCapacity == 0 {
+			memStr = "N/A"
+		}
+		return "0.0%", memStr, nil
+	}
+
+	type result struct {
+		cpuPercent float64
+		memUsage   int64
+		err        error
+	}
+
+	results := make(chan result, len(containers))
+	var wg sync.WaitGroup
+
+	for _, cont := range containers {
+		wg.Add(1)
+		go func(containerID string) {
+			defer wg.Done()
+
+			stats, err := c.ContainerStats(ctx, containerID, false)
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			defer func() { _ = stats.Body.Close() }()
+
+			var s container.StatsResponse
+			if decodeErr := json.NewDecoder(stats.Body).Decode(&s); decodeErr != nil {
+				results <- result{err: decodeErr}
+				return
+			}
+
+			// CPU
+			cpuDelta := float64(s.CPUStats.CPUUsage.TotalUsage - s.PreCPUStats.CPUUsage.TotalUsage)
+			systemDelta := float64(s.CPUStats.SystemUsage - s.PreCPUStats.SystemUsage)
+			onlineCPUs := float64(s.CPUStats.OnlineCPUs)
+			if onlineCPUs == 0 {
+				onlineCPUs = float64(len(s.CPUStats.CPUUsage.PercpuUsage))
+			}
+			var cpuPct float64
+			if systemDelta > 0 && onlineCPUs > 0 {
+				cpuPct = (cpuDelta / systemDelta) * onlineCPUs * 100.0
+			}
+
+			results <- result{cpuPercent: cpuPct, memUsage: int64(s.MemoryStats.Usage)}
+		}(cont.ID)
+	}
+
+	go func() { wg.Wait(); close(results) }()
+
+	var totalCPU float64
+	var totalMem int64
+	successCount := 0
+	for res := range results {
+		if res.err == nil {
+			totalCPU += res.cpuPercent
+			totalMem += res.memUsage
+			successCount++
+		}
+	}
+
+	cpuPct = "0.0%"
+	if successCount > 0 {
+		cpuPct = fmt.Sprintf("%.1f%%", totalCPU)
+	}
+
+	memPct = "N/A"
+	if totalCapacity > 0 && successCount > 0 {
+		memPct = fmt.Sprintf("%.1f%%", (float64(totalMem)/float64(totalCapacity))*100.0)
+	} else if successCount > 0 {
+		memPct = "0.0%"
+	}
+
+	return cpuPct, memPct, nil
 }
