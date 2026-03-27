@@ -41,7 +41,8 @@ type RemoveErrorMsg struct {
 
 // editorContentMsg is sent when editor returns content
 type editorContentMsg struct {
-	Content string
+	Content         string
+	OriginalContent string // populated in edit mode to detect no-change
 }
 
 // stackCreateErrorMsg is sent when stack creation has an error

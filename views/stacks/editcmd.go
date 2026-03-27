@@ -79,7 +79,7 @@ func editWithTempFileCmd(baseName string, initialData []byte, onDone func([]byte
 func openEditorForStackCmd(initialData string) tea.Cmd {
 	return editWithTempFileCmd("stack", []byte(initialData),
 		func(newData []byte) tea.Msg {
-			return editorContentMsg{Content: string(newData)}
+			return editorContentMsg{Content: string(newData), OriginalContent: initialData}
 		},
 		func(err error) tea.Msg {
 			return stackCreateErrorMsg{err}
