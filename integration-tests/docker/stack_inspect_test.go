@@ -91,6 +91,50 @@ func TestInspectStack(t *testing.T) {
 		t.Errorf("Expected network 'backend' in networks, got %v", inspection.Networks)
 	}
 
+	// Verify secrets are present (top-level aggregated list)
+	foundSecret := false
+	for _, s := range inspection.Secrets {
+		if s == "whoami_secret" {
+			foundSecret = true
+		}
+	}
+	if !foundSecret {
+		t.Errorf("Expected secret 'whoami_secret' in secrets, got %v", inspection.Secrets)
+	}
+
+	// Verify configs are present (top-level aggregated list)
+	foundConfig := false
+	for _, c := range inspection.Configs {
+		if c == "whoami_config" {
+			foundConfig = true
+		}
+	}
+	if !foundConfig {
+		t.Errorf("Expected config 'whoami_config' in configs, got %v", inspection.Configs)
+	}
+
+	// Verify per-service secrets and configs
+	for _, svc := range inspection.Services {
+		switch {
+		case strings.HasSuffix(svc.Name, "whoami") && !strings.Contains(svc.Name, "single"):
+			// whoami service should have secrets and configs
+			if len(svc.Secrets) == 0 {
+				t.Errorf("Service %q: expected non-empty secrets", svc.Name)
+			}
+			if len(svc.Configs) == 0 {
+				t.Errorf("Service %q: expected non-empty configs", svc.Name)
+			}
+		case strings.HasSuffix(svc.Name, "log_ticker"):
+			// log_ticker has neither secrets nor configs
+			if len(svc.Secrets) != 0 {
+				t.Errorf("Service %q: expected no secrets, got %v", svc.Name, svc.Secrets)
+			}
+			if len(svc.Configs) != 0 {
+				t.Errorf("Service %q: expected no configs, got %v", svc.Name, svc.Configs)
+			}
+		}
+	}
+
 	t.Logf("Successfully inspected stack: %d services, %d tasks", inspection.ServiceCount, inspection.TaskCount)
 }
 

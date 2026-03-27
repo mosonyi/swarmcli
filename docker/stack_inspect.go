@@ -34,6 +34,8 @@ type ServiceSummary struct {
 	Mode      string            `json:"mode"`
 	Replicas  string            `json:"replicas"`
 	Ports     []string          `json:"ports,omitempty"`
+	Secrets   []string          `json:"secrets,omitempty"`
+	Configs   []string          `json:"configs,omitempty"`
 	Labels    map[string]string `json:"labels,omitempty"`
 	CreatedAt time.Time         `json:"created_at"`
 	UpdatedAt time.Time         `json:"updated_at"`
@@ -135,16 +137,19 @@ func GetStackInspection(stackName string) (string, error) {
 		}
 
 		// Collect secrets, configs, and volumes
+		var svcSecrets, svcConfigs []string
 		if svc.Spec.TaskTemplate.ContainerSpec != nil {
 			for _, s := range svc.Spec.TaskTemplate.ContainerSpec.Secrets {
 				if s.SecretName != "" {
 					secretsMap[s.SecretName] = true
+					svcSecrets = append(svcSecrets, s.SecretName)
 				}
 			}
 
 			for _, c := range svc.Spec.TaskTemplate.ContainerSpec.Configs {
 				if c.ConfigName != "" {
 					configsMap[c.ConfigName] = true
+					svcConfigs = append(svcConfigs, c.ConfigName)
 				}
 			}
 
@@ -154,6 +159,8 @@ func GetStackInspection(stackName string) (string, error) {
 				}
 			}
 		}
+		sort.Strings(svcSecrets)
+		sort.Strings(svcConfigs)
 
 		// Add service summary
 		desc.Services = append(desc.Services, ServiceSummary{
@@ -163,6 +170,8 @@ func GetStackInspection(stackName string) (string, error) {
 			Mode:      mode,
 			Replicas:  replicas,
 			Ports:     ports,
+			Secrets:   svcSecrets,
+			Configs:   svcConfigs,
 			Labels:    svc.Spec.Labels,
 			CreatedAt: svc.CreatedAt,
 			UpdatedAt: svc.UpdatedAt,
