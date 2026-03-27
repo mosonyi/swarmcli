@@ -6,6 +6,10 @@ networks:
 volumes:
   whoami_data:
 
+secrets:
+  whoami_secret:
+    file: ./secrets/whoami_secret.txt
+
 configs:
   whoami_config:
     file: ./configs/whoami.conf
@@ -19,6 +23,9 @@ services:
       - backend
     volumes:
       - whoami_data:/data
+    secrets:
+      - source: whoami_secret
+        target: /run/secrets/whoami_secret
     configs:
       - source: whoami_config
         target: /etc/whoami/config
