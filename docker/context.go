@@ -150,7 +150,7 @@ func UseContext(contextName string) error {
 }
 
 // ValidateContext checks if a context switch would succeed by attempting to connect
-func ValidateContext(contextName string) error {
+func ValidateContext(ctx context.Context, contextName string) error {
 	// Save current context
 	currentCtx, err := GetCurrentContext()
 	if err != nil {
@@ -170,7 +170,6 @@ func ValidateContext(contextName string) error {
 		return fmt.Errorf("failed to connect to context %s: %w", contextName, err)
 	}
 	// Verify connection with ping
-	ctx := context.Background()
 	if _, err := cli.Ping(ctx); err != nil {
 		// Switch back to original context
 		_ = UseContext(currentCtx)

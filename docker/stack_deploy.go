@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -118,7 +119,8 @@ func extractNetworkNames(yamlContent string) []string {
 
 // cleanupNetworks attempts to remove networks that may have been created during a failed deployment
 func cleanupNetworks(stackName string, networkNames []string) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	for _, netName := range networkNames {
 		// Docker creates networks with the pattern: stackname_networkname
 		fullNetworkName := fmt.Sprintf("%s_%s", stackName, netName)

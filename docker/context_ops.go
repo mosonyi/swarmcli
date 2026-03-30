@@ -3,11 +3,13 @@
 
 package docker
 
+import "context"
+
 // ContextOps abstracts Docker context operations for testability and extensibility.
 type ContextOps interface {
 	ListContexts() ([]ContextInfo, error)
 	UseContext(contextName string) error
-	ValidateContext(contextName string) error
+	ValidateContext(ctx context.Context, contextName string) error
 	InspectContext(contextName string) (string, error)
 	ExportContext(contextName string) (string, error)
 	ExportContextWithForce(contextName string) (string, error)
@@ -29,8 +31,8 @@ func (defaultContextOps) ListContexts() ([]ContextInfo, error) {
 func (defaultContextOps) UseContext(contextName string) error {
 	return UseContext(contextName)
 }
-func (defaultContextOps) ValidateContext(contextName string) error {
-	return ValidateContext(contextName)
+func (defaultContextOps) ValidateContext(ctx context.Context, contextName string) error {
+	return ValidateContext(ctx, contextName)
 }
 func (defaultContextOps) InspectContext(contextName string) (string, error) {
 	return InspectContext(contextName)

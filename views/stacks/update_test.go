@@ -1,6 +1,7 @@
 package stacksview
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -335,7 +336,7 @@ func TestSortKey_R_Error(t *testing.T) {
 func TestConfirmResult_Remove(t *testing.T) {
 	removed := ""
 	stackMock := noopStackOps()
-	stackMock.removeStackFn = func(name string) error {
+	stackMock.removeStackFn = func(_ context.Context, name string) error {
 		removed = name
 		return nil
 	}
@@ -352,8 +353,8 @@ func TestConfirmResult_Remove(t *testing.T) {
 func TestConfirmResult_RemoveWithNetworks(t *testing.T) {
 	removedNetworks := ""
 	stackMock := noopStackOps()
-	stackMock.removeStackFn = func(_ string) error { return nil }
-	stackMock.removeStackNetworksFn = func(name string) error {
+	stackMock.removeStackFn = func(_ context.Context, _ string) error { return nil }
+	stackMock.removeStackNetworksFn = func(_ context.Context, name string) error {
 		removedNetworks = name
 		return nil
 	}
@@ -588,6 +589,22 @@ func TestFileBrowser_Enter_Directory(t *testing.T) {
 	m.fileBrowserCursor = 0
 	cmd := m.Update(key("enter"))
 	require.NotNil(t, cmd)
+}
+
+func TestRemoveStack_Timeout_ReturnsRemoveError(t *testing.T) {
+	stackMock := noopStackOps()
+	stackMock.removeStackFn = func(_ context.Context, _ string) error {
+		return context.DeadlineExceeded
+	}
+	m := testModel(func(m *Model) { m.deps.Stacks = stackMock })
+	loadStacks(m, fakeStacks("target"))
+	m.pendingAction = "remove"
+	m.confirmDialog.Visible = true
+	cmd := m.Update(confirmdialog.ResultMsg{Confirmed: true})
+	require.NotNil(t, cmd)
+	msg := runCmd(cmd)
+	_, ok := msg.(RemoveErrorMsg)
+	require.True(t, ok, "expected RemoveErrorMsg, got %T", msg)
 }
 
 // --- Task navigation tests ---

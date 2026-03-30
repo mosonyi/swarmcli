@@ -26,7 +26,8 @@ import (
 func (m *Model) loadSecretsCmd() tea.Cmd {
 	secretOps := m.deps.Secrets
 	return func() tea.Msg {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
+		defer cancel()
 		secs, err := secretOps.ListSecrets(ctx)
 		if err != nil {
 			return errorMsg(fmt.Errorf("failed to list secrets: %w", err))
@@ -46,7 +47,8 @@ func (m *Model) computeSecretUsedCmd(secs []docker.SecretWithDecodedData) tea.Cm
 	secretOps := m.deps.Secrets
 	return func() tea.Msg {
 		usedMap := make(map[string]bool, len(secs))
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
+		defer cancel()
 		for _, s := range secs {
 			usedMap[s.Secret.ID] = false
 			svcs, err := secretOps.ListServicesUsingSecretID(ctx, s.Secret.ID)
@@ -62,9 +64,16 @@ func (m *Model) computeSecretUsedCmd(secs []docker.SecretWithDecodedData) tea.Cm
 func (m *Model) checkSecretsCmd(lastHash uint64) tea.Cmd {
 	secretOps := m.deps.Secrets
 	return func() tea.Msg {
+		if !m.polling.CompareAndSwap(false, true) {
+			l().Info("checkSecretsCmd: skipped, previous poll still in flight")
+			return PollRetryMsg{}
+		}
+		defer m.polling.Store(false)
+
 		l().Info("checkSecretsCmd: Polling for secret changes")
 
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
+		defer cancel()
 		secs, err := secretOps.ListSecrets(ctx)
 		if err != nil {
 			l().Errorf("checkSecretsCmd: ListSecrets failed: %v", err)
@@ -115,7 +124,9 @@ func (m *Model) checkSecretsCmd(lastHash uint64) tea.Cmd {
 func (m *Model) inspectSecretCmd(name string) tea.Cmd {
 	secretOps := m.deps.Secrets
 	return func() tea.Msg {
-		sec, err := secretOps.InspectSecret(context.Background(), name)
+		ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+		defer cancel()
+		sec, err := secretOps.InspectSecret(ctx, name)
 		jsonStr := ""
 		if err != nil {
 			jsonStr = fmt.Sprintf("Error inspecting secret %q: %v", name, err)
@@ -143,7 +154,8 @@ func (m *Model) inspectSecretCmd(name string) tea.Cmd {
 func (m *Model) deleteSecretCmd(name string) tea.Cmd {
 	secretOps := m.deps.Secrets
 	return func() tea.Msg {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+		defer cancel()
 		err := secretOps.DeleteSecret(ctx, name)
 		if err != nil {
 			return errorMsg(fmt.Errorf("failed to delete secret %q: %w", name, err))
@@ -227,7 +239,8 @@ func (m *Model) createSecretFromFileCmd(name, filePath string, labels map[string
 		}
 
 		// Create the secret
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+		defer cancel()
 		newSec, err := secretOps.CreateSecret(ctx, name, data, labels)
 		if err != nil {
 			l().Errorf("Failed to create secret %s: %v", name, err)
@@ -261,7 +274,8 @@ func (m *Model) createSecretFromContentCmd(name string, content []byte, labels m
 		}
 
 		// Create the secret
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+		defer cancel()
 		newSec, err := secretOps.CreateSecret(ctx, name, content, labels)
 		if err != nil {
 			l().Errorf("Failed to create secret %s: %v", name, err)
@@ -281,7 +295,8 @@ func (m *Model) getUsedByStacksCmd(secretName string) tea.Cmd {
 	return func() tea.Msg {
 		l().Infof("Getting stacks/services that use secret: %s", secretName)
 
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+		defer cancel()
 		// Get secret ID for robust matching
 		sec, err := secretOps.InspectSecret(ctx, secretName)
 		if err != nil {

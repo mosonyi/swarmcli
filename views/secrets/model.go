@@ -13,6 +13,7 @@ import (
 	"swarmcli/views/helpbar"
 	loading "swarmcli/views/loading"
 	view "swarmcli/views/view"
+	"sync/atomic"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -38,7 +39,8 @@ type Model struct {
 	height        int
 	firstResize   bool   // tracks if we've received the first window size
 	lastSnapshot  uint64 // hash of last snapshot for change detection
-	visible       bool   // tracks if view is currently active
+	polling       atomic.Bool
+	visible       bool // tracks if view is currently active
 	sortField     SortField
 	sortAscending bool // true for ascending, false for descending
 
@@ -90,6 +92,8 @@ const (
 )
 
 const PollInterval = 5 * time.Second
+const pollTimeout = 4 * time.Second
+const userActionTimeout = 15 * time.Second
 
 func New(width, height int) *Model {
 	vp := viewport.New(width, height)

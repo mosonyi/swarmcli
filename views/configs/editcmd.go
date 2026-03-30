@@ -93,7 +93,8 @@ func (m *Model) editConfigInEditorCmd(name string) tea.Cmd {
 	configOps := m.deps.Configs
 	l().Infoln("editConfigInEditorCmd: started")
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+	defer cancel()
 	cfg, err := configOps.InspectConfig(ctx, name)
 	if err != nil {
 		l().Infoln("InspectConfig error:", err)
@@ -116,7 +117,9 @@ func (m *Model) editConfigInEditorCmd(name string) tea.Cmd {
 			}
 
 			// Create a new Docker config version with the edited data
-			newCfg, err := configOps.CreateConfigVersion(ctx, cfg.Config, newData)
+			createCtx, createCancel := context.WithTimeout(context.Background(), userActionTimeout)
+			defer createCancel()
+			newCfg, err := configOps.CreateConfigVersion(createCtx, cfg.Config, newData)
 			if err != nil {
 				l().Infoln("CreateConfigVersion error:", err)
 				return editConfigErrorMsg{err}

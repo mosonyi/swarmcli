@@ -76,5 +76,7 @@ type TickMsg time.Time
 type PollRetryMsg struct{}
 
 const PollInterval = 5 * time.Second
+const pollTimeout = 4 * time.Second
+const userActionTimeout = 15 * time.Second
 
 type SpinnerTickMsg time.Time

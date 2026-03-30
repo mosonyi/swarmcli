@@ -16,10 +16,13 @@ import (
 	inspectview "swarmcli/views/inspect"
 	servicesview "swarmcli/views/services"
 	"swarmcli/views/view"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/docker/docker/api/types/swarm"
 )
+
+const userActionTimeout = 15 * time.Second
 
 // getFreshNodeState retrieves the current node state with a forced refresh
 func (m *Model) getFreshNodeState(nodeID string) *docker.NodeEntry {
@@ -59,7 +62,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				snapshotOps := m.deps.Snapshot
 				// Run demote, keeping dialog visible during operation
 				return func() tea.Msg {
-					if err := nodeOps.DemoteNode(context.Background(), node.ID); err != nil {
+					ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+					defer cancel()
+					if err := nodeOps.DemoteNode(ctx, node.ID); err != nil {
 						return DemoteErrorMsg{NodeID: node.ID, Error: err}
 					}
 					// Force refresh
@@ -74,7 +79,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				snapshotOps := m.deps.Snapshot
 				// Run promote, keeping dialog visible during operation
 				return func() tea.Msg {
-					if err := nodeOps.PromoteNode(context.Background(), node.ID); err != nil {
+					ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+					defer cancel()
+					if err := nodeOps.PromoteNode(ctx, node.ID); err != nil {
 						return PromoteErrorMsg{NodeID: node.ID, Error: err}
 					}
 					// Force refresh
@@ -89,7 +96,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				snapshotOps := m.deps.Snapshot
 				// Run remove with force=true, keeping dialog visible during operation
 				return func() tea.Msg {
-					if err := nodeOps.RemoveNode(context.Background(), node.ID, true); err != nil {
+					ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+					defer cancel()
+					if err := nodeOps.RemoveNode(ctx, node.ID, true); err != nil {
 						return RemoveErrorMsg{NodeID: node.ID, Error: err}
 					}
 					// Force refresh
@@ -303,7 +312,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				node := m.List.Filtered[m.List.Cursor]
 				inspectOps := m.deps.Inspect
 				return func() tea.Msg {
-					inspectContent, err := inspectOps.Inspect(context.Background(), docker.InspectNode, node.ID)
+					ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+					defer cancel()
+					inspectContent, err := inspectOps.Inspect(ctx, docker.InspectNode, node.ID)
 					if err != nil {
 						inspectContent = "Error inspecting node: " + err.Error()
 					}
@@ -634,6 +645,8 @@ func (m *Model) handleAvailabilityDialogKey(msg tea.KeyMsg) tea.Cmd {
 		snapshotOps := m.deps.Snapshot
 		m.availabilityDialog = false
 		return func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+			defer cancel()
 			var avail swarm.NodeAvailability
 			switch availability {
 			case "active":
@@ -643,7 +656,7 @@ func (m *Model) handleAvailabilityDialogKey(msg tea.KeyMsg) tea.Cmd {
 			case "drain":
 				avail = swarm.NodeAvailabilityDrain
 			}
-			if err := nodeOps.SetNodeAvailability(context.Background(), nodeID, avail); err != nil {
+			if err := nodeOps.SetNodeAvailability(ctx, nodeID, avail); err != nil {
 				return SetAvailabilityErrorMsg{NodeID: nodeID, Error: err}
 			}
 			// Force refresh
@@ -701,7 +714,9 @@ func (m *Model) handleLabelInputDialogKey(msg tea.KeyMsg) tea.Cmd {
 		m.labelInputValue = ""
 
 		return func() tea.Msg {
-			if err := nodeOps.AddNodeLabel(context.Background(), nodeID, key, value); err != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+			defer cancel()
+			if err := nodeOps.AddNodeLabel(ctx, nodeID, key, value); err != nil {
 				return AddLabelErrorMsg{NodeID: nodeID, Error: err}
 			}
 			// Force refresh
@@ -748,7 +763,9 @@ func (m *Model) handleLabelRemoveDialogKey(msg tea.KeyMsg) tea.Cmd {
 			m.labelRemoveDialog = false
 
 			return func() tea.Msg {
-				if err := nodeOps.RemoveNodeLabel(context.Background(), nodeID, key); err != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+				defer cancel()
+				if err := nodeOps.RemoveNodeLabel(ctx, nodeID, key); err != nil {
 					return RemoveLabelErrorMsg{NodeID: nodeID, Error: err}
 				}
 				// Force refresh

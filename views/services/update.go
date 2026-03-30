@@ -131,7 +131,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			snapshotOps := m.deps.Snapshot
 			refreshCmd := m.refreshServicesCmd(m.nodeID, m.stackName, m.filterType)
 			return func() tea.Msg {
-				if err := serviceOps.ScaleService(entry.ServiceID, msg.Replicas); err != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+				defer cancel()
+				if err := serviceOps.ScaleService(ctx, entry.ServiceID, msg.Replicas); err != nil {
 					l().Errorf("Failed to scale service %s: %v", entry.ServiceName, err)
 					return ScaleErrorMsg{
 						ServiceName: entry.ServiceName,
@@ -161,8 +163,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			case "remove":
 				l().Debugln("Starting remove for", entry.ServiceName)
 				return func() tea.Msg {
+					ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+					defer cancel()
 					l().Infof("Executing remove for service: %s", entry.ServiceName)
-					if err := serviceOps.RemoveService(entry.ServiceName); err != nil {
+					if err := serviceOps.RemoveService(ctx, entry.ServiceName); err != nil {
 						l().Errorf("Failed to remove service %s: %v", entry.ServiceName, err)
 						return RemoveErrorMsg{
 							ServiceName: entry.ServiceName,
@@ -179,8 +183,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			case "rollback":
 				l().Debugln("Starting rollback for", entry.ServiceName)
 				return func() tea.Msg {
+					ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+					defer cancel()
 					l().Infof("Executing rollback for service: %s", entry.ServiceName)
-					if err := serviceOps.RollbackService(entry.ServiceName); err != nil {
+					if err := serviceOps.RollbackService(ctx, entry.ServiceName); err != nil {
 						l().Errorf("Failed to rollback service %s: %v", entry.ServiceName, err)
 						return RollbackErrorMsg{
 							ServiceName: entry.ServiceName,
@@ -198,8 +204,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				// Default to restart
 				l().Debugln("Starting restart for", entry.ServiceName)
 				return func() tea.Msg {
+					ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+					defer cancel()
 					l().Infof("Executing restart for service: %s", entry.ServiceName)
-					if err := serviceOps.RestartService(entry.ServiceName); err != nil {
+					if err := serviceOps.RestartService(ctx, entry.ServiceName); err != nil {
 						l().Errorf("Failed to restart service %s: %v", entry.ServiceName, err)
 						return RestartErrorMsg{
 							ServiceName: entry.ServiceName,
@@ -401,7 +409,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				entry := m.List.Filtered[m.List.Cursor]
 				inspectOps := m.deps.Inspect
 				return func() tea.Msg {
-					content, err := inspectOps.Inspect(context.Background(), docker.InspectService, entry.ServiceID)
+					ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+					defer cancel()
+					content, err := inspectOps.Inspect(ctx, docker.InspectService, entry.ServiceID)
 					if err != nil {
 						content = fmt.Sprintf("Error inspecting service %q: %v", entry.ServiceName, err)
 					}

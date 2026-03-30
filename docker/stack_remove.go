@@ -12,12 +12,11 @@ import (
 )
 
 // RemoveStack removes all services in a stack by stack name.
-func RemoveStack(stackName string) error {
+func RemoveStack(ctx context.Context, stackName string) error {
 	c, err := GetClient()
 	if err != nil {
 		return fmt.Errorf("docker client: %w", err)
 	}
-	ctx := context.Background()
 
 	// List all services in the stack
 	services, err := c.ServiceList(ctx, swarm.ServiceListOptions{})
@@ -51,12 +50,11 @@ func RemoveStack(stackName string) error {
 }
 
 // GetStackNetworks returns the names of networks associated with a stack
-func GetStackNetworks(stackName string) ([]string, error) {
+func GetStackNetworks(ctx context.Context, stackName string) ([]string, error) {
 	c, err := GetClient()
 	if err != nil {
 		return nil, fmt.Errorf("docker client: %w", err)
 	}
-	ctx := context.Background()
 
 	// List all networks
 	networks, err := c.NetworkList(ctx, network.ListOptions{})
@@ -78,8 +76,8 @@ func GetStackNetworks(stackName string) ([]string, error) {
 }
 
 // RemoveStackNetworks removes all networks associated with a stack
-func RemoveStackNetworks(stackName string) error {
-	networks, err := GetStackNetworks(stackName)
+func RemoveStackNetworks(ctx context.Context, stackName string) error {
+	networks, err := GetStackNetworks(ctx, stackName)
 	if err != nil {
 		return fmt.Errorf("getting stack networks: %w", err)
 	}
@@ -88,8 +86,6 @@ func RemoveStackNetworks(stackName string) error {
 		l().Infof("No networks found for stack %s", stackName)
 		return nil
 	}
-
-	ctx := context.Background()
 	var removedCount int
 	for _, netName := range networks {
 		if err := RemoveNetwork(ctx, netName); err != nil {

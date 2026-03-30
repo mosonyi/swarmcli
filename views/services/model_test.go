@@ -19,28 +19,30 @@ import (
 // --- mocks ---
 
 type mockServiceOps struct {
-	scaleServiceFn      func(serviceID string, replicas uint64) error
-	restartServiceFn    func(serviceName string) error
-	removeServiceFn     func(serviceName string) error
-	rollbackServiceFn   func(serviceName string) error
+	scaleServiceFn      func(ctx context.Context, serviceID string, replicas uint64) error
+	restartServiceFn    func(ctx context.Context, serviceName string) error
+	removeServiceFn     func(ctx context.Context, serviceName string) error
+	rollbackServiceFn   func(ctx context.Context, serviceName string) error
 	loadNodeServicesFn  func(nodeID string) []docker.ServiceEntry
 	loadStackServicesFn func(stackName string) []docker.ServiceEntry
 	getServiceLogsFn    func(ctx context.Context, serviceID string) (string, error)
 	createServiceFn     func(ctx context.Context, spec swarm.ServiceSpec) (string, error)
 }
 
-func (m *mockServiceOps) ScaleService(serviceID string, replicas uint64) error {
-	return m.scaleServiceFn(serviceID, replicas)
+func (m *mockServiceOps) ScaleService(ctx context.Context, serviceID string, replicas uint64) error {
+	return m.scaleServiceFn(ctx, serviceID, replicas)
 }
-func (m *mockServiceOps) ScaleServiceByName(_ string, _ uint64) error { panic("not mocked") }
-func (m *mockServiceOps) RestartService(serviceName string) error {
-	return m.restartServiceFn(serviceName)
+func (m *mockServiceOps) ScaleServiceByName(_ context.Context, _ string, _ uint64) error {
+	panic("not mocked")
 }
-func (m *mockServiceOps) RemoveService(serviceName string) error {
-	return m.removeServiceFn(serviceName)
+func (m *mockServiceOps) RestartService(ctx context.Context, serviceName string) error {
+	return m.restartServiceFn(ctx, serviceName)
 }
-func (m *mockServiceOps) RollbackService(serviceName string) error {
-	return m.rollbackServiceFn(serviceName)
+func (m *mockServiceOps) RemoveService(ctx context.Context, serviceName string) error {
+	return m.removeServiceFn(ctx, serviceName)
+}
+func (m *mockServiceOps) RollbackService(ctx context.Context, serviceName string) error {
+	return m.rollbackServiceFn(ctx, serviceName)
 }
 func (m *mockServiceOps) RestartServiceAndWait(_ context.Context, _ string) error {
 	panic("not mocked")
@@ -155,10 +157,10 @@ func runCmd(cmd tea.Cmd) tea.Msg {
 
 func noopServiceOps() *mockServiceOps {
 	return &mockServiceOps{
-		scaleServiceFn:      func(_ string, _ uint64) error { return nil },
-		restartServiceFn:    func(_ string) error { return nil },
-		removeServiceFn:     func(_ string) error { return nil },
-		rollbackServiceFn:   func(_ string) error { return nil },
+		scaleServiceFn:      func(_ context.Context, _ string, _ uint64) error { return nil },
+		restartServiceFn:    func(_ context.Context, _ string) error { return nil },
+		removeServiceFn:     func(_ context.Context, _ string) error { return nil },
+		rollbackServiceFn:   func(_ context.Context, _ string) error { return nil },
 		loadNodeServicesFn:  func(_ string) []docker.ServiceEntry { return nil },
 		loadStackServicesFn: func(_ string) []docker.ServiceEntry { return nil },
 	}
@@ -431,10 +433,10 @@ func TestConfirmRestart_Success(t *testing.T) {
 	restarted := ""
 	m := testModel(func(m *Model) {
 		m.deps.Services = &mockServiceOps{
-			scaleServiceFn:      func(_ string, _ uint64) error { return nil },
-			restartServiceFn:    func(name string) error { restarted = name; return nil },
-			removeServiceFn:     func(_ string) error { return nil },
-			rollbackServiceFn:   func(_ string) error { return nil },
+			scaleServiceFn:      func(_ context.Context, _ string, _ uint64) error { return nil },
+			restartServiceFn:    func(_ context.Context, name string) error { restarted = name; return nil },
+			removeServiceFn:     func(_ context.Context, _ string) error { return nil },
+			rollbackServiceFn:   func(_ context.Context, _ string) error { return nil },
 			loadNodeServicesFn:  func(_ string) []docker.ServiceEntry { return nil },
 			loadStackServicesFn: func(_ string) []docker.ServiceEntry { return nil },
 		}
@@ -452,10 +454,10 @@ func TestConfirmRemove_Success(t *testing.T) {
 	removed := ""
 	m := testModel(func(m *Model) {
 		m.deps.Services = &mockServiceOps{
-			scaleServiceFn:      func(_ string, _ uint64) error { return nil },
-			restartServiceFn:    func(_ string) error { return nil },
-			removeServiceFn:     func(name string) error { removed = name; return nil },
-			rollbackServiceFn:   func(_ string) error { return nil },
+			scaleServiceFn:      func(_ context.Context, _ string, _ uint64) error { return nil },
+			restartServiceFn:    func(_ context.Context, _ string) error { return nil },
+			removeServiceFn:     func(_ context.Context, name string) error { removed = name; return nil },
+			rollbackServiceFn:   func(_ context.Context, _ string) error { return nil },
 			loadNodeServicesFn:  func(_ string) []docker.ServiceEntry { return nil },
 			loadStackServicesFn: func(_ string) []docker.ServiceEntry { return nil },
 		}
@@ -473,10 +475,10 @@ func TestConfirmRollback_Success(t *testing.T) {
 	rolledBack := ""
 	m := testModel(func(m *Model) {
 		m.deps.Services = &mockServiceOps{
-			scaleServiceFn:      func(_ string, _ uint64) error { return nil },
-			restartServiceFn:    func(_ string) error { return nil },
-			removeServiceFn:     func(_ string) error { return nil },
-			rollbackServiceFn:   func(name string) error { rolledBack = name; return nil },
+			scaleServiceFn:      func(_ context.Context, _ string, _ uint64) error { return nil },
+			restartServiceFn:    func(_ context.Context, _ string) error { return nil },
+			removeServiceFn:     func(_ context.Context, _ string) error { return nil },
+			rollbackServiceFn:   func(_ context.Context, name string) error { rolledBack = name; return nil },
 			loadNodeServicesFn:  func(_ string) []docker.ServiceEntry { return nil },
 			loadStackServicesFn: func(_ string) []docker.ServiceEntry { return nil },
 		}
@@ -516,14 +518,14 @@ func TestScaleDialogResult_Confirmed(t *testing.T) {
 	var scaledTo uint64
 	m := testModel(func(m *Model) {
 		m.deps.Services = &mockServiceOps{
-			scaleServiceFn: func(id string, replicas uint64) error {
+			scaleServiceFn: func(_ context.Context, id string, replicas uint64) error {
 				scaled = id
 				scaledTo = replicas
 				return nil
 			},
-			restartServiceFn:    func(_ string) error { return nil },
-			removeServiceFn:     func(_ string) error { return nil },
-			rollbackServiceFn:   func(_ string) error { return nil },
+			restartServiceFn:    func(_ context.Context, _ string) error { return nil },
+			removeServiceFn:     func(_ context.Context, _ string) error { return nil },
+			rollbackServiceFn:   func(_ context.Context, _ string) error { return nil },
 			loadNodeServicesFn:  func(_ string) []docker.ServiceEntry { return nil },
 			loadStackServicesFn: func(_ string) []docker.ServiceEntry { return nil },
 		}

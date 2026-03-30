@@ -12,6 +12,7 @@ import (
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	loading "swarmcli/views/loading"
+	"sync/atomic"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -37,7 +38,8 @@ type Model struct {
 	height        int
 	firstResize   bool   // tracks if we've received the first window size
 	lastSnapshot  uint64 // hash of last snapshot for change detection
-	visible       bool   // tracks if view is currently active
+	polling       atomic.Bool
+	visible       bool // tracks if view is currently active
 	sortField     SortField
 	sortAscending bool // true for ascending, false for descending
 

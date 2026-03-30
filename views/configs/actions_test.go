@@ -246,3 +246,43 @@ func TestRotateConfigCmd_NilNewConfig(t *testing.T) {
 	cmd := m.rotateConfigCmd(nil, nil)
 	require.Nil(t, cmd)
 }
+
+func TestCheckConfigsCmd_Timeout_ReturnsPollRetryMsg(t *testing.T) {
+	mock := noopConfigOps()
+	mock.listConfigsFn = func(_ context.Context) ([]swarm.Config, error) {
+		return nil, context.DeadlineExceeded
+	}
+	m := testModel(func(m *Model) { m.deps.Configs = mock })
+	cmd := m.checkConfigsCmd(0)
+	msg := runCmd(cmd)
+	_, ok := msg.(PollRetryMsg)
+	require.True(t, ok)
+}
+
+func TestLoadConfigsCmd_Timeout_ReturnsErrorMsg(t *testing.T) {
+	mock := noopConfigOps()
+	mock.listConfigsFn = func(_ context.Context) ([]swarm.Config, error) {
+		return nil, context.DeadlineExceeded
+	}
+	m := testModel(func(m *Model) { m.deps.Configs = mock })
+	cmd := m.loadConfigsCmd()
+	msg := runCmd(cmd)
+	_, ok := msg.(errorMsg)
+	require.True(t, ok)
+}
+
+func TestCheckConfigsCmd_InFlightGuard_SkipsDuplicate(t *testing.T) {
+	called := false
+	mock := noopConfigOps()
+	mock.listConfigsFn = func(_ context.Context) ([]swarm.Config, error) {
+		called = true
+		return nil, nil
+	}
+	m := testModel(func(m *Model) { m.deps.Configs = mock })
+	m.polling.Store(true)
+	cmd := m.checkConfigsCmd(0)
+	msg := runCmd(cmd)
+	_, ok := msg.(PollRetryMsg)
+	require.True(t, ok)
+	require.False(t, called, "listConfigsFn should not be called when polling is in flight")
+}

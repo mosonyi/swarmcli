@@ -16,7 +16,7 @@ import (
 type mockContextOps struct {
 	listContextsFn               func() ([]docker.ContextInfo, error)
 	useContextFn                 func(contextName string) error
-	validateContextFn            func(contextName string) error
+	validateContextFn            func(ctx context.Context, contextName string) error
 	inspectContextFn             func(contextName string) (string, error)
 	exportContextFn              func(contextName string) (string, error)
 	exportContextWithForceFn     func(contextName string) (string, error)
@@ -36,8 +36,8 @@ func (m *mockContextOps) ListContexts() ([]docker.ContextInfo, error) {
 func (m *mockContextOps) UseContext(contextName string) error {
 	return m.useContextFn(contextName)
 }
-func (m *mockContextOps) ValidateContext(contextName string) error {
-	return m.validateContextFn(contextName)
+func (m *mockContextOps) ValidateContext(ctx context.Context, contextName string) error {
+	return m.validateContextFn(ctx, contextName)
 }
 func (m *mockContextOps) InspectContext(contextName string) (string, error) {
 	return m.inspectContextFn(contextName)
@@ -118,7 +118,7 @@ func noopContextOps() *mockContextOps {
 	return &mockContextOps{
 		listContextsFn:               func() ([]docker.ContextInfo, error) { return nil, nil },
 		useContextFn:                 func(_ string) error { return nil },
-		validateContextFn:            func(_ string) error { return nil },
+		validateContextFn:            func(_ context.Context, _ string) error { return nil },
 		inspectContextFn:             func(_ string) (string, error) { return "{}", nil },
 		exportContextFn:              func(_ string) (string, error) { return "/tmp/test.tar", nil },
 		exportContextWithForceFn:     func(_ string) (string, error) { return "/tmp/test.tar", nil },

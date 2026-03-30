@@ -3,10 +3,12 @@
 
 package docker
 
+import "context"
+
 // StackOps abstracts stack operations for testability and extensibility.
 type StackOps interface {
-	RemoveStack(stackName string) error
-	RemoveStackNetworks(stackName string) error
+	RemoveStack(ctx context.Context, stackName string) error
+	RemoveStackNetworks(ctx context.Context, stackName string) error
 	DeployStack(stackName string, yamlContent string) error
 	ValidateStackYAML(content string) error
 	InspectStack(stackName string) (string, error)
@@ -15,12 +17,12 @@ type StackOps interface {
 
 type defaultStackOps struct{}
 
-func (defaultStackOps) RemoveStack(stackName string) error {
-	return RemoveStack(stackName)
+func (defaultStackOps) RemoveStack(ctx context.Context, stackName string) error {
+	return RemoveStack(ctx, stackName)
 }
 
-func (defaultStackOps) RemoveStackNetworks(stackName string) error {
-	return RemoveStackNetworks(stackName)
+func (defaultStackOps) RemoveStackNetworks(ctx context.Context, stackName string) error {
+	return RemoveStackNetworks(ctx, stackName)
 }
 
 func (defaultStackOps) DeployStack(stackName string, yamlContent string) error {
