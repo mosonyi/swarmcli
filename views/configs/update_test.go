@@ -433,6 +433,21 @@ func TestParseLabels_Invalid(t *testing.T) {
 
 // --- Help content ---
 
+func TestTickMsg_WhenPollingInFlight_SkipsCheck(t *testing.T) {
+	m := testModel()
+	loadConfigs(m, fakeConfigs("c1"))
+	m.visible = true
+	m.polling.Store(true)
+	cmd := m.Update(TickMsg(time.Now()))
+	require.NotNil(t, cmd)
+	// With polling in flight the TickMsg handler should only return tickCmd,
+	// not batch(checkConfigsCmd, tickCmd). Executing the returned cmd should
+	// produce a TickMsg (from tickCmd), not a PollRetryMsg or configsLoadedMsg.
+	msg := runCmd(cmd)
+	_, isTickMsg := msg.(TickMsg)
+	require.True(t, isTickMsg, "expected TickMsg from tickCmd, got %T", msg)
+}
+
 func TestGetConfigsHelpContent(t *testing.T) {
 	cats := GetConfigsHelpContent()
 	require.True(t, len(cats) >= 3)

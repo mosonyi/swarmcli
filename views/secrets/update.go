@@ -163,7 +163,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case TickMsg:
 		l().Infof("SecretsView: Received TickMsg, state=%v, visible=%v", m.state, m.visible)
-		if m.visible && m.state == stateReady && !m.confirmDialog.Visible && !m.loadingView.Visible() {
+		if m.visible && m.state == stateReady && !m.confirmDialog.Visible && !m.loadingView.Visible() && !m.polling.Load() {
 			return tea.Batch(
 				m.checkSecretsCmd(m.lastSnapshot),
 				tickCmd(),

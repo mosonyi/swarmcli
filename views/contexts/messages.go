@@ -4,6 +4,7 @@
 package contexts
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,9 +14,12 @@ import (
 	swarmlog "swarmcli/utils/log"
 	inspectview "swarmcli/views/inspect"
 	"swarmcli/views/view"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+const userActionTimeout = 15 * time.Second
 
 // isContextArchive checks if a filename is a context archive (supports multiple formats)
 func isContextArchive(filename string) bool {
@@ -112,9 +116,11 @@ func (m *Model) loadContextsCmd() func() tea.Msg {
 func (m *Model) switchContextCmd(contextName string) tea.Cmd {
 	contextOps := m.deps.Contexts
 	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+		defer cancel()
 		// ValidateContext will switch to the context, verify it's reachable,
 		// and switch back to the original if validation fails
-		err := contextOps.ValidateContext(contextName)
+		err := contextOps.ValidateContext(ctx, contextName)
 		return ContextSwitchedMsg{
 			ContextName: contextName,
 			Success:     err == nil,

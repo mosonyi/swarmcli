@@ -527,6 +527,18 @@ func TestParseLabels_EmptyKey(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestTickMsg_WhenPollingInFlight_SkipsCheck(t *testing.T) {
+	m := testModel()
+	loadSecrets(m, fakeSecrets("s1"))
+	m.visible = true
+	m.polling.Store(true)
+	cmd := m.Update(TickMsg(time.Now()))
+	require.NotNil(t, cmd)
+	msg := runCmd(cmd)
+	_, isTickMsg := msg.(TickMsg)
+	require.True(t, isTickMsg, "expected TickMsg from tickCmd, got %T", msg)
+}
+
 // --- SpinnerTick ---
 
 func TestSpinnerTick_AdvancesSpinner(t *testing.T) {

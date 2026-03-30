@@ -1,6 +1,7 @@
 package stacksview
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -14,19 +15,19 @@ import (
 // --- mocks ---
 
 type mockStackOps struct {
-	removeStackFn             func(stackName string) error
-	removeStackNetworksFn     func(stackName string) error
+	removeStackFn             func(ctx context.Context, stackName string) error
+	removeStackNetworksFn     func(ctx context.Context, stackName string) error
 	deployStackFn             func(stackName string, yamlContent string) error
 	validateStackYAMLFn       func(content string) error
 	inspectStackFn            func(stackName string) (string, error)
 	reconstructStackComposeFn func(stackName string) (string, error)
 }
 
-func (m *mockStackOps) RemoveStack(stackName string) error {
-	return m.removeStackFn(stackName)
+func (m *mockStackOps) RemoveStack(ctx context.Context, stackName string) error {
+	return m.removeStackFn(ctx, stackName)
 }
-func (m *mockStackOps) RemoveStackNetworks(stackName string) error {
-	return m.removeStackNetworksFn(stackName)
+func (m *mockStackOps) RemoveStackNetworks(ctx context.Context, stackName string) error {
+	return m.removeStackNetworksFn(ctx, stackName)
 }
 func (m *mockStackOps) DeployStack(stackName string, yamlContent string) error {
 	return m.deployStackFn(stackName, yamlContent)
@@ -129,8 +130,8 @@ func runCmd(cmd tea.Cmd) tea.Msg {
 
 func noopStackOps() *mockStackOps {
 	return &mockStackOps{
-		removeStackFn:             func(_ string) error { return nil },
-		removeStackNetworksFn:     func(_ string) error { return nil },
+		removeStackFn:             func(_ context.Context, _ string) error { return nil },
+		removeStackNetworksFn:     func(_ context.Context, _ string) error { return nil },
 		deployStackFn:             func(_ string, _ string) error { return nil },
 		validateStackYAMLFn:       func(_ string) error { return nil },
 		inspectStackFn:            func(_ string) (string, error) { return "", nil },

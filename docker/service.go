@@ -97,13 +97,11 @@ func restartServiceCommon(ctx context.Context, c *client.Client, svc *swarm.Serv
 //
 
 // ScaleService updates the replica count of a service by ID.
-func ScaleService(serviceID string, replicas uint64) error {
+func ScaleService(ctx context.Context, serviceID string, replicas uint64) error {
 	c, err := GetClient()
 	if err != nil {
 		return fmt.Errorf("docker client: %w", err)
 	}
-
-	ctx := context.Background()
 
 	svc, _, err := c.ServiceInspectWithRaw(ctx, serviceID, swarm.ServiceInspectOptions{})
 	if err != nil {
@@ -113,13 +111,12 @@ func ScaleService(serviceID string, replicas uint64) error {
 }
 
 // ScaleServiceByName looks up a service by name and scales it.
-func ScaleServiceByName(serviceName string, replicas uint64) error {
+func ScaleServiceByName(ctx context.Context, serviceName string, replicas uint64) error {
 	c, err := GetClient()
 	if err != nil {
 		return fmt.Errorf("docker client: %w", err)
 	}
 
-	ctx := context.Background()
 	svc, err := findServiceByName(ctx, c, serviceName)
 	if err != nil {
 		return err
@@ -128,13 +125,12 @@ func ScaleServiceByName(serviceName string, replicas uint64) error {
 }
 
 // RestartService performs a rolling restart (like `docker service update --force`).
-func RestartService(serviceName string) error {
+func RestartService(ctx context.Context, serviceName string) error {
 	c, err := GetClient()
 	if err != nil {
 		return fmt.Errorf("docker client: %w", err)
 	}
 
-	ctx := context.Background()
 	svc, err := findServiceByName(ctx, c, serviceName)
 	if err != nil {
 		return err
@@ -143,13 +139,12 @@ func RestartService(serviceName string) error {
 }
 
 // RemoveService removes a service by name.
-func RemoveService(serviceName string) error {
+func RemoveService(ctx context.Context, serviceName string) error {
 	c, err := GetClient()
 	if err != nil {
 		return fmt.Errorf("docker client: %w", err)
 	}
 
-	ctx := context.Background()
 	svc, err := findServiceByName(ctx, c, serviceName)
 	if err != nil {
 		return err
@@ -164,13 +159,12 @@ func RemoveService(serviceName string) error {
 }
 
 // RollbackService rolls back a service to its previous configuration.
-func RollbackService(serviceName string) error {
+func RollbackService(ctx context.Context, serviceName string) error {
 	c, err := GetClient()
 	if err != nil {
 		return fmt.Errorf("docker client: %w", err)
 	}
 
-	ctx := context.Background()
 	svc, err := findServiceByName(ctx, c, serviceName)
 	if err != nil {
 		return err

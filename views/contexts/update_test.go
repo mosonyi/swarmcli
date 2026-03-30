@@ -1,6 +1,7 @@
 package contexts
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -290,7 +291,7 @@ func TestUpdate_ConfirmDialog_EscCloses(t *testing.T) {
 func TestKey_Enter_SwitchContext(t *testing.T) {
 	var switched string
 	ops := noopContextOps()
-	ops.validateContextFn = func(name string) error {
+	ops.validateContextFn = func(_ context.Context, name string) error {
 		switched = name
 		return nil
 	}
@@ -809,7 +810,7 @@ func TestLoadContextsCmd(t *testing.T) {
 func TestSwitchContextCmd(t *testing.T) {
 	var validated string
 	ops := noopContextOps()
-	ops.validateContextFn = func(name string) error {
+	ops.validateContextFn = func(_ context.Context, name string) error {
 		validated = name
 		return nil
 	}

@@ -25,6 +25,8 @@ type PollRetryMsg struct{}
 
 const PollInterval = 2 * time.Second
 
+const userActionTimeout = 15 * time.Second
+
 // RestartErrorMsg is sent when a service restart fails
 type RestartErrorMsg struct {
 	ServiceName string

@@ -11,11 +11,11 @@ import (
 
 // ServiceOps abstracts service operations for testability and extensibility.
 type ServiceOps interface {
-	ScaleService(serviceID string, replicas uint64) error
-	ScaleServiceByName(serviceName string, replicas uint64) error
-	RestartService(serviceName string) error
-	RemoveService(serviceName string) error
-	RollbackService(serviceName string) error
+	ScaleService(ctx context.Context, serviceID string, replicas uint64) error
+	ScaleServiceByName(ctx context.Context, serviceName string, replicas uint64) error
+	RestartService(ctx context.Context, serviceName string) error
+	RemoveService(ctx context.Context, serviceName string) error
+	RollbackService(ctx context.Context, serviceName string) error
 	RestartServiceAndWait(ctx context.Context, serviceName string) error
 	RestartServiceWithProgress(ctx context.Context, serviceName string, progressCh chan<- ProgressUpdate) error
 	LoadNodeServices(nodeID string) []ServiceEntry
@@ -27,20 +27,20 @@ type ServiceOps interface {
 
 type defaultServiceOps struct{}
 
-func (defaultServiceOps) ScaleService(serviceID string, replicas uint64) error {
-	return ScaleService(serviceID, replicas)
+func (defaultServiceOps) ScaleService(ctx context.Context, serviceID string, replicas uint64) error {
+	return ScaleService(ctx, serviceID, replicas)
 }
-func (defaultServiceOps) ScaleServiceByName(serviceName string, replicas uint64) error {
-	return ScaleServiceByName(serviceName, replicas)
+func (defaultServiceOps) ScaleServiceByName(ctx context.Context, serviceName string, replicas uint64) error {
+	return ScaleServiceByName(ctx, serviceName, replicas)
 }
-func (defaultServiceOps) RestartService(serviceName string) error {
-	return RestartService(serviceName)
+func (defaultServiceOps) RestartService(ctx context.Context, serviceName string) error {
+	return RestartService(ctx, serviceName)
 }
-func (defaultServiceOps) RemoveService(serviceName string) error {
-	return RemoveService(serviceName)
+func (defaultServiceOps) RemoveService(ctx context.Context, serviceName string) error {
+	return RemoveService(ctx, serviceName)
 }
-func (defaultServiceOps) RollbackService(serviceName string) error {
-	return RollbackService(serviceName)
+func (defaultServiceOps) RollbackService(ctx context.Context, serviceName string) error {
+	return RollbackService(ctx, serviceName)
 }
 func (defaultServiceOps) RestartServiceAndWait(ctx context.Context, serviceName string) error {
 	return RestartServiceAndWait(ctx, serviceName)

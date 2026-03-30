@@ -4,8 +4,10 @@
 package docker
 
 import (
+	"context"
 	"fmt"
 	"sync"
+	"time"
 )
 
 // Cache for nodeID → hostname lookups.
@@ -21,7 +23,9 @@ func ensureHostnameCache() error {
 	nodeCacheOnce.Do(func() {
 		nodeCacheMu.Lock()
 		defer nodeCacheMu.Unlock()
-		nodeCacheErr = refreshNodeCacheLocked()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		nodeCacheErr = refreshNodeCacheLocked(ctx)
 	})
 	return nodeCacheErr
 }
@@ -35,7 +39,9 @@ func RefreshHostnameCache() error {
 	// Reset the Once so ensureHostnameCache() can run again if needed.
 	nodeCacheOnce = sync.Once{}
 
-	if err := refreshNodeCacheLocked(); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := refreshNodeCacheLocked(ctx); err != nil {
 		nodeCacheErr = fmt.Errorf("manual hostname cache refresh failed: %w", err)
 		return nodeCacheErr
 	}
@@ -63,8 +69,8 @@ func GetNodeIDToHostnameMap() (map[string]string, error) {
 
 // refreshNodeCacheLocked updates the global cache map in-place.
 // Caller must hold nodeCacheMu write lock.
-func refreshNodeCacheLocked() error {
-	names, err := GetNodeIDToHostnameMapFromDocker()
+func refreshNodeCacheLocked(ctx context.Context) error {
+	names, err := GetNodeIDToHostnameMapFromDocker(ctx)
 	if err != nil {
 		return fmt.Errorf("refreshNodeCacheLocked: %w", err)
 	}

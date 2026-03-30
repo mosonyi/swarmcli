@@ -10,13 +10,13 @@ import (
 	"github.com/docker/docker/api/types/swarm"
 )
 
-func GetNodeIDToHostnameMapFromDocker() (map[string]string, error) {
+func GetNodeIDToHostnameMapFromDocker(ctx context.Context) (map[string]string, error) {
 	c, err := GetClient()
 	if err != nil {
 		return nil, err
 	}
 
-	nodes, err := c.NodeList(context.Background(), swarm.NodeListOptions{})
+	nodes, err := c.NodeList(ctx, swarm.NodeListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("listing nodes: %w", err)
 	}

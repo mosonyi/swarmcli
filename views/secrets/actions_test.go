@@ -153,6 +153,46 @@ func TestCheckSecretsCmd_NoChange_ReturnsPollRetry(t *testing.T) {
 	require.True(t, isPollRetry, "should return PollRetryMsg when no change")
 }
 
+func TestCheckSecretsCmd_Timeout_ReturnsPollRetryMsg(t *testing.T) {
+	mock := noopSecretOps()
+	mock.listSecretsFn = func(_ context.Context) ([]swarm.Secret, error) {
+		return nil, context.DeadlineExceeded
+	}
+	m := testModel(func(m *Model) { m.deps.Secrets = mock })
+	cmd := m.checkSecretsCmd(0)
+	msg := runCmd(cmd)
+	_, ok := msg.(PollRetryMsg)
+	require.True(t, ok)
+}
+
+func TestLoadSecretsCmd_Timeout_ReturnsErrorMsg(t *testing.T) {
+	mock := noopSecretOps()
+	mock.listSecretsFn = func(_ context.Context) ([]swarm.Secret, error) {
+		return nil, context.DeadlineExceeded
+	}
+	m := testModel(func(m *Model) { m.deps.Secrets = mock })
+	cmd := m.loadSecretsCmd()
+	msg := runCmd(cmd)
+	_, ok := msg.(errorMsg)
+	require.True(t, ok)
+}
+
+func TestCheckSecretsCmd_InFlightGuard_SkipsDuplicate(t *testing.T) {
+	called := false
+	mock := noopSecretOps()
+	mock.listSecretsFn = func(_ context.Context) ([]swarm.Secret, error) {
+		called = true
+		return nil, nil
+	}
+	m := testModel(func(m *Model) { m.deps.Secrets = mock })
+	m.polling.Store(true)
+	cmd := m.checkSecretsCmd(0)
+	msg := runCmd(cmd)
+	_, ok := msg.(PollRetryMsg)
+	require.True(t, ok)
+	require.False(t, called, "listSecretsFn should not be called when polling is in flight")
+}
+
 func TestCheckSecretsCmd_HashMatchesAfterLoad(t *testing.T) {
 	secrets := []swarm.Secret{
 		{ID: "id1", Meta: swarm.Meta{Version: swarm.Version{Index: 1}}, Spec: swarm.SecretSpec{Annotations: swarm.Annotations{Name: "alpha"}}},

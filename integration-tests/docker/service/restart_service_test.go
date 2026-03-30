@@ -6,6 +6,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -48,7 +49,7 @@ func TestRestartWhoamiSingleService(t *testing.T) {
 
 	t.Logf("Restarting service %s (old task ID: %s)", serviceName, oldTaskID)
 	start := time.Now()
-	if err := docker.RestartService(serviceName); err != nil {
+	if err := docker.RestartService(context.Background(), serviceName); err != nil {
 		t.Fatalf("failed to restart service: %v", err)
 	}
 
@@ -115,7 +116,7 @@ func TestRestartWhoamiMultiService(t *testing.T) {
 
 	t.Logf("Restarting multi-replica service %s (%d replicas)", serviceName, replicas)
 	start := time.Now()
-	if err := docker.RestartService(serviceName); err != nil {
+	if err := docker.RestartService(context.Background(), serviceName); err != nil {
 		t.Fatalf("failed to restart service: %v", err)
 	}
 
@@ -158,7 +159,7 @@ func TestRestartWhoamiMultiService(t *testing.T) {
 func TestRestartService_NotFound_ReturnsError(t *testing.T) {
 	const serviceName = "nonexistent_demo_service"
 
-	err := docker.RestartService(serviceName)
+	err := docker.RestartService(context.Background(), serviceName)
 	if err == nil {
 		t.Fatalf("expected error when restarting nonexistent service %s, got nil", serviceName)
 	}

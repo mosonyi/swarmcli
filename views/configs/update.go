@@ -168,7 +168,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case TickMsg:
 		l().Infof("ConfigsView: Received TickMsg, state=%v, visible=%v", m.state, m.visible)
 		// Only check for changes if view is visible, ready, and not showing dialogs
-		if m.visible && m.state == stateReady && !m.confirmDialog.Visible && !m.loadingView.Visible() {
+		if m.visible && m.state == stateReady && !m.confirmDialog.Visible && !m.loadingView.Visible() && !m.polling.Load() {
 			return tea.Batch(
 				m.checkConfigsCmd(m.lastSnapshot),
 				tickCmd(),
@@ -526,7 +526,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			l().Infof("Clone key pressed for config: %s", cfgName)
 			// Inspect to get content
-			ctx := context.Background()
+			ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+			defer cancel()
 			cfg, err := m.deps.Configs.InspectConfig(ctx, cfgName)
 			if err != nil {
 				l().Errorf("Failed to inspect config for clone: %v", err)

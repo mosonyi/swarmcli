@@ -24,7 +24,8 @@ import (
 func (m *Model) loadConfigsCmd() tea.Cmd {
 	configOps := m.deps.Configs
 	return func() tea.Msg {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
+		defer cancel()
 		cfgs, err := configOps.ListConfigs(ctx)
 		if err != nil {
 			return errorMsg(fmt.Errorf("failed to list configs: %w", err))
@@ -44,7 +45,8 @@ func (m *Model) computeConfigUsedCmd(cfgs []docker.ConfigWithDecodedData) tea.Cm
 	configOps := m.deps.Configs
 	return func() tea.Msg {
 		usedMap := make(map[string]bool, len(cfgs))
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
+		defer cancel()
 		for _, c := range cfgs {
 			usedMap[c.Config.ID] = false
 			svcs, err := configOps.ListServicesUsingConfigID(ctx, c.Config.ID)
@@ -60,9 +62,16 @@ func (m *Model) computeConfigUsedCmd(cfgs []docker.ConfigWithDecodedData) tea.Cm
 func (m *Model) checkConfigsCmd(lastHash uint64) tea.Cmd {
 	configOps := m.deps.Configs
 	return func() tea.Msg {
+		if !m.polling.CompareAndSwap(false, true) {
+			l().Info("checkConfigsCmd: skipped, previous poll still in flight")
+			return PollRetryMsg{}
+		}
+		defer m.polling.Store(false)
+
 		l().Info("checkConfigsCmd: Polling for config changes")
 
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
+		defer cancel()
 		cfgs, err := configOps.ListConfigs(ctx)
 		if err != nil {
 			l().Errorf("checkConfigsCmd: ListConfigs failed: %v", err)
@@ -118,7 +127,8 @@ func (m *Model) rotateConfigCmd(oldCfg *docker.ConfigWithDecodedData, newCfg *do
 	configOps := m.deps.Configs
 	l().Debugln("Starting to rotate config", newCfg.Config.Spec.Name)
 	return func() tea.Msg {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+		defer cancel()
 
 		oldSwarmCfg := &swarm.Config{}
 		if oldCfg != nil {
@@ -142,7 +152,9 @@ func (m *Model) rotateConfigCmd(oldCfg *docker.ConfigWithDecodedData, newCfg *do
 func (m *Model) inspectConfigCmd(name string) tea.Cmd {
 	configOps := m.deps.Configs
 	return func() tea.Msg {
-		cfg, err := configOps.InspectConfig(context.Background(), name)
+		ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+		defer cancel()
+		cfg, err := configOps.InspectConfig(ctx, name)
 		jsonStr := ""
 		if err != nil {
 			jsonStr = fmt.Sprintf("Error inspecting config %q: %v", name, err)
@@ -170,7 +182,9 @@ func (m *Model) inspectConfigCmd(name string) tea.Cmd {
 func (m *Model) inspectRawConfigCmd(name string) tea.Cmd {
 	configOps := m.deps.Configs
 	return func() tea.Msg {
-		cfg, err := configOps.InspectConfig(context.Background(), name)
+		ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+		defer cancel()
+		cfg, err := configOps.InspectConfig(ctx, name)
 		if err != nil {
 			return view.NavigateToMsg{
 				ViewName: inspectview.ViewName,
@@ -198,7 +212,8 @@ func (m *Model) inspectRawConfigCmd(name string) tea.Cmd {
 func (m *Model) deleteConfigCmd(name string) tea.Cmd {
 	configOps := m.deps.Configs
 	return func() tea.Msg {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+		defer cancel()
 		err := configOps.DeleteConfig(ctx, name)
 		if err != nil {
 			return errorMsg(fmt.Errorf("failed to delete config %q: %w", name, err))
@@ -271,7 +286,8 @@ func (m *Model) createConfigFromFileCmd(name, filePath string, labels map[string
 		}
 
 		// Create the config
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+		defer cancel()
 		newCfg, err := configOps.CreateConfig(ctx, name, data, labels)
 		if err != nil {
 			l().Errorf("Failed to create config %s: %v", name, err)
@@ -289,7 +305,8 @@ func (m *Model) createConfigFromContentCmd(name string, content []byte, labels m
 	return func() tea.Msg {
 		l().Infof("Creating config %s from inline content (labels=%v)", name, labels)
 
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+		defer cancel()
 		newCfg, err := configOps.CreateConfig(ctx, name, content, labels)
 		if err != nil {
 			l().Errorf("Failed to create config %s: %v", name, err)
@@ -306,7 +323,8 @@ func (m *Model) getUsedByStacksCmd(configName string) tea.Cmd {
 	return func() tea.Msg {
 		l().Infof("Getting stacks/services that use config: %s", configName)
 
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+		defer cancel()
 		// Get config ID for robust matching
 		cfg, err := configOps.InspectConfig(ctx, configName)
 		if err != nil {

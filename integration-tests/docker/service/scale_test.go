@@ -6,6 +6,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -37,7 +38,7 @@ func TestScaleWhoamiService(t *testing.T) {
 
 	scaleTarget := original - 1
 	t.Logf("Scaling service %s down from %d → %d replicas", serviceName, original, scaleTarget)
-	if err := docker.ScaleServiceByName(serviceName, scaleTarget); err != nil {
+	if err := docker.ScaleServiceByName(context.Background(), serviceName, scaleTarget); err != nil {
 		t.Fatalf("failed to scale down: %v", err)
 	}
 
@@ -65,7 +66,7 @@ func TestScaleWhoamiService(t *testing.T) {
 
 	// Restore
 	t.Logf("Restoring service %s back to %d replicas", serviceName, original)
-	if err := docker.ScaleServiceByName(serviceName, original); err != nil {
+	if err := docker.ScaleServiceByName(context.Background(), serviceName, original); err != nil {
 		t.Fatalf("failed to restore original count: %v", err)
 	}
 }
@@ -96,7 +97,7 @@ func TestScaleWhoamiSingleServiceTo0AndThenTo1(t *testing.T) {
 
 	// Scale down to 0
 	t.Logf("Scaling service %s down to 0 replicas", serviceName)
-	if err := docker.ScaleServiceByName(serviceName, 0); err != nil {
+	if err := docker.ScaleServiceByName(context.Background(), serviceName, 0); err != nil {
 		t.Fatalf("failed to scale down: %v", err)
 	}
 
@@ -124,7 +125,7 @@ func TestScaleWhoamiSingleServiceTo0AndThenTo1(t *testing.T) {
 
 	// Scale back up to 1
 	t.Logf("Scaling service %s back up to 1 replica", serviceName)
-	if err := docker.ScaleServiceByName(serviceName, 1); err != nil {
+	if err := docker.ScaleServiceByName(context.Background(), serviceName, 1); err != nil {
 		t.Fatalf("failed to scale up: %v", err)
 	}
 
@@ -157,13 +158,13 @@ func TestScaleServiceUnchanged(t *testing.T) {
 	const svcName = "demo_whoami_single"
 
 	// Get current replicas
-	err := docker.ScaleServiceByName(svcName, 1)
+	err := docker.ScaleServiceByName(context.Background(), svcName, 1)
 	if err != nil {
 		t.Fatalf("initial scale failed: %v", err)
 	}
 
 	// Scale to the same count again
-	err = docker.ScaleServiceByName(svcName, 1)
+	err = docker.ScaleServiceByName(context.Background(), svcName, 1)
 	if err != nil {
 		t.Fatalf("scaling to same count failed: %v", err)
 	}

@@ -37,7 +37,7 @@ func (m *mockSnapshotOps) GetOrRefreshSnapshot() (*docker.SwarmSnapshot, error) 
 }
 
 type mockNodeOps struct {
-	getNodeIDToHostnameMapFromDockerFn func() (map[string]string, error)
+	getNodeIDToHostnameMapFromDockerFn func(ctx context.Context) (map[string]string, error)
 	demoteNodeFn                       func(ctx context.Context, nodeID string) error
 	promoteNodeFn                      func(ctx context.Context, nodeID string) error
 	setNodeAvailabilityFn              func(ctx context.Context, nodeID string, availability swarm.NodeAvailability) error
@@ -46,8 +46,8 @@ type mockNodeOps struct {
 	removeNodeFn                       func(ctx context.Context, nodeID string, force bool) error
 }
 
-func (m *mockNodeOps) GetNodeIDToHostnameMapFromDocker() (map[string]string, error) {
-	return m.getNodeIDToHostnameMapFromDockerFn()
+func (m *mockNodeOps) GetNodeIDToHostnameMapFromDocker(ctx context.Context) (map[string]string, error) {
+	return m.getNodeIDToHostnameMapFromDockerFn(ctx)
 }
 func (m *mockNodeOps) DemoteNode(ctx context.Context, nodeID string) error {
 	return m.demoteNodeFn(ctx, nodeID)
@@ -133,7 +133,7 @@ func noopSnapshotOps() *mockSnapshotOps {
 
 func noopNodeOps() *mockNodeOps {
 	return &mockNodeOps{
-		getNodeIDToHostnameMapFromDockerFn: func() (map[string]string, error) { return nil, nil },
+		getNodeIDToHostnameMapFromDockerFn: func(_ context.Context) (map[string]string, error) { return nil, nil },
 		demoteNodeFn:                       func(_ context.Context, _ string) error { return nil },
 		promoteNodeFn:                      func(_ context.Context, _ string) error { return nil },
 		setNodeAvailabilityFn:              func(_ context.Context, _ string, _ swarm.NodeAvailability) error { return nil },

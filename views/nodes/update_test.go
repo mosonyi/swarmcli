@@ -1,6 +1,7 @@
 package nodesview
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -448,6 +449,24 @@ func TestLabelRemoveDialog_Enter(t *testing.T) {
 }
 
 // --- LoadNodesCmd test ---
+
+func TestDemoteNode_Timeout_ReturnsError(t *testing.T) {
+	nodeMock := noopNodeOps()
+	nodeMock.demoteNodeFn = func(_ context.Context, _ string) error {
+		return context.DeadlineExceeded
+	}
+	m := testModel(func(m *Model) { m.deps.Nodes = nodeMock })
+	entries := fakeNodes("mgr")
+	entries[0].Manager = true
+	loadNodes(m, entries)
+	m.confirmDialog.Visible = true
+	m.confirmDialog.Message = "Demote node mgr"
+	cmd := m.Update(confirmdialog.ResultMsg{Confirmed: true})
+	require.NotNil(t, cmd)
+	msg := runCmd(cmd)
+	_, ok := msg.(DemoteErrorMsg)
+	require.True(t, ok, "expected DemoteErrorMsg, got %T", msg)
+}
 
 func TestLoadNodesCmd(t *testing.T) {
 	snap := &docker.SwarmSnapshot{

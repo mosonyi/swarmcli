@@ -11,7 +11,7 @@ import (
 
 // NodeOps abstracts node operations for testability and extensibility.
 type NodeOps interface {
-	GetNodeIDToHostnameMapFromDocker() (map[string]string, error)
+	GetNodeIDToHostnameMapFromDocker(ctx context.Context) (map[string]string, error)
 	DemoteNode(ctx context.Context, nodeID string) error
 	PromoteNode(ctx context.Context, nodeID string) error
 	SetNodeAvailability(ctx context.Context, nodeID string, availability swarm.NodeAvailability) error
@@ -22,8 +22,8 @@ type NodeOps interface {
 
 type defaultNodeOps struct{}
 
-func (defaultNodeOps) GetNodeIDToHostnameMapFromDocker() (map[string]string, error) {
-	return GetNodeIDToHostnameMapFromDocker()
+func (defaultNodeOps) GetNodeIDToHostnameMapFromDocker(ctx context.Context) (map[string]string, error) {
+	return GetNodeIDToHostnameMapFromDocker(ctx)
 }
 func (defaultNodeOps) DemoteNode(ctx context.Context, nodeID string) error {
 	return DemoteNode(ctx, nodeID)

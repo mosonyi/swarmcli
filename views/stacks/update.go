@@ -4,6 +4,7 @@
 package stacksview
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,6 +25,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/docker/docker/api/types/swarm"
 )
+
+const userActionTimeout = 15 * time.Second
 
 // Update handles all messages for the stacks view.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
@@ -139,8 +142,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				snapOps := m.deps.Snapshot
 				checkCmd := m.checkStacksCmd(m.lastSnapshot, m.nodeID)
 				return func() tea.Msg {
+					ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+					defer cancel()
 					l().Infof("Executing remove for stack: %s (remove networks: %v)", selected.Name, removeNetworks)
-					if err := stackOps.RemoveStack(selected.Name); err != nil {
+					if err := stackOps.RemoveStack(ctx, selected.Name); err != nil {
 						l().Errorf("Failed to remove stack %s: %v", selected.Name, err)
 						return RemoveErrorMsg{
 							StackName: selected.Name,
@@ -152,7 +157,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					// Remove networks if checkbox was checked
 					if removeNetworks {
 						l().Infof("Removing networks for stack: %s", selected.Name)
-						if err := stackOps.RemoveStackNetworks(selected.Name); err != nil {
+						if err := stackOps.RemoveStackNetworks(ctx, selected.Name); err != nil {
 							l().Warnf("Failed to remove networks for stack %s: %v", selected.Name, err)
 							// Don't fail the whole operation if network removal fails
 						}
