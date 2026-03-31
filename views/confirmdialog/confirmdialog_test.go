@@ -1,9 +1,11 @@
 package confirmdialog
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
 )
 
@@ -182,4 +184,30 @@ func TestWithMessage(t *testing.T) {
 	ret := m.WithMessage("hi")
 	require.Equal(t, m, ret)
 	require.Equal(t, "hi", m.Message)
+}
+
+func TestView_LongMessage_Wraps(t *testing.T) {
+	m := New(80, 24)
+	m.ErrorMode = true
+	longMsg := "Bootstrap failed: error creating secret swarmcli-infra_proxy_cert: " +
+		"Error response from daemon: rpc error: code = AlreadyExists desc = secret swarmcli-infra_proxy_cert already exists"
+	m.Show(longMsg)
+	out := m.View()
+	// The dialog output should contain newlines from wrapping
+	// (the original message has no newlines, so any newlines in
+	// the rendered output come from wrapping).
+	require.Contains(t, out, "Bootstrap failed")
+	require.Contains(t, out, "already exists")
+	// Dialog should not be wider than the terminal (80 cols).
+	for _, line := range strings.Split(out, "\n") {
+		w := lipgloss.Width(line)
+		require.LessOrEqual(t, w, 82, "line too wide (visual width %d): %q", w, line)
+	}
+}
+
+func TestView_ShortMessage_NoWrapping(t *testing.T) {
+	m := New(80, 24)
+	m.Show("Short message")
+	out := m.View()
+	require.Contains(t, out, "Short message")
 }

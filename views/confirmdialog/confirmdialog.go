@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/reflow/wordwrap"
 )
 
 type ResultMsg struct {
@@ -74,10 +75,30 @@ func (m *Model) View() string {
 		return ""
 	}
 
-	// Calculate content width based on message
-	contentWidth := lipgloss.Width(m.Message) + 4
+	// Cap dialog width to a sensible maximum, then word-wrap.
+	maxWidth := 80
+	if m.Width > 0 && m.Width-6 < maxWidth {
+		maxWidth = m.Width - 6
+	}
+	if maxWidth < 40 {
+		maxWidth = 40
+	}
+
+	wrappedMessage := wordwrap.String(m.Message, maxWidth-4)
+
+	// Content width = longest wrapped line + padding.
+	contentWidth := 0
+	for _, line := range strings.Split(wrappedMessage, "\n") {
+		if w := lipgloss.Width(line); w > contentWidth {
+			contentWidth = w
+		}
+	}
+	contentWidth += 4
 	if contentWidth < 50 {
 		contentWidth = 50
+	}
+	if contentWidth > maxWidth {
+		contentWidth = maxWidth
 	}
 
 	// Styled title — color varies by mode
@@ -122,7 +143,7 @@ func (m *Model) View() string {
 	} else {
 		lines = append(lines, titleStyle.Render(" Confirm Action "))
 	}
-	lines = append(lines, messageStyle.Render(m.Message))
+	lines = append(lines, messageStyle.Render(wrappedMessage))
 
 	// Add checkbox if label is provided
 	if m.CheckboxLabel != "" && !m.ErrorMode && !m.InfoMode {
