@@ -150,6 +150,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			// Cancelled — return to save dialog
 			m.pendingAction = ""
 			m.saveDialogActive = true
+			m.saveFileInput.CursorEnd()
 			m.saveFileInput.Focus()
 			return nil
 		}
@@ -287,6 +288,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case stackSaveErrorMsg:
 		m.saveDialogActive = true
 		m.saveDialogError = msg.Err.Error()
+		m.saveFileInput.CursorEnd()
 		m.saveFileInput.Focus()
 		return nil
 
@@ -474,6 +476,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				m.saveDialogActive = true
 				m.saveDialogError = ""
 				m.saveFileInput.SetValue(selected.Name + ".yml")
+				m.saveFileInput.CursorEnd()
 				m.saveFileInput.Focus()
 				return nil
 			}
@@ -1033,6 +1036,7 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyMsg) tea.Cmd {
 				baseName = m.saveStackName + ".yml"
 			}
 			m.saveFileInput.SetValue(filepath.Join(m.fileBrowserPath, baseName))
+			m.saveFileInput.CursorEnd()
 			m.saveDialogActive = true
 			m.saveFileInput.Focus()
 		} else {
@@ -1080,6 +1084,7 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyMsg) tea.Cmd {
 				baseName = m.saveStackName + ".yml"
 			}
 			m.saveFileInput.SetValue(filepath.Join(m.fileBrowserPath, baseName))
+			m.saveFileInput.CursorEnd()
 			m.fileBrowserActive = false
 			m.saveDialogActive = true
 			m.saveFileInput.Focus()
@@ -1109,6 +1114,7 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyMsg) tea.Cmd {
 				baseName = m.saveStackName + ".yml"
 			}
 			m.saveFileInput.SetValue(filepath.Join(dir, baseName))
+			m.saveFileInput.CursorEnd()
 			m.fileBrowserActive = false
 			m.saveDialogActive = true
 			m.saveFileInput.Focus()
