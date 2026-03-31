@@ -100,6 +100,19 @@ func TestView_ExpandedStackShowsTasks(t *testing.T) {
 	require.Contains(t, out, "node1")
 }
 
+func TestView_SaveDialog(t *testing.T) {
+	m := testModel()
+	loadStacks(m, fakeStacks("s1"))
+	m.setRenderItem()
+	m.List.Viewport.Width = 80
+	m.List.Viewport.Height = 20
+	m.saveDialogActive = true
+	m.saveStackName = "mystack"
+	m.saveFileInput.SetValue("mystack.yml")
+	out := m.View()
+	require.Contains(t, out, "Save Stack")
+}
+
 func TestView_ErrorColumnHeader(t *testing.T) {
 	m := testModel()
 	loadStacks(m, fakeStacks("s1"))

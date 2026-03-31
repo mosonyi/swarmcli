@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strings"
 	"swarmcli/core/primitives/hash"
@@ -27,6 +28,9 @@ import (
 )
 
 const userActionTimeout = 15 * time.Second
+
+// saveDirSentinel is a special file browser entry that selects the current directory.
+const saveDirSentinel = "[Save here]"
 
 // Update handles all messages for the stacks view.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
@@ -131,6 +135,26 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case confirmdialog.ResultMsg:
 		m.confirmDialog.Visible = false
 		m.confirmDialog.CheckboxLabel = "" // Clear checkbox for next use
+		m.confirmDialog.InfoMode = false
+
+		if m.pendingAction == "save-overwrite" {
+			if msg.Confirmed {
+				filePath := m.saveFileInput.Value()
+				if !filepath.IsAbs(filePath) {
+					if abs, err := filepath.Abs(filePath); err == nil {
+						filePath = abs
+					}
+				}
+				m.pendingAction = ""
+				return m.saveStackToFileCmd(m.saveStackName, filePath)
+			}
+			// Cancelled — return to save dialog
+			m.pendingAction = ""
+			m.saveDialogActive = true
+			m.saveFileInput.CursorEnd()
+			m.saveFileInput.Focus()
+			return nil
+		}
 
 		if msg.Confirmed && m.List.Cursor < len(m.List.Filtered) {
 			selected := m.List.Filtered[m.List.Cursor]
@@ -253,21 +277,55 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.fileBrowserActive = false
 		return nil
 
+	case stackSavedMsg:
+		m.saveDialogActive = false
+		m.saveDialogError = ""
+		m.saveFileInput.Blur()
+		m.confirmDialog.Visible = true
+		m.confirmDialog.InfoMode = true
+		m.confirmDialog.Message = fmt.Sprintf("Stack YAML saved to:\n%s", msg.Path)
+		return nil
+
+	case stackSaveErrorMsg:
+		m.saveDialogActive = true
+		m.saveDialogError = msg.Err.Error()
+		m.saveFileInput.CursorEnd()
+		m.saveFileInput.Focus()
+		return nil
+
 	case filesLoadedMsg:
 		if msg.Error != nil {
 			l().Errorf("Error loading files: %v", msg.Error)
 			m.fileBrowserActive = false
-			m.createDialogActive = true
-			m.createDialogError = fmt.Sprintf("Failed to load directory: %v", msg.Error)
+			if m.fileBrowserContext == "save" {
+				m.saveDialogActive = true
+				m.saveDialogError = fmt.Sprintf("Failed to load directory: %v", msg.Error)
+			} else {
+				m.createDialogActive = true
+				m.createDialogError = fmt.Sprintf("Failed to load directory: %v", msg.Error)
+			}
 			return nil
 		}
 		m.fileBrowserPath = msg.Path
 		m.fileBrowserFiles = msg.Files
 		m.fileBrowserCursor = 0
+		// In save context, inject "[Save here]" entry after ".."
+		if m.fileBrowserContext == "save" {
+			idx := 0
+			if len(m.fileBrowserFiles) > 0 && m.fileBrowserFiles[0] == ".." {
+				idx = 1
+			}
+			m.fileBrowserFiles = slices.Insert(m.fileBrowserFiles, idx, saveDirSentinel)
+		}
 		m.fileBrowserActive = true // Ensure browser stays active
 		return nil
 
 	case tea.KeyMsg:
+		// If save dialog is active, handle its keys
+		if m.saveDialogActive {
+			return m.handleSaveDialogKey(msg)
+		}
+
 		// If create dialog is active, handle its keys
 		if m.createDialogActive {
 			return m.handleCreateDialogKey(msg)
@@ -408,6 +466,20 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				}
 				l().Infof("Reconstructed YAML for editing: %s (%d bytes)", stackName, len(yamlContent))
 				return openEditorForStackCmd(yamlContent)
+			}
+		}
+
+		// 's' saves stack YAML to a local file
+		if msg.String() == "s" {
+			if m.List.Cursor < len(m.List.Filtered) {
+				selected := m.List.Filtered[m.List.Cursor]
+				m.saveStackName = selected.Name
+				m.saveDialogActive = true
+				m.saveDialogError = ""
+				m.saveFileInput.SetValue(selected.Name + ".yml")
+				m.saveFileInput.CursorEnd()
+				m.saveFileInput.Focus()
+				return nil
 			}
 		}
 
@@ -657,6 +729,7 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 			if m.createInputFocus == 1 {
 				m.createDialogActive = false
 				m.fileBrowserActive = true
+				m.fileBrowserContext = "create"
 				homeDir, _ := os.UserHomeDir()
 				if homeDir == "" {
 					homeDir = "/"
@@ -863,12 +936,113 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
+// handleSaveDialogKey handles key presses inside the save dialog
+func (m *Model) handleSaveDialogKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "esc":
+		m.saveDialogActive = false
+		m.saveDialogError = ""
+		m.saveFileInput.Blur()
+		return nil
+	case "f", "F":
+		// Open file browser for directory selection
+		m.saveDialogActive = false
+		m.fileBrowserActive = true
+		m.fileBrowserContext = "save"
+		startDir, _ := os.Getwd()
+		val := m.saveFileInput.Value()
+		if val != "" {
+			dir := filepath.Dir(val)
+			if filepath.IsAbs(dir) {
+				startDir = dir
+			} else if abs, err := filepath.Abs(dir); err == nil {
+				startDir = abs
+			}
+		}
+		return loadFilesCmd(startDir)
+	case "enter":
+		// If there's an error, clear it and stay
+		if m.saveDialogError != "" {
+			m.saveDialogError = ""
+			return nil
+		}
+		filePath := m.saveFileInput.Value()
+		if filePath == "" {
+			m.saveDialogError = "File path cannot be empty"
+			return nil
+		}
+		// Resolve to absolute path
+		if !filepath.IsAbs(filePath) {
+			if abs, err := filepath.Abs(filePath); err == nil {
+				filePath = abs
+			}
+		}
+		// Check if file exists — ask for overwrite confirmation
+		if _, err := os.Stat(filePath); err == nil {
+			m.saveDialogActive = false
+			m.saveFileInput.Blur()
+			m.pendingAction = "save-overwrite"
+			m.confirmDialog.Visible = true
+			m.confirmDialog.ErrorMode = false
+			m.confirmDialog.Message = fmt.Sprintf("File already exists:\n%s\n\nOverwrite?", filePath)
+			return nil
+		}
+		// File does not exist — proceed with save
+		m.saveDialogActive = false
+		m.saveFileInput.Blur()
+		return m.saveStackToFileCmd(m.saveStackName, filePath)
+	default:
+		var cmd tea.Cmd
+		m.saveFileInput, cmd = m.saveFileInput.Update(msg)
+		if m.saveDialogError != "" {
+			m.saveDialogError = ""
+		}
+		return cmd
+	}
+}
+
+// saveStackToFileCmd reconstructs and saves stack YAML to a file
+func (m *Model) saveStackToFileCmd(stackName, filePath string) tea.Cmd {
+	stackOps := m.deps.Stacks
+	return func() tea.Msg {
+		l().Infof("Reconstructing YAML for stack: %s", stackName)
+		yamlContent, err := stackOps.ReconstructStackCompose(stackName)
+		if err != nil {
+			l().Errorf("Failed to reconstruct YAML for stack %s: %v", stackName, err)
+			return stackSaveErrorMsg{Err: fmt.Errorf("failed to reconstruct stack YAML: %w", err)}
+		}
+		l().Infof("Writing %d bytes to %s", len(yamlContent), filePath)
+		dir := filepath.Dir(filePath)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return stackSaveErrorMsg{Err: fmt.Errorf("failed to create directory: %w", err)}
+		}
+		if err := os.WriteFile(filePath, []byte(yamlContent), 0o644); err != nil {
+			l().Errorf("Failed to write file %s: %v", filePath, err)
+			return stackSaveErrorMsg{Err: fmt.Errorf("failed to write file: %w", err)}
+		}
+		l().Infof("Stack %s YAML saved to %s", stackName, filePath)
+		return stackSavedMsg{Path: filePath}
+	}
+}
+
 // handleFileBrowserKey handles key presses in file browser mode
 func (m *Model) handleFileBrowserKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc":
 		m.fileBrowserActive = false
-		m.createDialogActive = true
+		if m.fileBrowserContext == "save" {
+			// Update save path with the browsed directory
+			baseName := filepath.Base(m.saveFileInput.Value())
+			if baseName == "" || baseName == "." {
+				baseName = m.saveStackName + ".yml"
+			}
+			m.saveFileInput.SetValue(filepath.Join(m.fileBrowserPath, baseName))
+			m.saveFileInput.CursorEnd()
+			m.saveDialogActive = true
+			m.saveFileInput.Focus()
+		} else {
+			m.createDialogActive = true
+		}
 		return nil
 
 	case "up":
@@ -904,6 +1078,20 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyMsg) tea.Cmd {
 
 		selected := m.fileBrowserFiles[m.fileBrowserCursor]
 
+		// Handle "[Save here]" sentinel — select current directory
+		if selected == saveDirSentinel {
+			baseName := filepath.Base(m.saveFileInput.Value())
+			if baseName == "" || baseName == "." {
+				baseName = m.saveStackName + ".yml"
+			}
+			m.saveFileInput.SetValue(filepath.Join(m.fileBrowserPath, baseName))
+			m.saveFileInput.CursorEnd()
+			m.fileBrowserActive = false
+			m.saveDialogActive = true
+			m.saveFileInput.Focus()
+			return nil
+		}
+
 		// Handle parent directory
 		if selected == ".." {
 			parentDir := filepath.Dir(m.fileBrowserPath)
@@ -917,6 +1105,21 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyMsg) tea.Cmd {
 		if strings.HasSuffix(selected, "/") {
 			dirPath := strings.TrimSuffix(selected, "/")
 			return loadFilesCmd(dirPath)
+		}
+
+		// In save mode: selecting a file uses its parent directory as destination
+		if m.fileBrowserContext == "save" {
+			dir := filepath.Dir(selected)
+			baseName := filepath.Base(m.saveFileInput.Value())
+			if baseName == "" || baseName == "." {
+				baseName = m.saveStackName + ".yml"
+			}
+			m.saveFileInput.SetValue(filepath.Join(dir, baseName))
+			m.saveFileInput.CursorEnd()
+			m.fileBrowserActive = false
+			m.saveDialogActive = true
+			m.saveFileInput.Focus()
+			return nil
 		}
 
 		// It's a file - read the content and load it into the editor
@@ -1377,6 +1580,7 @@ func GetStacksHelpContent() []helpview.HelpCategory {
 				{Keys: "<enter>", Description: "Show services for Stack"},
 				{Keys: "<i>", Description: "Inspect stack"},
 				{Keys: "<e>", Description: "Edit stack (opens editor)"},
+				{Keys: "<s>", Description: "Save stack YAML to file"},
 				{Keys: "<p>", Description: "Show tasks for Stack"},
 				{Keys: "<n>", Description: "Create new stack"},
 				{Keys: "<ctrl+d>", Description: "Delete stack"},
