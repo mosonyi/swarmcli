@@ -92,6 +92,13 @@ type Model struct {
 
 	// Edit stack tracking
 	editStackName string // non-empty when editing a stack (vs creating new)
+
+	// Save stack dialog
+	saveDialogActive   bool
+	saveDialogError    string          // error message to display in save dialog
+	saveFileInput      textinput.Model // For typing file path
+	saveStackName      string          // name of stack being saved
+	fileBrowserContext string          // "create" or "save" — determines return target from file browser
 }
 
 func New(width, height int) *Model {
@@ -162,10 +169,19 @@ func New(width, height int) *Model {
 	fileInput.CharLimit = 512
 	fileInput.Width = 50
 
+	// Initialize save file path input
+	saveInput := textinput.New()
+	saveInput.Placeholder = "./my-stack.yml"
+	saveInput.Prompt = "Save to: "
+	saveInput.CharLimit = 512
+	saveInput.Width = 50
+
 	m.List = list
 	m.confirmDialog = confirmdialog.New(width, height)
 	m.createNameInput = nameInput
 	m.createFileInput = fileInput
+	m.saveFileInput = saveInput
+	m.fileBrowserContext = "create"
 	return m
 }
 
@@ -185,6 +201,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "n", Desc: "New stack"},
 		{Key: "e", Desc: "Edit"},
+		{Key: "s", Desc: "Save YAML"},
 		{Key: "enter", Desc: "Services"},
 		{Key: "i", Desc: "Inspect"},
 		{Key: "p", Desc: "Tasks"},
@@ -292,7 +309,7 @@ func (m *Model) ClearSearchQuery() {
 
 // CapturesInput reports whether the view is currently capturing all keyboard input.
 func (m *Model) CapturesInput() bool {
-	return (m.confirmDialog != nil && m.confirmDialog.Visible) || m.createDialogActive || m.fileBrowserActive
+	return (m.confirmDialog != nil && m.confirmDialog.Visible) || m.createDialogActive || m.saveDialogActive || m.fileBrowserActive
 }
 
 // HasErrors returns true if any stack has errors

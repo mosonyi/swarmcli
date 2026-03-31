@@ -3,6 +3,7 @@ package stacksview
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -651,4 +652,204 @@ func TestHorizontalScroll_Left(t *testing.T) {
 	m.errorScrollOffset = 10
 	m.Update(key("left"))
 	require.Equal(t, 5, m.errorScrollOffset)
+}
+
+// --- Save dialog tests ---
+
+func TestKey_S_OpensSaveDialog(t *testing.T) {
+	m := testModel()
+	loadStacks(m, fakeStacks("mystack"))
+	m.Update(key("s"))
+	require.True(t, m.saveDialogActive)
+	require.Equal(t, "mystack", m.saveStackName)
+	require.Equal(t, "mystack.yml", m.saveFileInput.Value())
+}
+
+func TestKey_S_NoStacks_NoDialog(t *testing.T) {
+	m := testModel()
+	m.Update(key("s"))
+	require.False(t, m.saveDialogActive)
+}
+
+func TestSaveDialog_Esc_Closes(t *testing.T) {
+	m := testModel()
+	m.saveDialogActive = true
+	m.saveStackName = "mystack"
+	m.saveDialogError = "some error"
+	m.Update(key("esc"))
+	require.False(t, m.saveDialogActive)
+	require.Equal(t, "", m.saveDialogError)
+}
+
+func TestSaveDialog_Enter_EmptyPath(t *testing.T) {
+	m := testModel()
+	m.saveDialogActive = true
+	m.saveStackName = "mystack"
+	m.saveFileInput.SetValue("")
+	m.Update(key("enter"))
+	require.Contains(t, m.saveDialogError, "File path cannot be empty")
+	require.True(t, m.saveDialogActive)
+}
+
+func TestSaveDialog_EnterWithError_ClearsError(t *testing.T) {
+	m := testModel()
+	m.saveDialogActive = true
+	m.saveDialogError = "previous error"
+	m.Update(key("enter"))
+	require.Equal(t, "", m.saveDialogError)
+	require.True(t, m.saveDialogActive)
+}
+
+func TestSaveDialog_F_OpensFileBrowser(t *testing.T) {
+	m := testModel()
+	m.saveDialogActive = true
+	m.saveStackName = "mystack"
+	m.saveFileInput.SetValue("mystack.yml")
+	cmd := m.Update(key("f"))
+	require.False(t, m.saveDialogActive)
+	require.True(t, m.fileBrowserActive)
+	require.Equal(t, "save", m.fileBrowserContext)
+	require.NotNil(t, cmd)
+}
+
+func TestStackSavedMsg_ShowsSuccess(t *testing.T) {
+	m := testModel()
+	m.saveDialogActive = true
+	m.Update(stackSavedMsg{Path: "/tmp/mystack.yml"})
+	require.False(t, m.saveDialogActive)
+	require.True(t, m.confirmDialog.Visible)
+	require.True(t, m.confirmDialog.ErrorMode)
+	require.Contains(t, m.confirmDialog.Message, "/tmp/mystack.yml")
+}
+
+func TestStackSaveErrorMsg_ReturnsToDialog(t *testing.T) {
+	m := testModel()
+	m.Update(stackSaveErrorMsg{Err: fmt.Errorf("permission denied")})
+	require.True(t, m.saveDialogActive)
+	require.Contains(t, m.saveDialogError, "permission denied")
+}
+
+func TestConfirmResult_SaveOverwrite_Confirmed(t *testing.T) {
+	reconstructed := false
+	stackMock := noopStackOps()
+	stackMock.reconstructStackComposeFn = func(_ string) (string, error) {
+		reconstructed = true
+		return "version: '3'", nil
+	}
+	m := testModel(func(m *Model) { m.deps.Stacks = stackMock })
+	loadStacks(m, fakeStacks("mystack"))
+	m.pendingAction = "save-overwrite"
+	m.confirmDialog.Visible = true
+	m.saveStackName = "mystack"
+	m.saveFileInput.SetValue("/tmp/mystack.yml")
+	cmd := m.Update(confirmdialog.ResultMsg{Confirmed: true})
+	require.False(t, m.confirmDialog.Visible)
+	require.Equal(t, "", m.pendingAction)
+	require.NotNil(t, cmd)
+	runCmd(cmd)
+	require.True(t, reconstructed)
+}
+
+func TestConfirmResult_SaveOverwrite_Cancelled(t *testing.T) {
+	m := testModel()
+	m.pendingAction = "save-overwrite"
+	m.confirmDialog.Visible = true
+	m.saveStackName = "mystack"
+	m.Update(confirmdialog.ResultMsg{Confirmed: false})
+	require.False(t, m.confirmDialog.Visible)
+	require.True(t, m.saveDialogActive)
+	require.Equal(t, "", m.pendingAction)
+}
+
+func TestFileBrowser_Esc_ReturnsSaveDialog(t *testing.T) {
+	m := testModel()
+	m.fileBrowserActive = true
+	m.fileBrowserContext = "save"
+	m.fileBrowserPath = "/tmp"
+	m.saveFileInput.SetValue("mystack.yml")
+	m.saveStackName = "mystack"
+	m.Update(key("esc"))
+	require.False(t, m.fileBrowserActive)
+	require.True(t, m.saveDialogActive)
+	require.Equal(t, "/tmp/mystack.yml", m.saveFileInput.Value())
+}
+
+func TestFileBrowser_Esc_ReturnsCreateDialog(t *testing.T) {
+	m := testModel()
+	m.fileBrowserActive = true
+	m.fileBrowserContext = "create"
+	m.Update(key("esc"))
+	require.False(t, m.fileBrowserActive)
+	require.True(t, m.createDialogActive)
+}
+
+func TestSaveStackToFileCmd_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := tmpDir + "/test-stack.yml"
+
+	stackMock := noopStackOps()
+	stackMock.reconstructStackComposeFn = func(_ string) (string, error) {
+		return "version: '3'\nservices:\n  web:\n    image: nginx\n", nil
+	}
+	m := testModel(func(m *Model) { m.deps.Stacks = stackMock })
+	cmd := m.saveStackToFileCmd("mystack", filePath)
+	msg := runCmd(cmd)
+	saved, ok := msg.(stackSavedMsg)
+	require.True(t, ok)
+	require.Equal(t, filePath, saved.Path)
+
+	// Verify file was written
+	data, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+	require.Contains(t, string(data), "nginx")
+}
+
+func TestSaveStackToFileCmd_ReconstructError(t *testing.T) {
+	stackMock := noopStackOps()
+	stackMock.reconstructStackComposeFn = func(_ string) (string, error) {
+		return "", fmt.Errorf("stack not found")
+	}
+	m := testModel(func(m *Model) { m.deps.Stacks = stackMock })
+	cmd := m.saveStackToFileCmd("mystack", "/tmp/test.yml")
+	msg := runCmd(cmd)
+	errMsg, ok := msg.(stackSaveErrorMsg)
+	require.True(t, ok)
+	require.Contains(t, errMsg.Err.Error(), "stack not found")
+}
+
+func TestSaveStackToFileCmd_WriteError(t *testing.T) {
+	stackMock := noopStackOps()
+	stackMock.reconstructStackComposeFn = func(_ string) (string, error) {
+		return "version: '3'", nil
+	}
+	m := testModel(func(m *Model) { m.deps.Stacks = stackMock })
+	// Use an invalid path to trigger write error
+	cmd := m.saveStackToFileCmd("mystack", "/proc/0/nonexistent/test.yml")
+	msg := runCmd(cmd)
+	errMsg, ok := msg.(stackSaveErrorMsg)
+	require.True(t, ok)
+	require.Error(t, errMsg.Err)
+}
+
+func TestFilesLoadedMsg_Error_SaveContext(t *testing.T) {
+	m := testModel()
+	m.fileBrowserContext = "save"
+	m.Update(filesLoadedMsg{Path: "/nope", Error: fmt.Errorf("no access")})
+	require.False(t, m.fileBrowserActive)
+	require.True(t, m.saveDialogActive)
+	require.Contains(t, m.saveDialogError, "no access")
+}
+
+func TestFileBrowser_Enter_File_SaveContext(t *testing.T) {
+	m := testModel()
+	m.fileBrowserActive = true
+	m.fileBrowserContext = "save"
+	m.fileBrowserFiles = []string{"/tmp/existing-file.yml"}
+	m.fileBrowserCursor = 0
+	m.saveFileInput.SetValue("mystack.yml")
+	m.saveStackName = "mystack"
+	m.Update(key("enter"))
+	require.False(t, m.fileBrowserActive)
+	require.True(t, m.saveDialogActive)
+	require.Equal(t, "/tmp/mystack.yml", m.saveFileInput.Value())
 }

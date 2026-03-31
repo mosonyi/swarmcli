@@ -62,3 +62,13 @@ type filesLoadedMsg struct {
 	Files []string
 	Error error
 }
+
+// stackSavedMsg is sent when stack YAML is successfully saved to file
+type stackSavedMsg struct {
+	Path string
+}
+
+// stackSaveErrorMsg is sent when saving stack YAML fails
+type stackSaveErrorMsg struct {
+	Err error
+}

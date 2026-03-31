@@ -234,6 +234,12 @@ func TestCapturesInput_FileBrowser(t *testing.T) {
 	require.True(t, m.CapturesInput())
 }
 
+func TestCapturesInput_SaveDialog(t *testing.T) {
+	m := testModel()
+	m.saveDialogActive = true
+	require.True(t, m.CapturesInput())
+}
+
 func TestHasActiveFilter_Default(t *testing.T) {
 	m := testModel()
 	require.False(t, m.HasActiveFilter())
@@ -258,13 +264,14 @@ func TestHasErrors_WithError(t *testing.T) {
 func TestShortHelpItems(t *testing.T) {
 	m := testModel()
 	items := m.ShortHelpItems()
-	require.True(t, len(items) >= 9)
+	require.True(t, len(items) >= 10)
 	keys := make(map[string]bool)
 	for _, item := range items {
 		keys[item.Key] = true
 	}
 	require.True(t, keys["n"])
 	require.True(t, keys["e"])
+	require.True(t, keys["s"])
 	require.True(t, keys["i"])
 	require.True(t, keys["ctrl+d"])
 	require.True(t, keys["?"])

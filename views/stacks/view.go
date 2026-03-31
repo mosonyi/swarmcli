@@ -33,8 +33,14 @@ func (m *Model) FrameContent() string {
 	width := frame.FrameWidth
 	if m.createDialogActive {
 		content = ui.OverlayCentered(content, m.renderCreateDialog(), width, 0)
+	} else if m.saveDialogActive {
+		content = ui.OverlayCentered(content, m.renderSaveDialog(), width, 0)
 	} else if m.fileBrowserActive {
-		fileBrowserDialog := ui.RenderFileBrowserDialog("Select Compose File", m.fileBrowserPath, m.fileBrowserFiles, m.fileBrowserCursor)
+		title := "Select Compose File"
+		if m.fileBrowserContext == "save" {
+			title = "Select Save Directory"
+		}
+		fileBrowserDialog := ui.RenderFileBrowserDialog(title, m.fileBrowserPath, m.fileBrowserFiles, m.fileBrowserCursor)
 		content = ui.OverlayCentered(content, fileBrowserDialog, width, 0)
 	} else if m.confirmDialog.Visible {
 		content = ui.OverlayCentered(content, m.confirmDialog.View(), width, 0)
@@ -193,6 +199,45 @@ func (m *Model) renderCreateDialog() string {
 		}
 		lines = append(lines, dialog.HelpStyle.Render(helpText))
 	}
+
+	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	return dialog.BorderStyle.Render(content)
+}
+
+func (m *Model) renderSaveDialog() string {
+	var lines []string
+	lines = append(lines, dialog.TitleStyle.Render(fmt.Sprintf(" Save Stack: %s ", m.saveStackName)))
+	lines = append(lines, dialog.ItemStyle.Render(""))
+
+	if m.saveDialogError != "" {
+		errorStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("196")).
+			Padding(0, 1).
+			Width(70)
+		wrappedError := ui.WrapText("⚠ "+m.saveDialogError, 68)
+		for _, line := range wrappedError {
+			lines = append(lines, errorStyle.Render(line))
+		}
+		lines = append(lines, dialog.ItemStyle.Render(""))
+	}
+
+	fileLine := m.saveFileInput.View()
+	fileLine += "  " + dialog.KeyStyle.Render("[f: Browse]")
+	lines = append(lines, dialog.ItemStyle.Render(fileLine))
+	lines = append(lines, dialog.ItemStyle.Render(""))
+
+	var helpText string
+	if m.saveDialogError != "" {
+		helpText = fmt.Sprintf(" %s Fix error • %s Cancel",
+			dialog.KeyStyle.Render("<Enter>"),
+			dialog.KeyStyle.Render("<Esc>"))
+	} else {
+		helpText = fmt.Sprintf(" %s Save • %s Browse • %s Cancel",
+			dialog.KeyStyle.Render("<Enter>"),
+			dialog.KeyStyle.Render("<f>"),
+			dialog.KeyStyle.Render("<Esc>"))
+	}
+	lines = append(lines, dialog.HelpStyle.Render(helpText))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	return dialog.BorderStyle.Render(content)
