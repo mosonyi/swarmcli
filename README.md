@@ -24,6 +24,7 @@
     <a href="#-features">Features</a> •
     <a href="#-installation">Installation</a> •
     <a href="#-contributing">Contributing</a>
+    <a href="https://swarmcli.io/">Homepage</a>
   </p>
 </div>
 
