@@ -135,6 +135,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case confirmdialog.ResultMsg:
 		m.confirmDialog.Visible = false
 		m.confirmDialog.CheckboxLabel = "" // Clear checkbox for next use
+		m.confirmDialog.InfoMode = false
 
 		if m.pendingAction == "save-overwrite" {
 			if msg.Confirmed {
@@ -281,7 +282,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.saveDialogError = ""
 		m.saveFileInput.Blur()
 		m.confirmDialog.Visible = true
-		m.confirmDialog.ErrorMode = true // dismiss-only dialog
+		m.confirmDialog.InfoMode = true
 		m.confirmDialog.Message = fmt.Sprintf("Stack YAML saved to:\n%s", msg.Path)
 		return nil
 

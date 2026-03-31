@@ -718,7 +718,8 @@ func TestStackSavedMsg_ShowsSuccess(t *testing.T) {
 	m.Update(stackSavedMsg{Path: "/tmp/mystack.yml"})
 	require.False(t, m.saveDialogActive)
 	require.True(t, m.confirmDialog.Visible)
-	require.True(t, m.confirmDialog.ErrorMode)
+	require.True(t, m.confirmDialog.InfoMode)
+	require.False(t, m.confirmDialog.ErrorMode)
 	require.Contains(t, m.confirmDialog.Message, "/tmp/mystack.yml")
 }
 
