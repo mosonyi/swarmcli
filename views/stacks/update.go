@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strings"
 	"swarmcli/core/primitives/hash"
@@ -27,6 +28,9 @@ import (
 )
 
 const userActionTimeout = 15 * time.Second
+
+// saveDirSentinel is a special file browser entry that selects the current directory.
+const saveDirSentinel = "[Save here]"
 
 // Update handles all messages for the stacks view.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
@@ -302,6 +306,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.fileBrowserPath = msg.Path
 		m.fileBrowserFiles = msg.Files
 		m.fileBrowserCursor = 0
+		// In save context, inject "[Save here]" entry after ".."
+		if m.fileBrowserContext == "save" {
+			idx := 0
+			if len(m.fileBrowserFiles) > 0 && m.fileBrowserFiles[0] == ".." {
+				idx = 1
+			}
+			m.fileBrowserFiles = slices.Insert(m.fileBrowserFiles, idx, saveDirSentinel)
+		}
 		m.fileBrowserActive = true // Ensure browser stays active
 		return nil
 
@@ -1060,6 +1072,19 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyMsg) tea.Cmd {
 		}
 
 		selected := m.fileBrowserFiles[m.fileBrowserCursor]
+
+		// Handle "[Save here]" sentinel — select current directory
+		if selected == saveDirSentinel {
+			baseName := filepath.Base(m.saveFileInput.Value())
+			if baseName == "" || baseName == "." {
+				baseName = m.saveStackName + ".yml"
+			}
+			m.saveFileInput.SetValue(filepath.Join(m.fileBrowserPath, baseName))
+			m.fileBrowserActive = false
+			m.saveDialogActive = true
+			m.saveFileInput.Focus()
+			return nil
+		}
 
 		// Handle parent directory
 		if selected == ".." {

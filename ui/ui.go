@@ -333,8 +333,10 @@ func RenderFileBrowserDialog(title, currentPath string, files []string, cursor i
 		item := files[i]
 		displayName := ""
 
-		// Handle parent directory
-		if item == ".." {
+		// Handle special entries and parent directory
+		if item == "[Save here]" {
+			displayName = "✓ [Save here]"
+		} else if item == ".." {
 			displayName = "📁 .."
 		} else if strings.HasSuffix(item, "/") {
 			// Directory

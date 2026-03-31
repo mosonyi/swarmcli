@@ -840,6 +840,37 @@ func TestFilesLoadedMsg_Error_SaveContext(t *testing.T) {
 	require.Contains(t, m.saveDialogError, "no access")
 }
 
+func TestFileBrowser_Enter_SaveHere(t *testing.T) {
+	m := testModel()
+	m.fileBrowserActive = true
+	m.fileBrowserContext = "save"
+	m.fileBrowserPath = "/tmp/mydir"
+	m.fileBrowserFiles = []string{"..", saveDirSentinel, "/tmp/mydir/sub/"}
+	m.fileBrowserCursor = 1 // [Save here]
+	m.saveFileInput.SetValue("mystack.yml")
+	m.saveStackName = "mystack"
+	m.Update(key("enter"))
+	require.False(t, m.fileBrowserActive)
+	require.True(t, m.saveDialogActive)
+	require.Equal(t, "/tmp/mydir/mystack.yml", m.saveFileInput.Value())
+}
+
+func TestFilesLoadedMsg_SaveContext_InjectsSentinel(t *testing.T) {
+	m := testModel()
+	m.fileBrowserContext = "save"
+	m.Update(filesLoadedMsg{Path: "/tmp", Files: []string{"..", "/tmp/sub/", "/tmp/file.yml"}})
+	require.True(t, m.fileBrowserActive)
+	require.Equal(t, []string{"..", saveDirSentinel, "/tmp/sub/", "/tmp/file.yml"}, m.fileBrowserFiles)
+}
+
+func TestFilesLoadedMsg_CreateContext_NoSentinel(t *testing.T) {
+	m := testModel()
+	m.fileBrowserContext = "create"
+	m.Update(filesLoadedMsg{Path: "/tmp", Files: []string{"..", "/tmp/sub/"}})
+	require.True(t, m.fileBrowserActive)
+	require.Equal(t, []string{"..", "/tmp/sub/"}, m.fileBrowserFiles)
+}
+
 func TestFileBrowser_Enter_File_SaveContext(t *testing.T) {
 	m := testModel()
 	m.fileBrowserActive = true
