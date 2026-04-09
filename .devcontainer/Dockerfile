@@ -3,6 +3,7 @@ FROM mcr.microsoft.com/devcontainers/go:dev-1.26
 RUN apt-get update \
     && apt-get install -y \
         docker.io \
+        docker-compose-plugin \
         ccze \
     && rm -rf /var/lib/apt/lists/*
 
