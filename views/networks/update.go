@@ -609,7 +609,7 @@ func (m *Model) handleInspectViewKeys(msg tea.KeyMsg) tea.Cmd {
 	}
 
 	switch msg.String() {
-	case "esc", "q":
+	case "esc":
 		m.inspectViewActive = false
 		m.inspectSearchMode = false
 		return nil
@@ -632,7 +632,7 @@ func (m *Model) handleInspectViewKeys(msg tea.KeyMsg) tea.Cmd {
 
 func (m *Model) handleUsedByViewKeys(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
-	case "esc", "q":
+	case "esc":
 		m.usedByViewActive = false
 		return nil
 	case "up", "k":
@@ -899,7 +899,7 @@ func (m *Model) handleNormalKeys(msg tea.KeyMsg) tea.Cmd {
 	}
 
 	switch msg.String() {
-	case "esc", "q":
+	case "esc":
 		// Networks is a root view, no back navigation
 		return nil
 	case "?":

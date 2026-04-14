@@ -416,15 +416,11 @@ func TestKey_Help_NavigatesToHelp(t *testing.T) {
 	require.Equal(t, view.NameHelp, nav.ViewName)
 }
 
-func TestKey_Q_NavigatesToStacks(t *testing.T) {
+func TestKey_Q_Disabled(t *testing.T) {
 	m := testModel()
 	loadServices(m, fakeEntries("web"))
 	cmd := m.Update(key("q"))
-	require.NotNil(t, cmd)
-	msg := runCmd(cmd)
-	nav, ok := msg.(view.NavigateToMsg)
-	require.True(t, ok)
-	require.Equal(t, view.NameStacks, nav.ViewName)
+	require.Nil(t, cmd) // q is disabled, does nothing
 }
 
 // --- Confirm dialog result tests ---

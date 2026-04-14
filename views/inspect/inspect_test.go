@@ -113,7 +113,7 @@ func TestShortHelpItems_Normal(t *testing.T) {
 	}
 	require.True(t, keys["ctrl+f"])
 	require.True(t, keys["r"])
-	require.True(t, keys["q"])
+	require.True(t, keys["esc"])
 }
 
 func TestShortHelpItems_SearchMode(t *testing.T) {

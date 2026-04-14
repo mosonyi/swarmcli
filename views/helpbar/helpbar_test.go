@@ -9,7 +9,7 @@ import (
 func TestNew_DefaultGlobalHelp(t *testing.T) {
 	m := New(200, 40)
 	require.Len(t, m.globalHelp, 2)
-	require.Equal(t, "q", m.globalHelp[0].Key)
+	require.Equal(t, "ctrl+q", m.globalHelp[0].Key)
 	require.Equal(t, "?", m.globalHelp[1].Key)
 }
 
@@ -20,7 +20,7 @@ func TestView_WithEntries(t *testing.T) {
 		{Key: "d", Desc: "Delete"},
 	})
 	out := m.View("", false)
-	require.Contains(t, out, "q")
+	require.Contains(t, out, "ctrl+q")
 	require.Contains(t, out, "help")
 	require.Contains(t, out, "n")
 	require.Contains(t, out, "New")

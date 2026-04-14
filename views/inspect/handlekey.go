@@ -9,8 +9,6 @@ import (
 
 func handleNormalKey(m *Model, k tea.KeyMsg) tea.Cmd {
 	switch k.String() {
-	case "q":
-		return nil
 	case "esc":
 		// If app-level filter is active, clear it instead of closing
 		if m.filterQuery != "" {

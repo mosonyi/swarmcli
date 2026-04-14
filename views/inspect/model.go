@@ -115,7 +115,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	}
 	entries = append(entries,
 		helpbar.HelpEntry{Key: "r", Desc: "Toggle raw"},
-		helpbar.HelpEntry{Key: "q", Desc: "Close"},
+		helpbar.HelpEntry{Key: "esc", Desc: "Close"},
 	)
 	return entries
 }

@@ -136,7 +136,7 @@ func TestShortHelpItems_NormalMode(t *testing.T) {
 	require.True(t, keys["s"])
 	require.True(t, keys["w"])
 	require.True(t, keys["o"])
-	require.True(t, keys["q"])
+	require.True(t, keys["esc"])
 }
 
 func TestShortHelpItems_SearchMode(t *testing.T) {
@@ -289,11 +289,11 @@ func TestKey_W_TogglesWrap(t *testing.T) {
 	require.NotNil(t, cmd) // WrapToggledMsg
 }
 
-func TestKey_Q_ClosesView(t *testing.T) {
+func TestKey_Q_Disabled(t *testing.T) {
 	m := testModel()
 	m.Visible = true
 	m.Update(key("q"))
-	require.False(t, m.Visible)
+	require.True(t, m.Visible) // q no longer closes view
 }
 
 func TestKey_Esc_ClosesView(t *testing.T) {

@@ -168,7 +168,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "w", Desc: view.BEHelpDesc("port-forward", "Port Forward"), Disabled: !view.HasAction("port-forward")},
 		{Key: "/", Desc: "Filter"},
 		{Key: "?", Desc: "Help"},
-		{Key: "q", Desc: "Close"},
+		{Key: "esc", Desc: "Back"},
 	}
 }
 

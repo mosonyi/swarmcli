@@ -34,7 +34,7 @@ const defaultMinColWidth = 20
 
 func New(width, height int) *Model {
 	return &Model{
-		globalHelp:  []HelpEntry{{Key: "q", Desc: "quit"}, {Key: "?", Desc: "help"}},
+		globalHelp:  []HelpEntry{{Key: "ctrl+q", Desc: "quit"}, {Key: "?", Desc: "help"}},
 		width:       width,
 		height:      height,
 		minColWidth: defaultMinColWidth,

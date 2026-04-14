@@ -251,11 +251,11 @@ func TestKey_CtrlR_NoLabels_ShowsError(t *testing.T) {
 	require.Contains(t, m.confirmDialog.Message, "no labels")
 }
 
-func TestKey_Q_HidesView(t *testing.T) {
+func TestKey_Q_Disabled(t *testing.T) {
 	m := testModel()
 	loadNodes(m, fakeNodes("n1"))
 	m.Update(key("q"))
-	require.False(t, m.Visible)
+	require.True(t, m.Visible) // q is disabled, does nothing
 }
 
 // --- Sort key tests ---

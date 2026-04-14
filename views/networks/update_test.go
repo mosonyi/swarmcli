@@ -463,11 +463,11 @@ func TestInspectView_Esc_Closes(t *testing.T) {
 	require.False(t, m.inspectViewActive)
 }
 
-func TestInspectView_Q_Closes(t *testing.T) {
+func TestInspectView_Q_Disabled(t *testing.T) {
 	m := testModel()
 	m.inspectViewActive = true
 	m.Update(key("q"))
-	require.False(t, m.inspectViewActive)
+	require.True(t, m.inspectViewActive) // q no longer closes inspect view
 }
 
 func TestInspectView_Slash_EntersSearch(t *testing.T) {
