@@ -468,6 +468,25 @@ func TestKey_UpDown(t *testing.T) {
 	require.Equal(t, 0, m.GetCursor())
 }
 
+func TestKey_PgUpPgDown(t *testing.T) {
+	m := testModel()
+	names := make([]string, 20)
+	for i := range names {
+		names[i] = fmt.Sprintf("ctx%d", i)
+	}
+	loadContexts(m, fakeContexts(names...))
+	m.List.Viewport.Height = 5
+	require.Equal(t, 0, m.GetCursor())
+	m.Update(key("pgdown"))
+	require.Equal(t, 5, m.GetCursor())
+	m.Update(key("pgdown"))
+	require.Equal(t, 10, m.GetCursor())
+	m.Update(key("pgup"))
+	require.Equal(t, 5, m.GetCursor())
+	m.Update(key("pgup"))
+	require.Equal(t, 0, m.GetCursor())
+}
+
 // --- Error dialog ---
 
 func TestKey_ErrorDialog_EnterClears(t *testing.T) {
