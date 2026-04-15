@@ -32,9 +32,15 @@ func SetEditionLabel(label string) {
 
 const defaultMinColWidth = 20
 
+// KeyBack is the canonical key for "go back / close this view".
+const KeyBack = "esc"
+
+// KeyQuit is the canonical key for "quit the application".
+const KeyQuit = "ctrl+q"
+
 func New(width, height int) *Model {
 	return &Model{
-		globalHelp:  []HelpEntry{{Key: "ctrl+q", Desc: "quit"}, {Key: "?", Desc: "help"}},
+		globalHelp:  []HelpEntry{{Key: KeyQuit, Desc: "quit"}, {Key: "?", Desc: "help"}},
 		width:       width,
 		height:      height,
 		minColWidth: defaultMinColWidth,
