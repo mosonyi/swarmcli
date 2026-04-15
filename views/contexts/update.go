@@ -692,6 +692,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.MoveCursor(1)
 			return nil
 
+		case "pgup":
+			m.MoveCursor(-m.List.Viewport.Height)
+			return nil
+
+		case "pgdown":
+			m.MoveCursor(m.List.Viewport.Height)
+			return nil
+
 		case "enter":
 			// Switch to selected context
 			ctx, ok := m.GetSelectedContext()
