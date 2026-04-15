@@ -3,6 +3,7 @@ version: "2"
 linters:
   default: none
   enable:
+    - goheader
     - errcheck
     - govet
     - staticcheck
@@ -13,6 +14,10 @@ linters:
     - revive
     - bodyclose
   settings:
+    goheader:
+      template: |-
+        SPDX-License-Identifier: Apache-2.0
+        Copyright © 2026 Eldara Tech
     gocritic:
       enabled-tags:
         - diagnostic
