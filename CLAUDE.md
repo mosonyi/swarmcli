@@ -140,3 +140,8 @@ When a PR fixes a GitHub issue, copy the issue's labels to the PR and add any mi
 ## Go Version & Build
 
 Go 1.26. No Makefile — use `go build` directly. GoReleaser handles releases with `-trimpath -s -w` ldflags and version injection.
+
+When updating the Go version, keep these three in sync:
+- `go.mod` — `go` and `toolchain` directives
+- `.devcontainer/Dockerfile` — `mcr.microsoft.com/devcontainers/go` image tag (tracks major.minor; patch versions are handled by `GOTOOLCHAIN=auto`)
+- `govulncheck` CI step — bump suppressed vuln IDs if the new toolchain resolves them, or add new ones if it introduces new unfixed stdlib vulns
