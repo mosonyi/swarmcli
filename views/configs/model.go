@@ -227,7 +227,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "e", Desc: "Edit & Rotate"},
 		{Key: "ctrl+d", Desc: "Delete"},
 		{Key: "?", Desc: "Help"},
-		{Key: "esc/q", Desc: "Back"},
+		{Key: "esc", Desc: "Back"},
 	}
 }
 

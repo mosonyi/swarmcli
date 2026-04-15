@@ -112,9 +112,6 @@ func HandleKey(m *Model, k tea.KeyMsg) tea.Cmd {
 
 	// Normal mode key handling
 	switch k.String() {
-	case "q":
-		m.Visible = false
-		return nil
 	case "esc":
 		// If app-level filter is active, clear it instead of closing
 		if m.getFilterQuery() != "" {

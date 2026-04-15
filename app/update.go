@@ -519,17 +519,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	// Global quit handler
-	if msg.Type == tea.KeyCtrlC || msg.String() == "q" {
-		// Allow views in search mode to consume the key (so typing 'q' in a search query doesn't exit)
-		if searchView, ok := m.currentView.(interface{ IsSearching() bool }); ok {
-			if searchView.IsSearching() {
-				cmd := m.currentView.Update(msg)
-				return m, cmd
-			}
-		}
-		cmd := m.goBack()
-		return m, cmd
+	// Global quit handler: Ctrl+Q (primary) and Ctrl+C (standard terminal fallback)
+	if msg.String() == "ctrl+q" || msg.Type == tea.KeyCtrlC {
+		exitCmd := m.currentView.OnExit()
+		return m, tea.Batch(exitCmd, tea.Quit)
 	}
 
 	cmd := m.currentView.Update(msg)

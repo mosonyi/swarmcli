@@ -82,7 +82,7 @@ func TestShortHelpItems(t *testing.T) {
 	m := New(80, 24, true, nil)
 	items := m.ShortHelpItems()
 	require.Len(t, items, 1)
-	require.Equal(t, "q", items[0].Key)
+	require.Equal(t, "ctrl+q", items[0].Key)
 }
 
 func TestInit_ReturnsCmd(t *testing.T) {

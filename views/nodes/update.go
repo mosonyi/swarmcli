@@ -504,8 +504,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				m.confirmDialog.ErrorMode = false
 				m.confirmDialog.Message = fmt.Sprintf("Remove node %q from swarm?\nWarning: This action cannot be undone.", node.Hostname)
 			}
-		case "q":
-			m.Visible = false
 		}
 
 		return nil
@@ -665,7 +663,7 @@ func (m *Model) handleAvailabilityDialogKey(msg tea.KeyMsg) tea.Cmd {
 			}
 			return SetAvailabilitySuccessMsg{}
 		}
-	case "esc", "q":
+	case "esc":
 		m.availabilityDialog = false
 	}
 	return nil
@@ -775,7 +773,7 @@ func (m *Model) handleLabelRemoveDialogKey(msg tea.KeyMsg) tea.Cmd {
 				return RemoveLabelSuccessMsg{}
 			}
 		}
-	case "esc", "q":
+	case "esc":
 		m.labelRemoveDialog = false
 	}
 	return nil
@@ -816,7 +814,7 @@ func GetNodesHelpContent() []helpview.HelpCategory {
 				{Keys: "<↑/↓>", Description: "Navigate"},
 				{Keys: "<pgup>", Description: "Page up"},
 				{Keys: "<pgdown>", Description: "Page down"},
-				{Keys: "<q>", Description: "Back to stacks"},
+				{Keys: "<esc>", Description: "Back"},
 			},
 		},
 	}

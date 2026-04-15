@@ -1602,7 +1602,7 @@ func GetStacksHelpContent() []helpview.HelpCategory {
 				{Keys: "<↑/↓>", Description: "Navigate"},
 				{Keys: "<pgup>", Description: "Page up"},
 				{Keys: "<pgdown>", Description: "Page down"},
-				{Keys: "<q>", Description: "Quit"},
+				{Keys: "<ctrl+q>", Description: "Quit"},
 			},
 		},
 	}

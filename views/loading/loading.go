@@ -123,7 +123,7 @@ func (m *Model) View() string {
 
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
-		{Key: "q", Desc: "Quit"},
+		{Key: "ctrl+q", Desc: "Quit"},
 	}
 }
 

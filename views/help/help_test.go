@@ -44,7 +44,7 @@ func TestShortHelpItems(t *testing.T) {
 	m := New(80, 24, nil)
 	items := m.ShortHelpItems()
 	require.Len(t, items, 1)
-	require.Equal(t, "q", items[0].Key)
+	require.Equal(t, "esc", items[0].Key)
 	require.Equal(t, "Close", items[0].Desc)
 }
 
@@ -120,7 +120,7 @@ func TestView_Categorized(t *testing.T) {
 	cats := []HelpCategory{
 		{Title: "Navigation", Items: []HelpItem{
 			{Keys: "<esc>", Description: "Go back"},
-			{Keys: "<q>", Description: "Quit"},
+			{Keys: "<ctrl+q>", Description: "Quit"},
 		}},
 		{Title: "Actions", Items: []HelpItem{
 			{Keys: "<n>", Description: "New item"},
@@ -188,7 +188,7 @@ func TestApplySearchQuery_CategorizedMode(t *testing.T) {
 	cats := []HelpCategory{
 		{Title: "Navigation", Items: []HelpItem{
 			{Keys: "<esc>", Description: "Go back"},
-			{Keys: "<q>", Description: "Quit"},
+			{Keys: "<ctrl+q>", Description: "Quit"},
 		}},
 		{Title: "Actions", Items: []HelpItem{
 			{Keys: "<n>", Description: "New item"},

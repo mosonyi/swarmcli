@@ -491,11 +491,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				return nil
 			}
 			return action(entry.ServiceName)
-		case "q":
-			m.Visible = false
-			// Go back to stacks view
-			return func() tea.Msg { return view.NavigateToMsg{ViewName: view.NameStacks, Payload: nil} }
-
 		case "esc":
 			// ESC should also go back to stacks view
 			m.Visible = false
@@ -1042,7 +1037,7 @@ func GetServicesHelpContent() []helpview.HelpCategory {
 				{Keys: "<↑/↓>", Description: "Navigate"},
 				{Keys: "<pgup>", Description: "Page up"},
 				{Keys: "<pgdown>", Description: "Page down"},
-				{Keys: "<q>", Description: "Back to stacks"},
+				{Keys: "<esc>", Description: "Back"},
 			},
 		},
 	}
