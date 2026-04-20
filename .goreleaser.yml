@@ -113,30 +113,7 @@ snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
 changelog:
-  sort: asc
-  use: github
-  filters:
-    exclude:
-      - '^docs:'
-      - '^test:'
-      - '^ci:'
-      - '^chore:'
-      - 'merge conflict'
-      - Merge pull request
-      - Merge remote-tracking branch
-      - Merge branch
-  groups:
-    - title: Features
-      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
-      order: 0
-    - title: 'Bug fixes'
-      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
-      order: 1
-    - title: 'Performance improvements'
-      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
-      order: 2
-    - title: Others
-      order: 999
+  disable: true
 
 # Homebrew tap 
 brews:

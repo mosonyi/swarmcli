@@ -18,12 +18,12 @@ categories:
   - title: ' [Bug Fixes] '
     labels:
       - 'A2-bugfix'
-  - title: ' [Dependencies] '
-    labels:
-      - 'D0-dependency'
   - title: ' [Technical] '
     labels:
       - 'A3-technical'
+  - title: ' [Dependencies] '
+    labels:
+      - 'D0-dependency'
 change-template: '- $TITLE (#$NUMBER) @$AUTHOR '
 change-title-escapes: '\<*_&' # You can add # and @ to disable mentions, and add ` to disable code blocks.
 template: |
