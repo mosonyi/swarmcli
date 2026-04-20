@@ -826,7 +826,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.SetSuccess("")
 			return textinput.Blink
 
-		case "d":
+		case "ctrl+d":
 			// Delete selected context
 			ctx, ok := m.GetSelectedContext()
 			if !ok {
@@ -863,7 +863,7 @@ func GetContextsHelpContent() []helpview.HelpCategory {
 				{Keys: "<e>", Description: "Edit context description"},
 				{Keys: "<x>", Description: "Export context"},
 				{Keys: "<m>", Description: "Import context from file"},
-				{Keys: "<d>", Description: "Delete context"},
+				{Keys: "<ctrl+d>", Description: "Delete context"},
 				{Keys: "</>", Description: "Filter"},
 			},
 		},

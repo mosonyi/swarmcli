@@ -397,7 +397,7 @@ func TestKey_Delete_CurrentContext_Error(t *testing.T) {
 	ctxs := fakeContexts("current")
 	ctxs[0].Current = true
 	loadContexts(m, ctxs)
-	m.Update(key("d"))
+	m.Update(key("ctrl+d"))
 	require.Contains(t, m.GetError(), "Cannot delete")
 	require.False(t, m.confirmDialog.Visible)
 }
@@ -409,7 +409,7 @@ func TestKey_Delete_NonCurrentContext(t *testing.T) {
 	ctxs[1].Current = false
 	loadContexts(m, ctxs)
 	m.MoveCursor(1)
-	m.Update(key("d"))
+	m.Update(key("ctrl+d"))
 	require.True(t, m.confirmDialog.Visible)
 	require.Equal(t, "other", m.pendingDeleteContext)
 	require.Equal(t, "delete", m.pendingAction)
