@@ -99,6 +99,8 @@ func key(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyPgUp}
 	case "pgdown":
 		return tea.KeyMsg{Type: tea.KeyPgDown}
+	case "ctrl+d":
+		return tea.KeyMsg{Type: tea.KeyCtrlD}
 	case "backspace":
 		return tea.KeyMsg{Type: tea.KeyBackspace}
 	case " ":
@@ -356,7 +358,7 @@ func TestShortHelpItems(t *testing.T) {
 	require.True(t, keys["x"])
 	require.True(t, keys["m"])
 	require.True(t, keys["c"])
-	require.True(t, keys["d"])
+	require.True(t, keys["ctrl+d"])
 	require.True(t, keys["e"])
 	require.True(t, keys["?"])
 }
