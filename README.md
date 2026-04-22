@@ -19,11 +19,11 @@
   </p>
 
   <p>
-    <a href="#-why-swarmcli">Why SwarmCLI?</a> •
-    <a href="#-quickstart">Quickstart</a> •
-    <a href="#-features">Features</a> •
-    <a href="#-installation">Installation</a> •
-    <a href="#-contributing">Contributing</a> •
+    <a href="#why-swarmcli">Why SwarmCLI?</a> •
+    <a href="#quickstart">Quickstart</a> •
+    <a href="#features">Features</a> •
+    <a href="#installation">Installation</a> •
+    <a href="CONTRIBUTING.md">Contributing</a> •
     <a href="https://swarmcli.io/">Homepage</a>
   </p>
 </div>
