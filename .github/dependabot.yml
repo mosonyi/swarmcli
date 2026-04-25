@@ -6,7 +6,6 @@ updates:
     schedule:
       interval: weekly
     labels:
-      - A3-technical
       - B0-low-priority
       - C0-breaks-nothing
       - D0-dependency
@@ -16,7 +15,6 @@ updates:
     schedule:
       interval: weekly
     labels:
-      - A3-technical
       - B0-low-priority
       - C0-breaks-nothing
       - D0-dependency
@@ -26,7 +24,6 @@ updates:
     schedule:
       interval: monthly
     labels:
-      - A3-technical
       - B0-low-priority
       - C0-breaks-nothing
       - D0-dependency
