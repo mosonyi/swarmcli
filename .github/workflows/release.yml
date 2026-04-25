@@ -55,3 +55,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           SCOOP_BUCKET_GITHUB_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+          # Force goreleaser to use the pushed tag rather than `git describe`,
+          # which is non-deterministic when two tags point at the same commit
+          # (e.g. promoting v1.1.0-rc1 to v1.1.0). Without this, the RC→GA
+          # promotion fails because goreleaser tries to re-publish the RC.
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
