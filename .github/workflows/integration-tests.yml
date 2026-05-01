@@ -3,30 +3,8 @@ name: Integration Tests
 on:
   push:
     branches: [main]
-    paths:
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - 'Dockerfile'
-      - 'Dockerfile.release'
-      - 'docker-compose.yaml'
-      - 'test-setup/**'
-      - 'integration-tests/**'
-      - 'scripts/**'
-      - '.github/workflows/integration-tests.yml'
   pull_request:
     branches: [main]
-    paths:
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - 'Dockerfile'
-      - 'Dockerfile.release'
-      - 'docker-compose.yaml'
-      - 'test-setup/**'
-      - 'integration-tests/**'
-      - 'scripts/**'
-      - '.github/workflows/integration-tests.yml'
 
 permissions: read-all
 
@@ -35,7 +13,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Detect whether the integration pipeline needs to run; the integration job
+  # gates on this output. Filtering at the job level (not the workflow trigger)
+  # keeps a "skipped" status on the PR so branch-protection required checks
+  # remain satisfied.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      integration: ${{ steps.f.outputs.integration }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: f
+        with:
+          filters: |
+            integration:
+              - '**.go'
+              - 'go.mod'
+              - 'go.sum'
+              - 'Dockerfile'
+              - 'Dockerfile.release'
+              - 'docker-compose.yaml'
+              - 'test-setup/**'
+              - 'integration-tests/**'
+              - 'scripts/**'
+              - '.github/workflows/integration-tests.yml'
+
   integration:
+    needs: [changes]
+    if: needs.changes.outputs.integration == 'true'
     name: Run integration tests
     runs-on: ubuntu-latest
 

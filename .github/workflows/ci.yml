@@ -3,26 +3,8 @@ name: SwarmCLI CI
 on:
   pull_request:
     branches: [main]
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE'
-      - 'NOTICE'
-      - 'assets/**'
-      - '.devcontainer/**'
-      - '.idea/**'
-      - '.gitignore'
-      - '.github/release_template.yml'
   push:
     branches: [main]
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE'
-      - 'NOTICE'
-      - 'assets/**'
-      - '.devcontainer/**'
-      - '.idea/**'
-      - '.gitignore'
-      - '.github/release_template.yml'
 
 permissions: read-all
 
@@ -31,7 +13,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Detect which file groups changed; downstream jobs gate on these outputs.
+  # Filtering at the job level (not the workflow trigger) means skipped jobs
+  # still publish a "skipped" status that satisfies branch-protection required
+  # checks — workflow-trigger paths-ignore would leave required checks pending.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.f.outputs.code }}
+      docker: ${{ steps.f.outputs.docker }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: f
+        with:
+          filters: |
+            code:
+              - '**.go'
+              - 'go.mod'
+              - 'go.sum'
+              - '.golangci.yml'
+              - '.github/workflows/ci.yml'
+            docker:
+              - '**.go'
+              - 'go.mod'
+              - 'go.sum'
+              - 'Dockerfile'
+              - 'Dockerfile.release'
+              - '.github/workflows/ci.yml'
+
   fmt:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -49,6 +62,8 @@ jobs:
           git diff --exit-code
 
   lint:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -69,6 +84,8 @@ jobs:
         run: golangci-lint run ./... --build-tags=integration
 
   vet:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -89,7 +106,8 @@ jobs:
           git diff --exit-code || (echo "Run go mod tidy locally" && exit 1)
 
   test:
-    needs: [fmt, lint, vet]
+    needs: [changes, fmt, lint, vet]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -105,7 +123,8 @@ jobs:
         run: go test -race -count=1 -timeout 5m ./...
 
   build:
-    needs: [test]
+    needs: [changes, test]
+    if: needs.changes.outputs.docker == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
