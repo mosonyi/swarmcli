@@ -3,8 +3,26 @@ name: SwarmCLI CI
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - 'NOTICE'
+      - 'assets/**'
+      - '.devcontainer/**'
+      - '.idea/**'
+      - '.gitignore'
+      - '.github/release_template.yml'
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - 'NOTICE'
+      - 'assets/**'
+      - '.devcontainer/**'
+      - '.idea/**'
+      - '.gitignore'
+      - '.github/release_template.yml'
 
 permissions: read-all
 

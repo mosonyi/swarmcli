@@ -3,8 +3,30 @@ name: Integration Tests
 on:
   push:
     branches: [main]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Dockerfile'
+      - 'Dockerfile.release'
+      - 'docker-compose.yaml'
+      - 'test-setup/**'
+      - 'integration-tests/**'
+      - 'scripts/**'
+      - '.github/workflows/integration-tests.yml'
   pull_request:
     branches: [main]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Dockerfile'
+      - 'Dockerfile.release'
+      - 'docker-compose.yaml'
+      - 'test-setup/**'
+      - 'integration-tests/**'
+      - 'scripts/**'
+      - '.github/workflows/integration-tests.yml'
 
 permissions: read-all
 
