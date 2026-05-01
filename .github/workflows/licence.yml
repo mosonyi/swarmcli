@@ -3,8 +3,18 @@ name: License checks
 on:
   pull_request:
     branches: [main]
+    paths:
+      - '**.go'
+      - '**.sh'
+      - 'scripts/check-spdx.sh'
+      - '.github/workflows/licence.yml'
   push:
     branches: [main]
+    paths:
+      - '**.go'
+      - '**.sh'
+      - 'scripts/check-spdx.sh'
+      - '.github/workflows/licence.yml'
 
 permissions: read-all
 
