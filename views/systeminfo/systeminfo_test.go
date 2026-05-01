@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"swarmcli/docker"
@@ -279,4 +280,30 @@ func TestUpdate_LatestVersionMsg(t *testing.T) {
 	require.Contains(t, m.content, "1.2.2")
 	require.Contains(t, m.content, "v1.3.3")
 	require.Contains(t, m.content, "⚡")
+}
+
+// Regression: long version+latest combinations must render in the fixed
+// systeminfo height without lipgloss wrapping the value onto a new line.
+// See https://github.com/Eldara-Tech/swarmcli-be/issues/93.
+func TestView_VersionLineDoesNotWrap_LongVersions(t *testing.T) {
+	cases := []struct {
+		name    string
+		version string
+		latest  string
+	}{
+		{"snapshot build", "1.4.6-next", "1.5.0"},
+		{"rc build", "v1.5.0-rc.1", "1.5.0"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := New(testDeps(), tc.version, "ce")
+			m.Update(LatestVersionMsg{latestVersion: tc.latest})
+
+			rendered := m.View()
+			lines := strings.Split(strings.TrimRight(rendered, "\n"), "\n")
+			require.Equal(t, Height, len(lines),
+				"systeminfo must render exactly %d lines (got %d) for version %q latest %q:\n%s",
+				Height, len(lines), tc.version, tc.latest, rendered)
+		})
+	}
 }

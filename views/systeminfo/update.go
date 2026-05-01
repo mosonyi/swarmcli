@@ -129,7 +129,7 @@ func content(context, version, cpu, mem string, containers, services int) string
 	labelStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("214")).
 		Bold(true).
-		Width(15)
+		Width(12)
 
 	// Use lipgloss Width to handle styled text properly
 	return fmt.Sprintf(
