@@ -5,6 +5,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      go-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
     labels:
       - B0-low-priority
       - C0-breaks-nothing
@@ -14,6 +18,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
     labels:
       - B0-low-priority
       - C0-breaks-nothing
@@ -23,6 +30,9 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    groups:
+      docker-images:
+        patterns: ["*"]
     labels:
       - B0-low-priority
       - C0-breaks-nothing
