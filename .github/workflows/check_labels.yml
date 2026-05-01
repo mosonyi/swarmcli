@@ -2,7 +2,12 @@ name: Check labels
 
 on:
   pull_request:
-    types: [opened, labeled, unlabeled, ready_for_review]
+    # synchronize is required so that this workflow re-publishes its check
+    # status on every new HEAD commit (including merges from main). Branch
+    # protection evaluates required checks per commit SHA — without
+    # synchronize, the check goes stale on push and blocks the merge gate
+    # even though the labels themselves haven't changed.
+    types: [opened, labeled, unlabeled, synchronize, ready_for_review]
 
 permissions: read-all
 
