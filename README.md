@@ -60,10 +60,31 @@ swarmcli
 - **Real-time Observability**: Live monitoring of Services, Tasks, Nodes, and Containers.
 - **Stack Awareness**: Navigate your cluster hierarchically (Stacks > Services > Tasks).
 - **Instant Logs**: No more `docker service logs -f`. Just press `l` on any service.
-- **Secrets & Configs**: Manage, rotate, and — with Pro — **reveal** secrets for debugging.
+- **Secrets & Configs**: Manage, rotate, and — with [Business Edition](#business-edition) — **reveal** secrets for debugging.
 - **Management Actions**: Scale, restart, remove, and update services with single keystrokes.
 - **Zero Config**: Works out-of-the-box with your local Docker engine or remote via SSH/Contexts.
 - **Lightweight**: Built with Go. Single static binary (< 20MB). Zero dependencies.
+
+## Business Edition
+
+The Community Edition is the full open-source TUI. **Business Edition** is a
+commercial superset that adds:
+
+- `:bootstrap` — one-command deploy of an mTLS-fronted RBAC proxy and
+  per-node agent stack onto your existing Swarm.
+- Per-user RBAC, identity by client certificate, role-gated mutation and
+  exec.
+- Interactive shell into a running service task.
+- Reveal-secret for debugging.
+
+Installs via `brew install Eldara-Tech/tap/swarmcli-be`,
+`scoop install swarmcli-be`, or `docker pull eldaratech/swarmcli-be`. The
+binary on disk is named `swarmcli` (BE is a strict superset of CE — same
+binary name, expanded feature set), so existing scripts and aliases
+continue to work.
+
+Documentation, install channels, and license sign-up are at the BE release
+repo: [Eldara-Tech/swarmcli-be-releases](https://github.com/Eldara-Tech/swarmcli-be-releases).
 
 ## Installation
 
