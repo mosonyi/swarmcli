@@ -19,6 +19,7 @@ type TaskEntry struct {
 	ServiceName  string
 	Image        string
 	NodeName     string
+	ContainerID  string
 	DesiredState string
 	CurrentState string
 	Error        string
@@ -103,12 +104,17 @@ func GetTasksForStack(stackName string) ([]TaskEntry, error) {
 			if len(id) > 12 {
 				id = id[:12]
 			}
+			containerID := ""
+			if task.Status.ContainerStatus != nil {
+				containerID = task.Status.ContainerStatus.ContainerID
+			}
 			tasks = append(tasks, TaskEntry{
 				ID:           id,
 				Name:         fmt.Sprintf("%s.%d", svc.Spec.Name, task.Slot),
 				ServiceName:  svc.Spec.Name,
 				Image:        image,
 				NodeName:     nodeName,
+				ContainerID:  containerID,
 				DesiredState: string(task.DesiredState),
 				CurrentState: currentState,
 				Error:        errorMsg,
@@ -210,12 +216,17 @@ func GetTasksForService(serviceID string) ([]TaskEntry, error) {
 			if len(id) > 12 {
 				id = id[:12]
 			}
+			containerID := ""
+			if task.Status.ContainerStatus != nil {
+				containerID = task.Status.ContainerStatus.ContainerID
+			}
 			tasks = append(tasks, TaskEntry{
 				ID:           id,
 				Name:         fmt.Sprintf("%s.%d", serviceName, task.Slot),
 				ServiceName:  serviceName,
 				Image:        image,
 				NodeName:     nodeName,
+				ContainerID:  containerID,
 				DesiredState: string(task.DesiredState),
 				CurrentState: currentState,
 				Error:        errorMsg,
