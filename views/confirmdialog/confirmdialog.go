@@ -76,7 +76,10 @@ func (m *Model) View() string {
 	}
 
 	// Cap dialog width to a sensible maximum, then word-wrap.
-	maxWidth := 80
+	// 100 keeps long single-token content (URLs, paths) on one line on
+	// modern terminals; the m.Width-6 clamp below scales it down on
+	// narrow ones.
+	maxWidth := 100
 	if m.Width > 0 && m.Width-6 < maxWidth {
 		maxWidth = m.Width - 6
 	}
