@@ -51,13 +51,6 @@ type Model struct {
 	networks          []networkItem
 	networkToDelete   *networkItem
 
-	// Inspect view
-	inspectViewActive bool
-	inspectViewport   viewport.Model
-	inspectContent    string
-	inspectSearchMode bool
-	inspectSearchTerm string
-
 	// Used By view
 	usedByViewActive  bool
 	usedByList        filterlist.FilterableList[usedByItem]
@@ -103,9 +96,6 @@ func New(width, height int) *Model {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
 
-	inspectVp := viewport.New(width, height)
-	inspectVp.SetContent("")
-
 	nameInput := textinput.New()
 	nameInput.Placeholder = "my-network"
 	nameInput.Prompt = "Name: "
@@ -144,7 +134,6 @@ func New(width, height int) *Model {
 		visible:           true,
 		confirmDialog:     confirmdialog.New(0, 0),
 		loadingView:       loading.New(width, height, false, "Loading Docker networks..."),
-		inspectViewport:   inspectVp,
 		sortField:         SortByName,
 		sortAscending:     true,
 		createNameInput:   nameInput,
@@ -222,11 +211,8 @@ func (m *Model) CapturesInput() bool {
 }
 
 // IsSearching reports whether the networks view is in a sub-view that should
-// capture keys (inspect, usedBy, createDialog).
+// capture keys (usedBy, createDialog).
 func (m *Model) IsSearching() bool {
-	if m.inspectViewActive {
-		return true
-	}
 	if m.usedByViewActive {
 		return true
 	}
@@ -281,21 +267,6 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		}
 	}
 
-	if m.inspectViewActive {
-		if m.inspectSearchMode {
-			return []helpbar.HelpEntry{
-				{Key: "Type", Desc: "Search"},
-				{Key: "Enter", Desc: "Apply"},
-				{Key: "Esc", Desc: "Cancel"},
-			}
-		}
-		return []helpbar.HelpEntry{
-			{Key: "/", Desc: "Search"},
-			{Key: "↑/↓/PgUp/PgDn", Desc: "Scroll"},
-			{Key: "Esc", Desc: "Back"},
-		}
-	}
-
 	return []helpbar.HelpEntry{
 		{Key: "↑/↓", Desc: "Navigate"},
 		{Key: "c", Desc: "Create"},
@@ -338,14 +309,6 @@ func (m *Model) SetSize(width, height int) {
 	if m.loadingView != nil {
 		m.loadingView.SetSize(width, height)
 	}
-
-	// Resize inspect viewport (content area inside the frame).
-	contentH := height - 4 // top+bottom borders + header + footer
-	if contentH < 1 {
-		contentH = 1
-	}
-	m.inspectViewport.Width = width
-	m.inspectViewport.Height = contentH
 
 	// Resize list viewports. Height is already adjusted by the app;
 	// do not subtract header/footer/help again.

@@ -85,42 +85,6 @@ func validateGateway(addrStr string, wantIPv6 bool) error {
 	return nil
 }
 
-var inspectSearchHighlightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("11"))
-
-func highlightMatches(text, term string) string {
-	if term == "" {
-		return text
-	}
-	lowerText := strings.ToLower(text)
-	lowerTerm := strings.ToLower(term)
-
-	var b strings.Builder
-	offset := 0
-	for {
-		idx := strings.Index(lowerText[offset:], lowerTerm)
-		if idx == -1 {
-			b.WriteString(text[offset:])
-			break
-		}
-		b.WriteString(text[offset : offset+idx])
-		b.WriteString(inspectSearchHighlightStyle.Render(text[offset+idx : offset+idx+len(term)]))
-		offset += idx + len(term)
-	}
-	return b.String()
-}
-
-func (m *Model) updateInspectViewport() {
-	if m.inspectSearchTerm == "" {
-		m.inspectViewport.SetContent(m.inspectContent)
-		return
-	}
-	lines := strings.Split(m.inspectContent, "\n")
-	for i := range lines {
-		lines[i] = highlightMatches(lines[i], m.inspectSearchTerm)
-	}
-	m.inspectViewport.SetContent(strings.Join(lines, "\n"))
-}
-
 func truncateWithEllipsis(s string, maxWidth int) string {
 	if maxWidth <= 0 {
 		return ""
@@ -241,14 +205,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.networksList.Viewport.Width = msg.Width
 		m.networksList.Viewport.Height = msg.Height
 		m.networksList.SetOuterSize(msg.Width, msg.Height)
-
-		// Inspect view uses its own viewport; keep it in sync with the window size.
-		inspectH := msg.Height - 4 // top+bottom borders + header + footer
-		if inspectH < 1 {
-			inspectH = 1
-		}
-		m.inspectViewport.Width = msg.Width
-		m.inspectViewport.Height = inspectH
 
 		if m.usedByViewActive {
 			m.usedByList.Viewport.Width = msg.Width
@@ -468,29 +424,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.showToast(strings.Join(lines, "\n"))
 		return m.loadNetworksCmd()
 
-	case NetworkInspectMsg:
-		if msg.Err != nil {
-			m.errorDialogActive = true
-			m.err = msg.Err
-			return nil
-		}
-
-		// Format the inspection data
-		content, err := msg.NetworkWithUsage.PrettyJSON()
-		if err != nil {
-			m.errorDialogActive = true
-			m.err = err
-			return nil
-		}
-
-		m.inspectContent = string(content)
-		m.inspectSearchMode = false
-		m.inspectSearchTerm = ""
-		m.updateInspectViewport()
-		m.inspectViewport.GotoTop()
-		m.inspectViewActive = true
-		return nil
-
 	case UsedByLoadedMsg:
 		if msg.Err != nil {
 			m.errorDialogActive = true
@@ -546,10 +479,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		if m.createDialogActive {
 			return m.handleCreateDialogKeys(msg)
 		}
-		// Handle inspect view
-		if m.inspectViewActive {
-			return m.handleInspectViewKeys(msg)
-		}
 
 		// Handle used-by view
 		if m.usedByViewActive {
@@ -583,50 +512,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.handleNormalKeys(msg)
 	}
 
-	return nil
-}
-
-func (m *Model) handleInspectViewKeys(msg tea.KeyMsg) tea.Cmd {
-	if m.inspectSearchMode {
-		switch msg.Type {
-		case tea.KeyRunes:
-			m.inspectSearchTerm += msg.String()
-			m.updateInspectViewport()
-		case tea.KeyBackspace:
-			if len(m.inspectSearchTerm) > 0 {
-				m.inspectSearchTerm = m.inspectSearchTerm[:len(m.inspectSearchTerm)-1]
-				m.updateInspectViewport()
-			}
-		case tea.KeyEnter:
-			m.inspectSearchMode = false
-			m.updateInspectViewport()
-		case tea.KeyEsc:
-			m.inspectSearchMode = false
-			m.inspectSearchTerm = ""
-			m.updateInspectViewport()
-		}
-		return nil
-	}
-
-	switch msg.String() {
-	case "esc":
-		m.inspectViewActive = false
-		m.inspectSearchMode = false
-		return nil
-	case "/", "shift+/":
-		m.inspectSearchMode = true
-		m.inspectSearchTerm = ""
-		m.updateInspectViewport()
-		return nil
-	case "up", "k":
-		m.inspectViewport.ScrollUp(1)
-	case "down", "j":
-		m.inspectViewport.ScrollDown(1)
-	case "pgup":
-		m.inspectViewport.ScrollUp(m.inspectViewport.Height)
-	case "pgdown":
-		m.inspectViewport.ScrollDown(m.inspectViewport.Height)
-	}
 	return nil
 }
 

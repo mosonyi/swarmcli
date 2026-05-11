@@ -212,12 +212,6 @@ func TestIsSearching_Default(t *testing.T) {
 	require.False(t, m.IsSearching())
 }
 
-func TestIsSearching_InspectView(t *testing.T) {
-	m := testModel()
-	m.inspectViewActive = true
-	require.True(t, m.IsSearching())
-}
-
 func TestIsSearching_UsedByView(t *testing.T) {
 	m := testModel()
 	m.usedByViewActive = true
@@ -275,31 +269,6 @@ func TestShortHelpItems_UsedByView(t *testing.T) {
 	require.True(t, keys["Esc"])
 }
 
-func TestShortHelpItems_InspectView(t *testing.T) {
-	m := testModel()
-	m.inspectViewActive = true
-	items := m.ShortHelpItems()
-	keys := make(map[string]bool)
-	for _, item := range items {
-		keys[item.Key] = true
-	}
-	require.True(t, keys["/"])
-	require.True(t, keys["Esc"])
-}
-
-func TestShortHelpItems_InspectSearchMode(t *testing.T) {
-	m := testModel()
-	m.inspectViewActive = true
-	m.inspectSearchMode = true
-	items := m.ShortHelpItems()
-	keys := make(map[string]bool)
-	for _, item := range items {
-		keys[item.Key] = true
-	}
-	require.True(t, keys["Enter"])
-	require.True(t, keys["Esc"])
-}
-
 func TestSetSize(t *testing.T) {
 	m := testModel()
 	m.SetSize(120, 40)
@@ -339,16 +308,6 @@ func TestValidateGateway_Invalid(t *testing.T) {
 	require.Error(t, validateGateway("not-an-ip", false))
 	require.Error(t, validateGateway("fd00::1", false)) // ipv6 in ipv4 slot
 	require.Error(t, validateGateway("10.0.0.1", true)) // ipv4 in ipv6 slot
-}
-
-func TestHighlightMatches_NoTerm(t *testing.T) {
-	require.Equal(t, "hello world", highlightMatches("hello world", ""))
-}
-
-func TestHighlightMatches_WithTerm(t *testing.T) {
-	result := highlightMatches("hello world", "world")
-	require.Contains(t, result, "world")
-	// Styling may or may not render in test env; just verify the match text is present
 }
 
 func TestTruncateWithEllipsis(t *testing.T) {

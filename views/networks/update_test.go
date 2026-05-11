@@ -4,6 +4,7 @@
 package networksview
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -115,26 +116,6 @@ func TestUpdate_NetworkCreatedMsg_Error_NoDialog(t *testing.T) {
 	require.True(t, m.errorDialogActive)
 }
 
-func TestUpdate_NetworkInspectMsg_Success(t *testing.T) {
-	m := testModel()
-	m.networksList.Viewport.Width = 80
-	m.networksList.Viewport.Height = 20
-	nw := &networkWithUsage{
-		Network:  makeNetworkSummary("mynet", "id1"),
-		Services: []string{"svc1"},
-	}
-	m.Update(NetworkInspectMsg{NetworkWithUsage: nw})
-	require.True(t, m.inspectViewActive)
-	require.Contains(t, m.inspectContent, "mynet")
-}
-
-func TestUpdate_NetworkInspectMsg_Error(t *testing.T) {
-	m := testModel()
-	m.Update(NetworkInspectMsg{Err: fmt.Errorf("not found")})
-	require.True(t, m.errorDialogActive)
-	require.False(t, m.inspectViewActive)
-}
-
 func TestUpdate_UsedByLoadedMsg_Success(t *testing.T) {
 	m := testModel()
 	m.networksList.Viewport.Width = 80
@@ -210,11 +191,19 @@ func TestKey_CtrlU_OpensPruneConfirm(t *testing.T) {
 	require.Equal(t, "prune", m.pendingAction)
 }
 
-func TestKey_I_InspectsNetwork(t *testing.T) {
-	m := testModel()
+func TestKey_I_NavigatesToInspectView(t *testing.T) {
+	mock := noopNetworkOps()
+	mock.inspectNetworkFn = func(_ context.Context, networkID string) (network.Inspect, error) {
+		return network.Inspect{Name: "mynet", ID: networkID, Driver: "overlay", Scope: "swarm"}, nil
+	}
+	m := testModel(func(m *Model) { m.deps.Networks = mock })
 	loadNetworks(m, fakeNetworks("mynet"))
 	cmd := m.Update(key("i"))
 	require.NotNil(t, cmd)
+	msg := runCmd(cmd)
+	nav, ok := msg.(view.NavigateToMsg)
+	require.True(t, ok)
+	require.Equal(t, "inspect", nav.ViewName)
 }
 
 func TestKey_U_OpensUsedByView(t *testing.T) {
@@ -457,49 +446,6 @@ func TestCreateDialog_IPv6WithoutEnable(t *testing.T) {
 	require.Contains(t, m.createDialogError, "Enable IPv6")
 }
 
-// --- Inspect view key tests ---
-
-func TestInspectView_Esc_Closes(t *testing.T) {
-	m := testModel()
-	m.inspectViewActive = true
-	m.Update(key("esc"))
-	require.False(t, m.inspectViewActive)
-}
-
-func TestInspectView_Q_Disabled(t *testing.T) {
-	m := testModel()
-	m.inspectViewActive = true
-	m.Update(key("q"))
-	require.True(t, m.inspectViewActive) // q no longer closes inspect view
-}
-
-func TestInspectView_Slash_EntersSearch(t *testing.T) {
-	m := testModel()
-	m.inspectViewActive = true
-	m.Update(key("/"))
-	require.True(t, m.inspectSearchMode)
-}
-
-func TestInspectView_Search_Esc_CancelsSearch(t *testing.T) {
-	m := testModel()
-	m.inspectViewActive = true
-	m.inspectSearchMode = true
-	m.inspectSearchTerm = "test"
-	m.Update(key("esc"))
-	require.False(t, m.inspectSearchMode)
-	require.Empty(t, m.inspectSearchTerm)
-}
-
-func TestInspectView_Search_Enter_AppliesSearch(t *testing.T) {
-	m := testModel()
-	m.inspectViewActive = true
-	m.inspectSearchMode = true
-	m.inspectSearchTerm = "test"
-	m.Update(key("enter"))
-	require.False(t, m.inspectSearchMode)
-	require.Equal(t, "test", m.inspectSearchTerm) // term preserved
-}
-
 // --- Used-by view key tests ---
 
 func TestUsedByView_Esc_Returns(t *testing.T) {
@@ -526,15 +472,4 @@ func TestUsedByView_Enter_Navigates(t *testing.T) {
 	nav, ok := msg.(view.NavigateToMsg)
 	require.True(t, ok)
 	require.Equal(t, "services", nav.ViewName)
-}
-
-// --- helper for creating network.Summary ---
-
-func makeNetworkSummary(name, id string) network.Summary {
-	return network.Summary{
-		Name:   name,
-		ID:     id,
-		Driver: "overlay",
-		Scope:  "swarm",
-	}
 }

@@ -4,10 +4,8 @@
 package docker
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
@@ -115,19 +113,4 @@ func (nw *NetworkWithUsage) JSON() ([]byte, error) {
 	}
 
 	return json.Marshal(obj)
-}
-
-// PrettyJSON returns the JSON representation of the network,
-// but pretty-printed (indented) for human-readable viewing.
-func (nw *NetworkWithUsage) PrettyJSON() ([]byte, error) {
-	raw, err := nw.JSON()
-	if err != nil {
-		return nil, err
-	}
-
-	var pretty bytes.Buffer
-	if err := json.Indent(&pretty, raw, "", "  "); err != nil {
-		return nil, fmt.Errorf("pretty-print failed: %w", err)
-	}
-	return pretty.Bytes(), nil
 }

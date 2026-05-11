@@ -8,6 +8,10 @@ import (
 	"fmt"
 	"time"
 
+	"swarmcli/docker"
+	inspectview "swarmcli/views/inspect"
+	"swarmcli/views/view"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/api/types/swarm"
@@ -26,11 +30,6 @@ type SpinnerTickMsg time.Time
 type NetworksLoadedMsg struct {
 	Networks []networkItem
 	Err      error
-}
-
-type NetworkInspectMsg struct {
-	NetworkWithUsage *networkWithUsage
-	Err              error
 }
 
 type NetworkDeletedMsg struct {
@@ -100,9 +99,18 @@ func (m *Model) inspectNetworkCmd(networkID string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
+		title := fmt.Sprintf("Network: %s", networkID)
+
 		net, err := networkOps.InspectNetwork(ctx, networkID)
 		if err != nil {
-			return NetworkInspectMsg{Err: fmt.Errorf("failed to inspect network: %w", err)}
+			return view.NavigateToMsg{
+				ViewName: inspectview.ViewName,
+				Payload: map[string]any{
+					"title":  title,
+					"json":   fmt.Sprintf("# Error inspecting network:\n# %v", err),
+					"format": inspectview.FormatRaw,
+				},
+			}
 		}
 
 		services, svcErr := networkOps.ListServicesUsingNetwork(ctx, networkID, net.Name)
@@ -129,9 +137,25 @@ func (m *Model) inspectNetworkCmd(networkID string) tea.Cmd {
 			Labels:     net.Labels,
 		}
 
-		return NetworkInspectMsg{
-			NetworkWithUsage: &networkWithUsage{Network: summary, Services: services},
-			Err:              nil,
+		nw := docker.NetworkWithUsage{Network: summary, Services: services}
+		content, jsonErr := nw.JSON()
+		if jsonErr != nil {
+			return view.NavigateToMsg{
+				ViewName: inspectview.ViewName,
+				Payload: map[string]any{
+					"title":  fmt.Sprintf("Network: %s", net.Name),
+					"json":   fmt.Sprintf("# Error marshalling network:\n# %v", jsonErr),
+					"format": inspectview.FormatRaw,
+				},
+			}
+		}
+
+		return view.NavigateToMsg{
+			ViewName: inspectview.ViewName,
+			Payload: map[string]any{
+				"title": fmt.Sprintf("Network: %s", net.Name),
+				"json":  string(content),
+			},
 		}
 	}
 }

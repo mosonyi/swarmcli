@@ -19,18 +19,12 @@ func (m *Model) FrameTitle() string {
 	if m.usedByViewActive {
 		return fmt.Sprintf("Network '%s' - Used By (%d)", m.usedByNetworkName, len(m.usedByList.Filtered))
 	}
-	if m.inspectViewActive {
-		return "Inspect Network"
-	}
 	return fmt.Sprintf("Docker Networks (%d)", len(m.networksList.Filtered))
 }
 
 func (m *Model) FrameHeader() string {
 	if m.usedByViewActive {
 		return m.usedByList.RenderHeader()
-	}
-	if m.inspectViewActive {
-		return ui.FrameHeaderStyle.Render("Network Details (JSON)")
 	}
 	width := 80
 	if m.networksList.Viewport.Width > 0 {
@@ -45,22 +39,12 @@ func (m *Model) FrameFooter() string {
 	if m.usedByViewActive {
 		return m.usedByList.RenderFooter()
 	}
-	if m.inspectViewActive {
-		footerText := "↑/↓ Scroll | PgUp/PgDn Page | / Search | Esc Back"
-		if m.inspectSearchMode {
-			footerText = fmt.Sprintf("Search: %s  (Enter apply | Esc cancel)", m.inspectSearchTerm)
-		}
-		return ui.StatusBarStyle.Render(footerText)
-	}
 	return m.networksList.RenderFooter()
 }
 
 func (m *Model) FrameContent() string {
 	if m.usedByViewActive {
 		return m.buildUsedByContent()
-	}
-	if m.inspectViewActive {
-		return m.buildInspectContent()
 	}
 	return m.buildMainContent()
 }
@@ -80,30 +64,6 @@ func (m *Model) buildUsedByContent() string {
 		m.width, m.height, header, footer,
 	)
 	content := m.usedByList.VisibleContent(frame.DesiredContentLines)
-
-	if m.errorDialogActive {
-		errorDialog := errordialog.Render(fmt.Sprintf("%v", m.err))
-		content = ui.OverlayCentered(content, errorDialog, width, 0)
-	}
-	return content
-}
-
-func (m *Model) buildInspectContent() string {
-	width := m.networksList.Viewport.Width
-	if width <= 0 {
-		width = m.width
-	}
-	if width <= 0 {
-		width = 80
-	}
-
-	header := m.FrameHeader()
-	footer := m.FrameFooter()
-	frame := ui.ComputeFrameDimensions(
-		width, m.networksList.Viewport.Height,
-		m.width, m.height, header, footer,
-	)
-	content := ui.TrimOrPadContentToLines(m.inspectViewport.View(), frame.DesiredContentLines)
 
 	if m.errorDialogActive {
 		errorDialog := errordialog.Render(fmt.Sprintf("%v", m.err))
@@ -157,9 +117,6 @@ func (m *Model) buildMainContent() string {
 func (m *Model) View() string {
 	if m.usedByViewActive {
 		return m.renderUsedByView()
-	}
-	if m.inspectViewActive {
-		return m.renderInspectView()
 	}
 	return ui.RenderViewFrame(m.FrameTitle(), m.FrameHeader(), m.FrameContent(), m.FrameFooter(),
 		m.networksList.Viewport.Width, m.networksList.Viewport.Height, false)
@@ -408,45 +365,6 @@ func (m *Model) renderUsedByView() string {
 	}
 
 	title := fmt.Sprintf("Network '%s' - Used By (%d)", m.usedByNetworkName, len(m.usedByList.Filtered))
-	view := ui.RenderFramedBox(title, header, content, footer, frame.FrameWidth)
-
-	return view
-}
-
-func (m *Model) renderInspectView() string {
-	width := m.networksList.Viewport.Width
-	if width <= 0 {
-		width = m.width
-	}
-	if width <= 0 {
-		width = 80
-	}
-
-	header := ui.FrameHeaderStyle.Render("Network Details (JSON)")
-	footerText := "↑/↓ Scroll | PgUp/PgDn Page | / Search | Esc Back"
-	if m.inspectSearchMode {
-		footerText = fmt.Sprintf("Search: %s  (Enter apply | Esc cancel)", m.inspectSearchTerm)
-	}
-	footer := ui.StatusBarStyle.Render(footerText)
-
-	frame := ui.ComputeFrameDimensions(
-		width,
-		m.networksList.Viewport.Height,
-		m.width,
-		m.height,
-		header,
-		footer,
-	)
-
-	content := ui.TrimOrPadContentToLines(m.inspectViewport.View(), frame.DesiredContentLines)
-
-	// Apply overlays
-	if m.errorDialogActive {
-		errorDialog := errordialog.Render(fmt.Sprintf("%v", m.err))
-		content = ui.OverlayCentered(content, errorDialog, width, 0)
-	}
-
-	title := "Inspect Network"
 	view := ui.RenderFramedBox(title, header, content, footer, frame.FrameWidth)
 
 	return view
