@@ -91,17 +91,6 @@ func TestView_CreateDialog_Creating(t *testing.T) {
 	require.Contains(t, out, "Creating")
 }
 
-func TestView_InspectView(t *testing.T) {
-	m := testModel()
-	m.networksList.Viewport.Width = 80
-	m.networksList.Viewport.Height = 20
-	m.inspectViewActive = true
-	m.inspectContent = `{"name": "mynet"}`
-	m.updateInspectViewport()
-	out := m.View()
-	require.Contains(t, out, "Inspect Network")
-}
-
 func TestView_UsedByView(t *testing.T) {
 	m := testModel()
 	m.usedByViewActive = true

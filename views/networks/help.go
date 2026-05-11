@@ -11,7 +11,7 @@ func GetNetworksHelpContent() []helpview.HelpCategory {
 		{
 			Title: "General",
 			Items: []helpview.HelpItem{
-				{Keys: "<i>", Description: "Inspect selected network (JSON)"},
+				{Keys: "<i>", Description: "Inspect selected network"},
 				{Keys: "<u>", Description: "Show services using the network"},
 				{Keys: "</>", Description: "Filter networks"},
 				{Keys: "<?>", Description: "Open this help"},

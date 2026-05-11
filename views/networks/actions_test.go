@@ -6,7 +6,11 @@ package networksview
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
+
+	inspectview "swarmcli/views/inspect"
+	"swarmcli/views/view"
 
 	"github.com/docker/docker/api/types/network"
 	"github.com/stretchr/testify/require"
@@ -171,12 +175,16 @@ func TestInspectNetworkCmd_Success(t *testing.T) {
 	m := testModel(func(m *Model) { m.deps.Networks = mock })
 	cmd := m.inspectNetworkCmd("id-mynet")
 	msg := runCmd(cmd)
-	result, ok := msg.(NetworkInspectMsg)
+	nav, ok := msg.(view.NavigateToMsg)
 	require.True(t, ok)
-	require.Nil(t, result.Err)
-	require.NotNil(t, result.NetworkWithUsage)
-	require.Equal(t, "mynet", result.NetworkWithUsage.Network.Name)
-	require.Equal(t, []string{"svc1"}, result.NetworkWithUsage.Services)
+	require.Equal(t, inspectview.ViewName, nav.ViewName)
+	payload, ok := nav.Payload.(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "Network: mynet", payload["title"])
+	jsonStr, ok := payload["json"].(string)
+	require.True(t, ok)
+	require.Contains(t, jsonStr, `"Name":"mynet"`)
+	require.Contains(t, jsonStr, `"Services":["svc1"]`)
 }
 
 func TestInspectNetworkCmd_Error(t *testing.T) {
@@ -187,9 +195,15 @@ func TestInspectNetworkCmd_Error(t *testing.T) {
 	m := testModel(func(m *Model) { m.deps.Networks = mock })
 	cmd := m.inspectNetworkCmd("bad-id")
 	msg := runCmd(cmd)
-	result, ok := msg.(NetworkInspectMsg)
+	nav, ok := msg.(view.NavigateToMsg)
 	require.True(t, ok)
-	require.Error(t, result.Err)
+	require.Equal(t, inspectview.ViewName, nav.ViewName)
+	payload, ok := nav.Payload.(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, inspectview.FormatRaw, payload["format"])
+	jsonStr, ok := payload["json"].(string)
+	require.True(t, ok)
+	require.True(t, strings.Contains(jsonStr, "not found"))
 }
 
 func TestLoadUsedByCmd_ClientError(t *testing.T) {

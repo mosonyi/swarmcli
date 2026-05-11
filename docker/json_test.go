@@ -90,14 +90,3 @@ func TestNetworkJSON(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, services, 2)
 }
-
-func TestNetworkPrettyJSON(t *testing.T) {
-	nw := &NetworkWithUsage{
-		Network:  network.Summary{Name: "my-net"},
-		Services: []string{"web"},
-	}
-	raw, err := nw.PrettyJSON()
-	require.NoError(t, err)
-	require.Contains(t, string(raw), "\n")
-	require.Contains(t, string(raw), "  ")
-}

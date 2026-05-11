@@ -5,10 +5,7 @@ package networksview
 
 import (
 	"fmt"
-	"swarmcli/docker"
 	"time"
-
-	"github.com/docker/docker/api/types/network"
 )
 
 type networkItem struct {
@@ -41,16 +38,3 @@ type usedByItem struct {
 func (i usedByItem) FilterValue() string { return i.StackName + " " + i.ServiceName }
 func (i usedByItem) Title() string       { return fmt.Sprintf("%-24s %-24s", i.StackName, i.ServiceName) }
 func (i usedByItem) Description() string { return "Service: " + i.ServiceName }
-
-type networkWithUsage struct {
-	Network  network.Summary
-	Services []string
-}
-
-func (nw *networkWithUsage) PrettyJSON() ([]byte, error) {
-	dockerNW := docker.NetworkWithUsage{
-		Network:  nw.Network,
-		Services: nw.Services,
-	}
-	return dockerNW.PrettyJSON()
-}
