@@ -483,6 +483,19 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				return nil
 			}
 			entry := m.List.Filtered[m.List.Cursor]
+			action, ok := view.GetAction("port-forwards")
+			if !ok {
+				m.confirmDialog.Visible = true
+				m.confirmDialog.ErrorMode = true
+				m.confirmDialog.Message = view.BEUnavailableErr("Active Forwards").Error()
+				return nil
+			}
+			return action(entry.ServiceName)
+		case "W":
+			if m.List.Cursor >= len(m.List.Filtered) {
+				return nil
+			}
+			entry := m.List.Filtered[m.List.Cursor]
 			action, ok := view.GetAction("port-forward")
 			if !ok {
 				m.confirmDialog.Visible = true
@@ -1015,7 +1028,8 @@ func GetServicesHelpContent() []helpview.HelpCategory {
 				{Keys: "<ctrl+r>", Description: "Rollback service"},
 				{Keys: "<ctrl+d>", Description: "Remove service"},
 				{Keys: "<x>", Description: view.BEHelpDesc("shell", "Open shell into service container")},
-				{Keys: "<w>", Description: view.BEHelpDesc("port-forward", "Forward service ports to localhost")},
+				{Keys: "<w>", Description: view.BEHelpDesc("port-forwards", "Show active port-forwards")},
+				{Keys: "<shift+w>", Description: view.BEHelpDesc("port-forward", "Forward service ports to localhost")},
 				{Keys: "</>", Description: "Filter"},
 			},
 		},

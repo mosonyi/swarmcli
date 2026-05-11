@@ -741,6 +741,16 @@ func TestKey_W_NoAction_ShowsBEDialog(t *testing.T) {
 	m.Update(key("w"))
 	require.True(t, m.confirmDialog.Visible)
 	require.True(t, m.confirmDialog.ErrorMode)
+	require.Contains(t, m.confirmDialog.Message, "Active Forwards")
+	require.Contains(t, m.confirmDialog.Message, "swarmcli.io/be")
+}
+
+func TestKey_ShiftW_NoAction_ShowsBEDialog(t *testing.T) {
+	m := testModel()
+	loadServices(m, fakeEntries("web"))
+	m.Update(key("W"))
+	require.True(t, m.confirmDialog.Visible)
+	require.True(t, m.confirmDialog.ErrorMode)
 	require.Contains(t, m.confirmDialog.Message, "Port Forward")
 	require.Contains(t, m.confirmDialog.Message, "swarmcli.io/be")
 }
@@ -760,7 +770,22 @@ func TestKey_X_WithAction_CallsAction(t *testing.T) {
 	require.Equal(t, "web", called)
 }
 
-func TestKey_W_WithAction_CallsAction(t *testing.T) {
+func TestKey_W_WithAction_CallsPortForwardsAction(t *testing.T) {
+	called := ""
+	view.RegisterAction("port-forwards", func(name string) tea.Cmd {
+		return func() tea.Msg { called = name; return nil }
+	})
+	defer view.UnregisterActionForTest("port-forwards")
+
+	m := testModel()
+	loadServices(m, fakeEntries("web"))
+	cmd := m.Update(key("w"))
+	require.NotNil(t, cmd)
+	runCmd(cmd)
+	require.Equal(t, "web", called)
+}
+
+func TestKey_ShiftW_WithAction_CallsPortForwardAction(t *testing.T) {
 	called := ""
 	view.RegisterAction("port-forward", func(name string) tea.Cmd {
 		return func() tea.Msg { called = name; return nil }
@@ -769,7 +794,7 @@ func TestKey_W_WithAction_CallsAction(t *testing.T) {
 
 	m := testModel()
 	loadServices(m, fakeEntries("web"))
-	cmd := m.Update(key("w"))
+	cmd := m.Update(key("W"))
 	require.NotNil(t, cmd)
 	runCmd(cmd)
 	require.Equal(t, "web", called)
@@ -785,4 +810,5 @@ func TestGetServicesHelpContent_IncludesBEActions(t *testing.T) {
 	}
 	require.True(t, found["<x>"])
 	require.True(t, found["<w>"])
+	require.True(t, found["<shift+w>"])
 }
