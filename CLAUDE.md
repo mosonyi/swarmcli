@@ -36,6 +36,7 @@ tail -f ~/.local/state/swarmcli/app.log          # prod mode (JSON)
 main.go                    Entry point; version injection via ldflags, tea.NewProgram()
 app/
   app.go                   View factory registry, Init(), command autoload via _ "swarmcli/commands"
+  hooks.go                 PreUpdateHook registration; StartupOverlay; RegisterShutdownHook / RunShutdownHooks (BE port-forward manager registers CloseAll here)
   model.go                 Central state: Model struct (viewport, currentView, viewStack, commandInput, searchInput, systemInfo)
   update.go                Main message router: navigation, resize, events, key dispatch
 views/
@@ -68,7 +69,7 @@ docker/
   snapshot.go              In-memory cache (3s TTL, sync.RWMutex, atomic refresh flag)
   events.go                Docker event stream subscription
   service.go               Service ops: scale, restart, update
-  node.go, task.go         Entity queries
+  node.go, task.go         Entity queries (TaskEntry includes ContainerID, populated from task.Status.ContainerStatus.ContainerID with nil-guard)
   stack.go                 Stack queries
   secret.go, config.go     Secret/config CRUD
 registry/

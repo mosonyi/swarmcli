@@ -32,3 +32,22 @@ var startupOverlay StartupOverlay
 func SetStartupOverlay(o StartupOverlay) {
 	startupOverlay = o
 }
+
+var shutdownHooks []func()
+
+// RegisterShutdownHook adds a function to run when the program exits.
+// Must be called from init(). Hooks run synchronously in registration order
+// from RunShutdownHooks, which the entry point invokes after tea.Program.Run
+// returns. They also fire from a SIGINT/SIGTERM handler set up by callers
+// that need defensive cleanup on panic paths.
+func RegisterShutdownHook(fn func()) {
+	shutdownHooks = append(shutdownHooks, fn)
+}
+
+// RunShutdownHooks executes all registered shutdown hooks in order.
+// Safe to call multiple times; hooks themselves must be idempotent.
+func RunShutdownHooks() {
+	for _, h := range shutdownHooks {
+		h()
+	}
+}
