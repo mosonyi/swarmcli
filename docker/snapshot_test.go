@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/docker/docker/api/types/swarm"
+	"github.com/docker/docker/api/types/system"
 	"github.com/stretchr/testify/require"
 )
 
@@ -177,4 +178,26 @@ func TestFindServiceByName_NotFound(t *testing.T) {
 	}
 	svc := snap.FindServiceByName("nonexistent")
 	require.Nil(t, svc)
+}
+
+func TestClusterIDFromInfo_Populated(t *testing.T) {
+	info := system.Info{
+		Swarm: swarm.Info{
+			Cluster: &swarm.ClusterInfo{ID: "abc123"},
+		},
+	}
+	require.Equal(t, "abc123", clusterIDFromInfo(info))
+}
+
+func TestClusterIDFromInfo_NilCluster(t *testing.T) {
+	// Non-swarm daemon: info.Swarm.Cluster is nil.
+	info := system.Info{Swarm: swarm.Info{Cluster: nil}}
+	require.Equal(t, "", clusterIDFromInfo(info))
+}
+
+func TestClusterIDFromInfo_EmptyID(t *testing.T) {
+	info := system.Info{
+		Swarm: swarm.Info{Cluster: &swarm.ClusterInfo{ID: ""}},
+	}
+	require.Equal(t, "", clusterIDFromInfo(info))
 }
