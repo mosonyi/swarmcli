@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/swarm"
+	"github.com/docker/docker/api/types/system"
 )
 
 type NodeEntry struct {
@@ -37,10 +38,11 @@ type StackEntry struct {
 
 // SwarmSnapshot contains the in-memory swarm state.
 type SwarmSnapshot struct {
-	Nodes    []swarm.Node
-	Services []swarm.Service
-	Tasks    []swarm.Task
-	Fetched  time.Time
+	Nodes     []swarm.Node
+	Services  []swarm.Service
+	Tasks     []swarm.Task
+	Fetched   time.Time
+	ClusterID string
 }
 
 var (
@@ -100,15 +102,32 @@ func RefreshSnapshot() (*SwarmSnapshot, error) {
 		return nil, fmt.Errorf("listing tasks: %w", err)
 	}
 
+	clusterID := ""
+	if info, err := c.Info(ctx); err != nil {
+		l().Warnf("snapshot: cli.Info failed (cluster id unavailable): %v", err)
+	} else {
+		clusterID = clusterIDFromInfo(info)
+	}
+
 	snap := &SwarmSnapshot{
-		Nodes:    nodes,
-		Services: services,
-		Tasks:    tasks,
-		Fetched:  time.Now(),
+		Nodes:     nodes,
+		Services:  services,
+		Tasks:     tasks,
+		Fetched:   time.Now(),
+		ClusterID: clusterID,
 	}
 
 	SetSnapshot(snap)
 	return snap, nil
+}
+
+// clusterIDFromInfo extracts the swarm cluster ID from a Docker Info result.
+// Returns empty string on non-swarm daemons (where info.Swarm.Cluster is nil).
+func clusterIDFromInfo(info system.Info) string {
+	if info.Swarm.Cluster == nil {
+		return ""
+	}
+	return info.Swarm.Cluster.ID
 }
 
 // RefreshSnapshotAsync triggers a background refresh if one is not already running.
