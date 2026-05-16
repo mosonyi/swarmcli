@@ -77,6 +77,27 @@ func TestReconstructStackCompose(t *testing.T) {
 		t.Error("Parsed YAML missing 'backend' network key")
 	}
 
+	// Issue #363 regression: a stack declaring ONLY the "default" network
+	// (with a service referencing it) must retain both the top-level
+	// networks: default key and the service-level networks: [default].
+	if _, ok := composed.Networks["default"]; !ok {
+		t.Error("Issue #363: reconstructed YAML dropped the 'default' network")
+	}
+	probe, ok := composed.Services["default_net_probe"]
+	if !ok {
+		t.Fatal("Issue #363: missing 'default_net_probe' service in reconstructed YAML")
+	}
+	probeNets, _ := probe.Networks.([]any) // yaml.Unmarshal yields []any
+	foundDefault := false
+	for _, n := range probeNets {
+		if s, _ := n.(string); s == "default" {
+			foundDefault = true
+		}
+	}
+	if !foundDefault {
+		t.Errorf("Issue #363: 'default_net_probe' lost its networks: [default], got %#v", probe.Networks)
+	}
+
 	t.Logf("Successfully reconstructed stack YAML (%d bytes)", len(yaml))
 }
 
@@ -167,6 +188,12 @@ func TestReconstructStackCompose_RoundTrip(t *testing.T) {
 	}
 
 	// 6. Compare: networks
+	// Issue #363: explicitly assert the default network survived the source
+	// reconstruction — the loop below would pass vacuously if "default" were
+	// dropped from BOTH src and rt.
+	if _, ok := srcCF.Networks["default"]; !ok {
+		t.Error("Issue #363: source reconstruction dropped the 'default' network")
+	}
 	for netName := range srcCF.Networks {
 		if _, ok := rtCF.Networks[netName]; !ok {
 			t.Errorf("Network %q present in source but missing from round-trip, got keys: %v",

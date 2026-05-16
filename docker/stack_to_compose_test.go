@@ -4,6 +4,7 @@
 package docker
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -177,33 +178,85 @@ func TestComposeFile_VolumeManagedNotExternal(t *testing.T) {
 	require.NotContains(t, string(out), "external")
 }
 
-func TestComposeFile_DefaultNetworkOmitted(t *testing.T) {
+// Issue #363 regression: a stack declaring ONLY the "default" network with
+// a service referencing it must survive reconstruction unchanged. The old
+// suppression logic (removed) dropped both, causing "Edit Stack no network".
+func TestPruneEmptySections_KeepsSoleDefaultNetwork(t *testing.T) {
 	cf := ComposeFile{
-		Version: "3.8",
+		Version: "3.9",
 		Services: map[string]ComposeService{
 			"web": {Image: "nginx", Networks: []string{"default"}},
 		},
-		Networks: map[string]map[string]any{"default": {"external": true}},
+		Networks: map[string]map[string]any{"default": {"driver": "overlay"}},
 	}
 
-	// Simulate the suppression logic
-	if len(cf.Networks) == 1 {
-		if _, ok := cf.Networks["default"]; ok {
-			cf.Networks = nil
-			for k, svc := range cf.Services {
-				if nets, ok := svc.Networks.([]string); ok && len(nets) == 1 && nets[0] == "default" {
-					svc.Networks = nil
-					cf.Services[k] = svc
-				}
-			}
-		}
-	}
+	pruneEmptySections(&cf)
+
+	require.NotNil(t, cf.Networks)
+	require.Contains(t, cf.Networks, "default")
+	require.Equal(t, "overlay", cf.Networks["default"]["driver"])
 
 	out, err := yaml.Marshal(&cf)
 	require.NoError(t, err)
 	yamlStr := string(out)
-	require.NotContains(t, yamlStr, "networks:")
-	require.NotContains(t, yamlStr, "default")
+	require.Contains(t, yamlStr, "networks:")
+	require.Contains(t, yamlStr, "default:")
+	require.Contains(t, yamlStr, "driver: overlay")
+}
+
+func TestPruneEmptySections_NilsGenuinelyEmpty(t *testing.T) {
+	cf := ComposeFile{
+		Version:  "3.9",
+		Services: map[string]ComposeService{"web": {Image: "nginx"}},
+		Networks: map[string]map[string]any{},
+		Volumes:  map[string]map[string]any{},
+		Secrets:  map[string]map[string]any{},
+		Configs:  map[string]map[string]any{},
+	}
+
+	pruneEmptySections(&cf)
+
+	require.Nil(t, cf.Networks)
+	require.Nil(t, cf.Volumes)
+	require.Nil(t, cf.Secrets)
+	require.Nil(t, cf.Configs)
+}
+
+func TestStripImageDigest(t *testing.T) {
+	digest := strings.Repeat("a", 64)
+	tests := []struct{ name, in, want string }{
+		{"digest pinned", "nginx:1.25@sha256:" + digest, "nginx:1.25"},
+		{"no tag with digest", "nginx@sha256:" + digest, "nginx"},
+		{"registry port + digest", "reg:5000/app:v2@sha256:" + digest, "reg:5000/app:v2"},
+		{"plain tag", "alpine:latest", "alpine:latest"},
+		{"no tag no digest", "alpine", "alpine"},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, stripImageDigest(tt.in))
+		})
+	}
+}
+
+func TestFormatPort(t *testing.T) {
+	tests := []struct {
+		name              string
+		published, target uint32
+		proto, want       string
+	}{
+		{"tcp default omitted", 8080, 80, "tcp", "8080:80"}, // issue #363 case
+		{"empty proto = tcp", 8080, 80, "", "8080:80"},
+		{"udp kept", 53, 53, "udp", "53:53/udp"},
+		{"sctp kept", 38412, 38412, "sctp", "38412:38412/sctp"},
+		{"target only tcp", 0, 80, "tcp", "80"},
+		{"target only udp", 0, 514, "udp", "514/udp"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, formatPort(tt.published, tt.target, tt.proto))
+		})
+	}
 }
 
 func TestComposeFile_NetworkManagedNotExternal(t *testing.T) {
