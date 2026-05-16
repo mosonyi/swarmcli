@@ -2,6 +2,8 @@ version: "3.9"
 
 networks:
   backend:
+  default:
+    driver: overlay
 
 volumes:
   whoami_data:
@@ -62,6 +64,18 @@ services:
       '
     ports:
       - "8082:80"
+  # Issue #363 regression fixture: a service using ONLY the explicitly
+  # declared "default" network. Reconstruction must retain both the
+  # top-level networks: default key and this service's networks: [default].
+  default_net_probe:
+    image: alpine:latest
+    networks:
+      - default
+    deploy:
+      replicas: 1
+    command: >
+      sh -c 'while true; do sleep 3600; done'
+
   log_ticker:
     image: alpine:latest
     deploy:

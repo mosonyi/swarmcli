@@ -205,7 +205,7 @@ func ReconstructStackCompose(stackName string) (string, error) {
 
 	// Initialize compose file structure
 	cf := ComposeFile{
-		Version:  "3.8",
+		Version:  "3.9",
 		Services: map[string]ComposeService{},
 		Networks: map[string]map[string]any{},
 		Volumes:  map[string]map[string]any{},
@@ -285,7 +285,7 @@ func ReconstructStackCompose(stackName string) (string, error) {
 
 		if si.Spec.TaskTemplate.ContainerSpec != nil {
 			cspec := si.Spec.TaskTemplate.ContainerSpec
-			cs.Image = cspec.Image
+			cs.Image = stripImageDigest(cspec.Image)
 
 			if cspec.Dir != "" {
 				cs.WorkingDir = cspec.Dir
@@ -375,15 +375,7 @@ func ReconstructStackCompose(stackName string) (string, error) {
 				if p.TargetPort == 0 {
 					continue
 				}
-				proto := p.Protocol
-				if proto == "" {
-					proto = "tcp"
-				}
-				if p.PublishedPort != 0 {
-					cs.Ports = append(cs.Ports, fmt.Sprintf("%d:%d/%s", p.PublishedPort, p.TargetPort, proto))
-				} else {
-					cs.Ports = append(cs.Ports, fmt.Sprintf("%d/%s", p.TargetPort, proto))
-				}
+				cs.Ports = append(cs.Ports, formatPort(p.PublishedPort, p.TargetPort, p.Protocol))
 			}
 		}
 
@@ -468,7 +460,7 @@ func ReconstructStackCompose(stackName string) (string, error) {
 			if si.Spec.TaskTemplate.RestartPolicy.Condition != "" {
 				rp["condition"] = si.Spec.TaskTemplate.RestartPolicy.Condition
 			}
-			if si.Spec.TaskTemplate.RestartPolicy.MaxAttempts != nil {
+			if si.Spec.TaskTemplate.RestartPolicy.MaxAttempts != nil && *si.Spec.TaskTemplate.RestartPolicy.MaxAttempts > 0 {
 				rp["max_attempts"] = int(*si.Spec.TaskTemplate.RestartPolicy.MaxAttempts)
 			}
 			if len(rp) > 0 {
@@ -487,32 +479,9 @@ func ReconstructStackCompose(stackName string) (string, error) {
 		cf.Services[key] = cs
 	}
 
-	// If the only declared network is "default" (implicit), suppress it
-	if len(cf.Networks) == 1 {
-		if _, ok := cf.Networks["default"]; ok {
-			cf.Networks = nil
-			for k, svc := range cf.Services {
-				if nets, ok := svc.Networks.([]string); ok && len(nets) == 1 && nets[0] == "default" {
-					svc.Networks = nil
-					cf.Services[k] = svc
-				}
-			}
-		}
-	}
-
-	// Remove empty top-level sections
-	if len(cf.Networks) == 0 {
-		cf.Networks = nil
-	}
-	if len(cf.Volumes) == 0 {
-		cf.Volumes = nil
-	}
-	if len(cf.Secrets) == 0 {
-		cf.Secrets = nil
-	}
-	if len(cf.Configs) == 0 {
-		cf.Configs = nil
-	}
+	// Remove empty top-level sections (does NOT suppress a "default"
+	// network — see issue #363)
+	pruneEmptySections(&cf)
 
 	// Marshal to YAML
 	y, err := yaml.Marshal(&cf)
@@ -639,6 +608,50 @@ func escapeComposeArgs(args []string) []string {
 		out[i] = escapeComposeInterpolation(a)
 	}
 	return out
+}
+
+// stripImageDigest removes a trailing "@sha256:<digest>" pin so the
+// reconstructed image is "repo:tag" rather than "repo:tag@sha256:...".
+// Docker resolves and pins the digest at deploy time; the original
+// Compose file only carried "repo:tag". See issue #363.
+func stripImageDigest(image string) string {
+	before, _, _ := strings.Cut(image, "@sha256:")
+	return before
+}
+
+// formatPort renders a Compose short-syntax port mapping. The "/proto"
+// suffix is omitted when proto is "tcp" (the Compose default) and kept
+// for udp/sctp. See issue #363.
+func formatPort(published, target uint32, proto string) string {
+	if proto == "" {
+		proto = "tcp"
+	}
+	base := fmt.Sprintf("%d", target)
+	if published != 0 {
+		base = fmt.Sprintf("%d:%d", published, target)
+	}
+	if proto == "tcp" {
+		return base
+	}
+	return base + "/" + proto
+}
+
+// pruneEmptySections nils out empty top-level map sections so they are
+// omitted from the marshaled Compose YAML (the structs use omitempty).
+// It does NOT suppress a "default" network — see issue #363.
+func pruneEmptySections(cf *ComposeFile) {
+	if len(cf.Networks) == 0 {
+		cf.Networks = nil
+	}
+	if len(cf.Volumes) == 0 {
+		cf.Volumes = nil
+	}
+	if len(cf.Secrets) == 0 {
+		cf.Secrets = nil
+	}
+	if len(cf.Configs) == 0 {
+		cf.Configs = nil
+	}
 }
 
 // stripStackPrefix removes the "<stack>_" prefix from a resource name
