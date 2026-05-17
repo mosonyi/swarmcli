@@ -16,9 +16,14 @@ func BEHelpDesc(actionName, desc string) string {
 	return desc + " (BE)"
 }
 
+// BELandingURL is the public Business Edition landing page (trial info,
+// feature overview). Exported so the BE module references the same
+// string instead of re-hardcoding it.
+const BELandingURL = "https://swarmcli.io/be"
+
 // BEUnavailableFormat is the format string used by BEUnavailableErr.
 // Contains one %s verb for the feature name. Override in init() to customise.
-var BEUnavailableFormat = "%s is a Business Edition feature.\nFor more information, visit: https://swarmcli.io/be"
+var BEUnavailableFormat = "%s is a Business Edition feature.\nFor more information, visit: " + BELandingURL
 
 // BEUnavailableFormatFn, if set, returns the error message for a feature.
 // Takes precedence over BEUnavailableFormat. Override in init() to customise.
