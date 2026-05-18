@@ -24,7 +24,13 @@ jobs:
           cache: true
 
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        # govulncheck statically type-checks targets with the go/types of the
+        # toolchain it was *built* with; a binary built with an older Go cannot
+        # analyze this module and silently scans nothing. Build it with the
+        # module's own toolchain (read from go.mod, stays in sync on bumps).
+        run: |
+          GOTOOLCHAIN=$(awk '/^toolchain /{print $2}' go.mod) \
+            go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
 
       - name: Run govulncheck
         # GO-2026-4887 and GO-2026-4883 are Docker daemon-side vulnerabilities
@@ -39,7 +45,7 @@ jobs:
 
           SUPPRESSED = {"GO-2026-4887", "GO-2026-4883"}
 
-          # -format json always exits 0; vulnerability data is inside the JSON stream.
+          # -format json exits 0 and streams JSON; vulnerability data is in the stream.
           proc = subprocess.run(
               ["govulncheck", "-format", "json", "./..."],
               capture_output=True, text=True,
@@ -47,7 +53,7 @@ jobs:
 
           # Parse the pretty-printed JSON stream (one object per message)
           text, depth, start = proc.stdout, 0, None
-          symbol_vulns = set()
+          symbol_vulns, saw_config = set(), False
           for i, c in enumerate(text):
               if c == '{':
                   if depth == 0:
@@ -58,15 +64,32 @@ jobs:
                   if depth == 0 and start is not None:
                       try:
                           obj = json.loads(text[start:i+1])
+                          if 'config' in obj:
+                              saw_config = True
                           if obj.get('finding'):
                               f = obj['finding']
                               osv = f.get('osv', '')
-                              # Symbol-level finding: trace contains a frame with a function
+                              # Symbol-level finding: trace has a frame with a function
                               if osv and any('function' in fr for fr in f.get('trace', [])):
                                   symbol_vulns.add(osv)
                       except Exception:
                           pass
                       start = None
+
+          # Fail loudly if govulncheck errored instead of scanning. A silent
+          # exit-0 here previously masked broken runs (e.g. a govulncheck built
+          # with an older Go toolchain emitting "requires newer Go version" and
+          # exiting 0) as "no vulnerabilities found".
+          LOAD_ERR = ("loading packages", "requires newer Go version",
+                      "toolchain not available", "no go.mod file")
+          blob = proc.stderr + proc.stdout
+          if (proc.returncode != 0 or not saw_config
+                  or any(s in blob for s in LOAD_ERR)):
+              sys.stderr.write(proc.stderr)
+              print("govulncheck did not analyze any packages "
+                    "(exit %d, config=%s) -- see stderr above"
+                    % (proc.returncode, saw_config))
+              sys.exit(proc.returncode or 1)
 
           unexpected = symbol_vulns - SUPPRESSED
           if unexpected:

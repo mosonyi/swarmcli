@@ -2,7 +2,7 @@ module swarmcli
 
 go 1.26
 
-toolchain go1.26.2
+toolchain go1.26.3
 
 require (
 	github.com/briandowns/spinner v1.23.2
