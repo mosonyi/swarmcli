@@ -12,9 +12,26 @@ import (
 	_ "swarmcli/commands/command/docker/network"
 	_ "swarmcli/commands/command/docker/node"
 	_ "swarmcli/commands/command/docker/secret"
+	"swarmcli/registry"
 
 	"github.com/stretchr/testify/require"
 )
+
+// TestAllCommands_HaveDetail guards that every registered OSS command
+// ships a per-command help Detail paragraph. Passthrough stubs (the OSS
+// bootstrap stub) are exempt: their help is intentionally never shown.
+func TestAllCommands_HaveDetail(t *testing.T) {
+	for _, c := range registry.PrimaryCommands() {
+		// Unwrap: CommandWithAliases embeds the Command interface, so
+		// its own method set does not include Spec().
+		spec, ok := registry.SpecOf(c.Command)
+		require.Truef(t, ok, "%s must declare a Spec()", c.Name())
+		if spec.Passthrough {
+			continue
+		}
+		require.NotEmptyf(t, spec.Detail, "%s spec must set Detail", c.Name())
+	}
+}
 
 func TestParseArgs_NoArgs(t *testing.T) {
 	result, err := parseArgs(nil, nil)

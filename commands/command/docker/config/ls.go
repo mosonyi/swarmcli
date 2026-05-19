@@ -18,7 +18,12 @@ func (DockerConfigLs) Name() string        { return "config" }
 func (DockerConfigLs) Description() string { return "docker config ls" }
 
 func (DockerConfigLs) Spec() registry.CommandSpec {
-	return registry.CommandSpec{Examples: []string{":config"}}
+	return registry.CommandSpec{
+		Detail: "Opens the Docker Configs list, where you can create, " +
+			"clone, inspect and delete configs and see which stacks use " +
+			"them.",
+		Examples: []string{":config"},
+	}
 }
 
 func (DockerConfigLs) Execute(ctx any, args args.Args) tea.Cmd {

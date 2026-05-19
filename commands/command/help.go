@@ -21,7 +21,11 @@ func (Help) Description() string { return "Show all available commands" }
 
 func (Help) Spec() registry.CommandSpec {
 	return registry.CommandSpec{
-		Usage:    "[command]",
+		Usage: "[command]",
+		Detail: "Lists every registered command with its description and " +
+			"aliases; the list is filterable. Pass a command name (e.g. " +
+			":help stack) — equivalent to :stack --help — to see that " +
+			"command's flags, usage and examples.",
 		Examples: []string{":help", ":help bootstrap"},
 	}
 }

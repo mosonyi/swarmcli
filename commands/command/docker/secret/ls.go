@@ -19,7 +19,13 @@ func (DockerSecretLs) Name() string        { return "secret" }
 func (DockerSecretLs) Description() string { return "docker secret ls" }
 
 func (DockerSecretLs) Spec() registry.CommandSpec {
-	return registry.CommandSpec{Examples: []string{":secret"}}
+	return registry.CommandSpec{
+		Detail: "Opens the Docker Secrets list, where you can create, " +
+			"inspect and delete secrets and see which stacks use them. " +
+			"With a Business Edition licence you can also reveal a " +
+			"secret's value.",
+		Examples: []string{":secret"},
+	}
 }
 
 func (DockerSecretLs) Execute(ctx any, args args.Args) tea.Cmd {

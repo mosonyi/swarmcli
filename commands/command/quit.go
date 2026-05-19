@@ -16,7 +16,10 @@ func (Quit) Name() string        { return "quit" }
 func (Quit) Description() string { return "Exit SwarmCLI" }
 
 func (Quit) Spec() registry.CommandSpec {
-	return registry.CommandSpec{Examples: []string{":quit"}}
+	return registry.CommandSpec{
+		Detail:   "Exits SwarmCLI immediately, without a confirmation prompt.",
+		Examples: []string{":quit"},
+	}
 }
 
 func (Quit) Execute(_ any, _ args.Args) tea.Cmd {

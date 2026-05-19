@@ -216,3 +216,23 @@ func TestClearSearchQuery_CategorizedMode(t *testing.T) {
 	out := m.View()
 	require.Contains(t, out, "Go back")
 }
+
+func TestFrameHeader_HintOnlyOnCommandList(t *testing.T) {
+	list := New(80, 24, []CommandInfo{{Name: "help", Description: "Show help"}})
+	h := list.FrameHeader()
+	require.Contains(t, h, "Available Commands")
+	require.Contains(t, h, "Tip:")
+	require.Contains(t, h, "--help")
+
+	perCmd := NewCommandHelp(80, 24, CommandHelp{
+		Title:    ":help",
+		Sections: []HelpCategory{{Title: "Usage", Items: []HelpItem{{Keys: ":help"}}}},
+	})
+	require.NotContains(t, perCmd.FrameHeader(), "Tip:")
+	require.Contains(t, perCmd.FrameHeader(), ":help")
+
+	keys := NewDetailed(80, 24, []HelpCategory{
+		{Title: "General", Items: []HelpItem{{Keys: "<n>", Description: "New"}}},
+	})
+	require.NotContains(t, keys.FrameHeader(), "Tip:")
+}

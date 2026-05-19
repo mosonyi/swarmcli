@@ -18,7 +18,12 @@ func (Contexts) Name() string        { return "contexts" }
 func (Contexts) Description() string { return "List and switch Docker contexts" }
 
 func (Contexts) Spec() registry.CommandSpec {
-	return registry.CommandSpec{Examples: []string{":contexts"}}
+	return registry.CommandSpec{
+		Detail: "Opens the Docker context list, where you can switch the " +
+			"active context (which reloads the cluster) and create, " +
+			"inspect, edit, delete, import or export contexts.",
+		Examples: []string{":contexts"},
+	}
 }
 
 func (Contexts) Execute(ctx any, args args.Args) tea.Cmd {
