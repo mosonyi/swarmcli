@@ -84,12 +84,13 @@ utils/log/
 - **View Stack**: `viewStack.Push(old)` / `Pop()` for breadcrumb navigation.
 - **View Factory**: `viewRegistry[name]` maps view names to constructor functions, registered in `app.Init()`.
 - **Command Registry**: Commands in `commands/command/` auto-register via `init()` + `registry.Register()`. Accessed via `:` input.
+- **Command Spec**: Commands optionally implement `registry.CommandWithSpec` (`Spec() registry.CommandSpec`, discovered by type assertion like `Aliaser`). The spec declares `Usage`, `Flags` (the allow-list), and `Examples`. `api.ParseInput` is the single chokepoint that, in order: short-circuits `Passthrough` specs, intercepts `--help`/`-h`/`-help` (and `:help <cmd>`) into a per-command help screen reusing the detailed help view, then rejects any undeclared flag (**global strict**, with a `did you mean --x?` suggestion). Unknown-flag rejection means every registered command MUST declare a spec — a missing/empty spec rejects all flags. `Passthrough:true` is the narrow escape-hatch for delegating/unavailable stubs (e.g. the OSS `bootstrap` stub): it skips both help interception and validation so every arg reaches `Execute` unchanged and the command keeps its own messaging (and no Pro flag internals leak into OSS — see Pro Feature Boundary).
 - **Snapshot Cache**: `docker.GetSnapshot()` / `docker.RefreshSnapshot()` — 3s TTL, background event-driven invalidation.
 - **Navigation**: `view.NavigateToMsg{ViewName, Payload, Replace}` dispatched in `update.go`.
 
 ## Adding New Functionality
 
-**New command**: Create `commands/command/mycommand.go`, implement `registry.Command` (Name/Description/Execute), call `registry.Register()` in `init()`.
+**New command**: Create `commands/command/mycommand.go`, implement `registry.Command` (Name/Description/Execute), call `registry.Register()` in `init()`. Also implement `Spec() registry.CommandSpec` — declare every flag the command reads (`a.Has`/`a.Get`) plus `Usage`/`Examples`, or `:cmd --help` shows only a fallback and strict validation rejects the command's own flags. Aliases (`Aliaser`) inherit the primary's spec; do not add a spec to the alias. See `commands/command/docker/node/ls.go` for a zero-flag spec and `swarmcli-be/commands/pro/bootstrap.go` for the full worked example.
 
 **New view**: Create `views/myview/`, implement `view.View` interface, register factory in `app/app.go` `Init()`.
 

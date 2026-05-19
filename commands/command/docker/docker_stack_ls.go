@@ -17,6 +17,10 @@ type DockerStackLs struct{}
 func (DockerStackLs) Name() string        { return "stack" }
 func (DockerStackLs) Description() string { return "List all Docker stacks: docker stack ls" }
 
+func (DockerStackLs) Spec() registry.CommandSpec {
+	return registry.CommandSpec{Examples: []string{":stack"}}
+}
+
 func (DockerStackLs) Execute(ctx any, args args.Args) tea.Cmd {
 	return func() tea.Msg {
 		return view.NavigateToMsg{

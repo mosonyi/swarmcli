@@ -17,6 +17,10 @@ type DockerNodeLs struct{}
 func (DockerNodeLs) Name() string        { return "node" }
 func (DockerNodeLs) Description() string { return "docker node ls" }
 
+func (DockerNodeLs) Spec() registry.CommandSpec {
+	return registry.CommandSpec{Examples: []string{":node"}}
+}
+
 func (DockerNodeLs) Execute(ctx any, args args.Args) tea.Cmd {
 	return func() tea.Msg {
 		return view.NavigateToMsg{

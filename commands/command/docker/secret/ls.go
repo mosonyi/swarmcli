@@ -18,6 +18,10 @@ type DockerSecretLs struct{}
 func (DockerSecretLs) Name() string        { return "secret" }
 func (DockerSecretLs) Description() string { return "docker secret ls" }
 
+func (DockerSecretLs) Spec() registry.CommandSpec {
+	return registry.CommandSpec{Examples: []string{":secret"}}
+}
+
 func (DockerSecretLs) Execute(ctx any, args args.Args) tea.Cmd {
 	return func() tea.Msg {
 		return view.NavigateToMsg{

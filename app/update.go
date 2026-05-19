@@ -4,9 +4,11 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"swarmcli/commands/api"
+	cmdpkg "swarmcli/commands/command"
 	"swarmcli/docker"
 	"swarmcli/views/commandinput"
 	"swarmcli/views/confirmdialog"
@@ -85,6 +87,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		cmd, parsedArgs, err := api.ParseInput(raw)
 		if err != nil {
+			var helpErr api.ErrHelpRequested
+			if errors.As(err, &helpErr) {
+				return m, cmdpkg.CommandHelpCmd(helpErr.Cmd)
+			}
 			m.commandInput.ShowError(err.Error())
 			return m, nil
 		}

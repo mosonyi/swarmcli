@@ -17,6 +17,10 @@ type Contexts struct{}
 func (Contexts) Name() string        { return "contexts" }
 func (Contexts) Description() string { return "List and switch Docker contexts" }
 
+func (Contexts) Spec() registry.CommandSpec {
+	return registry.CommandSpec{Examples: []string{":contexts"}}
+}
+
 func (Contexts) Execute(ctx any, args args.Args) tea.Cmd {
 	return func() tea.Msg {
 		return view.NavigateToMsg{

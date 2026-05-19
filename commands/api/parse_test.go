@@ -65,19 +65,63 @@ func TestParseInput_KnownCommand(t *testing.T) {
 	require.Empty(t, a.Positionals)
 }
 
+// These exercise ParseInput's flag/positional separation. They use the
+// passthrough "bootstrap" command (OSS stub) so arbitrary flags are not
+// rejected by strict validation — the separation mechanics are what is
+// under test here; strict validation is covered separately below.
 func TestParseInput_CommandWithArgs(t *testing.T) {
-	cmd, a, err := ParseInput("node --verbose")
+	cmd, a, err := ParseInput("bootstrap --verbose")
 	require.NoError(t, err)
 	require.NotNil(t, cmd)
-	require.Equal(t, "node", cmd.Name())
+	require.Equal(t, "bootstrap", cmd.Name())
 	require.Equal(t, "true", a.Flags["verbose"])
 }
 
 func TestParseInput_CommandWithPositionalArgs(t *testing.T) {
-	cmd, a, err := ParseInput("node mynode --verbose")
+	cmd, a, err := ParseInput("bootstrap mynode --verbose")
 	require.NoError(t, err)
 	require.NotNil(t, cmd)
-	require.Equal(t, "node", cmd.Name())
+	require.Equal(t, "bootstrap", cmd.Name())
 	require.Equal(t, []string{"mynode"}, a.Positionals)
 	require.Equal(t, "true", a.Flags["verbose"])
+}
+
+func TestParseInput_HelpFlag(t *testing.T) {
+	// "node" is registered via the blank imports above and has a spec.
+	cmd, _, err := ParseInput("node --help")
+	var helpErr ErrHelpRequested
+	require.ErrorAs(t, err, &helpErr)
+	require.Equal(t, "node", helpErr.Cmd.Name())
+	require.Nil(t, cmd)
+}
+
+func TestParseInput_HelpShortDash(t *testing.T) {
+	_, _, err := ParseInput("node -h")
+	var helpErr ErrHelpRequested
+	require.ErrorAs(t, err, &helpErr)
+	require.Equal(t, "node", helpErr.Cmd.Name())
+}
+
+func TestParseInput_HelpBeatsUnknownFlag(t *testing.T) {
+	_, _, err := ParseInput("node --help --bogus")
+	var helpErr ErrHelpRequested
+	require.ErrorAs(t, err, &helpErr)
+}
+
+func TestParseInput_UnknownFlagRejected(t *testing.T) {
+	_, _, err := ParseInput("node --bogus")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unknown flag --bogus for :node")
+}
+
+func TestParseInput_PassthroughSkipsValidation(t *testing.T) {
+	// bootstrap (OSS stub) is Passthrough: --upgrade is not rejected and
+	// --help is not intercepted; everything reaches Execute.
+	cmd, a, err := ParseInput("bootstrap --upgrade")
+	require.NoError(t, err)
+	require.Equal(t, "bootstrap", cmd.Name())
+	require.Equal(t, "true", a.Flags["upgrade"])
+
+	_, _, err = ParseInput("bootstrap --help")
+	require.NoError(t, err)
 }
