@@ -45,6 +45,31 @@ type Model struct {
 	height     int
 	// app-level "/" filter query
 	query string
+	// commandHelp, when set, selects the vertical single-column
+	// per-command help layout (distinct from the columnar keybinding
+	// cheat-sheet produced by NewDetailed).
+	commandHelp *CommandHelp
+}
+
+// CommandHelp is the payload for the per-command `--help` / `:help <cmd>`
+// screen. It is a distinct type (not []HelpCategory) so the view factory
+// routes it to the vertical layout and the keybinding cheat-sheet path
+// is left untouched.
+type CommandHelp struct {
+	Title    string
+	Sections []HelpCategory
+}
+
+// NewCommandHelp builds the model for the per-command help screen.
+func NewCommandHelp(width, height int, ch CommandHelp) *Model {
+	c := ch
+	return &Model{
+		Viewable:    viewport.New(width, height),
+		Visible:     true,
+		commandHelp: &c,
+		width:       width,
+		height:      height,
+	}
 }
 
 type CommandInfo struct {

@@ -71,8 +71,10 @@ func TestHelp_Execute_PerCommand(t *testing.T) {
 	nav, ok := msg.(view.NavigateToMsg)
 	require.True(t, ok)
 	require.Equal(t, helpview.ViewName, nav.ViewName)
-	_, ok = nav.Payload.([]helpview.HelpCategory)
-	require.True(t, ok, ":help <cmd> must use the detailed []HelpCategory payload")
+	ch, ok := nav.Payload.(helpview.CommandHelp)
+	require.True(t, ok, ":help <cmd> must use the CommandHelp payload")
+	require.Equal(t, ":quit", ch.Title)
+	require.NotEmpty(t, ch.Sections)
 }
 
 func TestHelp_Execute_UnknownCommand(t *testing.T) {

@@ -14,6 +14,9 @@ import (
 func (m *Model) FrameTitle() string { return "Help" }
 
 func (m *Model) FrameHeader() string {
+	if m.commandHelp != nil {
+		return ui.FrameHeaderStyle.Render(m.commandHelp.Title)
+	}
 	if len(m.categories) > 0 {
 		return ""
 	}
@@ -25,6 +28,9 @@ func (m *Model) FrameFooter() string {
 }
 
 func (m *Model) FrameContent() string {
+	if m.commandHelp != nil {
+		return m.buildCommandHelpContent()
+	}
 	if len(m.categories) > 0 {
 		return m.buildCategorizedContent()
 	}
@@ -145,4 +151,94 @@ func (m *Model) buildCategorizedContent() string {
 	footer := m.FrameFooter()
 	frame := ui.ComputeFrameDimensions(m.Viewable.Width, m.Viewable.Height, m.width, m.height, "", footer)
 	return ui.TrimOrPadContentToLines(fullContent, frame.DesiredContentLines)
+}
+
+// buildCommandHelpContent renders the per-command help as vertically
+// stacked sections in a single column. Short-key sections (flags) use an
+// aligned key/description column; sections whose widest key exceeds half
+// the width (usage, examples) fall back to stacked key-then-description
+// lines so long strings wrap cleanly instead of colliding.
+func (m *Model) buildCommandHelpContent() string {
+	width := m.Viewable.Width
+	if width <= 0 {
+		width = m.width
+	}
+	if width <= 0 {
+		width = 80
+	}
+
+	categoryStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("2"))
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("33"))
+	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+
+	const indent = "  "
+	var b strings.Builder
+
+	for i, cat := range m.commandHelp.Sections {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(categoryStyle.Render(strings.ToUpper(cat.Title)))
+		b.WriteString("\n")
+
+		keyW := 0
+		for _, it := range cat.Items {
+			if w := lipgloss.Width(it.Keys); w > keyW {
+				keyW = w
+			}
+		}
+		stacked := keyW > width/2
+
+		for _, it := range cat.Items {
+			if stacked || it.Description == "" {
+				for _, ln := range wrapText(it.Keys, width-len(indent)) {
+					b.WriteString(indent + keyStyle.Render(ln) + "\n")
+				}
+				if it.Description != "" {
+					for _, ln := range wrapText(it.Description, width-len(indent)-2) {
+						b.WriteString(indent + "  " + descStyle.Render(ln) + "\n")
+					}
+				}
+				continue
+			}
+
+			descW := width - len(indent) - keyW - 2
+			if descW < 10 {
+				descW = 10
+			}
+			dl := wrapText(it.Description, descW)
+			b.WriteString(indent + keyStyle.Render(fmt.Sprintf("%-*s", keyW, it.Keys)) + "  " + descStyle.Render(dl[0]) + "\n")
+			for _, extra := range dl[1:] {
+				b.WriteString(indent + strings.Repeat(" ", keyW) + "  " + descStyle.Render(extra) + "\n")
+			}
+		}
+	}
+
+	fullContent := strings.TrimRight(b.String(), "\n")
+	header := m.FrameHeader()
+	footer := m.FrameFooter()
+	frame := ui.ComputeFrameDimensions(m.Viewable.Width, m.Viewable.Height, m.width, m.height, header, footer)
+	return ui.TrimOrPadContentToLines(fullContent, frame.DesiredContentLines)
+}
+
+// wrapText word-wraps s to at most width columns, never splitting a word.
+func wrapText(s string, width int) []string {
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return []string{""}
+	}
+	if width <= 0 {
+		return []string{strings.Join(words, " ")}
+	}
+	var lines []string
+	cur := words[0]
+	for _, w := range words[1:] {
+		if lipgloss.Width(cur)+1+lipgloss.Width(w) > width {
+			lines = append(lines, cur)
+			cur = w
+		} else {
+			cur += " " + w
+		}
+	}
+	return append(lines, cur)
 }

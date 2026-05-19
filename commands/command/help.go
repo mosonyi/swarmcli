@@ -52,11 +52,14 @@ func (Help) Execute(_ any, a args.Args) tea.Cmd {
 // help screen for a single command. Shared by `:help <cmd>` and the
 // `--help`/`-h` interception path in the dispatcher.
 func CommandHelpCmd(cmd registry.Command) tea.Cmd {
-	categories := CommandHelpCategories(cmd)
+	ch := helpview.CommandHelp{
+		Title:    ":" + cmd.Name(),
+		Sections: CommandHelpCategories(cmd),
+	}
 	return func() tea.Msg {
 		return view.NavigateToMsg{
 			ViewName: helpview.ViewName,
-			Payload:  categories,
+			Payload:  ch,
 		}
 	}
 }
