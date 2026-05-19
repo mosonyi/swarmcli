@@ -89,6 +89,12 @@ type HelpItem struct {
 	Description string
 }
 
+// commandListTip is the discoverability hint shown at the top of the
+// main :help command list (in the body, not the framed header — the
+// frame supports only a single header line). Rendered in the default
+// terminal colour, followed by a blank line before the table header.
+const commandListTip = "Tip: <command> --help (or -h) for flags, usage & examples"
+
 func New(width, height int, cmds []CommandInfo) *Model {
 	cmdW := 16
 	descW := 20
@@ -107,6 +113,8 @@ func New(width, height int, cmds []CommandInfo) *Model {
 		Bold(true)
 
 	var b strings.Builder
+	fmt.Fprintln(&b, commandListTip)
+	fmt.Fprintln(&b)
 	if len(cmds) > 0 {
 		header := fmt.Sprintf("%-*s%s%-*s%s%s", cmdW, "COMMAND", gap, descW, "DESCRIPTION", gap, "ALIASES")
 		fmt.Fprintln(&b, headerStyle.Render(header))
@@ -203,6 +211,8 @@ func (m *Model) rebuildCommandContent() {
 		Bold(true)
 
 	var b strings.Builder
+	fmt.Fprintln(&b, commandListTip)
+	fmt.Fprintln(&b)
 	if len(m.commands) > 0 {
 		header := fmt.Sprintf("%-*s%s%-*s%s%s", cmdW, "COMMAND", gap, descW, "DESCRIPTION", gap, "ALIASES")
 		fmt.Fprintln(&b, headerStyle.Render(header))

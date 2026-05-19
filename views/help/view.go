@@ -20,10 +20,7 @@ func (m *Model) FrameHeader() string {
 	if len(m.categories) > 0 {
 		return ""
 	}
-	tip := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Render("Tip: <command> --help (or -h) for flags, usage & examples")
-	return ui.FrameHeaderStyle.Render("Available Commands") + "\n" + tip
+	return ui.FrameHeaderStyle.Render("Available Commands")
 }
 
 func (m *Model) FrameFooter() string {
