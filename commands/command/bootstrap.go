@@ -18,6 +18,14 @@ func (Bootstrap) Description() string {
 	return view.BEHelpDesc("bootstrap", "Deploy swarmcli infrastructure (rbac-proxy + agent)")
 }
 
+// Spec marks the OSS stub as passthrough: help interception and strict
+// flag validation are skipped so every invocation (incl. --help and any
+// Pro flags) reaches Execute and yields the Business-Edition notice.
+// This keeps Pro flag names/descriptions out of the OSS repo.
+func (Bootstrap) Spec() registry.CommandSpec {
+	return registry.CommandSpec{Passthrough: true}
+}
+
 func (Bootstrap) Execute(_ any, _ args.Args) tea.Cmd {
 	return func() tea.Msg {
 		return view.AppErrorMsg{

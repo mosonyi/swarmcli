@@ -17,6 +17,16 @@ type DockerNodeLs struct{}
 func (DockerNodeLs) Name() string        { return "node" }
 func (DockerNodeLs) Description() string { return "docker node ls" }
 
+func (DockerNodeLs) Spec() registry.CommandSpec {
+	return registry.CommandSpec{
+		Detail: "Opens the cluster Nodes list, where you can inspect " +
+			"nodes, change availability, promote or demote managers, " +
+			"manage node labels, view a node's tasks, and remove nodes " +
+			"from the swarm.",
+		Examples: []string{":node"},
+	}
+}
+
 func (DockerNodeLs) Execute(ctx any, args args.Args) tea.Cmd {
 	return func() tea.Msg {
 		return view.NavigateToMsg{

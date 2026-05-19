@@ -5,6 +5,7 @@ package helpview
 
 import (
 	"strings"
+	"swarmcli/ui"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -215,4 +216,32 @@ func TestClearSearchQuery_CategorizedMode(t *testing.T) {
 	m.ClearSearchQuery()
 	out := m.View()
 	require.Contains(t, out, "Go back")
+}
+
+func TestCommandListTip(t *testing.T) {
+	list := New(80, 24, []CommandInfo{{Name: "help", Description: "Show help"}})
+
+	// Frame header stays single-line so the box border is not broken.
+	require.Equal(t, ui.FrameHeaderStyle.Render("Available Commands"), list.FrameHeader())
+
+	// Tip is the first body line, then a blank line, then the table header.
+	require.True(t, strings.HasPrefix(list.content, commandListTip+"\n\n"),
+		"tip + blank line must precede the command table, got:\n%q", list.content)
+	require.Contains(t, list.content, "COMMAND")
+
+	// Tip stays after filtering (content is rebuilt).
+	list.ApplySearchQuery("zzz-no-match")
+	require.True(t, strings.HasPrefix(list.content, commandListTip+"\n\n"))
+
+	// Tip must not leak into per-command or keybinding help.
+	perCmd := NewCommandHelp(80, 24, CommandHelp{
+		Title:    ":help",
+		Sections: []HelpCategory{{Title: "Usage", Items: []HelpItem{{Keys: ":help"}}}},
+	})
+	require.NotContains(t, perCmd.View(), commandListTip)
+
+	keys := NewDetailed(80, 24, []HelpCategory{
+		{Title: "General", Items: []HelpItem{{Keys: "<n>", Description: "New"}}},
+	})
+	require.NotContains(t, keys.View(), commandListTip)
 }
