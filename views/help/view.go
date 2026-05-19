@@ -187,7 +187,9 @@ func (m *Model) buildCommandHelpContent() string {
 				keyW = w
 			}
 		}
-		stacked := keyW > width/2
+		// The USAGE block (first section) always stacks key-then-desc so
+		// the command line and its description read as a header.
+		stacked := i == 0 || keyW > width/2
 
 		for _, it := range cat.Items {
 			if stacked || it.Description == "" {
@@ -210,6 +212,22 @@ func (m *Model) buildCommandHelpContent() string {
 			b.WriteString(indent + keyStyle.Render(fmt.Sprintf("%-*s", keyW, it.Keys)) + "  " + descStyle.Render(dl[0]) + "\n")
 			for _, extra := range dl[1:] {
 				b.WriteString(indent + strings.Repeat(" ", keyW) + "  " + descStyle.Render(extra) + "\n")
+			}
+		}
+
+		// Detail prose belongs to the USAGE block (first section):
+		// a blank line then the wrapped paragraph(s), author newlines
+		// preserved as paragraph breaks.
+		if i == 0 && m.commandHelp.Detail != "" {
+			b.WriteString("\n")
+			for _, raw := range strings.Split(m.commandHelp.Detail, "\n") {
+				if strings.TrimSpace(raw) == "" {
+					b.WriteString("\n")
+					continue
+				}
+				for _, ln := range wrapText(raw, width-len(indent)) {
+					b.WriteString(indent + descStyle.Render(ln) + "\n")
+				}
 			}
 		}
 	}

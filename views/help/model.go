@@ -57,6 +57,7 @@ type Model struct {
 // is left untouched.
 type CommandHelp struct {
 	Title    string
+	Detail   string // optional prose rendered under the USAGE section
 	Sections []HelpCategory
 }
 

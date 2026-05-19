@@ -52,8 +52,10 @@ func (Help) Execute(_ any, a args.Args) tea.Cmd {
 // help screen for a single command. Shared by `:help <cmd>` and the
 // `--help`/`-h` interception path in the dispatcher.
 func CommandHelpCmd(cmd registry.Command) tea.Cmd {
+	spec, _ := registry.SpecOf(cmd)
 	ch := helpview.CommandHelp{
 		Title:    ":" + cmd.Name(),
+		Detail:   spec.Detail,
 		Sections: CommandHelpCategories(cmd),
 	}
 	return func() tea.Msg {

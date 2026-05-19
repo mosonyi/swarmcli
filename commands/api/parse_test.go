@@ -17,32 +17,60 @@ import (
 )
 
 func TestParseArgs_NoArgs(t *testing.T) {
-	result := parseArgs(nil)
+	result, err := parseArgs(nil, nil)
+	require.NoError(t, err)
 	require.Empty(t, result.Positionals)
 	require.Empty(t, result.Flags)
 }
 
 func TestParseArgs_Positionals(t *testing.T) {
-	result := parseArgs([]string{"node-1", "node-2"})
+	result, err := parseArgs([]string{"node-1", "node-2"}, nil)
+	require.NoError(t, err)
 	require.Equal(t, []string{"node-1", "node-2"}, result.Positionals)
 	require.Empty(t, result.Flags)
 }
 
 func TestParseArgs_FlagBoolean(t *testing.T) {
-	result := parseArgs([]string{"--verbose"})
+	result, err := parseArgs([]string{"--verbose"}, nil)
+	require.NoError(t, err)
 	require.Equal(t, "true", result.Flags["verbose"])
 }
 
 func TestParseArgs_FlagWithValue(t *testing.T) {
-	result := parseArgs([]string{"--limit=10"})
+	result, err := parseArgs([]string{"--limit=10"}, nil)
+	require.NoError(t, err)
 	require.Equal(t, "10", result.Flags["limit"])
 }
 
 func TestParseArgs_Mixed(t *testing.T) {
-	result := parseArgs([]string{"node-1", "--verbose", "--limit=10", "node-2"})
+	result, err := parseArgs([]string{"node-1", "--verbose", "--limit=10", "node-2"}, nil)
+	require.NoError(t, err)
 	require.Equal(t, []string{"node-1", "node-2"}, result.Positionals)
 	require.Equal(t, "true", result.Flags["verbose"])
 	require.Equal(t, "10", result.Flags["limit"])
+}
+
+func TestParseArgs_ValueFlag_Spaced(t *testing.T) {
+	vf := map[string]bool{"host": true}
+	result, err := parseArgs([]string{"--host", "localhost", "--force"}, vf)
+	require.NoError(t, err)
+	require.Equal(t, "localhost", result.Flags["host"])
+	require.Equal(t, "true", result.Flags["force"]) // not a value flag
+	require.Empty(t, result.Positionals)            // "localhost" consumed, not positional
+}
+
+func TestParseArgs_ValueFlag_Equals_StillWorks(t *testing.T) {
+	vf := map[string]bool{"host": true}
+	result, err := parseArgs([]string{"--host=localhost"}, vf)
+	require.NoError(t, err)
+	require.Equal(t, "localhost", result.Flags["host"])
+}
+
+func TestParseArgs_ValueFlag_MissingValue(t *testing.T) {
+	vf := map[string]bool{"host": true}
+	_, err := parseArgs([]string{"--host"}, vf)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "flag --host requires a value")
 }
 
 func TestParseInput_EmptyString(t *testing.T) {

@@ -16,9 +16,15 @@ type FlagSpec struct {
 // CommandSpec is the optional, declarative documentation/validation
 // contract for a command. Commands expose it via CommandWithSpec.
 type CommandSpec struct {
-	Usage    string     // positional usage, e.g. "[command]" or "" for none
-	Flags    []FlagSpec // accepted flags; the allow-list for strict validation
-	Examples []string   // full example invocations, incl. leading ':'
+	// Usage is the positional usage, e.g. "[command]" or "" for none.
+	Usage string
+	// Detail is optional prose rendered under USAGE — explain modes,
+	// e.g. that running with no flags starts an interactive flow.
+	Detail string
+	// Flags is the accepted-flag allow-list for strict validation.
+	Flags []FlagSpec
+	// Examples are full example invocations, incl. the leading ':'.
+	Examples []string
 
 	// Passthrough disables both help interception and strict flag
 	// validation for this command: every argument reaches Execute
