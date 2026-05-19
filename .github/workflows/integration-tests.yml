@@ -45,24 +45,16 @@ jobs:
     name: Run integration tests
     runs-on: ubuntu-latest
 
-    services:
-      docker:
-        image: docker:29-dind
-        options: >-
-          --privileged
-          --health-cmd="docker info >/dev/null 2>&1 || exit 1"
-          --health-interval=2s
-          --health-retries=20
-          --health-timeout=2s
-          --health-start-period=5s
-        ports:
-          - 22375:2375   # match your docker-compose manager
-        env:
-          DOCKER_TLS_CERTDIR: ""
-
+    # No `services:` DinD and no DOCKER_HOST override: a single shared DinD
+    # container plus `docker swarm init` shadowed the multinode topology —
+    # `test-setup/docker-compose.yml` (manager + worker1/worker2 + joins,
+    # all `privileged: true`) was run *nested* inside it, so every test and
+    # the worker-readiness gate talked to the outer single-node swarm while
+    # the real multinode swarm was orphaned (CI was silently single-node).
+    # Run the compose stack directly on the runner's Docker, exactly as a
+    # local `testenv.sh` run does: the compose `manager` publishes
+    # 22375:2375 so localhost:22375 is the manager and the workers join it.
     env:
-      DOCKER_HOST: tcp://localhost:22375
-      DOCKER_TLS_CERTDIR: ""
       CI: 1
 
     steps:
@@ -85,10 +77,6 @@ jobs:
         run: |
           docker version
           go version
-          docker info | sed -n '/Swarm:/,/ClusterID/p'
-
-      - name: Ensure Swarm is initialized
-        run: docker swarm init || true
 
       - name: Setup Swarm
         run: bash test-setup/testenv.sh up && bash test-setup/testenv.sh deploy
