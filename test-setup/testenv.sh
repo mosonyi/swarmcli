@@ -53,6 +53,51 @@ wait_for_manager() {
   exit 1
 }
 
+# Wait until every worker DinD node has joined the swarm and reports Ready.
+#
+# The compose file declares a manager + N `worker<i>-join` containers that run
+# `docker swarm join`. Those joins are asynchronous: before this gate, `up`
+# returned as soon as the manager API was reachable, so `deploy` (worker image
+# distribution) and the integration tests frequently ran against an
+# effectively single-node swarm — the global agent landed on the manager only
+# and worker-placement tests had nothing to exercise. Blocking here makes the
+# swarm match its declared topology so those tests are real, not skipped.
+#
+# Expected worker count is derived from the compose file (one per
+# `worker<i>-join` service) so it stays correct if the topology changes.
+# `SKIP_WORKER_WAIT=1` bypasses the gate for deliberately single-node local
+# runs. A worker that never joins becomes a loud, diagnosable failure here
+# rather than a silent single-node degrade later.
+wait_for_workers() {
+  if [ "${SKIP_WORKER_WAIT:-0}" = "1" ]; then
+    warn "SKIP_WORKER_WAIT=1: not waiting for worker nodes (single-node run)"
+    return
+  fi
+  local expected
+  expected="${EXPECT_WORKERS:-$(grep -cE '^[[:space:]]{2}worker[0-9]+-join:' "$COMPOSE_FILE")}"
+  if [ "$expected" -eq 0 ]; then
+    return
+  fi
+  info "⏳ Waiting for ${expected} worker node(s) to join the swarm..."
+  local retries=60
+  local wait_sec=2
+  local i ready
+  for i in $(seq 1 $retries); do
+    # Workers are nodes with an empty ManagerStatus; count those that are Ready.
+    ready=$(docker -H "$MANAGER_HOST" node ls \
+      --format '{{.Status}}|{{.ManagerStatus}}' 2>/dev/null \
+      | grep -c '^Ready|$' || true)
+    if [ "${ready:-0}" -ge "$expected" ]; then
+      ok "All ${expected} worker node(s) joined and Ready."
+      return
+    fi
+    sleep "$wait_sec"
+  done
+  err "Only ${ready:-0}/${expected} worker node(s) Ready after $((retries * wait_sec))s. Swarm state:"
+  docker -H "$MANAGER_HOST" node ls >&2 || true
+  exit 1
+}
+
 # Ensure the context exists and points to a live daemon
 ensure_context() {
   wait_for_manager
@@ -90,6 +135,11 @@ cmd_up() {
 
   info "🔧 Ensuring Docker context..."
   ensure_context
+
+  # Block until workers have actually joined, so `deploy` distributes images
+  # to them and the swarm matches its declared multinode topology before any
+  # tests run.
+  wait_for_workers
 
   ok "Swarm multinode environment is up."
 }
