@@ -4,8 +4,10 @@
 package helpbar
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,8 +71,60 @@ func TestSetters(t *testing.T) {
 	require.Equal(t, 100, m.width)
 	m.SetHeight(50)
 	require.Equal(t, 50, m.height)
-	m.SetMinColWidth(30)
-	require.Equal(t, 30, m.minColWidth)
+}
+
+// TestView_NeverOverflowsBox guards the invariant the app layout depends on:
+// the header is no wider than the width it was given and no taller than the
+// height it was given, at every terminal width. The previous implementation
+// rendered w+2 wide always, and 7-8 lines tall in the 112-124 band (word-wrap),
+// which pushed the body off-screen and scrambled the display.
+func TestView_NeverOverflowsBox(t *testing.T) {
+	const height = 6
+	// 40x6 system info stub, matching the real systeminfo view dimensions.
+	systemInfo := strings.TrimRight(strings.Repeat(strings.Repeat("x", 40)+"\n", height), "\n")
+	viewHelp := []HelpEntry{
+		{Key: "i", Desc: "Inspect"},
+		{Key: "ctrl+r", Desc: "Rollback service"},
+		{Key: "↑/↓", Desc: "Navigate"},
+		{Key: "ctrl+d", Desc: "Remove service"},
+		{Key: "p", Desc: "Show/hide tasks"},
+		{Key: "l", Desc: "View logs"},
+	}
+
+	for w := 60; w <= 200; w += 2 {
+		out := New(w, height).WithViewHelp(viewHelp).View(systemInfo, false)
+		require.LessOrEqualf(t, lipgloss.Width(out), w, "width overflow at vpWidth=%d", w)
+		require.LessOrEqualf(t, lipgloss.Height(out), height, "height overflow at vpWidth=%d", w)
+	}
+}
+
+// TestView_DegradesGracefully checks that the logo and help are shown when there
+// is room and dropped (without overflow) when there is not.
+func TestView_DegradesGracefully(t *testing.T) {
+	const height = 6
+	systemInfo := strings.TrimRight(strings.Repeat(strings.Repeat("x", 40)+"\n", height), "\n")
+	help := []HelpEntry{{Key: "i", Desc: "Inspect"}, {Key: "p", Desc: "Show/hide tasks"}}
+
+	wide := New(200, height).WithViewHelp(help).View(systemInfo, false)
+	require.Contains(t, wide, "_____", "logo should show when wide")
+	require.Contains(t, wide, "Inspect", "help should show when wide")
+
+	// Just enough for systemInfo only: logo and help both drop, no overflow.
+	narrow := New(44, height).WithViewHelp(help).View(systemInfo, false)
+	require.NotContains(t, narrow, "_____", "logo should drop when narrow")
+	require.LessOrEqual(t, lipgloss.Width(narrow), 44)
+}
+
+// TestView_OverlongEditionLabel ensures a label wider than the logo cannot panic.
+func TestView_OverlongEditionLabel(t *testing.T) {
+	orig := EditionLabel
+	defer SetEditionLabel(orig)
+	SetEditionLabel("An Absurdly Long Enterprise Ultimate Premium Edition Label")
+
+	require.NotPanics(t, func() {
+		out := New(200, 6).WithViewHelp([]HelpEntry{{Key: "i", Desc: "Inspect"}}).View("", false)
+		require.LessOrEqual(t, lipgloss.Width(out), 200)
+	})
 }
 
 func TestWithGlobalHelp(t *testing.T) {
