@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"swarmcli/core/primitives/hash"
@@ -376,7 +377,14 @@ func openEditorForContentCmd(initialData string) tea.Cmd {
 
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
-		editor = "nano"
+		editor = os.Getenv("VISUAL")
+	}
+	if editor == "" {
+		if runtime.GOOS == "windows" {
+			editor = "notepad"
+		} else {
+			editor = "nano"
+		}
 	}
 
 	l().Infoln("Invoking editor:", editor, tmp.Name())

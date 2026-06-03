@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -41,7 +42,14 @@ func editWithTempFileCmd(baseName string, initialData []byte, onDone func([]byte
 
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
-		editor = "nano"
+		editor = os.Getenv("VISUAL")
+	}
+	if editor == "" {
+		if runtime.GOOS == "windows" {
+			editor = "notepad"
+		} else {
+			editor = "nano"
+		}
 	}
 
 	l().Infoln("Invoking editor:", editor, tmp.Name())
