@@ -44,9 +44,6 @@ func editWithTempFileCmd(baseName string, initialData []byte, onDone func([]byte
 
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
-		editor = os.Getenv("VISUAL")
-	}
-	if editor == "" {
 		if runtime.GOOS == "windows" {
 			editor = "notepad"
 		} else {
