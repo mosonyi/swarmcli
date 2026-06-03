@@ -53,6 +53,14 @@ services:
         target: /etc/whoami/config
     deploy:
       replicas: 1
+    # Issue #379 fixture: a service with a healthcheck. Both inspect and
+    # compose reconstruction must surface it.
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     command: >
       sh -c '
         apk add --no-cache netcat-openbsd;
