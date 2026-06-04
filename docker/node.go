@@ -10,6 +10,21 @@ import (
 	"github.com/docker/docker/api/types/swarm"
 )
 
+// GetLocalNodeID returns the swarm node ID of the daemon the active Docker
+// client is connected to, or "" if it is not an active swarm node.
+func GetLocalNodeID(ctx context.Context) (string, error) {
+	c, err := GetClient()
+	if err != nil {
+		return "", err
+	}
+
+	info, err := c.Info(ctx)
+	if err != nil {
+		return "", fmt.Errorf("query docker info: %w", err)
+	}
+	return info.Swarm.NodeID, nil
+}
+
 func GetNodeIDToHostnameMapFromDocker(ctx context.Context) (map[string]string, error) {
 	c, err := GetClient()
 	if err != nil {
