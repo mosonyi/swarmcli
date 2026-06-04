@@ -133,6 +133,22 @@ func TestInspectStack(t *testing.T) {
 				t.Errorf("Service %q: expected no configs, got %v", svc.Name, svc.Configs)
 			}
 		}
+
+		// Issue #379: whoami_single declares a healthcheck; other services do not.
+		if strings.HasSuffix(svc.Name, "whoami_single") {
+			if svc.Healthcheck == nil {
+				t.Errorf("Service %q: expected a healthcheck, got nil", svc.Name)
+			} else {
+				if svc.Healthcheck.Interval != "30s" {
+					t.Errorf("Service %q: healthcheck interval = %q, want \"30s\"", svc.Name, svc.Healthcheck.Interval)
+				}
+				if svc.Healthcheck.Retries != 3 {
+					t.Errorf("Service %q: healthcheck retries = %d, want 3", svc.Name, svc.Healthcheck.Retries)
+				}
+			}
+		} else if svc.Healthcheck != nil {
+			t.Errorf("Service %q: expected no healthcheck, got %+v", svc.Name, svc.Healthcheck)
+		}
 	}
 
 	t.Logf("Successfully inspected stack: %d services, %d tasks", inspection.ServiceCount, inspection.TaskCount)

@@ -98,6 +98,29 @@ func TestReconstructStackCompose(t *testing.T) {
 		t.Errorf("Issue #363: 'default_net_probe' lost its networks: [default], got %#v", probe.Networks)
 	}
 
+	// Issue #379: whoami_single declares a healthcheck — it must round-trip
+	// through reconstruction rather than being silently dropped.
+	if !strings.Contains(yaml, "healthcheck:") {
+		t.Error("Issue #379: reconstructed YAML missing 'healthcheck:' section")
+	}
+	single, ok := composed.Services["whoami_single"]
+	if !ok {
+		t.Fatal("Issue #379: missing 'whoami_single' service in reconstructed YAML")
+	}
+	if single.Healthcheck == nil {
+		t.Error("Issue #379: 'whoami_single' lost its healthcheck during reconstruction")
+	} else {
+		if single.Healthcheck.Interval != "30s" {
+			t.Errorf("Issue #379: healthcheck interval = %q, want \"30s\"", single.Healthcheck.Interval)
+		}
+		if single.Healthcheck.Retries != 3 {
+			t.Errorf("Issue #379: healthcheck retries = %d, want 3", single.Healthcheck.Retries)
+		}
+		if len(single.Healthcheck.Test) == 0 {
+			t.Error("Issue #379: healthcheck test command is empty")
+		}
+	}
+
 	t.Logf("Successfully reconstructed stack YAML (%d bytes)", len(yaml))
 }
 
