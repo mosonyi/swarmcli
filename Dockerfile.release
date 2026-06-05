@@ -1,6 +1,9 @@
 FROM docker
 
-COPY swarmcli /swarmcli
+# dockers_v2 runs a single multi-platform buildx build and stages each
+# platform's binary under its $TARGETPLATFORM (e.g. linux/amd64/swarmcli).
+ARG TARGETPLATFORM
+COPY ${TARGETPLATFORM}/swarmcli /swarmcli
 
 ENV TERM=xterm-256color
 ENTRYPOINT ["/swarmcli"]
