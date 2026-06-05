@@ -97,11 +97,11 @@ func (m *Model) startStreamingCmd(ctx context.Context, service docker.ServiceEnt
 				for sc.Scan() {
 					line := sc.Text()
 					// Format the log line with node information
-					formattedLine, nodeName := m.formatLogLineWithNode(service.ServiceName, line)
-					// Store both the formatted line and node name (separated by a special marker)
-					// Format: "NODENAME\x00formatted_line" where \x00 is a null byte separator
+					formattedLine, nodeName, taskID := m.formatLogLineWithNode(service.ServiceName, line)
+					// Store the formatted line, node name and task ID (separated by a special marker)
+					// Format: "NODENAME\x00TASKID\x00formatted_line" where \x00 is a null byte separator
 					select {
-					case lines <- nodeName + "\x00" + formattedLine:
+					case lines <- nodeName + "\x00" + taskID + "\x00" + formattedLine:
 					case <-ctx.Done():
 						return
 					}
@@ -167,9 +167,9 @@ func (m *Model) streamServiceLogsRawCLI(ctx context.Context, service docker.Serv
 	sc.Buffer(make([]byte, 0, 256*1024), 256*1024) // 256 KB to handle long TTY lines
 	for sc.Scan() {
 		line := sc.Text()
-		formattedLine, nodeName := m.formatLogLineWithNode(service.ServiceName, line)
+		formattedLine, nodeName, taskID := m.formatLogLineWithNode(service.ServiceName, line)
 		select {
-		case lines <- nodeName + "\x00" + formattedLine:
+		case lines <- nodeName + "\x00" + taskID + "\x00" + formattedLine:
 		case <-ctx.Done():
 			_ = cmd.Wait()
 			return nil
@@ -229,18 +229,18 @@ func (m *Model) StopStreamingCmd() tea.Cmd {
 
 // formatLogLineWithNode parses the Docker log details and formats the line with node information
 // Input format: "com.docker.swarm.node.id=xxx,com.docker.swarm.task.id=yyy actual log message"
-// Output format: formatted line and node name for filtering
-// Returns: ("service_name.task_id@node_name | actual log message", "node_name")
-func (m *Model) formatLogLineWithNode(serviceName string, line string) (string, string) {
+// Output format: formatted line, node name and full task ID for filtering
+// Returns: ("service_name.task_id@node_name | actual log message", "node_name", "task_id")
+func (m *Model) formatLogLineWithNode(serviceName string, line string) (string, string, string) {
 	// Check if line has Docker details prefix
 	if !strings.Contains(line, "com.docker.swarm.") {
-		return line, ""
+		return line, "", ""
 	}
 
 	// Split on first space to separate details from message
 	parts := strings.SplitN(line, " ", 2)
 	if len(parts) != 2 {
-		return line, ""
+		return line, "", ""
 	}
 
 	details := parts[0]
@@ -283,7 +283,7 @@ func (m *Model) formatLogLineWithNode(serviceName string, line string) (string, 
 	// ANSI escape: \033[38;5;117m for foreground color 117, \033[0m to reset
 	prefix := fmt.Sprintf("\033[38;5;117m%s.%s@%s\033[0m", serviceName, taskIDShort, nodeName)
 
-	return fmt.Sprintf("%s | %s", prefix, message), nodeName
+	return fmt.Sprintf("%s | %s", prefix, message), nodeName, taskID
 }
 
 // getNodeHostname retrieves the hostname for a node ID from the snapshot

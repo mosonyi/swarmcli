@@ -236,6 +236,14 @@ func HandleKey(m *Model, k tea.KeyMsg) tea.Cmd {
 			l().Infof("[logsview] 'o' key pressed: showing node selection dialog with %d nodes", len(nodes))
 		}
 		return nil
+	case "t":
+		// Toggle showing logs from stopped (non-running) tasks
+		old := m.getHideStopped()
+		m.setHideStopped(!old)
+		l().Infof("[logsview] 't' key pressed: hideStopped %v -> %v", old, !old)
+		return func() tea.Msg {
+			return HideStoppedToggledMsg{}
+		}
 	}
 
 	return nil

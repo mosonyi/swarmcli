@@ -27,12 +27,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.readOneLineCmd()
 
 	case LineMsg:
-		// Parse node name from the line (format: "nodename\x00actual_line")
-		parts := strings.SplitN(msg.Line, "\x00", 2)
-		var nodeName, actualLine string
-		if len(parts) == 2 {
+		// Parse node name and task ID (format: "nodename\x00taskid\x00actual_line")
+		parts := strings.SplitN(msg.Line, "\x00", 3)
+		var nodeName, taskID, actualLine string
+		if len(parts) == 3 {
 			nodeName = parts[0]
-			actualLine = parts[1]
+			taskID = parts[1]
+			actualLine = parts[2]
 		} else {
 			actualLine = msg.Line
 		}
@@ -40,11 +41,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// Strip carriage returns that break frame rendering (progress bars, CRLF)
 		actualLine = strings.ReplaceAll(actualLine, "\r", "")
 
-		// append line into bounded buffer (store both line and node)
+		// append line into bounded buffer (store line, node and task)
 		m.mu.Lock()
 		// store line as-is (no newline); rendering will join with '\n'
 		m.lines = append(m.lines, actualLine)
 		m.lineNodes = append(m.lineNodes, nodeName)
+		m.lineTasks = append(m.lineTasks, taskID)
 
 		// track how many lines we're dropping from the top
 		linesDropped := 0
@@ -61,6 +63,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			newNodeBuf := make([]string, 0, m.MaxLines)
 			newNodeBuf = append(newNodeBuf, m.lineNodes[start:]...)
 			m.lineNodes = newNodeBuf
+
+			newTaskBuf := make([]string, 0, m.MaxLines)
+			newTaskBuf = append(newTaskBuf, m.lineTasks[start:]...)
+			m.lineTasks = newTaskBuf
 		}
 
 		// update searchMatches incrementally
@@ -68,7 +74,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			if linesDropped > 0 && m.searchMatches != nil {
 				// Lines dropped from top invalidate visible indices; recompute on next n/N
 				m.searchMatches = nil
-			} else if m.nodeFilter == "" && m.filterQuery == "" {
+			} else if m.nodeFilter == "" && m.filterQuery == "" && !m.hideStopped {
 				// Simple case: no filters, raw index equals visible index
 				if strings.Contains(strings.ToLower(actualLine), strings.ToLower(m.searchTerm)) {
 					m.searchMatches = append(m.searchMatches, len(m.lines)-1)
@@ -116,6 +122,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// append an error line and stop
 		m.mu.Lock()
 		m.lines = append(m.lines, fmt.Sprintf("Error: %v", msg.Err))
+		m.lineNodes = append(m.lineNodes, "")
+		m.lineTasks = append(m.lineTasks, "")
 		m.mu.Unlock()
 		l().Errorf("[logsview] stream error: %v", msg.Err)
 		if m.ready {
@@ -126,6 +134,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case StreamDoneMsg:
 		m.mu.Lock()
 		m.lines = append(m.lines, "--- stream closed ---")
+		m.lineNodes = append(m.lineNodes, "")
+		m.lineTasks = append(m.lineTasks, "")
 		m.mu.Unlock()
 		l().Debugf("[logsview] stream closed")
 		if m.ready {
@@ -165,6 +175,17 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// because existing lines need to be filtered/unfiltered
 		if m.ready {
 			m.viewport.SetContent(m.buildContent())
+			if m.getFollow() {
+				m.viewport.GotoBottom()
+			}
+		}
+		return nil
+
+	case HideStoppedToggledMsg:
+		// The visible set changed; recompute search-match indices (this also
+		// rebuilds the viewport content) and re-anchor to the bottom if following.
+		if m.ready {
+			m.highlightContent()
 			if m.getFollow() {
 				m.viewport.GotoBottom()
 			}
@@ -261,6 +282,11 @@ func (m *Model) SetContent(content string) {
 		start := len(m.lines) - m.MaxLines
 		m.lines = append([]string{}, m.lines[start:]...)
 	}
+	// SetContent carries no per-line node/task metadata; reset the parallel
+	// slices to empty (length-aligned) so all lines are treated as
+	// unfilterable (always visible) and indices stay aligned.
+	m.lineNodes = make([]string, len(m.lines))
+	m.lineTasks = make([]string, len(m.lines))
 	m.searchMatches = nil
 	m.searchTerm = ""
 	m.searchIndex = 0
@@ -283,14 +309,15 @@ func (m *Model) highlightContent() {
 		m.searchMatches = []int{}
 		lower := strings.ToLower(m.searchTerm)
 		m.mu.Lock()
+		var running map[string]bool
+		if m.hideStopped {
+			running = m.runningTaskIDs()
+		}
 		visibleIdx := 0
 		for i, L := range m.lines {
-			// Skip lines hidden by node filter
-			if m.nodeFilter != "" && (i >= len(m.lineNodes) || m.lineNodes[i] != m.nodeFilter) {
-				continue
-			}
-			// Skip lines hidden by filterQuery
-			if m.filterQuery != "" && !strings.Contains(strings.ToLower(L), strings.ToLower(m.filterQuery)) {
+			// Skip lines hidden by any active filter (must match buildContent
+			// exactly so search-match indices line up with the rendered output).
+			if !m.lineVisible(i, running) {
 				continue
 			}
 			if strings.Contains(strings.ToLower(L), lower) {
@@ -317,31 +344,17 @@ func (m *Model) buildContent() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Apply node filter
-	nodeFilter := m.nodeFilter
-	var filteredLines []string
-	if nodeFilter != "" {
-		// Filter lines by node
-		for i, line := range m.lines {
-			if i < len(m.lineNodes) && m.lineNodes[i] == nodeFilter {
-				filteredLines = append(filteredLines, line)
-			}
-		}
-	} else {
-		// No filter, use all lines
-		filteredLines = m.lines
+	// Apply all active filters (node, "/" text, hide-stopped) in a single pass
+	// via the shared predicate so the visible set matches highlightContent.
+	var running map[string]bool
+	if m.hideStopped {
+		running = m.runningTaskIDs()
 	}
-
-	// Apply text filter (app-level "/" search)
-	if m.filterQuery != "" {
-		lower := strings.ToLower(m.filterQuery)
-		var textFiltered []string
-		for _, line := range filteredLines {
-			if strings.Contains(strings.ToLower(line), lower) {
-				textFiltered = append(textFiltered, line)
-			}
+	var filteredLines []string
+	for i, line := range m.lines {
+		if m.lineVisible(i, running) {
+			filteredLines = append(filteredLines, line)
 		}
-		filteredLines = textFiltered
 	}
 
 	// Join lines first

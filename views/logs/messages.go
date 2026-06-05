@@ -22,3 +22,5 @@ type StreamDoneMsg struct{}
 type WrapToggledMsg struct{}
 
 type NodeFilterToggledMsg struct{}
+
+type HideStoppedToggledMsg struct{}
