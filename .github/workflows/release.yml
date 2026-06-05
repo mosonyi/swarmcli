@@ -33,6 +33,34 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Curated breaking-change callout. The committed .github/UPGRADE_NOTES.md
+      # is a placeholder (HTML comment only); a maintainer fills it with
+      # migration prose for a breaking release and clears it back afterwards.
+      # When it has real content, prepend it as an "Upgrade Notes" section above
+      # the release-drafter changelog in the draft body. GoReleaser below
+      # publishes that draft verbatim (use_existing_draft + changelog.disable),
+      # so this must run before it.
+      - name: Prepend upgrade notes to release draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          NOTES=$(perl -0777 -pe 's/<!--.*?-->//gs' .github/UPGRADE_NOTES.md)
+          if [ -z "$(printf '%s' "$NOTES" | tr -d '[:space:]')" ]; then
+            echo "UPGRADE_NOTES.md has no content; nothing to prepend."
+            exit 0
+          fi
+          BODY=$(gh release view "$TAG" --json body --jq '.body // ""')
+          {
+            echo "## ⚠️ Upgrade Notes"
+            echo ""
+            printf '%s\n' "$NOTES" | sed -e 's/[[:space:]]*$//' -e '/./,$!d'
+            echo ""
+            printf '%s\n' "$BODY"
+          } > /tmp/release-body.md
+          gh release edit "$TAG" --notes-file /tmp/release-body.md
+          echo "Prepended upgrade notes to $TAG."
+
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
