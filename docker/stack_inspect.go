@@ -28,17 +28,18 @@ type StackInspection struct {
 
 // ServiceSummary contains summary information about a service
 type ServiceSummary struct {
-	Name      string            `json:"name"`
-	ID        string            `json:"id"`
-	Image     string            `json:"image"`
-	Mode      string            `json:"mode"`
-	Replicas  string            `json:"replicas"`
-	Ports     []string          `json:"ports,omitempty"`
-	Secrets   []string          `json:"secrets,omitempty"`
-	Configs   []string          `json:"configs,omitempty"`
-	Labels    map[string]string `json:"labels,omitempty"`
-	CreatedAt time.Time         `json:"created_at"`
-	UpdatedAt time.Time         `json:"updated_at"`
+	Name        string            `json:"name"`
+	ID          string            `json:"id"`
+	Image       string            `json:"image"`
+	Mode        string            `json:"mode"`
+	Replicas    string            `json:"replicas"`
+	Ports       []string          `json:"ports,omitempty"`
+	Secrets     []string          `json:"secrets,omitempty"`
+	Configs     []string          `json:"configs,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	Healthcheck *Healthcheck      `json:"healthcheck,omitempty"`
+	CreatedAt   time.Time         `json:"created_at"`
+	UpdatedAt   time.Time         `json:"updated_at"`
 }
 
 // GetStackInspection returns detailed information about a stack in JSON format
@@ -136,8 +137,9 @@ func GetStackInspection(stackName string) (string, error) {
 			}
 		}
 
-		// Collect secrets, configs, and volumes
+		// Collect secrets, configs, volumes, and healthcheck
 		var svcSecrets, svcConfigs []string
+		var healthcheck *Healthcheck
 		if svc.Spec.TaskTemplate.ContainerSpec != nil {
 			for _, s := range svc.Spec.TaskTemplate.ContainerSpec.Secrets {
 				if s.SecretName != "" {
@@ -158,23 +160,30 @@ func GetStackInspection(stackName string) (string, error) {
 					volumesMap[m.Source] = true
 				}
 			}
+
+			if hc := svc.Spec.TaskTemplate.ContainerSpec.Healthcheck; hc != nil {
+				healthcheck = composeHealthcheck(hc.Test, int64(hc.Interval),
+					int64(hc.Timeout), int64(hc.StartPeriod), int64(hc.StartInterval),
+					hc.Retries, false /*no escape*/)
+			}
 		}
 		sort.Strings(svcSecrets)
 		sort.Strings(svcConfigs)
 
 		// Add service summary
 		desc.Services = append(desc.Services, ServiceSummary{
-			Name:      svc.Spec.Name,
-			ID:        svc.ID,
-			Image:     image,
-			Mode:      mode,
-			Replicas:  replicas,
-			Ports:     ports,
-			Secrets:   svcSecrets,
-			Configs:   svcConfigs,
-			Labels:    svc.Spec.Labels,
-			CreatedAt: svc.CreatedAt,
-			UpdatedAt: svc.UpdatedAt,
+			Name:        svc.Spec.Name,
+			ID:          svc.ID,
+			Image:       image,
+			Mode:        mode,
+			Replicas:    replicas,
+			Ports:       ports,
+			Secrets:     svcSecrets,
+			Configs:     svcConfigs,
+			Labels:      svc.Spec.Labels,
+			Healthcheck: healthcheck,
+			CreatedAt:   svc.CreatedAt,
+			UpdatedAt:   svc.UpdatedAt,
 		})
 	}
 

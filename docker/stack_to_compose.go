@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -40,7 +41,21 @@ type ComposeService struct {
 	Secrets     []map[string]any  `yaml:"secrets,omitempty"`
 	Configs     []map[string]any  `yaml:"configs,omitempty"`
 	Deploy      map[string]any    `yaml:"deploy,omitempty"`
+	Healthcheck *Healthcheck      `yaml:"healthcheck,omitempty"`
 	Extra       map[string]any    `yaml:",inline,omitempty"` // fallback
+}
+
+// Healthcheck is the compose-shaped view of a service healthcheck, used both
+// in reconstructed Compose YAML and in stack-inspect JSON. Durations are
+// rendered as compose duration strings (e.g. "30s").
+type Healthcheck struct {
+	Test          []string `json:"test,omitempty" yaml:"test,omitempty"`
+	Interval      string   `json:"interval,omitempty" yaml:"interval,omitempty"`
+	Timeout       string   `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	StartPeriod   string   `json:"start_period,omitempty" yaml:"start_period,omitempty"`
+	StartInterval string   `json:"start_interval,omitempty" yaml:"start_interval,omitempty"`
+	Retries       int      `json:"retries,omitempty" yaml:"retries,omitempty"`
+	Disable       bool     `json:"disable,omitempty" yaml:"disable,omitempty"`
 }
 
 // ServiceInspect represents Docker service inspect output (partial)
@@ -89,6 +104,20 @@ type ContainerSpec struct {
 	Mounts  []Mount           `json:"Mounts,omitempty"`
 	Secrets []SecretRef       `json:"Secrets,omitempty"`
 	Configs []ConfigRef       `json:"Configs,omitempty"`
+	// Healthcheck durations arrive as nanosecond integers over the
+	// `docker service inspect` CLI JSON.
+	Healthcheck *HealthConfigJSON `json:"Healthcheck,omitempty"`
+}
+
+// HealthConfigJSON captures the Healthcheck block of a `docker service inspect`
+// ContainerSpec. Durations are nanosecond integers.
+type HealthConfigJSON struct {
+	Test          []string `json:"Test,omitempty"`
+	Interval      int64    `json:"Interval,omitempty"`
+	Timeout       int64    `json:"Timeout,omitempty"`
+	StartPeriod   int64    `json:"StartPeriod,omitempty"`
+	StartInterval int64    `json:"StartInterval,omitempty"`
+	Retries       int      `json:"Retries,omitempty"`
 }
 
 // Mount represents a mount specification
@@ -367,6 +396,12 @@ func ReconstructStackCompose(stackName string) (string, error) {
 				}
 				cs.Configs = append(cs.Configs, ref)
 			}
+
+			// Healthcheck
+			if h := cspec.Healthcheck; h != nil {
+				cs.Healthcheck = composeHealthcheck(h.Test, h.Interval, h.Timeout,
+					h.StartPeriod, h.StartInterval, h.Retries, true /*escape*/)
+			}
 		}
 
 		// Ports
@@ -599,6 +634,47 @@ func filterLabels(labels map[string]string) map[string]string {
 // attempt variable interpolation on reconstructed command strings.
 func escapeComposeInterpolation(s string) string {
 	return strings.ReplaceAll(s, "$", "$$")
+}
+
+// composeHealthcheck builds the compose-shaped Healthcheck from a service's
+// healthcheck spec. Durations are raw nanoseconds (as Docker reports them) and
+// are rendered as compose duration strings (e.g. "30s"). Returns nil when the
+// spec carries nothing meaningful, i.e. the service inherits the image's
+// healthcheck. When escape is true, Test elements are escaped for Compose
+// variable interpolation (used in the reconstructed Compose YAML).
+func composeHealthcheck(test []string, intervalNs, timeoutNs, startPeriodNs,
+	startIntervalNs int64, retries int, escape bool) *Healthcheck {
+
+	disabled := len(test) == 1 && test[0] == "NONE"
+	if !disabled && len(test) == 0 && intervalNs == 0 && timeoutNs == 0 &&
+		startPeriodNs == 0 && startIntervalNs == 0 && retries == 0 {
+		return nil // inherit image healthcheck — nothing specified
+	}
+
+	hc := &Healthcheck{}
+	if disabled {
+		hc.Disable = true
+		return hc
+	}
+	if escape {
+		hc.Test = escapeComposeArgs(test)
+	} else {
+		hc.Test = test
+	}
+	if intervalNs > 0 {
+		hc.Interval = time.Duration(intervalNs).String()
+	}
+	if timeoutNs > 0 {
+		hc.Timeout = time.Duration(timeoutNs).String()
+	}
+	if startPeriodNs > 0 {
+		hc.StartPeriod = time.Duration(startPeriodNs).String()
+	}
+	if startIntervalNs > 0 {
+		hc.StartInterval = time.Duration(startIntervalNs).String()
+	}
+	hc.Retries = retries
+	return hc
 }
 
 // escapeComposeArgs applies escapeComposeInterpolation to each element.

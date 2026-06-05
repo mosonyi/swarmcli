@@ -115,24 +115,34 @@ snapshot:
 changelog:
   disable: true
 
-# Homebrew tap 
-brews:
+# Homebrew tap (cask)
+homebrew_casks:
   - name: swarmcli
     ids:
       - default
+    binaries:
+      - swarmcli
     repository:
       owner: Eldara-Tech
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    directory: Formula
+    directory: Casks
     homepage: "https://swarmcli.io"
     description: "Docker Swarm TUI management tool"
-    license: "Apache-2.0"
     commit_author:
       name: Eldara Tech
       email: hello@eldara.io
-    install: |
-      bin.install "swarmcli"
+    conflicts:
+      - cask: swarmcli-be
+    # GoReleaser binaries are not Apple-notarized; strip the Gatekeeper
+    # quarantine xattr on install so the CLI runs without a security prompt.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr",
+                           args: ["-dr", "com.apple.quarantine", "#{staged_path}/swarmcli"]
+          end
 
 # Scoop bucket for Windows
 scoops:
@@ -152,40 +162,21 @@ scoops:
     post_install:
       - "Write-Host 'swarmcli installed successfully!' -ForegroundColor Green"
 
-# Docker images
-dockers:
-  - image_templates:
-      - "eldaratech/swarmcli:{{ .Tag }}-amd64"
+# Docker images (multi-arch; replaces the deprecated dockers + docker_manifests)
+dockers_v2:
+  - id: swarmcli
+    images:
+      - "eldaratech/swarmcli"
     dockerfile: Dockerfile.release
-    use: buildx
-    build_flag_templates:
-      - "--platform=linux/amd64"
-      - "--load"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-    goos: linux
-    goarch: amd64
-  - image_templates:
-      - "eldaratech/swarmcli:{{ .Tag }}-arm64"
-    dockerfile: Dockerfile.release
-    use: buildx
-    build_flag_templates:
-      - "--platform=linux/arm64"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-    goos: linux
-    goarch: arm64
-
-docker_manifests:
-  - name_template: "eldaratech/swarmcli:{{ .Tag }}"
-    image_templates:
-      - "eldaratech/swarmcli:{{ .Tag }}-amd64"
-      - "eldaratech/swarmcli:{{ .Tag }}-arm64"
-  - name_template: "eldaratech/swarmcli:latest"
-    image_templates:
-      - "eldaratech/swarmcli:{{ .Tag }}-amd64"
-      - "eldaratech/swarmcli:{{ .Tag }}-arm64"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    tags:
+      - "{{ .Tag }}"
+      # Only move :latest for stable releases — never on -rc/-beta tags.
+      - '{{ if not .Prerelease }}latest{{ end }}'
+    labels:
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.title: "{{ .ProjectName }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.version: "{{ .Version }}"

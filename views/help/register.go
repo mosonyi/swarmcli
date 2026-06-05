@@ -15,6 +15,9 @@ func init() {
 }
 
 func factory(_ docker.Deps, w, h int, payload any) (view.View, tea.Cmd) {
+	if ch, ok := payload.(CommandHelp); ok {
+		return NewCommandHelp(w, h, ch), nil
+	}
 	if categories, ok := payload.([]HelpCategory); ok {
 		return NewDetailed(w, h, categories), nil
 	}

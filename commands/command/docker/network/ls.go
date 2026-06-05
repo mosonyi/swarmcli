@@ -17,6 +17,15 @@ type DockerNetworkLs struct{}
 func (DockerNetworkLs) Name() string        { return "network" }
 func (DockerNetworkLs) Description() string { return "docker network ls" }
 
+func (DockerNetworkLs) Spec() registry.CommandSpec {
+	return registry.CommandSpec{
+		Detail: "Opens the Docker Networks list, where you can create, " +
+			"inspect and delete networks and see which services use a " +
+			"given network.",
+		Examples: []string{":network"},
+	}
+}
+
 func (DockerNetworkLs) Execute(ctx any, args args.Args) tea.Cmd {
 	return func() tea.Msg {
 		return view.NavigateToMsg{

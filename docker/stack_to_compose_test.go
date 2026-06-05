@@ -6,6 +6,7 @@ package docker
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -316,4 +317,65 @@ func TestEscapeComposeArgs(t *testing.T) {
 	require.Equal(t, []string{"sh", "-c", "echo $$HOME; date=$$(date)"}, got)
 	// original slice must not be modified
 	require.Equal(t, "echo $HOME; date=$(date)", in[2])
+}
+
+func TestComposeHealthcheck_FullSpec(t *testing.T) {
+	hc := composeHealthcheck(
+		[]string{"CMD", "curl", "-f", "http://localhost"},
+		90*int64(time.Second), 10*int64(time.Second),
+		40*int64(time.Second), 5*int64(time.Second), 3, false)
+	require.NotNil(t, hc)
+	require.Equal(t, []string{"CMD", "curl", "-f", "http://localhost"}, hc.Test)
+	require.Equal(t, "1m30s", hc.Interval)
+	require.Equal(t, "10s", hc.Timeout)
+	require.Equal(t, "40s", hc.StartPeriod)
+	require.Equal(t, "5s", hc.StartInterval)
+	require.Equal(t, 3, hc.Retries)
+	require.False(t, hc.Disable)
+}
+
+func TestComposeHealthcheck_Disabled(t *testing.T) {
+	hc := composeHealthcheck([]string{"NONE"}, 0, 0, 0, 0, 0, false)
+	require.NotNil(t, hc)
+	require.True(t, hc.Disable)
+	require.Empty(t, hc.Test)
+	require.Empty(t, hc.Interval)
+}
+
+func TestComposeHealthcheck_InheritReturnsNil(t *testing.T) {
+	require.Nil(t, composeHealthcheck(nil, 0, 0, 0, 0, 0, false))
+	require.Nil(t, composeHealthcheck([]string{}, 0, 0, 0, 0, 0, false))
+}
+
+func TestComposeHealthcheck_Escapes(t *testing.T) {
+	hc := composeHealthcheck(
+		[]string{"CMD-SHELL", "test $VAR = 1"}, int64(time.Second), 0, 0, 0, 0, true)
+	require.NotNil(t, hc)
+	require.Equal(t, []string{"CMD-SHELL", "test $$VAR = 1"}, hc.Test)
+}
+
+func TestComposeService_HealthcheckYAML(t *testing.T) {
+	cs := ComposeService{
+		Image: "nginx:latest",
+		Healthcheck: &Healthcheck{
+			Test:     []string{"CMD", "true"},
+			Interval: "30s",
+			Timeout:  "5s",
+			Retries:  3,
+		},
+	}
+	out, err := yaml.Marshal(&cs)
+	require.NoError(t, err)
+	yamlStr := string(out)
+	require.Contains(t, yamlStr, "healthcheck:")
+	require.Contains(t, yamlStr, "test:")
+	require.Contains(t, yamlStr, "interval: 30s")
+	require.Contains(t, yamlStr, "retries: 3")
+}
+
+func TestComposeService_HealthcheckOmittedWhenNil(t *testing.T) {
+	cs := ComposeService{Image: "nginx:latest"}
+	out, err := yaml.Marshal(&cs)
+	require.NoError(t, err)
+	require.NotContains(t, string(out), "healthcheck")
 }
