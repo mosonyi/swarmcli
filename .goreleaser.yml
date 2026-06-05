@@ -189,3 +189,4 @@ docker_manifests:
     image_templates:
       - "eldaratech/swarmcli:{{ .Tag }}-amd64"
       - "eldaratech/swarmcli:{{ .Tag }}-arm64"
+    skip_push: "auto"
