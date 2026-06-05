@@ -118,6 +118,8 @@ changelog:
 # Homebrew tap (cask)
 homebrew_casks:
   - name: swarmcli
+    # Don't update the public tap for prereleases (-rc) or snapshots; GA only.
+    skip_upload: "auto"
     ids:
       - default
     binaries:
@@ -147,6 +149,8 @@ homebrew_casks:
 # Scoop bucket for Windows
 scoops:
   - name: swarmcli
+    # Don't update the public bucket for prereleases (-rc) or snapshots; GA only.
+    skip_upload: "auto"
     ids:
       - default
     repository:
