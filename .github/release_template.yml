@@ -2,13 +2,12 @@ name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
 exclude-labels:
   - 'E0-silent'
+# Categories key off the mutually-exclusive A-type (and D0) labels only.
+# B (urgency) and C (breaking) are orthogonal axes: release-drafter places
+# a PR in *every* matching category (by design, no per-category exclude),
+# so keeping B2/C1 categories duplicated those PRs into their type section.
+# Breaking-ness is conveyed by the version/RC itself.
 categories:
-  - title: ' ‼️ High Priority Release '
-    labels:
-      - 'B2-high-priority'
-  - title: '⚡ Breaking API Changes'
-    labels:
-      - 'C1-breaking-change'
   - title: '[UI]'
     labels:
       - 'A0-ui'
