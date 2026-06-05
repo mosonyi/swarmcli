@@ -131,6 +131,8 @@ Add all three labels when creating a PR: `gh pr edit <number> --add-label "A0-ui
 
 When a PR fixes a GitHub issue, copy the issue's labels to the PR and add any missing required group labels (A, B, C). Use `gh api repos/OWNER/REPO/issues/<pr-number>/labels -f "labels[]=LABEL"` to add labels via API.
 
+**Versioning at release.** A `C1-breaking-change` PR merged since the last GA forces a **major** tag (`vX.0.0`). The release changelog is type-only (no dedicated "Breaking" section), so the label is the breaking-change gate — the pushed tag is authoritative, overriding release-drafter's `$RESOLVED_VERSION`. For a breaking release, fill `.github/UPGRADE_NOTES.md` before tagging.
+
 ## CI Workflows (.github/workflows/)
 
 - `ci.yml`: go fmt, golangci-lint, go build, Docker image build
