@@ -11,6 +11,7 @@ import (
 	"swarmcli/docker"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/docker/docker/api/types/swarm"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,9 +31,9 @@ func testModel() *Model {
 	return m
 }
 
-type mockSnapshotOps struct{}
+type mockSnapshotOps struct{ snap *docker.SwarmSnapshot }
 
-func (m *mockSnapshotOps) GetSnapshot() *docker.SwarmSnapshot              { return nil }
+func (m *mockSnapshotOps) GetSnapshot() *docker.SwarmSnapshot              { return m.snap }
 func (m *mockSnapshotOps) SetSnapshot(_ *docker.SwarmSnapshot)             {}
 func (m *mockSnapshotOps) InvalidateSnapshot()                             {}
 func (m *mockSnapshotOps) RefreshSnapshot() (*docker.SwarmSnapshot, error) { return nil, nil }
@@ -139,6 +140,7 @@ func TestShortHelpItems_NormalMode(t *testing.T) {
 	require.True(t, keys["s"])
 	require.True(t, keys["w"])
 	require.True(t, keys["o"])
+	require.True(t, keys["t"])
 	require.True(t, keys["esc"])
 }
 
@@ -187,12 +189,13 @@ func TestUpdate_LineMsg(t *testing.T) {
 	m.errChan = errs
 
 	// Add a line
-	m.Update(LineMsg{Line: "node1\x00hello world"})
+	m.Update(LineMsg{Line: "node1\x00task-1\x00hello world"})
 
 	m.mu.Lock()
 	require.Len(t, m.lines, 1)
 	require.Equal(t, "hello world", m.lines[0])
 	require.Equal(t, "node1", m.lineNodes[0])
+	require.Equal(t, "task-1", m.lineTasks[0])
 	m.mu.Unlock()
 	close(lines)
 	close(errs)
@@ -212,6 +215,8 @@ func TestUpdate_LineMsg_Trimming(t *testing.T) {
 	}
 	m.mu.Lock()
 	require.Len(t, m.lines, 3)
+	require.Len(t, m.lineTasks, 3) // parallel slice trimmed in lock-step
+	require.Len(t, m.lineNodes, 3)
 	m.mu.Unlock()
 	close(lines)
 	close(errs)
@@ -440,6 +445,7 @@ func TestView_Normal(t *testing.T) {
 	require.Contains(t, out, "Service: web")
 	require.Contains(t, out, "AutoScroll: on")
 	require.Contains(t, out, "wrap: on")
+	require.Contains(t, out, "Stopped: hidden")
 }
 
 func TestView_SearchMode(t *testing.T) {
@@ -615,7 +621,7 @@ func TestLineMsg_StripsCR(t *testing.T) {
 	m.linesChan = lines
 	m.errChan = errs
 
-	m.Update(LineMsg{Line: "node1\x00downloading 50%\rprogress"})
+	m.Update(LineMsg{Line: "node1\x00task-1\x00downloading 50%\rprogress"})
 
 	m.mu.Lock()
 	require.Len(t, m.lines, 1)
@@ -681,4 +687,124 @@ func TestShouldFallbackToRawFromStdCopy(t *testing.T) {
 			require.Equal(t, tc.want, shouldFallbackToRawFromStdCopy(tc.err))
 		})
 	}
+}
+
+// --- hide-stopped (issue #388) tests ---
+
+// hideStoppedModel returns a model whose snapshot has one running and one
+// stopped task for the model's service (svc-123).
+func hideStoppedModel() *Model {
+	m := testModel()
+	m.deps.Snapshot = &mockSnapshotOps{snap: &docker.SwarmSnapshot{
+		Tasks: []swarm.Task{
+			{ID: "task-run", ServiceID: "svc-123", DesiredState: swarm.TaskStateRunning},
+			{ID: "task-stop", ServiceID: "svc-123", DesiredState: swarm.TaskStateShutdown},
+		},
+	}}
+	return m
+}
+
+func TestHideStopped_Default(t *testing.T) {
+	m := testModel()
+	require.True(t, m.getHideStopped())
+}
+
+func TestHideStoppedToggle(t *testing.T) {
+	m := testModel()
+	m.setHideStopped(false)
+	require.False(t, m.getHideStopped())
+	m.setHideStopped(true)
+	require.True(t, m.getHideStopped())
+}
+
+func TestKey_T_TogglesHideStopped(t *testing.T) {
+	m := testModel()
+	m.Visible = true
+	require.True(t, m.getHideStopped())
+	cmd := m.Update(key("t"))
+	require.False(t, m.getHideStopped())
+	require.NotNil(t, cmd) // HideStoppedToggledMsg
+	m.Update(key("t"))
+	require.True(t, m.getHideStopped())
+}
+
+func TestBuildContent_HidesStoppedTasks(t *testing.T) {
+	m := hideStoppedModel()
+	m.mu.Lock()
+	m.lines = []string{"running line", "stopped line", "system line"}
+	m.lineTasks = []string{"task-run", "task-stop", ""}
+	m.lineNodes = []string{"n", "n", ""}
+	m.mu.Unlock()
+	content := m.buildContent()
+	require.Contains(t, content, "running line")
+	require.NotContains(t, content, "stopped line")
+	require.Contains(t, content, "system line") // empty task ID => always visible
+}
+
+func TestBuildContent_ShowAllWhenHideStoppedOff(t *testing.T) {
+	m := hideStoppedModel()
+	m.setHideStopped(false)
+	m.mu.Lock()
+	m.lines = []string{"running line", "stopped line", "system line"}
+	m.lineTasks = []string{"task-run", "task-stop", ""}
+	m.lineNodes = []string{"n", "n", ""}
+	m.mu.Unlock()
+	content := m.buildContent()
+	require.Contains(t, content, "running line")
+	require.Contains(t, content, "stopped line")
+	require.Contains(t, content, "system line")
+}
+
+func TestBuildContent_NilSnapshotFailOpen(t *testing.T) {
+	m := testModel() // default mock => nil snapshot
+	require.True(t, m.getHideStopped())
+	m.mu.Lock()
+	m.lines = []string{"a", "b"}
+	m.lineTasks = []string{"task-run", "task-stop"}
+	m.lineNodes = []string{"", ""}
+	m.mu.Unlock()
+	content := m.buildContent()
+	require.Contains(t, content, "a")
+	require.Contains(t, content, "b") // nil snapshot => show all
+}
+
+func TestBuildContent_EmptyTaskIDAlwaysVisible(t *testing.T) {
+	m := hideStoppedModel()
+	m.mu.Lock()
+	m.lines = []string{"no task line"}
+	m.lineTasks = []string{""}
+	m.lineNodes = []string{""}
+	m.mu.Unlock()
+	content := m.buildContent()
+	require.Contains(t, content, "no task line")
+}
+
+func TestHighlightContent_SyncWithHideStopped(t *testing.T) {
+	m := hideStoppedModel()
+	m.mu.Lock()
+	m.lines = []string{"match running", "match stopped", "match again"}
+	m.lineTasks = []string{"task-run", "task-stop", "task-run"}
+	m.lineNodes = []string{"n", "n", "n"}
+	m.mu.Unlock()
+	m.searchTerm = "match"
+	m.highlightContent()
+	// The stopped line is hidden, so only two visible matches remain and their
+	// visible indices are contiguous (0,1) — aligned with buildContent's output.
+	require.Equal(t, []int{0, 1}, m.searchMatches)
+}
+
+func TestSetContent_ResetsTaskSlice(t *testing.T) {
+	m := testModel()
+	m.mu.Lock()
+	m.lineTasks = []string{"old"}
+	m.lineNodes = []string{"old"}
+	m.mu.Unlock()
+	m.SetContent("a\nb\nc")
+	m.mu.Lock()
+	require.Len(t, m.lineTasks, 3)
+	require.Len(t, m.lineNodes, 3)
+	for _, id := range m.lineTasks {
+		require.Equal(t, "", id)
+	}
+	m.mu.Unlock()
 }

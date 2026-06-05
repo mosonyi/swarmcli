@@ -24,12 +24,17 @@ func (m *Model) FrameTitle() string {
 	if nodeFilter != "" {
 		filterStatus = fmt.Sprintf("node: %s", nodeFilter)
 	}
+	stoppedStatus := "hidden"
+	if !m.getHideStopped() {
+		stoppedStatus = "shown"
+	}
 	return fmt.Sprintf(
-		"Service: %s • AutoScroll: %s • wrap: %s • Filter: %s",
+		"Service: %s • AutoScroll: %s • wrap: %s • Filter: %s • Stopped: %s",
 		m.ServiceEntry.ServiceName,
 		followStatus,
 		wrapStatus,
 		filterStatus,
+		stoppedStatus,
 	)
 }
 
