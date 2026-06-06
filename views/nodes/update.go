@@ -11,6 +11,7 @@ import (
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	"swarmcli/ui"
+	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"
@@ -272,26 +273,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// Handle left/right for labels scrolling
 		switch msg.String() {
 		case "left":
-			if m.labelsScrollOffset > 0 {
-				m.labelsScrollOffset -= 5
-				if m.labelsScrollOffset < 0 {
-					m.labelsScrollOffset = 0
-				}
-				m.setRenderItem() // Re-render with new offset
-				m.List.Viewport.SetContent(m.List.View())
-			}
+			m.List.ScrollLeft()
+			m.List.Viewport.SetContent(m.List.View())
 			return nil
 		case "right":
-			if m.List.Cursor < len(m.List.Filtered) {
-				node := m.List.Filtered[m.List.Cursor]
-				labelsStr := formatLabels(node.Labels)
-				// Allow scrolling if labels are longer than visible width
-				if len(labelsStr) > m.labelsScrollOffset+20 {
-					m.labelsScrollOffset += 5
-					m.setRenderItem() // Re-render with new offset
-					m.List.Viewport.SetContent(m.List.View())
-				}
-			}
+			m.List.ScrollRight()
+			m.List.Viewport.SetContent(m.List.View())
 			return nil
 		}
 
@@ -300,8 +287,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 		// Reset scroll offset on cursor movement
 		if m.List.Cursor != oldCursor {
-			m.labelsScrollOffset = 0
-			m.setRenderItem()
+			m.List.ResetColumnScroll()
 			m.List.Viewport.SetContent(m.List.View())
 		}
 
@@ -521,8 +507,6 @@ func (m *Model) SetContent(msg Msg) {
 	m.List.ApplyFilter()
 	m.applySorting()
 
-	// Calculate column widths for all columns
-	m.colWidths = calcColumnWidths(msg.Entries)
 	m.setRenderItem()
 
 	if m.ready {
@@ -533,88 +517,36 @@ func (m *Model) SetContent(msg Msg) {
 	}
 }
 
-func (m *Model) setRenderItem() {
-	// Use bright white for content and reserve leading space in first column
-	itemStyle := ui.ListItemStyle
-
-	m.List.RenderItem = func(n docker.NodeEntry, selected bool, _ int) string {
-		colWidths := m.List.ColWidths()
-		if len(colWidths) < 10 {
-			return n.Hostname
-		}
-		manager := "no"
-		if n.Manager {
-			manager = "yes"
-		}
-		mgrStatus := n.ManagerStatus
-		labelsStr := formatLabelsWithScroll(n.Labels, m.labelsScrollOffset, colWidths[9])
-		// Truncate ID so it fits the formatted field width (we render with
-		// a leading space and field width `colWidths[0]-1`). Ensure the
-		// final string length is <= colWidths[0]-1. If we need an ellipsis,
-		// reserve 3 chars for it and trim the core accordingly.
-		idStr := n.ID
-		// safeWidth is the maximum length we can print for the ID (excluding the leading space)
-		safeWidth := 0
-		if colWidths[0] > 0 {
-			safeWidth = colWidths[0] - 1
-		}
-		if safeWidth < 0 {
-			safeWidth = 0
-		}
-		if len(idStr) > safeWidth {
-			// If we can show at least 5 chars, show core + "..." and leave 1
-			// extra char to avoid colliding with the next column: core + "..." so total == safeWidth
-			if safeWidth > 4 {
-				core := safeWidth - 4
-				if core < 0 {
-					core = 0
-				}
-				if core > len(idStr) {
-					core = len(idStr)
-				}
-				idStr = idStr[:core] + "..."
-			} else if safeWidth > 0 {
-				// No room for ellipsis, just trim to fit
-				if safeWidth > len(idStr) {
-					// already fits, no-op
-				} else {
-					idStr = idStr[:safeWidth]
-				}
-			} else {
-				idStr = ""
+// buildColumns declares the nodes table columns for the shared content-aware
+// layout. ID/HOSTNAME/LABELS flex (grow + horizontally scroll); the rest are
+// fixed-width status columns.
+func (m *Model) buildColumns() []filterlist.Column[docker.NodeEntry] {
+	return []filterlist.Column[docker.NodeEntry]{
+		{Label: "ID", MinWidth: 6, Flex: true, Cell: func(n docker.NodeEntry) string { return n.ID }},
+		{Label: "HOSTNAME", MinWidth: 8, Flex: true, Cell: func(n docker.NodeEntry) string { return n.Hostname }},
+		{Label: "ROLE", Cell: func(n docker.NodeEntry) string { return n.Role }},
+		{Label: "STATE", Cell: func(n docker.NodeEntry) string { return n.State }},
+		{Label: "Availability", Cell: func(n docker.NodeEntry) string { return n.Availability }},
+		{Label: "MANAGER", Cell: func(n docker.NodeEntry) string {
+			if n.Manager {
+				return "yes"
 			}
-		}
-		// Use the pre-calculated column widths instead of the single colWidth
-		if selected {
-			selStyle := ui.ListSelectedStyle
-			// Preserve leading space for hostname when selected
-			return selStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s",
-				colWidths[0]-1, idStr,
-				colWidths[1], n.Hostname,
-				colWidths[2], n.Role,
-				colWidths[3], n.State,
-				colWidths[4], n.Availability,
-				colWidths[5], manager,
-				colWidths[6], mgrStatus,
-				colWidths[7], n.Version,
-				colWidths[8], n.Addr,
-				colWidths[9], labelsStr,
-			))
-		}
+			return "no"
+		}},
+		{Label: "MGR STATUS", Cell: func(n docker.NodeEntry) string { return n.ManagerStatus }},
+		{Label: "VERSION", Cell: func(n docker.NodeEntry) string { return n.Version }},
+		{Label: "ADDRESS", Cell: func(n docker.NodeEntry) string { return n.Addr }},
+		{Label: "LABELS", MinWidth: 6, Flex: true, Cell: func(n docker.NodeEntry) string { return formatLabels(n.Labels) }},
+	}
+}
 
-		// Ensure the first column has a leading space to align with header
-		return itemStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s%-*s",
-			colWidths[0]-1, idStr,
-			colWidths[1], n.Hostname,
-			colWidths[2], n.Role,
-			colWidths[3], n.State,
-			colWidths[4], n.Availability,
-			colWidths[5], manager,
-			colWidths[6], mgrStatus,
-			colWidths[7], n.Version,
-			colWidths[8], n.Addr,
-			colWidths[9], labelsStr,
-		))
+func (m *Model) setRenderItem() {
+	m.List.RenderItem = func(n docker.NodeEntry, selected bool, _ int) string {
+		row := m.List.RenderRow(n, selected)
+		if selected {
+			return ui.ListSelectedStyle.Render(row)
+		}
+		return ui.ListItemStyle.Render(row)
 	}
 }
 

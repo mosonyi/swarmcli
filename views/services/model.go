@@ -72,8 +72,6 @@ type Model struct {
 	serviceHasError map[string]bool
 	// serviceErrorText stores a representative error text per service
 	serviceErrorText map[string]string
-	// columnScrollOffset controls horizontal scroll for all columns
-	columnScrollOffset int
 
 	// Track task navigation: -1 means service row is selected, >= 0 means task at that index
 	selectedTaskIndex int
@@ -111,9 +109,9 @@ func New(width, height int) *Model {
 		Match: func(s docker.ServiceEntry, query string) bool {
 			return strings.Contains(strings.ToLower(s.ServiceName), strings.ToLower(query))
 		},
+		Columns: m.layoutColumns(),
 		Header: &filterlist.HeaderConfig{
-			Columns:       headerColumns(m.activeColumnLabels()),
-			ColWidthsFunc: m.computeColWidths,
+			Columns:       filterlist.ColumnDefs(m.layoutColumns()),
 			SortIndicator: m.sortIndicator,
 		},
 		Footer: &filterlist.FooterConfig{ItemLabel: "Node"},

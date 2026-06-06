@@ -1,0 +1,73 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright © 2026 Eldara Tech
+
+package nodesview
+
+import (
+	"testing"
+
+	"swarmcli/docker"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/stretchr/testify/require"
+)
+
+const longHostname = "worker-with-a-very-long-hostname-that-overflows"
+
+func readyNodes(m *Model, width int, names ...string) {
+	loadNodes(m, fakeNodes(names...))
+	m.setRenderItem()
+	m.List.Viewport.Width = width
+	m.List.Viewport.Height = 20
+}
+
+func longNode(m *Model) docker.NodeEntry {
+	for _, n := range m.List.Filtered {
+		if n.Hostname == longHostname {
+			return n
+		}
+	}
+	return docker.NodeEntry{}
+}
+
+func TestContentAwareHostname_WideTerminal(t *testing.T) {
+	m := testModel()
+	readyNodes(m, 220, longHostname, "w2")
+	row := m.List.RenderItem(longNode(m), false, 0)
+	require.Contains(t, row, longHostname, "full hostname must be visible on a wide terminal")
+}
+
+func TestHeaderRowAlignment(t *testing.T) {
+	m := testModel()
+	loadNodes(m, fakeNodes(longHostname, "w2"))
+	m.setRenderItem()
+	for _, w := range []int{60, 120, 220} {
+		m.List.Viewport.Width = w
+		header := m.List.RenderHeader()
+		row := m.List.RenderItem(longNode(m), false, 0)
+		require.Equal(t, lipgloss.Width(header), lipgloss.Width(row), "width=%d header/row mismatch", w)
+	}
+}
+
+func TestArrowScrollMovesWindow(t *testing.T) {
+	m := testModel()
+	readyNodes(m, 70, longHostname, "w2") // narrow → flex columns overflow
+	before := m.List.RenderItem(longNode(m), true, 0)
+	m.Update(key("right"))
+	after := m.List.RenderItem(longNode(m), true, 0)
+	require.NotEqual(t, before, after, "right arrow should shift the truncated cell window")
+}
+
+func TestResetScrollOnCursorMove(t *testing.T) {
+	m := testModel()
+	readyNodes(m, 70, longHostname, "w2")
+	m.Update(key("right"))
+	m.Update(key("right"))
+	scrolled := m.List.RenderItem(longNode(m), true, 0)
+
+	m.Update(key("down"))
+	m.Update(key("up"))
+
+	require.NotEqual(t, scrolled, m.List.RenderItem(longNode(m), true, 0),
+		"scroll offset must reset when the cursor moves")
+}

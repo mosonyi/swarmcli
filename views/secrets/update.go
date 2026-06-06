@@ -16,6 +16,7 @@ import (
 	helpview "swarmcli/views/help"
 	loading "swarmcli/views/loading"
 	view "swarmcli/views/view"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -389,27 +390,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return action(secName)
 
 		case "left":
-			if m.labelsScrollOffset > 0 {
-				m.labelsScrollOffset -= 5
-				if m.labelsScrollOffset < 0 {
-					m.labelsScrollOffset = 0
-				}
-				m.setRenderItem()
-				m.secretsList.Viewport.SetContent(m.secretsList.View())
-			}
+			m.secretsList.ScrollLeft()
+			m.secretsList.Viewport.SetContent(m.secretsList.View())
 			return nil
 
 		case "right":
-			if m.secretsList.Cursor < len(m.secretsList.Filtered) {
-				sec := m.secretsList.Filtered[m.secretsList.Cursor]
-				labelsStr := formatLabels(sec.Labels)
-				// Allow scrolling if labels are longer than visible width
-				if len(labelsStr) > m.labelsScrollOffset+20 {
-					m.labelsScrollOffset += 5
-					m.setRenderItem()
-					m.secretsList.Viewport.SetContent(m.secretsList.View())
-				}
-			}
+			m.secretsList.ScrollRight()
+			m.secretsList.Viewport.SetContent(m.secretsList.View())
 			return nil
 
 		case "n":
@@ -507,8 +494,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.secretsList.HandleKey(msg)
 			// Reset scroll offset on cursor movement
 			if m.secretsList.Cursor != oldCursor {
-				m.labelsScrollOffset = 0
-				m.setRenderItem()
+				m.secretsList.ResetColumnScroll()
 				m.secretsList.Viewport.SetContent(m.secretsList.View())
 			}
 			return nil
@@ -524,78 +510,43 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	}
 }
 
-func (m *Model) setRenderItem() {
-	itemStyle := ui.ListItemStyle
-
-	m.secretsList.RenderItem = func(sec secretItem, selected bool, _ int) string {
-		colWidths := m.secretsList.ColWidths()
-		if len(colWidths) < 6 {
-			return sec.Name
-		}
-
-		// Prepare cell texts
-		nameText := truncateWithEllipsis(sec.Name, colWidths[0]-1)
-		idText := truncateWithEllipsis(sec.ID, colWidths[1])
-		usedText := " "
-		if !sec.UsedKnown {
-			usedText = ui.SpinnerCharAt(m.spinner)
-		} else if sec.Used {
-			usedText = "●"
-		}
-		// Format timestamps
-		createdStr := "N/A"
-		if !sec.CreatedAt.IsZero() {
-			createdStr = sec.CreatedAt.Format("2006-01-02 15:04:05")
-		}
-		updatedStr := "N/A"
-		if !sec.UpdatedAt.IsZero() {
-			updatedStr = sec.UpdatedAt.Format("2006-01-02 15:04:05")
-		}
-		createdText := truncateWithEllipsis(createdStr, colWidths[3])
-		updatedText := truncateWithEllipsis(updatedStr, colWidths[4])
-		// Format labels with scroll (sorted and in last column)
-		// Reserve 1 char for space before frame end
-		maxLabelsWidth := colWidths[5] - 1
-		if maxLabelsWidth < 1 {
-			maxLabelsWidth = 1
-		}
-		labelsText := formatLabelsWithScroll(sec.Labels, m.labelsScrollOffset, maxLabelsWidth)
-
-		// Render all columns in one format string (no explicit separators, like nodes view)
-		if selected {
-			selStyle := ui.ListSelectedStyle
-			return selStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s",
-				colWidths[0]-1, nameText,
-				colWidths[1], idText,
-				colWidths[2], usedText,
-				colWidths[3], createdText,
-				colWidths[4], updatedText,
-				colWidths[5], labelsText,
-			))
-		}
-
-		return itemStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s",
-			colWidths[0]-1, nameText,
-			colWidths[1], idText,
-			colWidths[2], usedText,
-			colWidths[3], createdText,
-			colWidths[4], updatedText,
-			colWidths[5], labelsText,
-		))
+// buildColumns declares the secrets table columns for the shared content-aware
+// layout. The USED cell closure captures the model so the spinner animates.
+func (m *Model) buildColumns() []filterlist.Column[secretItem] {
+	return []filterlist.Column[secretItem]{
+		{Label: "NAME", MinWidth: 4, Flex: true, Cell: func(s secretItem) string { return s.Name }},
+		{Label: "ID", MinWidth: 4, Flex: true, Cell: func(s secretItem) string { return s.ID }},
+		{Label: "USED", MinWidth: 4, Cell: func(s secretItem) string {
+			switch {
+			case !s.UsedKnown:
+				return ui.SpinnerCharAt(m.spinner)
+			case s.Used:
+				return "●"
+			default:
+				return " "
+			}
+		}},
+		{Label: "CREATED AT", MinWidth: 19, Cell: func(s secretItem) string { return formatTimestamp(s.CreatedAt) }},
+		{Label: "UPDATED AT", MinWidth: 19, Cell: func(s secretItem) string { return formatTimestamp(s.UpdatedAt) }},
+		{Label: "LABELS", MinWidth: 6, Flex: true, Cell: func(s secretItem) string { return formatLabels(s.Labels) }},
 	}
 }
 
-func truncateWithEllipsis(s string, maxWidth int) string {
-	if len(s) <= maxWidth {
-		return s
+func formatTimestamp(t time.Time) string {
+	if t.IsZero() {
+		return "N/A"
 	}
-	if maxWidth <= 1 {
-		return "…"
+	return t.Format("2006-01-02 15:04:05")
+}
+
+func (m *Model) setRenderItem() {
+	m.secretsList.RenderItem = func(sec secretItem, selected bool, _ int) string {
+		row := m.secretsList.RenderRow(sec, selected)
+		if selected {
+			return ui.ListSelectedStyle.Render(row)
+		}
+		return ui.ListItemStyle.Render(row)
 	}
-	if maxWidth == 2 {
-		return s[:1] + "…"
-	}
-	return s[:maxWidth-1] + "…"
 }
 
 func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {

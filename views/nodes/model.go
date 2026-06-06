@@ -37,12 +37,10 @@ type Model struct {
 	width                 int
 	height                int
 	sortField             SortField
-	sortAscending         bool // true for ascending, false for descending
-	colWidths             map[string]int
+	sortAscending         bool   // true for ascending, false for descending
 	lastSnapshot          uint64 // Hash of last node state for change detection
 	confirmDialog         *confirmdialog.Model
 	errorDialogActive     bool
-	labelsScrollOffset    int      // Horizontal scroll offset for labels column
 	availabilityDialog    bool     // Whether availability selection dialog is visible
 	availabilityNodeID    string   // Node ID for availability change
 	availabilitySelection int      // Currently selected option (0=active, 1=pause, 2=drain)
@@ -69,17 +67,15 @@ func New(width, height int) *Model {
 		sortAscending: true,
 	}
 
+	cols := m.buildColumns()
 	list := filterlist.FilterableList[docker.NodeEntry]{
 		Viewport: vp,
 		Match: func(n docker.NodeEntry, query string) bool {
 			return strings.Contains(strings.ToLower(n.Hostname), strings.ToLower(query))
 		},
+		Columns: cols,
 		Header: &filterlist.HeaderConfig{
-			Columns: []filterlist.ColumnDef{
-				{Label: "ID"}, {Label: "HOSTNAME"}, {Label: "ROLE"}, {Label: "STATE"},
-				{Label: "Availability"}, {Label: "MANAGER"}, {Label: "MGR STATUS"},
-				{Label: "VERSION"}, {Label: "ADDRESS"}, {Label: "LABELS"},
-			},
+			Columns: filterlist.ColumnDefs(cols),
 			SortIndicator: func() (int, bool) {
 				sortColMap := map[SortField]int{
 					SortByHostname:     1,

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"testing"
 
+	filterlist "swarmcli/ui/components/filterable/list"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -99,18 +101,16 @@ func TestFormatLabels_SkipsInternalLabels(t *testing.T) {
 	require.Equal(t, "env=prod", formatLabels(labels))
 }
 
-func TestFormatLabelsWithScroll(t *testing.T) {
-	labels := map[string]string{"longkey": "longvalue"}
-	full := formatLabels(labels)
+func TestLabelsScroll(t *testing.T) {
+	full := formatLabels(map[string]string{"longkey": "longvalue"})
 	require.Equal(t, "longkey=longvalue", full)
 
-	scrolled := formatLabelsWithScroll(labels, 4, 20)
-	require.Equal(t, "key=longvalue", scrolled)
+	require.Equal(t, "key=longvalue", filterlist.ScrollWindow(full, 4, 20))
 }
 
-func TestFormatLabelsWithScroll_Truncation(t *testing.T) {
-	labels := map[string]string{"a": "verylongvalue"}
-	truncated := formatLabelsWithScroll(labels, 0, 5)
-	require.Contains(t, truncated, ">")
-	require.Len(t, truncated, 5)
+func TestLabelsScroll_Truncation(t *testing.T) {
+	full := formatLabels(map[string]string{"a": "verylongvalue"})
+	truncated := filterlist.ScrollWindow(full, 0, 5)
+	require.Contains(t, truncated, "…")
+	require.Equal(t, 5, len([]rune(truncated)))
 }
