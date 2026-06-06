@@ -51,10 +51,6 @@ type Model struct {
 	height       int
 	lastSnapshot uint64 // hash of last snapshot for change detection
 
-	// Column widths cached after computation
-	colServiceWidth int
-	colStackWidth   int
-
 	// Filter
 	filterType FilterType
 	nodeID     string
@@ -116,23 +112,9 @@ func New(width, height int) *Model {
 			return strings.Contains(strings.ToLower(s.ServiceName), strings.ToLower(query))
 		},
 		Header: &filterlist.HeaderConfig{
-			Columns: []filterlist.ColumnDef{
-				{Label: "SERVICE"}, {Label: "STACK"}, {Label: "REPLICAS"},
-				{Label: "STATUS"}, {Label: "MODE"}, {Label: "IMAGE"},
-				{Label: "PORTS"}, {Label: "CREATED"}, {Label: "UPDATED"}, {Label: "ERROR"},
-			},
+			Columns:       headerColumns(m.activeColumnLabels()),
 			ColWidthsFunc: m.computeColWidths,
-			SortIndicator: func() (int, bool) {
-				colMap := map[SortField]int{
-					SortByName: 0, SortByStatus: 3, SortByImage: 5,
-					SortByPorts: 6, SortByCreated: 7, SortByUpdated: 8, SortByError: 9,
-				}
-				col, ok := colMap[m.sortField]
-				if !ok {
-					return -1, true
-				}
-				return col, m.sortAscending
-			},
+			SortIndicator: m.sortIndicator,
 		},
 		Footer: &filterlist.FooterConfig{ItemLabel: "Node"},
 	}
