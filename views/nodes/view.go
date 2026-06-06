@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"swarmcli/docker"
 	"swarmcli/ui"
 
 	"github.com/charmbracelet/lipgloss"
@@ -64,59 +63,6 @@ func plural(n int) string {
 		return ""
 	}
 	return "s"
-}
-
-// calcColumnWidths determines the best width per column based on the longest cell.
-func calcColumnWidths(entries []docker.NodeEntry) map[string]int {
-	widths := map[string]int{
-		"ID":           len("ID"),
-		"Hostname":     len("HOSTNAME"),
-		"Role":         len("ROLE"),
-		"State":        len("STATE"),
-		"Availability": len("Availability"),
-		"Manager":      len("MANAGER"),
-		"Version":      len("VERSION"),
-		"Addr":         len("ADDRESS"),
-		"Labels":       len("LABELS"),
-	}
-
-	for _, e := range entries {
-		if len(e.ID) > widths["ID"] {
-			widths["ID"] = len(e.ID)
-		}
-		if len(e.Hostname) > widths["Hostname"] {
-			widths["Hostname"] = len(e.Hostname)
-		}
-		if len(e.Role) > widths["Role"] {
-			widths["Role"] = len(e.Role)
-		}
-		if len(e.State) > widths["State"] {
-			widths["State"] = len(e.State)
-		}
-		if len(e.Availability) > widths["Availability"] {
-			widths["Availability"] = len(e.Availability)
-		}
-		manager := "no"
-		if e.Manager {
-			manager = "yes"
-		}
-		if len(manager) > widths["Manager"] {
-			widths["Manager"] = len(manager)
-		}
-		if len(e.Version) > widths["Version"] {
-			widths["Version"] = len(e.Version)
-		}
-		if len(e.Addr) > widths["Addr"] {
-			widths["Addr"] = len(e.Addr)
-		}
-		// Format labels as key=value pairs
-		labelsStr := formatLabels(e.Labels)
-		if len(labelsStr) > widths["Labels"] {
-			widths["Labels"] = len(labelsStr)
-		}
-	}
-
-	return widths
 }
 
 // formatLabels converts label map to comma-separated key=value string
@@ -263,29 +209,4 @@ func (m *Model) renderLabelRemoveDialog() string {
 
 	content := strings.Join(lines, "\n")
 	return borderStyle.Render(content)
-}
-
-// formatLabelsWithScroll formats labels with horizontal scroll offset and truncation indicator
-func formatLabelsWithScroll(labels map[string]string, offset int, maxWidth int) string {
-	full := formatLabels(labels)
-	if full == "-" {
-		return full
-	}
-
-	// Apply scroll offset
-	if offset > len(full) {
-		offset = len(full)
-	}
-	visible := full[offset:]
-
-	// Truncate if needed and add > indicator
-	if len(visible) > maxWidth {
-		if maxWidth > 1 {
-			visible = visible[:maxWidth-1] + ">"
-		} else {
-			visible = ">"
-		}
-	}
-
-	return visible
 }

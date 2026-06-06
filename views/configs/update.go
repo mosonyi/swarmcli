@@ -16,6 +16,7 @@ import (
 	"swarmcli/views/confirmdialog"
 	helpview "swarmcli/views/help"
 	view "swarmcli/views/view"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -483,27 +484,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return m.getUsedByStacksCmd(cfgName)
 
 		case "left":
-			if m.labelsScrollOffset > 0 {
-				m.labelsScrollOffset -= 5
-				if m.labelsScrollOffset < 0 {
-					m.labelsScrollOffset = 0
-				}
-				m.setRenderItem()
-				m.configsList.Viewport.SetContent(m.configsList.View())
-			}
+			m.configsList.ScrollLeft()
+			m.configsList.Viewport.SetContent(m.configsList.View())
 			return nil
 
 		case "right":
-			if m.configsList.Cursor < len(m.configsList.Filtered) {
-				cfg := m.configsList.Filtered[m.configsList.Cursor]
-				labelsStr := formatLabels(cfg.Labels)
-				// Allow scrolling if labels are longer than visible width
-				if len(labelsStr) > m.labelsScrollOffset+20 {
-					m.labelsScrollOffset += 5
-					m.setRenderItem()
-					m.configsList.Viewport.SetContent(m.configsList.View())
-				}
-			}
+			m.configsList.ScrollRight()
+			m.configsList.Viewport.SetContent(m.configsList.View())
 			return nil
 
 		case "n":
@@ -628,7 +615,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		default:
 			// Let FilterableList handle navigation keys (up/down/pgup/pgdown)
+			oldCursor := m.configsList.Cursor
 			m.configsList.HandleKey(msg)
+			// Reset horizontal scroll offset on cursor movement
+			if m.configsList.Cursor != oldCursor {
+				m.configsList.ResetColumnScroll()
+				m.configsList.Viewport.SetContent(m.configsList.View())
+			}
 			return nil
 		}
 	}
@@ -643,76 +636,43 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	}
 }
 
-func (m *Model) setRenderItem() {
-	itemStyle := ui.ListItemStyle
-
-	m.configsList.RenderItem = func(cfg configItem, selected bool, _ int) string {
-		colWidths := m.configsList.ColWidths()
-
-		// Prepare cell texts (truncate where necessary)
-		// Reserve one character for the leading space in the first column
-		nameText := truncateWithEllipsis(cfg.Name, colWidths[0]-1)
-		idText := truncateWithEllipsis(cfg.ID, colWidths[1])
-		usedText := " "
-		if !cfg.UsedKnown {
-			// Use same spinner charset as systeminfo (14) for consistency
-			usedText = ui.SpinnerCharAt(m.spinner)
-		} else if cfg.Used {
-			usedText = "●"
-		}
-		createdStr := "N/A"
-		if !cfg.CreatedAt.IsZero() {
-			createdStr = cfg.CreatedAt.Format("2006-01-02 15:04:05")
-		}
-		updatedStr := "N/A"
-		if !cfg.UpdatedAt.IsZero() {
-			updatedStr = cfg.UpdatedAt.Format("2006-01-02 15:04:05")
-		}
-		createdText := truncateWithEllipsis(createdStr, colWidths[3])
-		updatedText := truncateWithEllipsis(updatedStr, colWidths[4])
-		// Format labels with scroll (sorted and in last column)
-		// Reserve 1 char for space before frame end
-		maxLabelsWidth := colWidths[5] - 1
-		if maxLabelsWidth < 1 {
-			maxLabelsWidth = 1
-		}
-		labelsText := formatLabelsWithScroll(cfg.Labels, m.labelsScrollOffset, maxLabelsWidth)
-
-		// Render all columns in one format string (no explicit separators, like secrets view)
-		if selected {
-			return ui.ListSelectedStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s",
-				colWidths[0]-1, nameText,
-				colWidths[1], idText,
-				colWidths[2], usedText,
-				colWidths[3], createdText,
-				colWidths[4], updatedText,
-				colWidths[5], labelsText,
-			))
-		}
-
-		return itemStyle.Render(fmt.Sprintf(" %-*s%-*s%-*s%-*s%-*s%-*s",
-			colWidths[0]-1, nameText,
-			colWidths[1], idText,
-			colWidths[2], usedText,
-			colWidths[3], createdText,
-			colWidths[4], updatedText,
-			colWidths[5], labelsText,
-		))
+// buildColumns declares the configs table columns for the shared content-aware
+// layout. The USED cell closure captures the model so the spinner animates.
+func (m *Model) buildColumns() []filterlist.Column[configItem] {
+	return []filterlist.Column[configItem]{
+		{Label: "NAME", MinWidth: 4, Flex: true, Cell: func(c configItem) string { return c.Name }},
+		{Label: "ID", MinWidth: 4, Flex: true, Cell: func(c configItem) string { return c.ID }},
+		{Label: "USED", MinWidth: 4, Cell: func(c configItem) string {
+			switch {
+			case !c.UsedKnown:
+				return ui.SpinnerCharAt(m.spinner)
+			case c.Used:
+				return "●"
+			default:
+				return " "
+			}
+		}},
+		{Label: "CREATED AT", MinWidth: 19, Cell: func(c configItem) string { return formatTimestamp(c.CreatedAt) }},
+		{Label: "UPDATED AT", MinWidth: 19, Cell: func(c configItem) string { return formatTimestamp(c.UpdatedAt) }},
+		{Label: "LABELS", MinWidth: 6, Flex: true, Cell: func(c configItem) string { return formatLabels(c.Labels) }},
 	}
 }
 
-// truncateWithEllipsis truncates a string preserving room for an ellipsis
-func truncateWithEllipsis(s string, maxWidth int) string {
-	if len(s) <= maxWidth {
-		return s
+func formatTimestamp(t time.Time) string {
+	if t.IsZero() {
+		return "N/A"
 	}
-	if maxWidth <= 1 {
-		return "…"
+	return t.Format("2006-01-02 15:04:05")
+}
+
+func (m *Model) setRenderItem() {
+	m.configsList.RenderItem = func(cfg configItem, selected bool, _ int) string {
+		row := m.configsList.RenderRow(cfg, selected)
+		if selected {
+			return ui.ListSelectedStyle.Render(row)
+		}
+		return ui.ListItemStyle.Render(row)
 	}
-	if maxWidth == 2 {
-		return s[:1] + "…"
-	}
-	return s[:maxWidth-1] + "…"
 }
 
 func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {

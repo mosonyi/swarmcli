@@ -11,6 +11,7 @@ import (
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	"swarmcli/ui"
+	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
 	helpview "swarmcli/views/help"
 	inspectview "swarmcli/views/inspect"
@@ -24,20 +25,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/docker/docker/api/types/swarm"
 )
-
-// truncateWithEllipsis truncates a string to maxWidth runes, adding … if needed.
-// It counts and slices by runes so width measurement (displayWidth) and the
-// truncated output agree on multibyte content.
-func truncateWithEllipsis(s string, maxWidth int) string {
-	r := []rune(s)
-	if len(r) <= maxWidth {
-		return s
-	}
-	if maxWidth <= 1 {
-		return "…"
-	}
-	return string(r[:maxWidth-1]) + "…"
-}
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
@@ -282,19 +269,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// Handle left/right for column scrolling
 		switch msg.String() {
 		case "left":
-			if m.columnScrollOffset > 0 {
-				m.columnScrollOffset -= 5
-				if m.columnScrollOffset < 0 {
-					m.columnScrollOffset = 0
-				}
-				m.setRenderItem()
-				m.List.Viewport.SetContent(m.List.View())
-			}
+			m.List.ScrollLeft()
+			m.List.Viewport.SetContent(m.List.View())
 			return nil
 		case "right":
-			// Scroll right if any column has more content
-			m.columnScrollOffset += 5
-			m.setRenderItem()
+			m.List.ScrollRight()
 			m.List.Viewport.SetContent(m.List.View())
 			return nil
 		}
@@ -366,7 +345,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		if oldCursor != m.List.Cursor {
 			m.selectedTaskIndex = -1
 			// Reset horizontal scroll when moving cursor
-			m.columnScrollOffset = 0
+			m.List.ResetColumnScroll()
 		}
 
 		switch msg.String() {
@@ -596,23 +575,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-// formatErrorWithScroll formats error text with horizontal offset and truncation indicator
-func formatErrorWithScroll(full string, offset int, maxWidth int) string {
-	if full == "" {
-		return ""
-	}
-	if offset > len(full) {
-		offset = len(full)
-	}
-	visible := full[offset:]
-
-	// Truncate to maxWidth
-	if len(visible) > maxWidth {
-		visible = truncateWithEllipsis(visible, maxWidth)
-	}
-	return visible
-}
-
 func (m *Model) SetContent(msg Msg) {
 	l().Infof("ServicesView.SetContent: Updating display with %d services", len(msg.Entries))
 
@@ -644,11 +606,13 @@ func (m *Model) SetContent(msg Msg) {
 	m.nodeID = msg.NodeID
 	m.stackName = msg.StackName
 
-	// Rebuild the header to match the active column set for this scope (STACK is
-	// dropped outside AllFilter). Header, widths, sort indices, and rows all
-	// derive from activeColumns so they stay consistent.
+	// Rebuild the columns to match the active set for this scope (STACK is
+	// dropped outside AllFilter). Widths, header, sort indices, and rows all
+	// derive from the same set so they stay consistent.
+	cols := m.layoutColumns()
+	m.List.Columns = cols
 	if m.List.Header != nil {
-		m.List.Header.Columns = headerColumns(m.activeColumnLabels())
+		m.List.Header.Columns = filterlist.ColumnDefs(cols)
 	}
 
 	m.setRenderItem()
@@ -782,112 +746,11 @@ func (m *Model) refreshServiceErrorsFromSnapshot() {
 	}
 }
 
-// computeColWidths sizes the active columns to their content so wide terminals
-// no longer truncate names while space sits empty, and guarantees at least one
-// space between columns. Each returned width includes a trailing gap; the row
-// and header renderers left-align text into it, so the gap is trailing padding.
-// Header and rows stay aligned because both derive from this same array and the
-// same active column set.
-func (m *Model) computeColWidths(width int) []int {
-	if width <= 0 {
-		width = 80
-	}
-	active := m.activeColumns()
-	n := len(active)
-	if n == 0 {
-		return nil
-	}
-
-	content := make([]int, n)
-	floors := make([]int, n)
-	flex := make([]bool, n)
-	sum := 0
-	for i, spec := range active {
-		// Floor: the header label is never truncated by the shared renderer, so a
-		// column must never shrink below its label width (plus the sort indicator
-		// on the active sort column) or the header overflows and misaligns with
-		// the rows. Also honour the column's declared minimum.
-		fl := displayWidth(spec.label)
-		if spec.hasSort && spec.sort == m.sortField {
-			fl += 2 // " ▲"/" ▼"
-		}
-		if fl < spec.minWidth {
-			fl = spec.minWidth
-		}
-		if fl < 3 {
-			fl = 3
-		}
-
-		// Natural content width: the widest of the floor and any cell.
-		w := fl
-		for _, e := range m.List.Filtered {
-			if cw := displayWidth(spec.cell(m, e)); cw > w {
-				w = cw
-			}
-		}
-		floors[i] = fl
-		content[i] = w
-		flex[i] = spec.flex
-		sum += w
-	}
-
-	// Column 0 renders with a leading space (header convention); reserve one
-	// extra cell in both its natural width and its floor so the leading space
-	// never eats into the trailing gap.
-	content[0]++
-	floors[0]++
-	sum++
-
-	need := sum + colGap*n
-	switch {
-	case need < width:
-		// Hand the leftover to flex columns (SERVICE first via the remainder).
-		distributeSlack(content, flex, width-need)
-	case need > width:
-		shrinkColumns(content, floors, flex, need-width)
-	}
-
-	colWidths := make([]int, n)
-	for i := range content {
-		colWidths[i] = content[i] + colGap
-	}
-	return colWidths
-}
-
 func (m *Model) setRenderItem() {
-	// Use shared computation for column widths to keep header and rows in sync
+	// The shared layout computes widths and the base row text; this view keeps
+	// its own decoration (error coloring, full-width highlight, task sub-rows).
 	m.List.RenderItem = func(e docker.ServiceEntry, selected bool, _ int) string {
-		active := m.activeColumns()
-		colWidths := m.List.ColWidths()
-		if len(colWidths) != len(active) {
-			return e.ServiceName
-		}
-
-		// Build each column cell from the active column set so header, widths,
-		// and rows stay in lockstep. Flex columns horizontally scroll when the
-		// selected row's content is truncated; every column keeps a trailing gap.
-		cells := make([]string, len(active))
-		for i, spec := range active {
-			raw := spec.cell(m, e)
-			cw := colWidths[i] - colGap
-			lead := ""
-			if i == 0 {
-				// Column 0 carries a leading space matching the header convention.
-				lead = " "
-				cw--
-			}
-			if cw < 1 {
-				cw = 1
-			}
-			var text string
-			if selected && spec.flex && displayWidth(raw) > cw {
-				text = formatErrorWithScroll(raw, m.columnScrollOffset, cw)
-			} else {
-				text = truncateWithEllipsis(raw, cw)
-			}
-			cells[i] = fmt.Sprintf("%s%-*s", lead, colWidths[i]-len(lead), text)
-		}
-		rowText := strings.Join(cells, "")
+		rowText := m.List.RenderRow(e, selected)
 
 		itemStyle := ui.ListItemStyle
 
@@ -927,11 +790,11 @@ func (m *Model) setRenderItem() {
 
 				// Add each task as a row
 				for taskIdx, task := range tasks {
-					taskName := truncateWithEllipsis(task.Name, 22)
-					taskNode := truncateWithEllipsis(task.NodeName, 12)
-					taskDesired := truncateWithEllipsis(task.DesiredState, 13)
-					taskCurrent := truncateWithEllipsis(task.CurrentState, 40)
-					taskErr := truncateWithEllipsis(task.Error, 30)
+					taskName := filterlist.TruncateRunes(task.Name, 22)
+					taskNode := filterlist.TruncateRunes(task.NodeName, 12)
+					taskDesired := filterlist.TruncateRunes(task.DesiredState, 13)
+					taskCurrent := filterlist.TruncateRunes(task.CurrentState, 40)
+					taskErr := filterlist.TruncateRunes(task.Error, 30)
 
 					// Check if this task is selected
 					taskSelected := selected && m.selectedTaskIndex == taskIdx

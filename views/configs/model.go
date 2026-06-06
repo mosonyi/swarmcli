@@ -78,9 +78,6 @@ type Model struct {
 
 	// Spinner for slow-used-status indicator
 	spinner int
-
-	// Horizontal scroll offset for labels column
-	labelsScrollOffset int
 }
 
 type state int
@@ -105,6 +102,7 @@ func New(width, height int) *Model {
 		sortAscending: true,
 	}
 
+	cols := m.buildColumns()
 	list := filterlist.FilterableList[configItem]{
 		Viewport: vp,
 		Match: func(c configItem, query string) bool {
@@ -112,15 +110,9 @@ func New(width, height int) *Model {
 			return strings.Contains(strings.ToLower(c.Name), q) ||
 				strings.Contains(strings.ToLower(c.ID), q)
 		},
+		Columns: cols,
 		Header: &filterlist.HeaderConfig{
-			Columns: []filterlist.ColumnDef{
-				{Label: "NAME"},
-				{Label: "ID"},
-				{Label: "CONFIG USED"},
-				{Label: "CREATED AT", MinWidth: 19},
-				{Label: "UPDATED AT", MinWidth: 19},
-				{Label: "LABELS"},
-			},
+			Columns: filterlist.ColumnDefs(cols),
 			SortIndicator: func() (int, bool) {
 				return int(m.sortField), m.sortAscending
 			},

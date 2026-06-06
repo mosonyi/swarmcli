@@ -39,9 +39,16 @@ type FilterableList[T any] struct {
 	// Nil means no footer is rendered by RenderFooter/RenderFramedView.
 	Footer *FooterConfig
 
-	outerWidth  int
-	outerHeight int
-	colWidth    int
+	// Columns, when non-nil, enables the shared content-aware table layout:
+	// ColWidths sizes columns to content, RenderRow builds gapped/scrolled rows,
+	// and ScrollLeft/Right drive a unified horizontal scroll. Leave nil to keep
+	// the legacy equal/Pct width behavior unchanged.
+	Columns []Column[T]
+
+	outerWidth   int
+	outerHeight  int
+	colWidth     int
+	columnScroll int // unified horizontal scroll offset for flex columns (shared layout)
 }
 
 // SetOuterSize stores fallback dimensions from tea.WindowSizeMsg.
@@ -82,7 +89,43 @@ func (f *FilterableList[T]) ColWidths() []int {
 	if f.Header.ColWidthsFunc != nil {
 		return f.Header.ColWidthsFunc(w)
 	}
+	if f.Columns != nil {
+		return LayoutWidths(f.Columns, f.Filtered, w, f.sortColIndex())
+	}
 	return computeColWidths(f.Header.Columns, w)
+}
+
+// sortColIndex returns the active sort column index from the header's
+// SortIndicator, or -1 when there is none.
+func (f *FilterableList[T]) sortColIndex() int {
+	if f.Header == nil || f.Header.SortIndicator == nil {
+		return -1
+	}
+	col, _ := f.Header.SortIndicator()
+	return col
+}
+
+// RenderRow builds the plain (unstyled) row text for an item using the shared
+// content-aware layout. Callers apply their own styling/decoration.
+func (f *FilterableList[T]) RenderRow(item T, selected bool) string {
+	return RenderRow(f.Columns, f.ColWidths(), item, f.columnScroll, selected)
+}
+
+// ScrollLeft / ScrollRight / ResetColumnScroll drive the unified horizontal
+// scroll for flex columns on the selected row.
+func (f *FilterableList[T]) ScrollLeft() {
+	f.columnScroll -= 5
+	if f.columnScroll < 0 {
+		f.columnScroll = 0
+	}
+}
+
+func (f *FilterableList[T]) ScrollRight() {
+	f.columnScroll += 5
+}
+
+func (f *FilterableList[T]) ResetColumnScroll() {
+	f.columnScroll = 0
 }
 
 type ModeType int
