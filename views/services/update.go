@@ -25,18 +25,18 @@ import (
 	"github.com/docker/docker/api/types/swarm"
 )
 
-// truncateWithEllipsis truncates a string to maxWidth, adding … if needed
+// truncateWithEllipsis truncates a string to maxWidth runes, adding … if needed.
+// It counts and slices by runes so width measurement (displayWidth) and the
+// truncated output agree on multibyte content.
 func truncateWithEllipsis(s string, maxWidth int) string {
-	if len(s) <= maxWidth {
+	r := []rune(s)
+	if len(r) <= maxWidth {
 		return s
 	}
 	if maxWidth <= 1 {
 		return "…"
 	}
-	if maxWidth == 2 {
-		return s[:1] + "…"
-	}
-	return s[:maxWidth-1] + "…"
+	return string(r[:maxWidth-1]) + "…"
 }
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
@@ -644,6 +644,13 @@ func (m *Model) SetContent(msg Msg) {
 	m.nodeID = msg.NodeID
 	m.stackName = msg.StackName
 
+	// Rebuild the header to match the active column set for this scope (STACK is
+	// dropped outside AllFilter). Header, widths, sort indices, and rows all
+	// derive from activeColumns so they stay consistent.
+	if m.List.Header != nil {
+		m.List.Header.Columns = headerColumns(m.activeColumnLabels())
+	}
+
 	m.setRenderItem()
 
 	if m.ready {
@@ -775,58 +782,74 @@ func (m *Model) refreshServiceErrorsFromSnapshot() {
 	}
 }
 
-// computeColWidths centralizes column width calculation so header and rows
-// use the exact same sizes. Uses equal division like CONFIG view.
+// computeColWidths sizes the active columns to their content so wide terminals
+// no longer truncate names while space sits empty, and guarantees at least one
+// space between columns. Each returned width includes a trailing gap; the row
+// and header renderers left-align text into it, so the gap is trailing padding.
+// Header and rows stay aligned because both derive from this same array and the
+// same active column set.
 func (m *Model) computeColWidths(width int) []int {
 	if width <= 0 {
 		width = 80
 	}
-	cols := 10
-	starts := make([]int, cols)
-	for i := 0; i < cols; i++ {
-		starts[i] = (i * width) / cols
-	}
-	colWidths := make([]int, cols)
-	for i := 0; i < cols; i++ {
-		if i == cols-1 {
-			colWidths[i] = width - starts[i]
-		} else {
-			colWidths[i] = starts[i+1] - starts[i]
-		}
-		if colWidths[i] < 1 {
-			colWidths[i] = 1
-		}
+	active := m.activeColumns()
+	n := len(active)
+	if n == 0 {
+		return nil
 	}
 
-	// Ensure STATUS and UPDATED columns have at least 10 chars
-	minStatus := 10
-	minUpdated := 10
-	cur := colWidths[3] + colWidths[8]
-	if cur < minStatus+minUpdated {
-		deficit := minStatus + minUpdated - cur
-		for i := 2; i >= 0 && deficit > 0; i-- {
-			take := deficit
-			if colWidths[i] > take+5 {
-				colWidths[i] -= take
-				deficit = 0
-			} else {
-				take = colWidths[i] - 5
-				if take > 0 {
-					colWidths[i] -= take
-					deficit -= take
-				}
+	content := make([]int, n)
+	floors := make([]int, n)
+	flex := make([]bool, n)
+	sum := 0
+	for i, spec := range active {
+		// Floor: the header label is never truncated by the shared renderer, so a
+		// column must never shrink below its label width (plus the sort indicator
+		// on the active sort column) or the header overflows and misaligns with
+		// the rows. Also honour the column's declared minimum.
+		fl := displayWidth(spec.label)
+		if spec.hasSort && spec.sort == m.sortField {
+			fl += 2 // " ▲"/" ▼"
+		}
+		if fl < spec.minWidth {
+			fl = spec.minWidth
+		}
+		if fl < 3 {
+			fl = 3
+		}
+
+		// Natural content width: the widest of the floor and any cell.
+		w := fl
+		for _, e := range m.List.Filtered {
+			if cw := displayWidth(spec.cell(m, e)); cw > w {
+				w = cw
 			}
 		}
-		if colWidths[3] < minStatus {
-			colWidths[3] = minStatus
-		}
-		if colWidths[8] < minUpdated {
-			colWidths[8] = minUpdated
-		}
+		floors[i] = fl
+		content[i] = w
+		flex[i] = spec.flex
+		sum += w
 	}
 
-	if colWidths[2] < 1 {
-		colWidths[2] = 1
+	// Column 0 renders with a leading space (header convention); reserve one
+	// extra cell in both its natural width and its floor so the leading space
+	// never eats into the trailing gap.
+	content[0]++
+	floors[0]++
+	sum++
+
+	need := sum + colGap*n
+	switch {
+	case need < width:
+		// Hand the leftover to flex columns (SERVICE first via the remainder).
+		distributeSlack(content, flex, width-need)
+	case need > width:
+		shrinkColumns(content, floors, flex, need-width)
+	}
+
+	colWidths := make([]int, n)
+	for i := range content {
+		colWidths[i] = content[i] + colGap
 	}
 	return colWidths
 }
@@ -834,83 +857,45 @@ func (m *Model) computeColWidths(width int) []int {
 func (m *Model) setRenderItem() {
 	// Use shared computation for column widths to keep header and rows in sync
 	m.List.RenderItem = func(e docker.ServiceEntry, selected bool, _ int) string {
+		active := m.activeColumns()
 		colWidths := m.List.ColWidths()
-		if len(colWidths) < 10 {
+		if len(colWidths) != len(active) {
 			return e.ServiceName
 		}
 
-		// Cache for header alignment
-		m.colServiceWidth = colWidths[0]
-		m.colStackWidth = colWidths[1]
-
-		// Prepare texts
-		replicasText := fmt.Sprintf("%d/%d", e.ReplicasOnNode, e.ReplicasTotal)
-		if e.ReplicasTotal == 0 {
-			replicasText = "—"
+		// Build each column cell from the active column set so header, widths,
+		// and rows stay in lockstep. Flex columns horizontally scroll when the
+		// selected row's content is truncated; every column keeps a trailing gap.
+		cells := make([]string, len(active))
+		for i, spec := range active {
+			raw := spec.cell(m, e)
+			cw := colWidths[i] - colGap
+			lead := ""
+			if i == 0 {
+				// Column 0 carries a leading space matching the header convention.
+				lead = " "
+				cw--
+			}
+			if cw < 1 {
+				cw = 1
+			}
+			var text string
+			if selected && spec.flex && displayWidth(raw) > cw {
+				text = formatErrorWithScroll(raw, m.columnScrollOffset, cw)
+			} else {
+				text = truncateWithEllipsis(raw, cw)
+			}
+			cells[i] = fmt.Sprintf("%s%-*s", lead, colWidths[i]-len(lead), text)
 		}
-
-		// For selected row, apply scrolling only to columns that are actually truncated
-		var serviceName, stackName, statusText, modeText, imageText, portsText, created, updated, errText string
-
-		if selected {
-			// Check each column - only scroll if truncated
-			if len(e.ServiceName) > colWidths[0]-1 {
-				serviceName = formatErrorWithScroll(e.ServiceName, m.columnScrollOffset, colWidths[0]-1)
-			} else {
-				serviceName = truncateWithEllipsis(e.ServiceName, colWidths[0]-1)
-			}
-
-			if len(e.Image) > colWidths[5] {
-				imageText = formatErrorWithScroll(e.Image, m.columnScrollOffset, colWidths[5])
-			} else {
-				imageText = truncateWithEllipsis(e.Image, colWidths[5])
-			}
-
-			if len(e.Ports) > colWidths[6] {
-				portsText = formatErrorWithScroll(e.Ports, m.columnScrollOffset, colWidths[6])
-			} else {
-				portsText = truncateWithEllipsis(e.Ports, colWidths[6])
-			}
-
-			errStr := m.serviceErrorText[e.ServiceID]
-			if len(errStr) > colWidths[9] {
-				errText = formatErrorWithScroll(errStr, m.columnScrollOffset, colWidths[9])
-			} else {
-				errText = truncateWithEllipsis(errStr, colWidths[9])
-			}
-
-			// These columns rarely need scrolling, just truncate
-			stackName = truncateWithEllipsis(e.StackName, colWidths[1])
-			statusText = truncateWithEllipsis(e.Status, colWidths[3])
-			modeText = truncateWithEllipsis(e.Mode, colWidths[4])
-			created = truncateWithEllipsis(formatRelativeTime(e.CreatedAt), colWidths[7])
-			updated = truncateWithEllipsis(formatRelativeTime(e.UpdatedAt), colWidths[8])
-		} else {
-			// For non-selected rows, just truncate normally
-			serviceName = truncateWithEllipsis(e.ServiceName, colWidths[0]-1)
-			stackName = truncateWithEllipsis(e.StackName, colWidths[1])
-			statusText = truncateWithEllipsis(e.Status, colWidths[3])
-			modeText = truncateWithEllipsis(e.Mode, colWidths[4])
-			imageText = truncateWithEllipsis(e.Image, colWidths[5])
-			portsText = truncateWithEllipsis(e.Ports, colWidths[6])
-			created = truncateWithEllipsis(formatRelativeTime(e.CreatedAt), colWidths[7])
-			updated = truncateWithEllipsis(formatRelativeTime(e.UpdatedAt), colWidths[8])
-			errText = truncateWithEllipsis(m.serviceErrorText[e.ServiceID], colWidths[9])
-		}
+		rowText := strings.Join(cells, "")
 
 		itemStyle := ui.ListItemStyle
-
-		// Build format string with all columns at once (like CONFIG view)
-		formatStr := fmt.Sprintf(" %%-%ds%%-%ds%%-%ds%%-%ds%%-%ds%%-%ds%%-%ds%%-%ds%%-%ds%%-%ds",
-			colWidths[0]-1, colWidths[1], colWidths[2], colWidths[3], colWidths[4],
-			colWidths[5], colWidths[6], colWidths[7], colWidths[8], colWidths[9])
 
 		var lineStr string
 		if selected && m.selectedTaskIndex == -1 {
 			// Only highlight service row if no task is selected
 			selBase := ui.ListSelectedStyle
-			lineStr = selBase.Render(fmt.Sprintf(formatStr,
-				serviceName, stackName, replicasText, statusText, modeText, imageText, portsText, created, updated, errText))
+			lineStr = selBase.Render(rowText)
 
 			// Ensure highlight background fills the full viewport width
 			if m.List.Viewport.Width > 0 {
@@ -923,12 +908,10 @@ func (m *Model) setRenderItem() {
 		} else if m.serviceHasError[e.ServiceID] {
 			// Color non-selected error rows red
 			errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-			lineStr = errStyle.Render(fmt.Sprintf(formatStr,
-				serviceName, stackName, replicasText, statusText, modeText, imageText, portsText, created, updated, errText))
+			lineStr = errStyle.Render(rowText)
 		} else {
 			// Normal rendering
-			lineStr = itemStyle.Render(fmt.Sprintf(formatStr,
-				serviceName, stackName, replicasText, statusText, modeText, imageText, portsText, created, updated, errText))
+			lineStr = itemStyle.Render(rowText)
 		}
 
 		// Check if service is expanded and add task rows
