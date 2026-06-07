@@ -6,6 +6,7 @@ package volumesview
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -30,6 +31,10 @@ type SpinnerTickMsg time.Time
 type VolumesLoadedMsg struct {
 	Volumes []volumeItem
 	Err     error
+	// Warn is a non-fatal banner message. Set when ListVolumes reports a
+	// docker.PartialListError: the data is usable but some nodes were
+	// unreachable. Empty on a fully successful load (which clears the banner).
+	Warn string
 }
 
 func (m *Model) loadVolumesCmd() tea.Cmd {
@@ -40,6 +45,10 @@ func (m *Model) loadVolumesCmd() tea.Cmd {
 
 		volumes, err := volumeOps.ListVolumes(ctx)
 		if err != nil {
+			var partial *docker.PartialListError
+			if errors.As(err, &partial) {
+				return VolumesLoadedMsg{Volumes: toVolumeItems(volumes), Warn: partial.Error()}
+			}
 			return VolumesLoadedMsg{Err: fmt.Errorf("failed to list volumes: %w", err)}
 		}
 		return VolumesLoadedMsg{Volumes: toVolumeItems(volumes)}
@@ -54,8 +63,14 @@ func (m *Model) checkVolumesCmd(lastHash uint64) tea.Cmd {
 		defer cancel()
 
 		volumes, err := volumeOps.ListVolumes(ctx)
+		warn := ""
 		if err != nil {
-			return VolumesLoadedMsg{Err: err}
+			var partial *docker.PartialListError
+			if !errors.As(err, &partial) {
+				return VolumesLoadedMsg{Err: err}
+			}
+			// Partial failure: the returned volumes are still usable.
+			warn = partial.Error()
 		}
 		items := toVolumeItems(volumes)
 		newHash, hErr := hash.Compute(stableVolumes(items))
@@ -65,7 +80,7 @@ func (m *Model) checkVolumesCmd(lastHash uint64) tea.Cmd {
 		}
 		if newHash != lastHash {
 			l().Info("Volumes changed, reloading")
-			return VolumesLoadedMsg{Volumes: items}
+			return VolumesLoadedMsg{Volumes: items, Warn: warn}
 		}
 		return PollRetryMsg{}
 	}
@@ -123,6 +138,7 @@ func toVolumeItems(volumes []docker.VolumeInfo) []volumeItem {
 			Mountpoint: v.Mountpoint,
 			Created:    v.Created,
 			Host:       v.Host,
+			NodeID:     v.NodeID,
 		}
 	}
 	return items

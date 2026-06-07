@@ -152,6 +152,9 @@ func (m *Model) handleVolumesLoaded(msg VolumesLoadedMsg) tea.Cmd {
 		return nil
 	}
 
+	// Persist (or clear) the non-fatal partial-failure banner.
+	m.partialWarn = msg.Warn
+
 	selectedName := ""
 	if !m.resetCursorOnNextLoad && m.volumesList.Cursor < len(m.volumesList.Filtered) {
 		selectedName = m.volumesList.Filtered[m.volumesList.Cursor].Name
@@ -245,8 +248,42 @@ func (m *Model) handleNormalKeys(msg tea.KeyMsg) tea.Cmd {
 		}
 		selected := m.volumesList.Filtered[m.volumesList.Cursor]
 		return m.inspectVolumeCmd(selected.Name)
+	case "c":
+		// Create is selection-independent; the action owns the node picker.
+		return m.dispatchAction("volume-create", "Create volume", "")
+	case "b":
+		if sel, ok := m.selectedVolume(); ok {
+			return m.dispatchAction("volume-browse", "Volume browser", view.EncodeRef(sel.NodeID, sel.Name))
+		}
+		return nil
+	case "ctrl+d":
+		if sel, ok := m.selectedVolume(); ok {
+			return m.dispatchAction("volume-delete", "Delete volume", view.EncodeRef(sel.NodeID, sel.Name))
+		}
+		return nil
 	}
 	return nil
+}
+
+// selectedVolume returns the volume under the cursor, or false if the list is empty.
+func (m *Model) selectedVolume() (volumeItem, bool) {
+	if len(m.volumesList.Filtered) == 0 {
+		return volumeItem{}, false
+	}
+	return m.volumesList.Filtered[m.volumesList.Cursor], true
+}
+
+// dispatchAction invokes a registered action, or surfaces the standard
+// "Business Edition feature" dialog when it is not available. The action
+// keybindings are inert in builds that do not register them.
+func (m *Model) dispatchAction(actionName, label, arg string) tea.Cmd {
+	action, ok := view.GetAction(actionName)
+	if !ok {
+		m.err = view.BEUnavailableErr(label)
+		m.errorDialogActive = true
+		return nil
+	}
+	return action(arg)
 }
 
 func (m *Model) toggleSort(field SortField) {

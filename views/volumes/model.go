@@ -11,6 +11,7 @@ import (
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/helpbar"
+	"swarmcli/views/view"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -56,6 +57,10 @@ type Model struct {
 
 	toastMessage string
 	toastUntil   time.Time
+
+	// partialWarn is a persistent non-fatal banner shown while a cross-node
+	// listing is degraded (some nodes unreachable). Cleared on a full load.
+	partialWarn string
 }
 
 func New(width, height int) *Model {
@@ -157,6 +162,9 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "↑/↓", Desc: "Navigate"},
 		{Key: "i", Desc: "Inspect"},
+		{Key: "c", Desc: view.BEHelpDesc("volume-create", "Create"), Disabled: !view.HasAction("volume-create")},
+		{Key: "b", Desc: view.BEHelpDesc("volume-browse", "Browse"), Disabled: !view.HasAction("volume-browse")},
+		{Key: "ctrl+d", Desc: view.BEHelpDesc("volume-delete", "Delete"), Disabled: !view.HasAction("volume-delete")},
 		{Key: "/", Desc: "Filter"},
 		{Key: "?", Desc: "Help"},
 		{Key: "esc", Desc: "Back"},

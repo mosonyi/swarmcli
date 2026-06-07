@@ -5,6 +5,7 @@ package docker
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/docker/docker/api/types/volume"
@@ -21,9 +22,26 @@ type VolumeInfo struct {
 	Driver     string
 	Mountpoint string
 	Created    time.Time
-	Host       string // node the volume lives on
+	Host       string // node hostname the volume lives on (display)
+	NodeID     string // swarm node ID the volume lives on; "" for the CE single-node impl, filled by aggregating implementations for node-addressed actions
 	Labels     map[string]string
 	Raw        *volume.Volume // underlying SDK object, for inspect
+}
+
+// PartialListError reports that a cross-node listing partially succeeded: the
+// returned items are valid, but one or more nodes could not be reached. An
+// aggregating implementation returns it alongside the successful results so the
+// view can show the data plus a non-fatal banner instead of failing outright.
+// The default single-node implementation never returns it.
+type PartialListError struct {
+	NodeErrors map[string]string // node identifier -> error summary
+}
+
+func (e *PartialListError) Error() string {
+	if len(e.NodeErrors) == 1 {
+		return "1 node unreachable"
+	}
+	return fmt.Sprintf("%d nodes unreachable", len(e.NodeErrors))
 }
 
 // ListVolumes returns the volumes on the connected Docker node.
