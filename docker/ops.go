@@ -14,6 +14,7 @@ type Deps struct {
 	Configs     ConfigOps
 	Secrets     SecretOps
 	Networks    NetworkOps
+	Volumes     VolumeOps
 	Contexts    ContextOps
 	Snapshot    SnapshotOps
 	ClusterInfo ClusterInfoOps
@@ -34,6 +35,7 @@ func DefaultDeps() Deps {
 		Configs:     defaultConfigOps{},
 		Secrets:     defaultSecretOps{},
 		Networks:    defaultNetworkOps{},
+		Volumes:     defaultVolumeOps{},
 		Contexts:    defaultContextOps{},
 		Snapshot:    defaultSnapshotOps{},
 		ClusterInfo: defaultClusterInfoOps{},
