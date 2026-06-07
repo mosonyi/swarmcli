@@ -10,9 +10,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
+	"swarmcli/core/primitives/editor"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	inspectview "swarmcli/views/inspect"
@@ -375,20 +375,12 @@ func openEditorForContentCmd(initialData string) tea.Cmd {
 
 	l().Infoln("Created temp file:", tmp.Name())
 
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = os.Getenv("VISUAL")
-	}
-	if editor == "" {
-		if runtime.GOOS == "windows" {
-			editor = "notepad"
-		} else {
-			editor = "nano"
-		}
-	}
+	editorCmd := editor.Sense()
 
-	l().Infoln("Invoking editor:", editor, tmp.Name())
-	cmd := exec.Command(editor, tmp.Name())
+	l().Infoln("Invoking editor:", editorCmd, tmp.Name())
+	parts := strings.Fields(editorCmd)
+	cmdArgs := append(parts[1:], tmp.Name())
+	cmd := exec.Command(parts[0], cmdArgs...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
 	"strings"
+	"swarmcli/core/primitives/editor"
 	"swarmcli/docker"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -42,17 +42,10 @@ func editWithTempFileCmd(baseName string, initialData []byte, onDone func([]byte
 
 	l().Infoln("Created temp file:", tmp.Name())
 
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		if runtime.GOOS == "windows" {
-			editor = "notepad"
-		} else {
-			editor = "nano"
-		}
-	}
+	editorCmd := editor.Sense()
 
-	l().Infoln("Invoking editor:", editor, tmp.Name())
-	parts := strings.Fields(editor)
+	l().Infoln("Invoking editor:", editorCmd, tmp.Name())
+	parts := strings.Fields(editorCmd)
 	cmdArgs := append(parts[1:], tmp.Name())
 	cmd := exec.Command(parts[0], cmdArgs...)
 	cmd.Stdin = os.Stdin
