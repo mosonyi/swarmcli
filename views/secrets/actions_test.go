@@ -6,6 +6,7 @@ package secretsview
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"swarmcli/docker"
@@ -219,4 +220,45 @@ func TestCheckSecretsCmd_HashMatchesAfterLoad(t *testing.T) {
 	msg := runCmd(cmd)
 	_, isLoaded := msg.(secretsLoadedMsg)
 	require.False(t, isLoaded, "hash from secretsLoadedMsg must match hash from checkSecretsCmd for identical data")
+}
+
+func TestSecureWipeAndRemove(t *testing.T) {
+	t.Run("successfully wipes and removes a file with content", func(t *testing.T) {
+		tmp, err := os.CreateTemp("", "test-wipe-*.txt")
+		require.NoError(t, err)
+		defer os.Remove(tmp.Name()) // Clean up just in case
+
+		data := []byte("confidential information")
+		_, err = tmp.Write(data)
+		require.NoError(t, err)
+
+		err = tmp.Close()
+		require.NoError(t, err)
+
+		err = secureWipeAndRemove(tmp.Name())
+		require.NoError(t, err)
+
+		_, err = os.Stat(tmp.Name())
+		require.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("wipes and removes an empty file", func(t *testing.T) {
+		tmp, err := os.CreateTemp("", "test-wipe-empty-*.txt")
+		require.NoError(t, err)
+		defer os.Remove(tmp.Name())
+
+		err = tmp.Close()
+		require.NoError(t, err)
+
+		err = secureWipeAndRemove(tmp.Name())
+		require.NoError(t, err)
+
+		_, err = os.Stat(tmp.Name())
+		require.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("returns error for non-existent file", func(t *testing.T) {
+		err := secureWipeAndRemove("this-file-does-not-exist-at-all-xyz")
+		require.Error(t, err)
+	})
 }
