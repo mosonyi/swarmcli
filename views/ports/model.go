@@ -6,6 +6,7 @@ package portsview
 import (
 	"swarmcli/docker"
 	"swarmcli/views/helpbar"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -18,6 +19,12 @@ type Model struct {
 	width    int
 	height   int
 	ready    bool
+
+	// probe state
+	probeMu      sync.RWMutex
+	probeResults []docker.NodeProbeResult
+	probing      bool // true while a probe round is in-flight
+	lastProbeAt  time.Time
 }
 
 func New(width, height int) *Model {
@@ -46,6 +53,7 @@ func (m *Model) Name() string {
 
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
+		{Key: "r", Desc: "Re-probe"},
 		{Key: "esc", Desc: "Back"},
 	}
 }
@@ -60,4 +68,23 @@ func (m *Model) OnExit() tea.Cmd {
 
 func (m *Model) HasErrors() bool {
 	return false
+}
+
+// getProbeResults returns a snapshot of the latest probe results, safe to call
+// from the render path.
+func (m *Model) getProbeResults() []docker.NodeProbeResult {
+	m.probeMu.RLock()
+	defer m.probeMu.RUnlock()
+	out := make([]docker.NodeProbeResult, len(m.probeResults))
+	copy(out, m.probeResults)
+	return out
+}
+
+// setProbeResults stores results delivered by the background probe goroutine.
+func (m *Model) setProbeResults(results []docker.NodeProbeResult) {
+	m.probeMu.Lock()
+	defer m.probeMu.Unlock()
+	m.probeResults = results
+	m.probing = false
+	m.lastProbeAt = time.Now()
 }
