@@ -165,6 +165,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "c", Desc: view.BEHelpDesc("volume-create", "Create"), Disabled: !view.HasAction("volume-create")},
 		{Key: "b", Desc: view.BEHelpDesc("volume-browse", "Browse"), Disabled: !view.HasAction("volume-browse")},
 		{Key: "ctrl+d", Desc: view.BEHelpDesc("volume-delete", "Delete"), Disabled: !view.HasAction("volume-delete")},
+		{Key: "p", Desc: view.BEHelpDesc("volume-prune", "Prune"), Disabled: !view.HasAction("volume-prune")},
 		{Key: "/", Desc: "Filter"},
 		{Key: "?", Desc: "Help"},
 		{Key: "esc", Desc: "Back"},

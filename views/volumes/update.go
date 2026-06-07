@@ -251,6 +251,9 @@ func (m *Model) handleNormalKeys(msg tea.KeyMsg) tea.Cmd {
 	case "c":
 		// Create is selection-independent; the action owns the node picker.
 		return m.dispatchAction("volume-create", "Create volume", "")
+	case "p":
+		// Prune is selection-independent; the action owns the node picker.
+		return m.dispatchAction("volume-prune", "Prune volumes", "")
 	case "b":
 		if sel, ok := m.selectedVolume(); ok {
 			return m.dispatchAction("volume-browse", "Volume browser", view.EncodeRef(sel.NodeID, sel.Name, sel.Host))

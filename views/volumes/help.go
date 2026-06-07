@@ -25,6 +25,7 @@ func GetVolumesHelpContent() []helpview.HelpCategory {
 				{Keys: "<c>", Description: view.BEHelpDesc("volume-create", "Create a volume")},
 				{Keys: "<b>", Description: view.BEHelpDesc("volume-browse", "Browse files in the selected volume")},
 				{Keys: "<ctrl+d>", Description: view.BEHelpDesc("volume-delete", "Delete the selected volume")},
+				{Keys: "<p>", Description: view.BEHelpDesc("volume-prune", "Prune unused volumes on a node")},
 			},
 		},
 		{
