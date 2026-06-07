@@ -50,7 +50,7 @@ func TestKey_Browse_PassesEncodedNodeAndName(t *testing.T) {
 	msg := runCmd(m.Update(key("b")))
 	require.IsType(t, sentinelMsg{}, msg)
 	parts := view.DecodeRef(*got)
-	require.Equal(t, []string{"node-id-123", "vol1"}, parts)
+	require.Equal(t, []string{"node-id-123", "vol1", "node-1"}, parts)
 }
 
 func TestKey_Delete_PassesEncodedNodeAndName(t *testing.T) {
@@ -62,7 +62,7 @@ func TestKey_Delete_PassesEncodedNodeAndName(t *testing.T) {
 
 	msg := runCmd(m.Update(tea.KeyMsg{Type: tea.KeyCtrlD}))
 	require.IsType(t, sentinelMsg{}, msg)
-	require.Equal(t, []string{"node-id-123", "vol1"}, view.DecodeRef(*got))
+	require.Equal(t, []string{"node-id-123", "vol1", "node-1"}, view.DecodeRef(*got))
 }
 
 func TestKey_Action_Unregistered_ShowsBEDialog(t *testing.T) {

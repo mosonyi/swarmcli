@@ -253,12 +253,12 @@ func (m *Model) handleNormalKeys(msg tea.KeyMsg) tea.Cmd {
 		return m.dispatchAction("volume-create", "Create volume", "")
 	case "b":
 		if sel, ok := m.selectedVolume(); ok {
-			return m.dispatchAction("volume-browse", "Volume browser", view.EncodeRef(sel.NodeID, sel.Name))
+			return m.dispatchAction("volume-browse", "Volume browser", view.EncodeRef(sel.NodeID, sel.Name, sel.Host))
 		}
 		return nil
 	case "ctrl+d":
 		if sel, ok := m.selectedVolume(); ok {
-			return m.dispatchAction("volume-delete", "Delete volume", view.EncodeRef(sel.NodeID, sel.Name))
+			return m.dispatchAction("volume-delete", "Delete volume", view.EncodeRef(sel.NodeID, sel.Name, sel.Host))
 		}
 		return nil
 	}
