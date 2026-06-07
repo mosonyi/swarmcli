@@ -28,6 +28,7 @@ func (m *Model) View() string {
 	globalHelp := []helpbar.HelpEntry{
 		{Key: "f", Desc: "Fullscreen"},
 		{Key: "?", Desc: "Help"},
+		{Key: "ctrl+q", Desc: "Quit"},
 	}
 	if m.currentView.Name() == view.NameHelp {
 		globalHelp = []helpbar.HelpEntry{}
