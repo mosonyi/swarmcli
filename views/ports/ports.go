@@ -6,8 +6,6 @@ package portsview
 import (
 	"swarmcli/docker"
 	"time"
-
-	swarmlog "swarmcli/utils/log"
 )
 
 const ViewName = "ports"
@@ -24,8 +22,4 @@ type TickMsg time.Time
 // ProbeResultMsg carries finished probe results back to the Update loop.
 type ProbeResultMsg struct {
 	Results []docker.NodeProbeResult
-}
-
-func l() *swarmlog.SwarmLogger {
-	return swarmlog.L().With("view", "ports")
 }

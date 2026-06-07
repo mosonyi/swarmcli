@@ -22,11 +22,11 @@ type mockSnapshotOps struct {
 	snap *docker.SwarmSnapshot
 }
 
-func (m mockSnapshotOps) GetSnapshot() *docker.SwarmSnapshot            { return m.snap }
-func (m mockSnapshotOps) TriggerRefreshIfNeeded()                       {}
-func (m mockSnapshotOps) RefreshSnapshotAsync()                         {}
-func (m mockSnapshotOps) SetSnapshot(s *docker.SwarmSnapshot)           {}
-func (m mockSnapshotOps) InvalidateSnapshot()                           {}
+func (m mockSnapshotOps) GetSnapshot() *docker.SwarmSnapshot              { return m.snap }
+func (m mockSnapshotOps) TriggerRefreshIfNeeded()                         {}
+func (m mockSnapshotOps) RefreshSnapshotAsync()                           {}
+func (m mockSnapshotOps) SetSnapshot(s *docker.SwarmSnapshot)             {}
+func (m mockSnapshotOps) InvalidateSnapshot()                             {}
 func (m mockSnapshotOps) RefreshSnapshot() (*docker.SwarmSnapshot, error) { return m.snap, nil }
 func (m mockSnapshotOps) GetOrRefreshSnapshot() (*docker.SwarmSnapshot, error) {
 	return m.snap, nil
@@ -50,7 +50,7 @@ func TestNew(t *testing.T) {
 func TestUpdate_WindowSize(t *testing.T) {
 	m := New(80, 20)
 	cmd := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
-	require.NotNil(t, cmd)        // batch (tick + probe launch)
+	require.NotNil(t, cmd) // batch (tick + probe launch)
 	require.True(t, m.ready)
 	require.Equal(t, 100, m.width)
 	require.Equal(t, 40, m.height)
@@ -138,7 +138,7 @@ func TestUpdate_TickMsg_OldProbeTriggersNewProbe(t *testing.T) {
 func TestUpdate_TickMsg_FreshProbeSkipsNewProbe(t *testing.T) {
 	m := New(80, 40)
 	m.ready = true
-	m.lastProbeAt = time.Now()                                // just probed
+	m.lastProbeAt = time.Now() // just probed
 	m.deps = docker.Deps{Snapshot: mockSnapshotOps{snap: &docker.SwarmSnapshot{}}}
 
 	cmd := m.Update(TickMsg(time.Now()))
@@ -221,9 +221,9 @@ func TestGetDiagnosticStatus_HealthyManager(t *testing.T) {
 	m.deps = docker.Deps{Snapshot: mockSnapshotOps{
 		snap: &docker.SwarmSnapshot{
 			Nodes: []swarm.Node{{
-				ID:   "n1",
-				Spec: swarm.NodeSpec{Role: swarm.NodeRoleManager},
-				Status: swarm.NodeStatus{State: swarm.NodeStateReady},
+				ID:            "n1",
+				Spec:          swarm.NodeSpec{Role: swarm.NodeRoleManager},
+				Status:        swarm.NodeStatus{State: swarm.NodeStateReady},
 				ManagerStatus: &swarm.ManagerStatus{Leader: true},
 			}},
 		},
@@ -241,9 +241,9 @@ func TestGetDiagnosticStatus_DegradedGossip(t *testing.T) {
 		snap: &docker.SwarmSnapshot{
 			Nodes: []swarm.Node{
 				{
-					ID:     "n1",
-					Spec:   swarm.NodeSpec{Role: swarm.NodeRoleManager},
-					Status: swarm.NodeStatus{State: swarm.NodeStateReady},
+					ID:            "n1",
+					Spec:          swarm.NodeSpec{Role: swarm.NodeRoleManager},
+					Status:        swarm.NodeStatus{State: swarm.NodeStateReady},
 					ManagerStatus: &swarm.ManagerStatus{Leader: true},
 				},
 				{
@@ -263,8 +263,8 @@ func TestGetDiagnosticStatus_UnreachableManager(t *testing.T) {
 	m.deps = docker.Deps{Snapshot: mockSnapshotOps{
 		snap: &docker.SwarmSnapshot{
 			Nodes: []swarm.Node{{
-				ID:   "n1",
-				Spec: swarm.NodeSpec{Role: swarm.NodeRoleManager},
+				ID:     "n1",
+				Spec:   swarm.NodeSpec{Role: swarm.NodeRoleManager},
 				Status: swarm.NodeStatus{State: swarm.NodeStateReady},
 				ManagerStatus: &swarm.ManagerStatus{
 					Reachability: swarm.ReachabilityUnreachable,

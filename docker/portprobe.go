@@ -40,8 +40,8 @@ const ProbeTimeout = 2 * time.Second
 type NodeProbeResult struct {
 	NodeID    string
 	Hostname  string
-	Addr      string     // IP address probed
-	NodeState string     // Docker-reported state ("ready", "down", …)
+	Addr      string // IP address probed
+	NodeState string // Docker-reported state ("ready", "down", …)
 	TCP2377   PortStatus
 	TCP7946   PortStatus
 	UDP7946   PortStatus
@@ -93,7 +93,7 @@ func ProbeAllNodes(entries []NodeEntry) []NodeProbeResult {
 
 // probeTCP attempts a TCP connection to host:port.
 func probeTCP(host string, port int) PortStatus {
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 	conn, err := net.DialTimeout("tcp", addr, ProbeTimeout)
 	if err == nil {
 		conn.Close()
@@ -110,7 +110,7 @@ func probeTCP(host string, port int) PortStatus {
 // unreachable, which surfaces as a "connection refused" read error.
 // Silence (timeout) means the port is open or the ICMP is being dropped.
 func probeUDP(host string, port int) PortStatus {
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 	conn, err := net.DialTimeout("udp", addr, ProbeTimeout)
 	if err != nil {
 		return PortFiltered

@@ -52,9 +52,9 @@ func (m *Model) updateViewport() {
 	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("117")).Width(12)
 	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
 
-	okStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("2"))    // green
+	okStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("2"))     // green
 	warnStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208")) // amber
-	errStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("9"))   // red
+	errStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("9"))    // red
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
 	cardWidth := m.viewport.Width - 6
@@ -144,7 +144,7 @@ func (m *Model) updateViewport() {
 	if probing {
 		b.WriteString(sectionHeader.Render(" LIVE PORT PROBES — probing… "))
 	} else {
-		b.WriteString(sectionHeader.Render(" LIVE PORT PROBES — press r to re-probe"+probeAge+" "))
+		b.WriteString(sectionHeader.Render(" LIVE PORT PROBES — press r to re-probe" + probeAge + " "))
 	}
 	b.WriteString("\n\n")
 
