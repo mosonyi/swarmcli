@@ -18,6 +18,11 @@ func TestPartialListError_Message(t *testing.T) {
 	require.Equal(t, "2 nodes unreachable", (&PartialListError{
 		NodeErrors: map[string]string{"n1": "timeout", "n2": "refused"},
 	}).Error())
+	// Note overrides the node-count message.
+	require.Equal(t, "connected node only", (&PartialListError{
+		Note:       "connected node only",
+		NodeErrors: map[string]string{"n1": "timeout"},
+	}).Error())
 }
 
 func TestPartialListError_RoundTripsThroughErrorsAs(t *testing.T) {

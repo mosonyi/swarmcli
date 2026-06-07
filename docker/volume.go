@@ -28,16 +28,22 @@ type VolumeInfo struct {
 	Raw        *volume.Volume // underlying SDK object, for inspect
 }
 
-// PartialListError reports that a cross-node listing partially succeeded: the
-// returned items are valid, but one or more nodes could not be reached. An
-// aggregating implementation returns it alongside the successful results so the
-// view can show the data plus a non-fatal banner instead of failing outright.
-// The default single-node implementation never returns it.
+// PartialListError reports that a listing succeeded but is degraded: the
+// returned items are valid and shown, with a non-fatal banner explaining the
+// limitation, instead of failing outright. An aggregating implementation
+// returns it when some nodes are unreachable (NodeErrors), or with a custom
+// Note when the listing fell back to a narrower scope (e.g. connected-node
+// only because the cross-node path is unavailable). The default single-node
+// implementation never returns it.
 type PartialListError struct {
 	NodeErrors map[string]string // node identifier -> error summary
+	Note       string            // optional banner override; takes precedence over NodeErrors
 }
 
 func (e *PartialListError) Error() string {
+	if e.Note != "" {
+		return e.Note
+	}
 	if len(e.NodeErrors) == 1 {
 		return "1 node unreachable"
 	}
