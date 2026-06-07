@@ -17,4 +17,5 @@ import (
 	_ "swarmcli/views/services"
 	_ "swarmcli/views/stacks"
 	_ "swarmcli/views/tasks"
+	_ "swarmcli/views/volumes"
 )

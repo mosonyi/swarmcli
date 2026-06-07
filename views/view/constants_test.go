@@ -12,7 +12,7 @@ import (
 func TestIsTopLevel(t *testing.T) {
 	topLevel := []string{
 		NameStacks, NameNodes, NameConfigs, NameSecrets,
-		NameNetworks, NameContexts, NameLoading, NameHelp,
+		NameNetworks, NameVolumes, NameContexts, NameLoading, NameHelp,
 	}
 	for _, name := range topLevel {
 		require.True(t, IsTopLevel(name), "expected %q to be top-level", name)

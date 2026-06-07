@@ -171,6 +171,8 @@ TEST_LOG=1 ./test-setup/testenv.sh test
 | `:node`  | Navigate to Nodes       |
 | `:config`  | Navigate to Config    |
 | `:secret`  | Navigate to Secret    |
+| `:network` | Navigate to Networks  |
+| `:volume`  | Navigate to Volumes   |
 | `:node`  | Navigate to Nodes       |
 | `l`      | View Logs               |
 | `s`      | Scale Service           |

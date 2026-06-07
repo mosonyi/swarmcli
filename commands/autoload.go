@@ -10,4 +10,5 @@ import (
 	_ "swarmcli/commands/command/docker/network"
 	_ "swarmcli/commands/command/docker/node"
 	_ "swarmcli/commands/command/docker/secret"
+	_ "swarmcli/commands/command/docker/volume"
 )
