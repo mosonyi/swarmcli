@@ -174,6 +174,16 @@ func TestKey_Help(t *testing.T) {
 	require.Equal(t, view.NameHelp, nav.ViewName)
 }
 
+func TestKey_CtrlP_ShowsPorts(t *testing.T) {
+	m := testModel()
+	loadNodes(m, fakeNodes("n1"))
+	cmd := m.Update(key("ctrl+p"))
+	msg := runCmd(cmd)
+	nav, ok := msg.(view.NavigateToMsg)
+	require.True(t, ok)
+	require.Equal(t, view.NamePorts, nav.ViewName)
+}
+
 func TestKey_CtrlD_OpensRemoveConfirm(t *testing.T) {
 	m := testModel()
 	loadNodes(m, fakeNodes("mynode"))

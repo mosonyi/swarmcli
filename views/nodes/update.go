@@ -490,6 +490,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				m.confirmDialog.ErrorMode = false
 				m.confirmDialog.Message = fmt.Sprintf("Remove node %q from swarm?\nWarning: This action cannot be undone.", node.Hostname)
 			}
+		case "ctrl+p":
+			return func() tea.Msg {
+				return view.NavigateToMsg{
+					ViewName: view.NamePorts,
+					Payload:  nil,
+				}
+			}
 		}
 
 		return nil
@@ -725,6 +732,7 @@ func GetNodesHelpContent() []helpview.HelpCategory {
 				{Keys: "<ctrl+o>", Description: "Promote to manager"},
 				{Keys: "<ctrl+t>", Description: "Demote to worker"},
 				{Keys: "<ctrl+d>", Description: "Remove node"},
+				{Keys: "<ctrl+p>", Description: "Show required Swarm ports"},
 				{Keys: "</>", Description: "Filter"},
 			},
 		},

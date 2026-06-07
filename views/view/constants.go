@@ -18,12 +18,14 @@ const (
 	NameLoading  = "loading"
 	NameNetworks = "networks"
 	NameVolumes  = "volumes"
+	NamePorts    = "ports"
 )
 
 var topLevelViews = map[string]bool{
 	NameStacks: true, NameNodes: true, NameConfigs: true,
 	NameSecrets: true, NameNetworks: true, NameVolumes: true,
 	NameContexts: true, NameLoading: true, NameHelp: true,
+	NamePorts: true,
 }
 
 // RegisterTopLevel marks a view name as top-level. Called from init() by
