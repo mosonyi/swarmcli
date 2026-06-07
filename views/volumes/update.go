@@ -118,7 +118,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.handleVolumesLoaded(msg)
 
 	case TickMsg:
-		if m.visible && m.state == stateReady && !m.errorDialogActive && !m.loadingView.Visible() {
+		if m.visible && m.state == stateReady && !m.errorDialogActive {
 			return tea.Batch(m.checkVolumesCmd(m.lastSnapshot), tickCmd())
 		}
 		return tickCmd()

@@ -11,7 +11,6 @@ import (
 	"swarmcli/docker"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/helpbar"
-	loading "swarmcli/views/loading"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -52,7 +51,6 @@ type Model struct {
 	err   error
 
 	errorDialogActive bool
-	loadingView       *loading.Model
 
 	spinner int
 
@@ -70,7 +68,6 @@ func New(width, height int) *Model {
 		firstResize:   true,
 		state:         stateLoading,
 		visible:       true,
-		loadingView:   loading.New(width, height, false, "Loading Docker volumes..."),
 		sortField:     SortByName,
 		sortAscending: true,
 	}
@@ -186,9 +183,6 @@ func (m *Model) SetVisible(visible bool) {
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
-	if m.loadingView != nil {
-		m.loadingView.SetSize(width, height)
-	}
 	m.volumesList.Viewport.Width = width
 	m.volumesList.Viewport.Height = height
 	m.volumesList.SetOuterSize(width, height)
