@@ -33,7 +33,8 @@ func TestView_ReadyState_ShowsVolumes(t *testing.T) {
 func TestHeader_ShowsAllColumns(t *testing.T) {
 	m := testModel()
 	m.volumesList.Viewport.Width = 120
-	header := m.renderVolumesHeader()
+	loadVolumes(m, fakeVolumes("alpha"))
+	header := m.volumesList.RenderHeader()
 	for _, col := range []string{"NAME", "STACK", "DRIVER", "MOUNT POINT", "CREATED", "HOST"} {
 		require.Contains(t, header, col)
 	}
