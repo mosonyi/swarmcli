@@ -117,6 +117,9 @@ func (m *Model) renderVolumesHeader() string {
 
 func (m *Model) renderVolumesFooter() string {
 	base := m.baseFooter()
+	if m.partialWarn != "" {
+		base += "\n" + ui.StatusBarStyle.Render("⚠ "+m.partialWarn)
+	}
 	if features.IsEnabled(allNodesFeature) {
 		return base
 	}

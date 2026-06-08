@@ -15,6 +15,7 @@ type volumeItem struct {
 	Mountpoint string
 	Created    time.Time
 	Host       string
+	NodeID     string // swarm node ID; populated by the cross-node impl, used to address node-scoped actions
 }
 
 func (i volumeItem) FilterValue() string { return i.Name }

@@ -5,6 +5,7 @@ package docker
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/docker/docker/api/types/volume"
@@ -21,9 +22,32 @@ type VolumeInfo struct {
 	Driver     string
 	Mountpoint string
 	Created    time.Time
-	Host       string // node the volume lives on
+	Host       string // node hostname the volume lives on (display)
+	NodeID     string // swarm node ID the volume lives on; "" for the CE single-node impl, filled by aggregating implementations for node-addressed actions
 	Labels     map[string]string
 	Raw        *volume.Volume // underlying SDK object, for inspect
+}
+
+// PartialListError reports that a listing succeeded but is degraded: the
+// returned items are valid and shown, with a non-fatal banner explaining the
+// limitation, instead of failing outright. An aggregating implementation
+// returns it when some nodes are unreachable (NodeErrors), or with a custom
+// Note when the listing fell back to a narrower scope (e.g. connected-node
+// only because the cross-node path is unavailable). The default single-node
+// implementation never returns it.
+type PartialListError struct {
+	NodeErrors map[string]string // node identifier -> error summary
+	Note       string            // optional banner override; takes precedence over NodeErrors
+}
+
+func (e *PartialListError) Error() string {
+	if e.Note != "" {
+		return e.Note
+	}
+	if len(e.NodeErrors) == 1 {
+		return "1 node unreachable"
+	}
+	return fmt.Sprintf("%d nodes unreachable", len(e.NodeErrors))
 }
 
 // ListVolumes returns the volumes on the connected Docker node.

@@ -60,6 +60,36 @@ func TestListVolumes_IncludesCreatedVolume(t *testing.T) {
 	require.NotEmpty(t, found.Host, "host should be the connected node's hostname")
 }
 
+// TestDefaultVolumeOps_ListsViaInterface exercises the VolumeOps seam BE swaps:
+// the default (connected-node) implementation lists the volume and leaves
+// NodeID empty (the field an aggregating implementation fills).
+func TestDefaultVolumeOps_ListsViaInterface(t *testing.T) {
+	swarmlog.InitTestIfTestLogEnv()
+	ctx := context.Background()
+
+	cli, err := docker.GetClient()
+	require.NoError(t, err)
+
+	name := uniqueName("test_vol_ops")
+	_, err = cli.VolumeCreate(ctx, volume.CreateOptions{Name: name, Driver: "local"})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cli.VolumeRemove(ctx, name, true) })
+
+	ops := docker.DefaultDeps().Volumes
+	volumes, err := ops.ListVolumes(ctx)
+	require.NoError(t, err)
+
+	var found *docker.VolumeInfo
+	for i := range volumes {
+		if volumes[i].Name == name {
+			found = &volumes[i]
+			break
+		}
+	}
+	require.NotNil(t, found, "volume %q should appear via the VolumeOps seam", name)
+	require.Empty(t, found.NodeID, "CE single-node impl leaves NodeID empty")
+}
+
 func TestInspectVolume(t *testing.T) {
 	swarmlog.InitTestIfTestLogEnv()
 	ctx := context.Background()
