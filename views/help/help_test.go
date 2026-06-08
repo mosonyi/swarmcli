@@ -34,6 +34,26 @@ func TestNewDetailed_Categories(t *testing.T) {
 	require.Len(t, m.categories, 1)
 }
 
+func TestSupportContact_CheatSheet(t *testing.T) {
+	defer func() { SupportContact = "" }()
+	cats := []HelpCategory{
+		{Title: "General", Items: []HelpItem{{Keys: "<n>", Description: "New"}}},
+	}
+	m := NewDetailed(80, 24, cats)
+
+	// Default (empty): OSS shows no support line.
+	SupportContact = ""
+	require.NotContains(t, m.buildCategorizedContent(), "SUPPORT")
+
+	// Set: the full address is rendered (no truncation) as the last body line.
+	SupportContact = "be-support@swarmcli.io"
+	out := m.buildCategorizedContent()
+	require.Contains(t, out, "SUPPORT")
+	require.Contains(t, out, "be-support@swarmcli.io")
+	lines := strings.Split(out, "\n")
+	require.Contains(t, lines[len(lines)-1], "be-support@swarmcli.io")
+}
+
 func TestName(t *testing.T) {
 	m := New(80, 24, nil)
 	require.Equal(t, "help", m.Name())

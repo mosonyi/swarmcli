@@ -23,6 +23,11 @@ func (m *Model) FrameHeader() string {
 	return ui.FrameHeaderStyle.Render("Available Commands")
 }
 
+// SupportContact, when non-empty, is rendered as a SUPPORT line at the
+// bottom of the keybinding cheat-sheet. Empty by default so OSS shows
+// nothing; editions set it to their support address at startup.
+var SupportContact string
+
 func (m *Model) FrameFooter() string {
 	return ui.StatusBarStyle.Render("Press <esc> to go back")
 }
@@ -150,6 +155,13 @@ func (m *Model) buildCategorizedContent() string {
 
 	footer := m.FrameFooter()
 	frame := ui.ComputeFrameDimensions(m.Viewable.Width, m.Viewable.Height, m.width, m.height, "", footer)
+	// Pin the edition support line (when set) to the bottom of the body,
+	// flush above the footer, padding the keybinding columns to fill.
+	if SupportContact != "" {
+		body := ui.TrimOrPadContentToLines(fullContent, max(0, frame.DesiredContentLines-1))
+		support := categoryStyle.Render("SUPPORT") + "  " + descStyle.Render(SupportContact)
+		fullContent = body + "\n" + support
+	}
 	return ui.TrimOrPadContentToLines(fullContent, frame.DesiredContentLines)
 }
 
