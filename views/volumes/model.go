@@ -77,6 +77,7 @@ func New(width, height int) *Model {
 		sortAscending: true,
 	}
 
+	cols := m.buildColumns()
 	list := filterlist.FilterableList[volumeItem]{
 		Viewport: vp,
 		Match: func(v volumeItem, query string) bool {
@@ -87,13 +88,11 @@ func New(width, height int) *Model {
 				strings.Contains(strings.ToLower(v.Mountpoint), q) ||
 				strings.Contains(strings.ToLower(v.Host), q)
 		},
+		Columns: cols,
 		Header: &filterlist.HeaderConfig{
-			Columns: []filterlist.ColumnDef{
-				{Label: "NAME"}, {Label: "STACK"}, {Label: "DRIVER"},
-				{Label: "MOUNT POINT"}, {Label: "CREATED"}, {Label: "HOST"},
-			},
-			ColWidthsFunc: func(w int) []int {
-				return m.volumeColWidths(w)
+			Columns: filterlist.ColumnDefs(cols),
+			SortIndicator: func() (int, bool) {
+				return m.sortColumnIndex(), m.sortAscending
 			},
 		},
 		Footer: &filterlist.FooterConfig{

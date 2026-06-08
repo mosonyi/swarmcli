@@ -10,29 +10,62 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestColWidths_SumToWidth(t *testing.T) {
-	for _, w := range []int{60, 80, 100, 120, 200} {
-		widths := (&Model{}).volumeColWidths(w)
-		require.Len(t, widths, 6)
-		sum := 0
-		for _, cw := range widths {
-			require.Greater(t, cw, 0)
-			sum += cw
+// longVolName is wide enough to overflow the NAME column on a narrow terminal
+// and to verify full visibility on a wide one.
+const longVolName = "volume_with_a_fairly_long_descriptive_name"
+
+// longVolume returns the loaded item whose name overflows, for scroll tests.
+func longVolume(m *Model) volumeItem {
+	for _, v := range m.volumesList.Filtered {
+		if v.Name == longVolName {
+			return v
 		}
-		// columns + 5 two-space separators reconstruct the effective width.
-		require.LessOrEqual(t, sum+5*2, w+1, "columns must fit within the available width at w=%d", w)
 	}
+	return volumeItem{}
 }
 
 func TestHeaderAndRow_Aligned(t *testing.T) {
-	for _, w := range []int{80, 120} {
+	for _, w := range []int{60, 120, 220} {
 		m := testModel()
 		m.volumesList.Viewport.Width = w
-		loadVolumes(m, fakeVolumes("alpha"))
+		loadVolumes(m, fakeVolumes(longVolName, "z2"))
 
-		header := m.renderVolumesHeader()
+		header := m.volumesList.RenderHeader()
 		row := m.volumesList.RenderItem(m.volumesList.Filtered[0], false, 0)
 		require.Equal(t, lipgloss.Width(header), lipgloss.Width(row),
 			"header and row widths must match at width %d", w)
 	}
+}
+
+func TestContentAwareName_WideTerminal(t *testing.T) {
+	m := testModel()
+	m.volumesList.Viewport.Width = 220
+	loadVolumes(m, fakeVolumes(longVolName, "z2"))
+	row := m.volumesList.RenderItem(longVolume(m), false, 0)
+	require.Contains(t, row, longVolName, "full name must be visible on a wide terminal")
+}
+
+func TestArrowScrollMovesWindow(t *testing.T) {
+	m := testModel()
+	m.volumesList.Viewport.Width = 70 // narrow → flex columns overflow
+	loadVolumes(m, fakeVolumes(longVolName, "z2"))
+	before := m.volumesList.RenderItem(longVolume(m), true, 0)
+	m.Update(key("right"))
+	after := m.volumesList.RenderItem(longVolume(m), true, 0)
+	require.NotEqual(t, before, after, "right arrow should shift the truncated cell window")
+}
+
+func TestResetScrollOnCursorMove(t *testing.T) {
+	m := testModel()
+	m.volumesList.Viewport.Width = 70
+	loadVolumes(m, fakeVolumes(longVolName, "z2"))
+	m.Update(key("right"))
+	m.Update(key("right"))
+	scrolled := m.volumesList.RenderItem(longVolume(m), true, 0)
+
+	m.Update(key("down"))
+	m.Update(key("up"))
+
+	require.NotEqual(t, scrolled, m.volumesList.RenderItem(longVolume(m), true, 0),
+		"scroll offset must reset when the cursor moves")
 }

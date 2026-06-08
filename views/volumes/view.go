@@ -11,7 +11,6 @@ import (
 	"swarmcli/features"
 	"swarmcli/ui"
 	"swarmcli/ui/components/errordialog"
-	"swarmcli/ui/components/sorting"
 	"swarmcli/views/view"
 )
 
@@ -24,7 +23,7 @@ func (m *Model) FrameTitle() string {
 }
 
 func (m *Model) FrameHeader() string {
-	return m.renderVolumesHeader()
+	return m.volumesList.RenderHeader()
 }
 
 func (m *Model) FrameFooter() string {
@@ -74,45 +73,6 @@ func (m *Model) buildMainContent() string {
 		content = ui.OverlayCentered(content, errorDialog, width, 0)
 	}
 	return content
-}
-
-func (m *Model) renderVolumesHeader() string {
-	widths := m.volumesList.ColWidths()
-	if len(widths) < 6 {
-		return ""
-	}
-
-	labels := []string{" NAME", "STACK", "DRIVER", "MOUNT POINT", "CREATED", "HOST"}
-
-	arrow := func() string {
-		if m.sortAscending {
-			return sorting.SortArrow(sorting.Ascending)
-		}
-		return sorting.SortArrow(sorting.Descending)
-	}
-	switch m.sortField {
-	case SortByName:
-		labels[0] = " NAME " + arrow()
-	case SortByStack:
-		labels[1] = "STACK " + arrow()
-	case SortByDriver:
-		labels[2] = "DRIVER " + arrow()
-	case SortByCreated:
-		labels[4] = "CREATED " + arrow()
-	case SortByHost:
-		labels[5] = "HOST " + arrow()
-	}
-
-	sep := strings.Repeat(" ", 2)
-	line := fmt.Sprintf("%-*s%s%-*s%s%-*s%s%-*s%s%-*s%s%-*s",
-		widths[0], labels[0], sep,
-		widths[1], labels[1], sep,
-		widths[2], labels[2], sep,
-		widths[3], labels[3], sep,
-		widths[4], labels[4], sep,
-		widths[5], labels[5],
-	)
-	return ui.FrameHeaderStyle.Render(line)
 }
 
 func (m *Model) renderVolumesFooter() string {

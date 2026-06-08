@@ -4,35 +4,18 @@
 package volumesview
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"swarmcli/core/primitives/hash"
 	"swarmcli/ui"
+	filterlist "swarmcli/ui/components/filterable/list"
 	helpview "swarmcli/views/help"
 	view "swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
-
-func truncateWithEllipsis(s string, maxWidth int) string {
-	if maxWidth <= 0 {
-		return ""
-	}
-	if maxWidth <= 1 {
-		return "…"
-	}
-	if lipgloss.Width(s) <= maxWidth {
-		return s
-	}
-	if maxWidth == 2 {
-		return s[:1] + "…"
-	}
-	return s[:maxWidth-1] + "…"
-}
 
 func formatCreated(t time.Time) string {
 	if t.IsZero() {
@@ -41,54 +24,37 @@ func formatCreated(t time.Time) string {
 	return t.Format("2006-01-02 15:04")
 }
 
-// volumeColWidths allocates the six column widths as percentages of the
-// available width, with the MOUNT POINT column absorbing rounding remainder.
-func (m *Model) volumeColWidths(totalWidth int) []int {
-	if totalWidth <= 0 {
-		totalWidth = 80
+// buildColumns declares the volumes table columns for the shared content-aware
+// layout. NAME, MOUNT POINT, and HOST flex (absorb slack and horizontally
+// scroll when truncated on the selected row); the rest size to content.
+func (m *Model) buildColumns() []filterlist.Column[volumeItem] {
+	return []filterlist.Column[volumeItem]{
+		{Label: "NAME", MinWidth: 4, Flex: true, Cell: func(v volumeItem) string { return v.Name }},
+		{Label: "STACK", MinWidth: 5, Cell: func(v volumeItem) string { return displayOrDash(v.Stack) }},
+		{Label: "DRIVER", MinWidth: 6, Cell: func(v volumeItem) string { return v.Driver }},
+		{Label: "MOUNT POINT", MinWidth: 10, Flex: true, Cell: func(v volumeItem) string { return v.Mountpoint }},
+		{Label: "CREATED", MinWidth: 16, Cell: func(v volumeItem) string { return formatCreated(v.Created) }},
+		{Label: "HOST", MinWidth: 4, Flex: true, Cell: func(v volumeItem) string { return displayOrDash(v.Host) }},
 	}
-	const (
-		sepLen  = 2
-		numCols = 6
-		flexCol = 3 // MOUNT POINT
-	)
-	effWidth := totalWidth - (numCols-1)*sepLen
-	if effWidth < 30 {
-		effWidth = totalWidth
-	}
+}
 
-	weights := []int{20, 12, 9, 21, 24, 14} // NAME STACK DRIVER MOUNT CREATED HOST
-	mins := []int{8, 5, 5, 10, 12, 5}
-
-	widths := make([]int, numCols)
-	sum := 0
-	for i := 0; i < numCols; i++ {
-		w := (effWidth * weights[i]) / 100
-		if w < 1 {
-			w = 1
-		}
-		widths[i] = w
-		sum += w
+// sortColumnIndex maps the active sort field to its column index for the header
+// sort arrow. The mapping is not 1:1 because MOUNT POINT (column 3) is
+// unsortable, so CREATED and HOST sit one column past their sort-field ordinal.
+func (m *Model) sortColumnIndex() int {
+	switch m.sortField {
+	case SortByName:
+		return 0
+	case SortByStack:
+		return 1
+	case SortByDriver:
+		return 2
+	case SortByCreated:
+		return 4
+	case SortByHost:
+		return 5
 	}
-	widths[flexCol] += effWidth - sum
-
-	for i := range widths {
-		if widths[i] < mins[i] {
-			widths[i] = mins[i]
-		}
-	}
-
-	sum = 0
-	for _, w := range widths {
-		sum += w
-	}
-	if sum != effWidth {
-		widths[flexCol] += effWidth - sum
-		if widths[flexCol] < mins[flexCol] {
-			widths[flexCol] = mins[flexCol]
-		}
-	}
-	return widths
+	return 0
 }
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
@@ -212,14 +178,22 @@ func (m *Model) handleNormalKeys(msg tea.KeyMsg) tea.Cmd {
 	case "H":
 		m.toggleSort(SortByHost)
 		return nil
+	case "left":
+		m.volumesList.ScrollLeft()
+		m.volumesList.Viewport.SetContent(m.volumesList.View())
+	case "right":
+		m.volumesList.ScrollRight()
+		m.volumesList.Viewport.SetContent(m.volumesList.View())
 	case "up", "k":
 		if m.volumesList.Cursor > 0 {
 			m.volumesList.Cursor--
+			m.volumesList.ResetColumnScroll()
 			m.volumesList.Viewport.SetContent(m.volumesList.View())
 		}
 	case "down", "j":
 		if m.volumesList.Cursor < len(m.volumesList.Filtered)-1 {
 			m.volumesList.Cursor++
+			m.volumesList.ResetColumnScroll()
 			m.volumesList.Viewport.SetContent(m.volumesList.View())
 		}
 	case "pgup":
@@ -231,6 +205,7 @@ func (m *Model) handleNormalKeys(msg tea.KeyMsg) tea.Cmd {
 		if m.volumesList.Cursor < 0 {
 			m.volumesList.Cursor = 0
 		}
+		m.volumesList.ResetColumnScroll()
 		m.volumesList.Viewport.SetContent(m.volumesList.View())
 	case "pgdown":
 		page := m.volumesList.Viewport.Height
@@ -241,6 +216,7 @@ func (m *Model) handleNormalKeys(msg tea.KeyMsg) tea.Cmd {
 		if m.volumesList.Cursor >= len(m.volumesList.Filtered) {
 			m.volumesList.Cursor = len(m.volumesList.Filtered) - 1
 		}
+		m.volumesList.ResetColumnScroll()
 		m.volumesList.Viewport.SetContent(m.volumesList.View())
 	case "i", "enter":
 		if len(m.volumesList.Filtered) == 0 {
@@ -358,40 +334,12 @@ func (m *Model) applySorting() {
 }
 
 func (m *Model) setRenderItem() {
-	m.volumesList.RenderItem = func(item volumeItem, selected bool, colWidth int) string {
-		style := ui.ListItemStyle
+	m.volumesList.RenderItem = func(item volumeItem, selected bool, _ int) string {
+		row := m.volumesList.RenderRow(item, selected)
 		if selected {
-			style = ui.ListSelectedStyle
+			return ui.ListSelectedStyle.Render(row)
 		}
-
-		widths := m.volumesList.ColWidths()
-		if len(widths) < 6 {
-			return item.Name
-		}
-		nameW, stackW, driverW := widths[0], widths[1], widths[2]
-		mountW, createdW, hostW := widths[3], widths[4], widths[5]
-
-		innerNameW := nameW
-		if innerNameW > 1 {
-			innerNameW--
-		}
-		name := " " + truncateWithEllipsis(item.Name, innerNameW)
-		stack := truncateWithEllipsis(displayOrDash(item.Stack), stackW)
-		driver := truncateWithEllipsis(item.Driver, driverW)
-		mount := truncateWithEllipsis(item.Mountpoint, mountW)
-		created := truncateWithEllipsis(formatCreated(item.Created), createdW)
-		host := truncateWithEllipsis(displayOrDash(item.Host), hostW)
-
-		sep := strings.Repeat(" ", 2)
-		line := fmt.Sprintf("%-*s%s%-*s%s%-*s%s%-*s%s%-*s%s%-*s",
-			nameW, name, sep,
-			stackW, stack, sep,
-			driverW, driver, sep,
-			mountW, mount, sep,
-			createdW, created, sep,
-			hostW, host,
-		)
-		return style.Render(line)
+		return ui.ListItemStyle.Render(row)
 	}
 	m.volumesList.Viewport.SetContent(m.volumesList.View())
 }
