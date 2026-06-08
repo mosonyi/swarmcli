@@ -755,9 +755,9 @@ func TestBuildContent_ShowsStartingAndUnknownTasks(t *testing.T) {
 	m.lineNodes = []string{"n", "n", "n"}
 	m.mu.Unlock()
 	content := m.buildContent()
-	require.Contains(t, content, "starting line")    // starting => not terminal => visible
-	require.Contains(t, content, "unknown line")      // not in snapshot => fail open => visible
-	require.NotContains(t, content, "stopped line")   // terminal => hidden
+	require.Contains(t, content, "starting line")   // starting => not terminal => visible
+	require.Contains(t, content, "unknown line")    // not in snapshot => fail open => visible
+	require.NotContains(t, content, "stopped line") // terminal => hidden
 }
 
 func TestBuildContent_ShowAllWhenHideStoppedOff(t *testing.T) {
