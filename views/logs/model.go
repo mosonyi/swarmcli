@@ -254,27 +254,43 @@ func (m *Model) HasErrors() bool {
 	return false
 }
 
-// runningTaskIDs returns the set of full task IDs for this service whose desired
-// state is running. Returns nil when no snapshot is available (callers treat nil
-// as "show all" — fail open). Does not take m.mu; callers already hold it.
-func (m *Model) runningTaskIDs() map[string]bool {
+// isTerminalTaskState reports whether a task's current state means its container
+// has exited — i.e. the task is "stopped" and its logs are old history. Starting
+// states (new/pending/…/preparing/ready/starting) and running are NOT terminal.
+func isTerminalTaskState(state swarm.TaskState) bool {
+	switch state {
+	case swarm.TaskStateComplete, swarm.TaskStateShutdown, swarm.TaskStateFailed,
+		swarm.TaskStateRejected, swarm.TaskStateOrphaned, swarm.TaskStateRemove:
+		return true
+	default:
+		return false
+	}
+}
+
+// stoppedTaskIDs returns the set of full task IDs for this service whose current
+// state is terminal (container has exited). Returns nil when no snapshot is
+// available (callers treat nil as "hide nothing" — fail open). The hide-stopped
+// filter is a denylist over this set: lines from running, starting, and unknown
+// (not-yet-in-snapshot) tasks stay visible. Does not take m.mu; callers already
+// hold it.
+func (m *Model) stoppedTaskIDs() map[string]bool {
 	snap := m.deps.Snapshot.GetSnapshot()
 	if snap == nil {
 		return nil
 	}
-	running := make(map[string]bool)
+	stopped := make(map[string]bool)
 	for _, task := range snap.Tasks {
-		if task.ServiceID == m.ServiceEntry.ServiceID && task.DesiredState == swarm.TaskStateRunning {
-			running[task.ID] = true
+		if task.ServiceID == m.ServiceEntry.ServiceID && isTerminalTaskState(task.Status.State) {
+			stopped[task.ID] = true
 		}
 	}
-	return running
+	return stopped
 }
 
 // lineVisible reports whether the line at index i passes all active filters
 // (node filter, "/" text filter, hide-stopped). Callers must hold m.mu and pass
-// the precomputed running-task set (nil = don't apply the hide-stopped filter).
-func (m *Model) lineVisible(i int, running map[string]bool) bool {
+// the precomputed stopped-task set (nil = don't apply the hide-stopped filter).
+func (m *Model) lineVisible(i int, stopped map[string]bool) bool {
 	// node filter
 	if m.nodeFilter != "" && (i >= len(m.lineNodes) || m.lineNodes[i] != m.nodeFilter) {
 		return false
@@ -283,14 +299,16 @@ func (m *Model) lineVisible(i int, running map[string]bool) bool {
 	if m.filterQuery != "" && !strings.Contains(strings.ToLower(m.lines[i]), strings.ToLower(m.filterQuery)) {
 		return false
 	}
-	// hide-stopped filter
-	if m.hideStopped && running != nil {
+	// hide-stopped filter: hide only lines from tasks known to be terminal.
+	// Unknown task IDs (not yet in the snapshot — e.g. a starting container)
+	// fail open and stay visible.
+	if m.hideStopped && stopped != nil {
 		taskID := ""
 		if i < len(m.lineTasks) {
 			taskID = m.lineTasks[i]
 		}
 		// empty task ID => always visible (can't determine task state)
-		if taskID != "" && !running[taskID] {
+		if taskID != "" && stopped[taskID] {
 			return false
 		}
 	}

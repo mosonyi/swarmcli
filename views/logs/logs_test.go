@@ -691,14 +691,15 @@ func TestShouldFallbackToRawFromStdCopy(t *testing.T) {
 
 // --- hide-stopped (issue #388) tests ---
 
-// hideStoppedModel returns a model whose snapshot has one running and one
-// stopped task for the model's service (svc-123).
+// hideStoppedModel returns a model whose snapshot has one running, one starting
+// and one stopped (terminal) task for the model's service (svc-123).
 func hideStoppedModel() *Model {
 	m := testModel()
 	m.deps.Snapshot = &mockSnapshotOps{snap: &docker.SwarmSnapshot{
 		Tasks: []swarm.Task{
-			{ID: "task-run", ServiceID: "svc-123", DesiredState: swarm.TaskStateRunning},
-			{ID: "task-stop", ServiceID: "svc-123", DesiredState: swarm.TaskStateShutdown},
+			{ID: "task-run", ServiceID: "svc-123", Status: swarm.TaskStatus{State: swarm.TaskStateRunning}},
+			{ID: "task-start", ServiceID: "svc-123", Status: swarm.TaskStatus{State: swarm.TaskStateStarting}},
+			{ID: "task-stop", ServiceID: "svc-123", Status: swarm.TaskStatus{State: swarm.TaskStateShutdown}},
 		},
 	}}
 	return m
@@ -739,6 +740,24 @@ func TestBuildContent_HidesStoppedTasks(t *testing.T) {
 	require.Contains(t, content, "running line")
 	require.NotContains(t, content, "stopped line")
 	require.Contains(t, content, "system line") // empty task ID => always visible
+}
+
+// TestBuildContent_ShowsStartingAndUnknownTasks is the regression guard for
+// issue #388 comment 4644247107: starting containers (non-terminal state) and
+// tasks not yet present in the snapshot must remain visible while hide-stopped
+// is on.
+func TestBuildContent_ShowsStartingAndUnknownTasks(t *testing.T) {
+	m := hideStoppedModel()
+	require.True(t, m.getHideStopped())
+	m.mu.Lock()
+	m.lines = []string{"starting line", "unknown line", "stopped line"}
+	m.lineTasks = []string{"task-start", "task-not-in-snapshot", "task-stop"}
+	m.lineNodes = []string{"n", "n", "n"}
+	m.mu.Unlock()
+	content := m.buildContent()
+	require.Contains(t, content, "starting line")   // starting => not terminal => visible
+	require.Contains(t, content, "unknown line")    // not in snapshot => fail open => visible
+	require.NotContains(t, content, "stopped line") // terminal => hidden
 }
 
 func TestBuildContent_ShowAllWhenHideStoppedOff(t *testing.T) {
