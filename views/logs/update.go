@@ -309,15 +309,15 @@ func (m *Model) highlightContent() {
 		m.searchMatches = []int{}
 		lower := strings.ToLower(m.searchTerm)
 		m.mu.Lock()
-		var running map[string]bool
+		var stopped map[string]bool
 		if m.hideStopped {
-			running = m.runningTaskIDs()
+			stopped = m.stoppedTaskIDs()
 		}
 		visibleIdx := 0
 		for i, L := range m.lines {
 			// Skip lines hidden by any active filter (must match buildContent
 			// exactly so search-match indices line up with the rendered output).
-			if !m.lineVisible(i, running) {
+			if !m.lineVisible(i, stopped) {
 				continue
 			}
 			if strings.Contains(strings.ToLower(L), lower) {
@@ -346,13 +346,13 @@ func (m *Model) buildContent() string {
 
 	// Apply all active filters (node, "/" text, hide-stopped) in a single pass
 	// via the shared predicate so the visible set matches highlightContent.
-	var running map[string]bool
+	var stopped map[string]bool
 	if m.hideStopped {
-		running = m.runningTaskIDs()
+		stopped = m.stoppedTaskIDs()
 	}
 	var filteredLines []string
 	for i, line := range m.lines {
-		if m.lineVisible(i, running) {
+		if m.lineVisible(i, stopped) {
 			filteredLines = append(filteredLines, line)
 		}
 	}
