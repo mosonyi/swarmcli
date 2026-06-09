@@ -39,11 +39,11 @@ func (m *Model) FrameContent() string {
 	if len(m.categories) > 0 {
 		return m.buildCategorizedContent()
 	}
-	// Command help content
+	// Command-list path (`:help`): pin the edition support line at the bottom.
 	header := m.FrameHeader()
 	footer := m.FrameFooter()
 	frame := ui.ComputeFrameDimensions(m.Viewable.Width, m.Viewable.Height, m.width, m.height, header, footer)
-	return ui.TrimOrPadContentToLines(m.Viewable.View(), frame.DesiredContentLines)
+	return appendSupportLine(m.Viewable.View(), frame.DesiredContentLines)
 }
 
 func (m *Model) View() string {
@@ -155,14 +155,23 @@ func (m *Model) buildCategorizedContent() string {
 
 	footer := m.FrameFooter()
 	frame := ui.ComputeFrameDimensions(m.Viewable.Width, m.Viewable.Height, m.width, m.height, "", footer)
-	// Pin the edition support line (when set) to the bottom of the body,
-	// flush above the footer, padding the keybinding columns to fill.
-	if SupportContact != "" {
-		body := ui.TrimOrPadContentToLines(fullContent, max(0, frame.DesiredContentLines-1))
-		support := categoryStyle.Render("SUPPORT") + "  " + descStyle.Render(SupportContact)
-		fullContent = body + "\n" + support
+	return appendSupportLine(fullContent, frame.DesiredContentLines)
+}
+
+// appendSupportLine fits content to total lines, pinning the edition SUPPORT
+// line (when SupportContact is set) one blank line above the footer so it
+// doesn't crowd it. With SupportContact empty (OSS) it just fits content to
+// total, rendering nothing extra.
+func appendSupportLine(content string, total int) string {
+	if SupportContact == "" {
+		return ui.TrimOrPadContentToLines(content, total)
 	}
-	return ui.TrimOrPadContentToLines(fullContent, frame.DesiredContentLines)
+	categoryStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("2"))
+	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	// Reserve the SUPPORT line plus one blank spacer above the footer.
+	body := ui.TrimOrPadContentToLines(content, max(0, total-2))
+	support := categoryStyle.Render("SUPPORT") + "  " + descStyle.Render(SupportContact)
+	return ui.TrimOrPadContentToLines(body+"\n"+support, total)
 }
 
 // buildCommandHelpContent renders the per-command help as vertically

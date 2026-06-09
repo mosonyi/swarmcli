@@ -45,13 +45,34 @@ func TestSupportContact_CheatSheet(t *testing.T) {
 	SupportContact = ""
 	require.NotContains(t, m.buildCategorizedContent(), "SUPPORT")
 
-	// Set: the full address is rendered (no truncation) as the last body line.
+	// Set: the full address is rendered (no truncation), lifted one blank
+	// line off the footer (second-to-last body line, blank spacer below).
 	SupportContact = "be-support@swarmcli.io"
 	out := m.buildCategorizedContent()
 	require.Contains(t, out, "SUPPORT")
 	require.Contains(t, out, "be-support@swarmcli.io")
 	lines := strings.Split(out, "\n")
-	require.Contains(t, lines[len(lines)-1], "be-support@swarmcli.io")
+	require.Equal(t, "", strings.TrimSpace(lines[len(lines)-1]), "blank spacer below SUPPORT")
+	require.Contains(t, lines[len(lines)-2], "be-support@swarmcli.io")
+}
+
+func TestSupportContact_CommandList(t *testing.T) {
+	defer func() { SupportContact = "" }()
+	cmds := []CommandInfo{
+		{Name: "stacks", Description: "List stacks"},
+		{Name: "help", Description: "Show help"},
+	}
+	m := New(80, 24, cmds)
+
+	// Default (empty): OSS shows no support line in the :help command list.
+	SupportContact = ""
+	require.NotContains(t, m.FrameContent(), "SUPPORT")
+
+	// Set: the support line is surfaced in the :help command list too.
+	SupportContact = "be-support@swarmcli.io"
+	out := m.FrameContent()
+	require.Contains(t, out, "SUPPORT")
+	require.Contains(t, out, "be-support@swarmcli.io")
 }
 
 func TestName(t *testing.T) {
