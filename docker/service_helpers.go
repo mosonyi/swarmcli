@@ -30,10 +30,6 @@ func getServiceImage(svc swarm.Service) string {
 	if idx := strings.Index(image, "@sha256:"); idx != -1 {
 		image = image[:idx]
 	}
-	// Optionally truncate very long image names
-	if len(image) > 50 {
-		return image[:47] + "..."
-	}
 	return image
 }
 

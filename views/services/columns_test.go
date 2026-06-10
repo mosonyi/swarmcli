@@ -102,6 +102,19 @@ func TestView_FullServiceNameOnWideTerminal(t *testing.T) {
 	require.Contains(t, out, longServiceName, "full name must be visible, not truncated (#392)")
 }
 
+func TestView_FullServiceImageOnWideTerminal(t *testing.T) {
+	const longImage = "registry.example.com/myproject/some-very-long-image-name:v1.2.3"
+	m := testModel()
+	entries := fakeEntries("web")
+	entries[0].Image = longImage
+	loadWithFilter(m, AllFilter, entries)
+	m.List.Viewport.Width = 200
+	m.List.Viewport.Height = 20
+
+	out := m.View()
+	require.Contains(t, out, longImage, "full image must be visible, not truncated")
+}
+
 func TestHeaderRowAlignment(t *testing.T) {
 	// Header and rows must share the same total width across scopes and sort
 	// fields, including the sorted column's " ▲" indicator (the #392 regression).
