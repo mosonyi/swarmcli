@@ -60,7 +60,7 @@ func TestGetServiceImage_StripDigest(t *testing.T) {
 	require.Equal(t, "nginx", getServiceImage(svc))
 }
 
-func TestGetServiceImage_LongName(t *testing.T) {
+func TestGetServiceImage_LongNameNotTruncated(t *testing.T) {
 	long := strings.Repeat("a", 60)
 	svc := swarm.Service{
 		Spec: swarm.ServiceSpec{
@@ -69,9 +69,7 @@ func TestGetServiceImage_LongName(t *testing.T) {
 			},
 		},
 	}
-	result := getServiceImage(svc)
-	require.Len(t, result, 50)
-	require.True(t, strings.HasSuffix(result, "..."))
+	require.Equal(t, long, getServiceImage(svc))
 }
 
 func TestGetServiceImage_NilContainerSpec(t *testing.T) {
