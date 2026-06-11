@@ -49,7 +49,7 @@ func loadServicesForViewWith(serviceOps docker.ServiceOps, filterType FilterType
 		entries = serviceOps.LoadStackServices("-")
 		title = "Services (no stack)"
 	default: // All services
-		entries = serviceOps.LoadStackServices("")
+		entries = serviceOps.LoadAllServices()
 		title = "All Services"
 	}
 	return

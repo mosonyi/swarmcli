@@ -28,6 +28,7 @@ type mockServiceOps struct {
 	rollbackServiceFn   func(ctx context.Context, serviceName string) error
 	loadNodeServicesFn  func(nodeID string) []docker.ServiceEntry
 	loadStackServicesFn func(stackName string) []docker.ServiceEntry
+	loadAllServicesFn   func() []docker.ServiceEntry
 	getServiceLogsFn    func(ctx context.Context, serviceID string) (string, error)
 	createServiceFn     func(ctx context.Context, spec swarm.ServiceSpec) (string, error)
 }
@@ -58,6 +59,9 @@ func (m *mockServiceOps) LoadNodeServices(nodeID string) []docker.ServiceEntry {
 }
 func (m *mockServiceOps) LoadStackServices(stackName string) []docker.ServiceEntry {
 	return m.loadStackServicesFn(stackName)
+}
+func (m *mockServiceOps) LoadAllServices() []docker.ServiceEntry {
+	return m.loadAllServicesFn()
 }
 func (m *mockServiceOps) GetServiceLogs(ctx context.Context, serviceID string) (string, error) {
 	if m.getServiceLogsFn != nil {
@@ -166,6 +170,7 @@ func noopServiceOps() *mockServiceOps {
 		rollbackServiceFn:   func(_ context.Context, _ string) error { return nil },
 		loadNodeServicesFn:  func(_ string) []docker.ServiceEntry { return nil },
 		loadStackServicesFn: func(_ string) []docker.ServiceEntry { return nil },
+		loadAllServicesFn:   func() []docker.ServiceEntry { return nil },
 	}
 }
 
@@ -438,6 +443,7 @@ func TestConfirmRestart_Success(t *testing.T) {
 			rollbackServiceFn:   func(_ context.Context, _ string) error { return nil },
 			loadNodeServicesFn:  func(_ string) []docker.ServiceEntry { return nil },
 			loadStackServicesFn: func(_ string) []docker.ServiceEntry { return nil },
+			loadAllServicesFn:   func() []docker.ServiceEntry { return nil },
 		}
 	})
 	loadServices(m, fakeEntries("web"))
@@ -459,6 +465,7 @@ func TestConfirmRemove_Success(t *testing.T) {
 			rollbackServiceFn:   func(_ context.Context, _ string) error { return nil },
 			loadNodeServicesFn:  func(_ string) []docker.ServiceEntry { return nil },
 			loadStackServicesFn: func(_ string) []docker.ServiceEntry { return nil },
+			loadAllServicesFn:   func() []docker.ServiceEntry { return nil },
 		}
 	})
 	loadServices(m, fakeEntries("web"))
@@ -480,6 +487,7 @@ func TestConfirmRollback_Success(t *testing.T) {
 			rollbackServiceFn:   func(_ context.Context, name string) error { rolledBack = name; return nil },
 			loadNodeServicesFn:  func(_ string) []docker.ServiceEntry { return nil },
 			loadStackServicesFn: func(_ string) []docker.ServiceEntry { return nil },
+			loadAllServicesFn:   func() []docker.ServiceEntry { return nil },
 		}
 	})
 	loadServices(m, fakeEntries("web"))
@@ -527,6 +535,7 @@ func TestScaleDialogResult_Confirmed(t *testing.T) {
 			rollbackServiceFn:   func(_ context.Context, _ string) error { return nil },
 			loadNodeServicesFn:  func(_ string) []docker.ServiceEntry { return nil },
 			loadStackServicesFn: func(_ string) []docker.ServiceEntry { return nil },
+			loadAllServicesFn:   func() []docker.ServiceEntry { return nil },
 		}
 	})
 	loadServices(m, fakeEntries("web"))
@@ -657,13 +666,16 @@ func TestGetServicesHelpContent(t *testing.T) {
 
 func TestLoadServicesForView_AllFilter(t *testing.T) {
 	mock := noopServiceOps()
-	mock.loadStackServicesFn = func(stackName string) []docker.ServiceEntry {
-		require.Equal(t, "", stackName)
-		return fakeEntries("web")
+	mock.loadStackServicesFn = func(string) []docker.ServiceEntry {
+		t.Fatal("AllFilter must not call LoadStackServices")
+		return nil
+	}
+	mock.loadAllServicesFn = func() []docker.ServiceEntry {
+		return fakeEntries("web", "db")
 	}
 	m := testModel(func(m *Model) { m.deps.Services = mock })
 	entries, title := m.loadServicesForView(AllFilter, "", "")
-	require.Len(t, entries, 1)
+	require.Len(t, entries, 2)
 	require.Contains(t, title, "All Services")
 }
 
