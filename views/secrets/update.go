@@ -382,6 +382,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			action, ok := view.GetAction("reveal-secret")
 			if !ok {
+				if cmd := view.FeatureLockedCmd("Reveal Secret"); cmd != nil {
+					return cmd
+				}
 				m.err = view.BEUnavailableErr("Reveal Secret")
 				m.errorDialogActive = true
 				return nil

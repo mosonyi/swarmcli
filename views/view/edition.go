@@ -6,6 +6,8 @@ package view
 import (
 	"errors"
 	"fmt"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // BEHelpDesc returns desc if the action is registered, or desc+" (BE)" if not.
@@ -35,4 +37,21 @@ func BEUnavailableErr(featureName string) error {
 		return errors.New(BEUnavailableFormatFn(featureName))
 	}
 	return fmt.Errorf(BEUnavailableFormat, featureName)
+}
+
+// FeatureLockedCmdFn, if set by an extension, returns a tea.Cmd to run when a
+// license-gated feature is requested without entitlement. When set it takes
+// precedence over the caller's local error dialog, letting the extension show
+// a richer prompt (e.g. an inline license dialog) instead of the flat
+// BEUnavailableErr text. Override in init().
+var FeatureLockedCmdFn func(featureName string) tea.Cmd
+
+// FeatureLockedCmd returns the extension's rich locked-feature command for
+// featureName, or nil when no extension is registered — in which case callers
+// fall back to surfacing BEUnavailableErr in their own error UI.
+func FeatureLockedCmd(featureName string) tea.Cmd {
+	if FeatureLockedCmdFn != nil {
+		return FeatureLockedCmdFn(featureName)
+	}
+	return nil
 }

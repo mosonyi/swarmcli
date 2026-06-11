@@ -29,3 +29,20 @@ func TestBEUnavailableErr_ContainsURL(t *testing.T) {
 	err := BEUnavailableErr("Shell")
 	require.Contains(t, err.Error(), "https://swarmcli.io/be")
 }
+
+func TestFeatureLockedCmd_NilWhenUnset(t *testing.T) {
+	require.Nil(t, FeatureLockedCmdFn)
+	require.Nil(t, FeatureLockedCmd("Shell"))
+}
+
+func TestFeatureLockedCmd_ReturnsRegisteredCmd(t *testing.T) {
+	type lockedMsg struct{ feature string }
+	FeatureLockedCmdFn = func(feature string) tea.Cmd {
+		return func() tea.Msg { return lockedMsg{feature: feature} }
+	}
+	defer func() { FeatureLockedCmdFn = nil }()
+
+	cmd := FeatureLockedCmd("Shell")
+	require.NotNil(t, cmd)
+	require.Equal(t, lockedMsg{feature: "Shell"}, cmd())
+}
