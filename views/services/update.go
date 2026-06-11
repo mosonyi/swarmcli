@@ -451,6 +451,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			entry := m.List.Filtered[m.List.Cursor]
 			action, ok := view.GetAction("shell")
 			if !ok {
+				if cmd := view.FeatureLockedCmd("Shell"); cmd != nil {
+					return cmd
+				}
 				m.confirmDialog.Visible = true
 				m.confirmDialog.ErrorMode = true
 				m.confirmDialog.Message = view.BEUnavailableErr("Shell").Error()
@@ -464,6 +467,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			entry := m.List.Filtered[m.List.Cursor]
 			action, ok := view.GetAction("port-forwards")
 			if !ok {
+				if cmd := view.FeatureLockedCmd("Active Forwards"); cmd != nil {
+					return cmd
+				}
 				m.confirmDialog.Visible = true
 				m.confirmDialog.ErrorMode = true
 				m.confirmDialog.Message = view.BEUnavailableErr("Active Forwards").Error()
@@ -477,6 +483,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			entry := m.List.Filtered[m.List.Cursor]
 			action, ok := view.GetAction("port-forward")
 			if !ok {
+				if cmd := view.FeatureLockedCmd("Port Forward"); cmd != nil {
+					return cmd
+				}
 				m.confirmDialog.Visible = true
 				m.confirmDialog.ErrorMode = true
 				m.confirmDialog.Message = view.BEUnavailableErr("Port Forward").Error()

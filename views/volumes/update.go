@@ -258,6 +258,9 @@ func (m *Model) selectedVolume() (volumeItem, bool) {
 func (m *Model) dispatchAction(actionName, label, arg string) tea.Cmd {
 	action, ok := view.GetAction(actionName)
 	if !ok {
+		if cmd := view.FeatureLockedCmd(label); cmd != nil {
+			return cmd
+		}
 		m.err = view.BEUnavailableErr(label)
 		m.errorDialogActive = true
 		return nil
