@@ -436,6 +436,43 @@ func LoadStackServices(stackName string) []ServiceEntry {
 	return entries
 }
 
+// LoadAllServices returns every service in the swarm, across all stacks
+// (including services with no stack, shown as "-"). Equivalent to
+// `docker service ls`.
+func LoadAllServices() []ServiceEntry {
+	snap, err := GetOrRefreshSnapshot()
+	if err != nil {
+		l().Warnf("failed to get snapshot: %v", err)
+		return nil
+	}
+
+	var entries []ServiceEntry
+
+	for _, svc := range snap.Services {
+		stack, desired := getServiceStackAndDesired(svc, snap)
+
+		// Count tasks on all nodes
+		onNode := countTasksForNode(svc.ID, "", snap)
+
+		entries = append(entries, ServiceEntry{
+			StackName:      stack,
+			ServiceName:    svc.Spec.Name,
+			ServiceID:      svc.ID,
+			ReplicasOnNode: onNode,
+			ReplicasTotal:  desired,
+			Status:         getServiceStatus(svc),
+			Mode:           getServiceMode(svc),
+			Image:          getServiceImage(svc),
+			Ports:          getServicePorts(svc),
+			CreatedAt:      svc.CreatedAt,
+			UpdatedAt:      svc.UpdatedAt,
+		})
+	}
+
+	sortEntries(entries)
+	return entries
+}
+
 // --- Helpers ---
 
 // getServiceStackAndDesired returns the stack name and desired replicas for a service

@@ -20,6 +20,7 @@ type ServiceOps interface {
 	RestartServiceWithProgress(ctx context.Context, serviceName string, progressCh chan<- ProgressUpdate) error
 	LoadNodeServices(nodeID string) []ServiceEntry
 	LoadStackServices(stackName string) []ServiceEntry
+	LoadAllServices() []ServiceEntry
 	GetServiceLogs(ctx context.Context, serviceID string) (string, error)
 	GetServiceTaskDiagnostics(ctx context.Context, serviceID string) (string, error)
 	CreateService(ctx context.Context, spec swarm.ServiceSpec) (string, error)
@@ -53,6 +54,9 @@ func (defaultServiceOps) LoadNodeServices(nodeID string) []ServiceEntry {
 }
 func (defaultServiceOps) LoadStackServices(stackName string) []ServiceEntry {
 	return LoadStackServices(stackName)
+}
+func (defaultServiceOps) LoadAllServices() []ServiceEntry {
+	return LoadAllServices()
 }
 func (defaultServiceOps) GetServiceLogs(ctx context.Context, serviceID string) (string, error) {
 	return GetServiceLogs(ctx, serviceID)
