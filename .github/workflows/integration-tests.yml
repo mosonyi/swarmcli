@@ -90,3 +90,32 @@ jobs:
         with:
           name: test-report
           path: /tmp/test-report.xml
+
+  # The locked-swarm test autolocks and restarts its own throwaway dind daemon,
+  # so it must stay isolated from the shared multi-node swarm above. It is gated
+  # behind the dedicated `integration_locked` build tag and needs no compose
+  # bring-up, so it runs as its own job for a clean, independent signal.
+  locked-swarm:
+    needs: [changes]
+    if: needs.changes.outputs.integration == 'true'
+    name: Run locked-swarm integration test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify Docker & Go
+        run: |
+          docker version
+          go version
+
+      - name: Run locked-swarm integration test
+        run: go test -tags=integration_locked -count=1 -v -timeout=15m ./integration-tests/...
