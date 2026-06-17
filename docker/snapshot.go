@@ -43,6 +43,9 @@ type SwarmSnapshot struct {
 	Tasks     []swarm.Task
 	Fetched   time.Time
 	ClusterID string
+	// Locked is true when the swarm is reachable but encrypted/locked. In that
+	// case the entity lists are empty until the swarm is unlocked.
+	Locked bool
 }
 
 var (
@@ -89,6 +92,14 @@ func RefreshSnapshot() (*SwarmSnapshot, error) {
 
 	nodes, err := c.NodeList(ctx, swarm.NodeListOptions{})
 	if err != nil {
+		// A locked swarm rejects every store-backed call. Surface it as a flagged
+		// empty snapshot instead of a fatal error so the context switch is not
+		// reverted; the app prompts the user to unlock.
+		if IsSwarmLockedErr(err) {
+			snap := &SwarmSnapshot{Locked: true, Fetched: time.Now()}
+			SetSnapshot(snap)
+			return snap, nil
+		}
 		return nil, fmt.Errorf("listing nodes: %w", err)
 	}
 

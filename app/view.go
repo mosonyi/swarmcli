@@ -19,7 +19,7 @@ func (m *Model) View() string {
 		header := m.currentView.FrameHeader()
 		content := m.currentView.FrameContent()
 		out := ui.RenderViewFrame(title, header, content, "", m.terminalWidth, m.terminalHeight, true)
-		return m.overlayStartup(m.overlayAppError(out))
+		return m.overlayStartup(m.overlayUnlock(m.overlayAppError(out)))
 	}
 
 	systemInfo := m.systemInfo.View()
@@ -74,7 +74,7 @@ func (m *Model) View() string {
 			framedView,
 			m.renderStackBar(),
 		)
-		return m.overlayStartup(m.overlayAppError(out))
+		return m.overlayStartup(m.overlayUnlock(m.overlayAppError(out)))
 	}
 
 	if m.searchInput.Visible() {
@@ -95,7 +95,7 @@ func (m *Model) View() string {
 			framedView,
 			m.renderStackBar(),
 		)
-		return m.overlayStartup(m.overlayAppError(out))
+		return m.overlayStartup(m.overlayUnlock(m.overlayAppError(out)))
 	}
 
 	if frameHeight < 1 {
@@ -109,7 +109,7 @@ func (m *Model) View() string {
 		framedView,
 		m.renderStackBar(),
 	)
-	return m.overlayStartup(m.overlayAppError(out))
+	return m.overlayStartup(m.overlayUnlock(m.overlayAppError(out)))
 }
 
 // overlayAppError overlays the app-level error dialog on top of the rendered output.
@@ -118,6 +118,14 @@ func (m *Model) overlayAppError(base string) string {
 		return base
 	}
 	return ui.OverlayCentered(base, m.errorDialog.View(), m.terminalWidth, 0)
+}
+
+// overlayUnlock overlays the swarm unlock-key dialog on top of the rendered output.
+func (m *Model) overlayUnlock(base string) string {
+	if !m.unlockDialog.Visible {
+		return base
+	}
+	return ui.OverlayCentered(base, m.unlockDialog.View(), m.terminalWidth, 0)
 }
 
 // overlayStartup composites the startup overlay on top of the rendered output.

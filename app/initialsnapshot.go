@@ -5,13 +5,15 @@ package app
 
 import (
 	"swarmcli/docker"
-	stacksview "swarmcli/views/stacks"
-	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // --- Async snapshot loader ---
+// loadSnapshotAsync refreshes the snapshot and reports the outcome via
+// snapshotLoadedMsg, whose handler navigates to the stacks view on success
+// (and surfaces a notice when the swarm is locked). Used on startup, after a
+// context switch, and after an unlock.
 func loadSnapshotAsync() tea.Cmd {
 	return func() tea.Msg {
 		_, err := docker.RefreshSnapshot()
@@ -20,19 +22,3 @@ func loadSnapshotAsync() tea.Cmd {
 }
 
 type snapshotLoadedMsg struct{ Err error }
-
-// loadSnapshotAndNavigateToStacksCmd loads snapshot and then navigates to stacks view
-// Used after context switch to show the stacks for the new context
-func loadSnapshotAndNavigateToStacksCmd() tea.Cmd {
-	return func() tea.Msg {
-		_, err := docker.RefreshSnapshot()
-		if err != nil {
-			return snapshotLoadedMsg{Err: err}
-		}
-		// Navigate to stacks view after snapshot loads
-		return view.NavigateToMsg{
-			ViewName: stacksview.ViewName,
-			Replace:  true, // Replace the loading view
-		}
-	}
-}

@@ -12,6 +12,7 @@ import (
 	loadingview "swarmcli/views/loading"
 	"swarmcli/views/searchinput"
 	systeminfoview "swarmcli/views/systeminfo"
+	"swarmcli/views/unlockdialog"
 
 	"github.com/charmbracelet/lipgloss"
 	"swarmcli/views/view"
@@ -40,6 +41,10 @@ type Model struct {
 	errorDialog          *confirmdialog.Model
 	appErrorDialogActive bool
 	errorFallbackView    string // view to navigate to on dismiss; "" = goBack()
+
+	// App-level swarm unlock-key dialog, shown when the active swarm is locked.
+	unlockDialog       *unlockdialog.Model
+	unlockDialogActive bool
 
 	// Terminal dimensions
 	terminalWidth  int
@@ -95,6 +100,7 @@ func InitialModel() *Model {
 		commandInput:   cmdBar(),
 		searchInput:    searchinput.New(),
 		errorDialog:    confirmdialog.New(terminalWidth, terminalHeight),
+		unlockDialog:   unlockdialog.New(terminalWidth, terminalHeight),
 		terminalWidth:  terminalWidth,
 		terminalHeight: terminalHeight,
 	}
@@ -188,8 +194,19 @@ func cmdBar() *commandinput.Model {
 
 func (m *Model) showAppError(errMsg string, fallbackView string) {
 	m.errorDialog.Visible = true
+	m.errorDialog.InfoMode = false
 	m.errorDialog.ErrorMode = true
 	m.errorDialog.Message = errMsg
+	m.appErrorDialogActive = true
+	m.errorFallbackView = fallbackView
+}
+
+// showAppInfo shows the app-level modal styled as a neutral notice (not an error).
+func (m *Model) showAppInfo(infoMsg string, fallbackView string) {
+	m.errorDialog.Visible = true
+	m.errorDialog.ErrorMode = false
+	m.errorDialog.InfoMode = true
+	m.errorDialog.Message = infoMsg
 	m.appErrorDialogActive = true
 	m.errorFallbackView = fallbackView
 }
