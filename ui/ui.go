@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Styles (you can override these per-view if desired)
@@ -418,6 +419,12 @@ func OverlayCentered(base, overlay string, width, height int) string {
 		} else {
 			// Overlay dialog in the middle using width-aware truncation
 			leftPart := TruncateANSI(baseLine, startCol)
+			// A wide grapheme straddling startCol leaves leftPart one cell
+			// short; pad so the dialog's left border is column-aligned on
+			// every row (otherwise borders jitter on wide-char lines).
+			if pad := startCol - lipgloss.Width(leftPart); pad > 0 {
+				leftPart += strings.Repeat(" ", pad)
+			}
 			rightStart := startCol + dialogWidth
 			rightPart := ""
 			if rightStart < baseWidth {
@@ -436,71 +443,22 @@ func OverlayCentered(base, overlay string, width, height int) string {
 	return strings.Join(baseLines, "\n")
 }
 
-// TruncateANSI truncates a string with ANSI codes to a specific visual width.
+// TruncateANSI truncates a string with ANSI codes to a specific visual (cell)
+// width. It is grapheme/display-width aware (wide East-Asian chars and emoji
+// count as 2 cells) and never splits an escape sequence.
 func TruncateANSI(s string, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	var result strings.Builder
-	var currentWidth int
-	inEscape := false
-
-	for _, r := range s {
-		if r == '\x1b' {
-			inEscape = true
-		}
-
-		if inEscape {
-			result.WriteRune(r)
-			if r == 'm' {
-				inEscape = false
-			}
-			continue
-		}
-
-		if currentWidth >= width {
-			break
-		}
-
-		result.WriteRune(r)
-		currentWidth++
-	}
-
-	return result.String()
+	return ansi.Truncate(s, width, "")
 }
 
-// TruncateANSIAfter skips characters up to a visual width and returns the rest.
+// TruncateANSIAfter skips skipWidth visual cells and returns the rest,
+// re-emitting the active SGR state at the cut so colors survive. It is
+// grapheme/display-width aware and never splits an escape sequence.
 func TruncateANSIAfter(s string, skipWidth int) string {
 	if skipWidth <= 0 {
 		return s
 	}
-	var result strings.Builder
-	var currentWidth int
-	inEscape := false
-	var escapeBuffer strings.Builder
-
-	for _, r := range s {
-		if r == '\x1b' {
-			inEscape = true
-			escapeBuffer.Reset()
-		}
-
-		if inEscape {
-			escapeBuffer.WriteRune(r)
-			if r == 'm' {
-				inEscape = false
-				if currentWidth >= skipWidth {
-					result.WriteString(escapeBuffer.String())
-				}
-			}
-			continue
-		}
-
-		if currentWidth >= skipWidth {
-			result.WriteRune(r)
-		}
-		currentWidth++
-	}
-
-	return result.String()
+	return ansi.TruncateLeft(s, skipWidth, "")
 }
