@@ -1,0 +1,8 @@
+apiVersion: v2
+name: demo
+version: 0.1.0
+appVersion: "1.0"
+description: Minimal chart used in unit tests
+maintainers:
+  - name: Eldara Tech
+    email: hello@eldara.io

@@ -1,0 +1,6 @@
+{{- if .Values.extras.enabled }}
+services:
+  sidecar:
+    image: busybox:latest
+    command: ["sleep", "3600"]
+{{- end }}
