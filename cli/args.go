@@ -12,16 +12,18 @@ import (
 // flags holds the parsed flag values shared across charts subcommands. Not
 // every subcommand reads every field.
 type flags struct {
-	values     []string // -f/--values, repeatable
-	sets       []string // --set, repeatable
-	version    string   // --version, chart version selector
-	dryRun     bool
-	wait       bool
-	debug      bool
-	purge      bool          // --purge-volumes
-	install    bool          // --install (upgrade, Phase 2)
-	timeout    time.Duration // --timeout
-	historyMax int           // --history-max
+	values      []string // -f/--values, repeatable
+	sets        []string // --set, repeatable
+	version     string   // --version, chart version selector
+	dryRun      bool
+	wait        bool
+	debug       bool
+	purge       bool          // --purge-volumes
+	install     bool          // --install (upgrade)
+	reuseValues bool          // --reuse-values (upgrade)
+	revision    int           // --revision (get)
+	timeout     time.Duration // --timeout
+	historyMax  int           // --history-max
 }
 
 // parseArgs splits raw args into positionals and flags. It understands the
@@ -93,6 +95,18 @@ func parseArgs(args []string) ([]string, flags, error) {
 				return nil, f, fmt.Errorf("invalid --history-max %q: %w", v, err)
 			}
 			f.historyMax = n
+		case "--revision":
+			v, err := next()
+			if err != nil {
+				return nil, f, err
+			}
+			n, err := parseInt(v)
+			if err != nil {
+				return nil, f, fmt.Errorf("invalid --revision %q: %w", v, err)
+			}
+			f.revision = n
+		case "--reuse-values":
+			f.reuseValues = true
 		case "--dry-run":
 			f.dryRun = true
 		case "--wait":

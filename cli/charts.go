@@ -32,7 +32,12 @@ Discovery:
 Releases:
   template <release> <chart>  Render manifest to stdout (no deploy)
   install  <release> <chart>  Install a chart as a release
+  upgrade  <release> <chart>  Upgrade a release to a new revision
   uninstall <release>         Remove a release (keeps volumes)
+  rollback <release> <rev>    Re-deploy the contents of a past revision
+  history <release>           Show a release's revision history
+  get values|manifest <rel>   Show stored values or rendered manifest
+  diff upgrade <rel> <chart>  Preview manifest changes before upgrading
   list                        List releases
   status <release>            Show release status and services
 
@@ -44,6 +49,9 @@ Common options:
       --wait            Wait for services to converge
       --timeout <dur>   Wait timeout, e.g. 10m (default 5m)
       --history-max <n> Max release revisions to retain
+      --install         upgrade: install the release if absent
+      --reuse-values    upgrade/diff: layer overrides on previous values
+      --revision <n>    get: select a specific revision
       --purge-volumes   uninstall: also remove the release's volumes
 `
 
@@ -68,8 +76,18 @@ func chartsMain(args []string) int {
 		return chartsTemplate(rest)
 	case "install":
 		return chartsInstall(rest)
+	case "upgrade":
+		return chartsUpgrade(rest)
 	case "uninstall":
 		return chartsUninstall(rest)
+	case "rollback":
+		return chartsRollback(rest)
+	case "history":
+		return chartsHistory(rest)
+	case "get":
+		return chartsGet(rest)
+	case "diff":
+		return chartsDiff(rest)
 	case "list", "ls":
 		return chartsList(rest)
 	case "status":
@@ -252,7 +270,7 @@ func chartsTemplate(args []string) int {
 		return usageErr("charts template <release> <repo/chart>")
 	}
 	release, ref := pos[0], pos[1]
-	manifest, _, _, code := prepare(release, ref, f)
+	manifest, _, _, code := prepare(release, ref, f, nil)
 	if code >= 0 {
 		return code
 	}
@@ -269,12 +287,11 @@ func chartsInstall(args []string) int {
 		return usageErr("charts install <release> <repo/chart>")
 	}
 	release, ref := pos[0], pos[1]
-	manifest, values, rc, code := prepare(release, ref, f)
+	manifest, values, rc, code := prepare(release, ref, f, nil)
 	if code >= 0 {
 		return code
 	}
-	eng := charts.NewEngine()
-	rel, err := eng.Install(context.Background(), release, rc, values, manifest, charts.InstallOptions{
+	rel, err := charts.NewEngine().Install(context.Background(), release, rc, values, manifest, charts.InstallOptions{
 		DryRun:     f.dryRun,
 		Wait:       f.wait,
 		Timeout:    f.timeout,
@@ -283,7 +300,46 @@ func chartsInstall(args []string) int {
 	if err != nil {
 		return fail(err)
 	}
-	if f.dryRun {
+	return reportRelease(rel, manifest, f.dryRun)
+}
+
+func chartsUpgrade(args []string) int {
+	pos, f, err := parseArgs(args)
+	if err != nil {
+		return usageErr(err.Error())
+	}
+	if len(pos) != 2 {
+		return usageErr("charts upgrade <release> <repo/chart>")
+	}
+	release, ref := pos[0], pos[1]
+
+	var base map[string]any
+	if f.reuseValues {
+		cur, err := charts.NewEngine().GetRevision(context.Background(), release, 0)
+		if err != nil {
+			return fail(err)
+		}
+		base = cur.Values
+	}
+	manifest, values, rc, code := prepare(release, ref, f, base)
+	if code >= 0 {
+		return code
+	}
+	rel, err := charts.NewEngine().Upgrade(context.Background(), release, rc, values, manifest, charts.InstallOptions{
+		DryRun:     f.dryRun,
+		Wait:       f.wait,
+		Install:    f.install,
+		Timeout:    f.timeout,
+		HistoryMax: f.historyMax,
+	})
+	if err != nil {
+		return fail(err)
+	}
+	return reportRelease(rel, manifest, f.dryRun)
+}
+
+func reportRelease(rel *charts.Release, manifest string, dryRun bool) int {
+	if dryRun {
 		outf("NAME: %s\nREVISION: %d\nSTATUS: %s (dry-run, not deployed)\n\n", rel.Name, rel.Revision, rel.Status)
 		outln(manifest)
 		return 0
@@ -292,17 +348,128 @@ func chartsInstall(args []string) int {
 	return 0
 }
 
+func chartsRollback(args []string) int {
+	pos, f, err := parseArgs(args)
+	if err != nil {
+		return usageErr(err.Error())
+	}
+	if len(pos) != 2 {
+		return usageErr("charts rollback <release> <revision>")
+	}
+	rev, err := parseInt(pos[1])
+	if err != nil {
+		return usageErr(fmt.Sprintf("invalid revision %q", pos[1]))
+	}
+	rel, err := charts.NewEngine().Rollback(context.Background(), pos[0], rev, charts.InstallOptions{
+		Wait: f.wait, Timeout: f.timeout, HistoryMax: f.historyMax,
+	})
+	if err != nil {
+		return fail(err)
+	}
+	outf("Rolled back %s to the contents of revision %d (new revision %d)\n", rel.Name, rev, rel.Revision)
+	return 0
+}
+
+func chartsHistory(args []string) int {
+	pos, _, err := parseArgs(args)
+	if err != nil {
+		return usageErr(err.Error())
+	}
+	if len(pos) != 1 {
+		return usageErr("charts history <release>")
+	}
+	hist, err := charts.NewEngine().History(context.Background(), pos[0])
+	if err != nil {
+		return fail(err)
+	}
+	rows := make([][]string, 0, len(hist))
+	for _, r := range hist {
+		rows = append(rows, []string{strconv.Itoa(r.Revision), r.Status, r.Chart.Name + "-" + r.Chart.Version, r.Created})
+	}
+	table([]string{"REVISION", "STATUS", "CHART", "UPDATED"}, rows)
+	return 0
+}
+
+func chartsGet(args []string) int {
+	if len(args) < 2 {
+		return usageErr("charts get <values|manifest> <release> [--revision N]")
+	}
+	what, release := args[0], args[1]
+	_, f, err := parseArgs(args[2:])
+	if err != nil {
+		return usageErr(err.Error())
+	}
+	rel, err := charts.NewEngine().GetRevision(context.Background(), release, f.revision)
+	if err != nil {
+		return fail(err)
+	}
+	switch what {
+	case "values":
+		data, err := yaml.Marshal(rel.Values)
+		if err != nil {
+			return fail(err)
+		}
+		_, _ = stdout.Write(data)
+	case "manifest":
+		outln(rel.Manifest)
+	default:
+		return usageErr(fmt.Sprintf("unknown get target %q (want values|manifest)", what))
+	}
+	return 0
+}
+
+func chartsDiff(args []string) int {
+	if len(args) < 1 {
+		return usageErr("charts diff upgrade <release> <repo/chart>")
+	}
+	if args[0] != "upgrade" {
+		return usageErr(fmt.Sprintf("unknown diff target %q (want upgrade)", args[0]))
+	}
+	pos, f, err := parseArgs(args[1:])
+	if err != nil {
+		return usageErr(err.Error())
+	}
+	if len(pos) != 2 {
+		return usageErr("charts diff upgrade <release> <repo/chart>")
+	}
+	release, ref := pos[0], pos[1]
+
+	cur, err := charts.NewEngine().GetRevision(context.Background(), release, 0)
+	if err != nil {
+		return fail(err)
+	}
+	var base map[string]any
+	if f.reuseValues {
+		base = cur.Values
+	}
+	next, _, _, code := prepare(release, ref, f, base)
+	if code >= 0 {
+		return code
+	}
+	if cur.Manifest == next {
+		outln("No changes.")
+		return 0
+	}
+	out(lineDiff(cur.Manifest, next))
+	return 0
+}
+
 // prepare loads the chart, merges + validates values, and renders the manifest.
-func prepare(release, ref string, f flags) (manifest string, values map[string]any, rc charts.ReleaseChart, code int) {
+// base, when non-nil, replaces the chart defaults as the merge base (used by
+// `upgrade --reuse-values` to layer overrides over the previous release).
+func prepare(release, ref string, f flags, base map[string]any) (manifest string, values map[string]any, rc charts.ReleaseChart, code int) {
 	ch, _, c := loadChart(ref, f.version)
 	if c >= 0 {
 		return "", nil, rc, c
+	}
+	if base == nil {
+		base = ch.Values
 	}
 	files, err := readValuesFiles(f.values)
 	if err != nil {
 		return "", nil, rc, fail(err)
 	}
-	values, err = charts.MergeValues(ch.Values, files, f.sets)
+	values, err = charts.MergeValues(base, files, f.sets)
 	if err != nil {
 		return "", nil, rc, fail(err)
 	}

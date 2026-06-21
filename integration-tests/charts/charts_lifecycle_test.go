@@ -99,6 +99,28 @@ func TestChartsReleaseLifecycle(t *testing.T) {
 	require.Equal(t, charts.StatusDeployed, cur.Status)
 	require.NotEmpty(t, svcs, "status should list services")
 
+	// Upgrade to revision 2 (scale to 1) then roll back to revision 1's content.
+	up, err := charts.MergeValues(ch.Values, nil, []string{"replicas=1"})
+	require.NoError(t, err)
+	upManifest, err := charts.Render(ch, charts.RenderContext{
+		Values:  up,
+		Release: charts.ReleaseMeta{Name: release, Namespace: release, Revision: 2},
+		Chart:   charts.ChartMeta{Name: ch.Metadata.Name, Version: ch.Metadata.Version},
+	})
+	require.NoError(t, err)
+	rel2, err := eng.Upgrade(ctx, release, charts.ReleaseChart{Name: ch.Metadata.Name, Version: ch.Metadata.Version},
+		up, upManifest, charts.InstallOptions{Wait: true, Timeout: 90 * time.Second})
+	require.NoError(t, err)
+	require.Equal(t, 2, rel2.Revision)
+
+	hist, err := eng.History(ctx, release)
+	require.NoError(t, err)
+	require.Len(t, hist, 2)
+
+	rb, err := eng.Rollback(ctx, release, 1, charts.InstallOptions{Wait: true, Timeout: 90 * time.Second})
+	require.NoError(t, err)
+	require.Equal(t, 3, rb.Revision)
+
 	// Uninstall removes the stack and the release Configs.
 	require.NoError(t, eng.Uninstall(ctx, release, true))
 	_, err = docker.InspectConfig(ctx, fmt.Sprintf("swarmcli.release.%s.v1", release))
