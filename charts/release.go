@@ -72,10 +72,11 @@ func NewEngineWith(b Backend) *Engine {
 	return &Engine{Backend: b, now: time.Now}
 }
 
-// InstallOptions tune an install.
+// InstallOptions tune an install or upgrade.
 type InstallOptions struct {
 	DryRun     bool
 	Wait       bool
+	Install    bool // upgrade: create the release if it does not exist
 	Timeout    time.Duration
 	HistoryMax int // 0 = keep all
 }
@@ -95,9 +96,97 @@ func (e *Engine) Install(ctx context.Context, release string, chart ReleaseChart
 		return nil, fmt.Errorf("release %q already exists (revision %d); use upgrade", release, cur.Revision)
 	}
 
-	rel := &Release{
+	rel := e.newRevision(release, nextRevision(revs), chart, values, manifest)
+	return e.deployAndRecord(ctx, rel, opts)
+}
+
+// Upgrade deploys a new revision of an existing release. When the release does
+// not exist it errors unless opts.Install is set (the `upgrade --install`
+// behavior). manifest must already be rendered and validated.
+func (e *Engine) Upgrade(ctx context.Context, release string, chart ReleaseChart, values map[string]any, manifest string, opts InstallOptions) (*Release, error) {
+	if err := validateReleaseName(release); err != nil {
+		return nil, err
+	}
+	revs, err := e.revisions(ctx, release)
+	if err != nil {
+		return nil, err
+	}
+	cur := currentRevision(revs)
+	if cur == nil || cur.Status == StatusUninstalled {
+		if !opts.Install {
+			return nil, fmt.Errorf("release %q does not exist; use install or upgrade --install", release)
+		}
+	}
+	rel := e.newRevision(release, nextRevision(revs), chart, values, manifest)
+	return e.deployAndRecord(ctx, rel, opts)
+}
+
+// Rollback deploys a new revision whose content is copied from a previous
+// revision (append-only, mirroring Helm). targetRev must be an existing,
+// non-failed revision.
+func (e *Engine) Rollback(ctx context.Context, release string, targetRev int, opts InstallOptions) (*Release, error) {
+	revs, err := e.revisions(ctx, release)
+	if err != nil {
+		return nil, err
+	}
+	if len(revs) == 0 {
+		return nil, fmt.Errorf("release %q not found", release)
+	}
+	var target *Release
+	for i := range revs {
+		if revs[i].Revision == targetRev {
+			target = &revs[i]
+		}
+	}
+	if target == nil {
+		return nil, fmt.Errorf("release %q has no revision %d", release, targetRev)
+	}
+	if target.Status == StatusFailed {
+		return nil, fmt.Errorf("cannot roll back to failed revision %d", targetRev)
+	}
+	rel := e.newRevision(release, nextRevision(revs), target.Chart, target.Values, target.Manifest)
+	return e.deployAndRecord(ctx, rel, opts)
+}
+
+// History returns every stored revision of a release, ascending, with derived
+// display statuses.
+func (e *Engine) History(ctx context.Context, release string) ([]Release, error) {
+	revs, err := e.revisions(ctx, release)
+	if err != nil {
+		return nil, err
+	}
+	if len(revs) == 0 {
+		return nil, fmt.Errorf("release %q not found", release)
+	}
+	return revs, nil
+}
+
+// GetRevision returns a specific revision of a release, or the current one when
+// rev <= 0.
+func (e *Engine) GetRevision(ctx context.Context, release string, rev int) (*Release, error) {
+	revs, err := e.revisions(ctx, release)
+	if err != nil {
+		return nil, err
+	}
+	if len(revs) == 0 {
+		return nil, fmt.Errorf("release %q not found", release)
+	}
+	if rev <= 0 {
+		return currentRevision(revs), nil
+	}
+	for i := range revs {
+		if revs[i].Revision == rev {
+			return &revs[i], nil
+		}
+	}
+	return nil, fmt.Errorf("release %q has no revision %d", release, rev)
+}
+
+// newRevision builds an unsaved, deployed-status revision.
+func (e *Engine) newRevision(release string, rev int, chart ReleaseChart, values map[string]any, manifest string) *Release {
+	return &Release{
 		Name:      release,
-		Revision:  nextRevision(revs),
+		Revision:  rev,
 		Status:    StatusDeployed,
 		Chart:     chart,
 		Values:    values,
@@ -105,31 +194,35 @@ func (e *Engine) Install(ctx context.Context, release string, chart ReleaseChart
 		Namespace: release,
 		Created:   e.now().UTC().Format(time.RFC3339),
 	}
+}
 
+// deployAndRecord deploys a revision's manifest and records it. On DryRun it
+// returns the prospective revision without touching Docker. On deploy failure
+// it records nothing, leaving the release retryable (no orphaned revision).
+func (e *Engine) deployAndRecord(ctx context.Context, rel *Release, opts InstallOptions) (*Release, error) {
 	if opts.DryRun {
 		return rel, nil
 	}
-
-	if err := e.ensureExternalNetworks(ctx, manifest); err != nil {
+	if err := e.ensureExternalNetworks(ctx, rel.Manifest); err != nil {
 		rel.Status = StatusFailed
 		return rel, err
 	}
-	if err := e.Backend.DeployStack(release, manifest); err != nil {
+	if err := e.Backend.DeployStack(rel.Name, rel.Manifest); err != nil {
 		rel.Status = StatusFailed
 		// Do not record on failure: a failed deploy must leave no release Config
-		// behind, so the install stays retryable (no orphaned "already exists").
+		// behind, so the release stays retryable (no orphaned "already exists").
 		return rel, fmt.Errorf("deploy failed: %w", err)
 	}
 	if err := e.record(ctx, rel); err != nil {
 		return rel, fmt.Errorf("deployed, but recording release failed: %w", err)
 	}
 	if opts.Wait {
-		if err := e.waitReady(release, opts.Timeout); err != nil {
+		if err := e.waitReady(rel.Name, opts.Timeout); err != nil {
 			return rel, err
 		}
 	}
 	if opts.HistoryMax > 0 {
-		e.pruneHistory(ctx, release, opts.HistoryMax)
+		e.pruneHistory(ctx, rel.Name, opts.HistoryMax)
 	}
 	return rel, nil
 }

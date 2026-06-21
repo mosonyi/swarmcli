@@ -10,10 +10,10 @@ A Helm-inspired package manager for Docker Swarm. Charts package Docker Stack
 produces a **release** — a Docker stack whose revision history is stored in
 Docker Configs.
 
-This is **Phase 1 (MVP)** of [issue #413]: repository management, discovery,
-templating, and the install/uninstall/list/status release lifecycle. Upgrade,
-history, rollback, diff, and chart-dev tooling (create/lint/dependency) follow
-in later phases.
+Implemented so far ([issue #413]): repository management, discovery, templating,
+and the full release lifecycle — install, upgrade, rollback, uninstall, list,
+status, history, diff, and get. Chart-dev tooling (`create`, `lint`,
+`dependency`) and subchart resolution are the remaining phase.
 
 ## Invocation
 
@@ -29,6 +29,10 @@ swarmcli charts show values eldara/traefik > values.yaml
 swarmcli charts template my-traefik eldara/traefik -f values.yaml
 swarmcli charts install  my-traefik eldara/traefik -f values.yaml
 swarmcli charts status   my-traefik
+swarmcli charts diff upgrade my-traefik eldara/traefik --set replicas=3
+swarmcli charts upgrade  my-traefik eldara/traefik --set replicas=3
+swarmcli charts history  my-traefik
+swarmcli charts rollback my-traefik 1
 swarmcli charts list
 swarmcli charts uninstall my-traefik
 ```
