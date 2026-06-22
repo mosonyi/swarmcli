@@ -102,3 +102,46 @@ func TestLoadChartArchive(t *testing.T) {
 	require.Contains(t, ch.Templates, "templates/stack.yaml")
 	require.NotEmpty(t, ch.Schema)
 }
+
+// Charts may come from untrusted repos, so the host-reaching Sprig helpers are
+// denied: a template referencing `env` must fail to render rather than leak the
+// host environment into the manifest.
+func TestRenderDeniesHostEnvFuncs(t *testing.T) {
+	ch := loadDemo(t)
+	ch.Templates = map[string]string{"templates/x.yaml": `app: {{ env "HOME" }}`}
+	_, err := Render(ch, RenderContext{Release: ReleaseMeta{Name: "x", Namespace: "x", Revision: 1}})
+	require.ErrorContains(t, err, "env")
+}
+
+func TestRenderErrors(t *testing.T) {
+	cases := []struct{ name, tmpl, want string }{
+		{"parse error", "{{ if .Values.x }}", "parse error"},
+		{"invalid yaml", "foo: [unclosed", "invalid YAML"},
+		{"empty manifest", "{{ if false }}a: b{{ end }}", "empty manifest"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ch := loadDemo(t)
+			ch.Templates = map[string]string{"templates/x.yaml": tc.tmpl}
+			_, err := Render(ch, RenderContext{Release: ReleaseMeta{Name: "x", Namespace: "x", Revision: 1}})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
+func TestMergeValuesErrors(t *testing.T) {
+	_, err := MergeValues(map[string]any{}, [][]byte{[]byte("a: [bad")}, nil)
+	require.ErrorContains(t, err, "values file #1")
+
+	_, err = MergeValues(map[string]any{}, nil, []string{"noequals"})
+	require.ErrorContains(t, err, "expected key=value")
+
+	_, err = MergeValues(map[string]any{}, nil, []string{"=v"})
+	require.ErrorContains(t, err, "empty key")
+}
+
+func TestValidateValuesErrors(t *testing.T) {
+	require.NoError(t, ValidateValues(nil, map[string]any{}))          // empty schema: no-op
+	require.NoError(t, ValidateValues([]byte("  "), map[string]any{})) // blank schema: no-op
+	require.ErrorContains(t, ValidateValues([]byte("{not json"), map[string]any{}), "not valid JSON")
+}

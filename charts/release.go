@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -41,6 +42,9 @@ type ServiceState struct {
 type Backend interface {
 	DeployStack(name, manifest string) error
 	RemoveStack(name string) error
+	// RefreshSnapshot invalidates the shared Docker state cache after a mutation
+	// so subsequent reads (status, convergence polling) do not see stale data.
+	RefreshSnapshot() error
 	CreateConfig(ctx context.Context, name string, data []byte, labels map[string]string) error
 	ListConfigs(ctx context.Context) ([]ConfigMeta, error)
 	InspectConfig(ctx context.Context, name string) ([]byte, error)
@@ -53,6 +57,9 @@ type Backend interface {
 	NetworkScopes(ctx context.Context) (map[string]string, error)
 	// CreateOverlayNetwork creates an attachable, swarm-scoped overlay network.
 	CreateOverlayNetwork(ctx context.Context, name string) error
+	// RemoveOverlayNetwork removes a network by name, used to roll back networks
+	// auto-created for an install whose deploy then failed. A no-op if absent.
+	RemoveOverlayNetwork(ctx context.Context, name string) error
 }
 
 // Engine drives release lifecycle operations against a Backend.
@@ -203,18 +210,30 @@ func (e *Engine) deployAndRecord(ctx context.Context, rel *Release, opts Install
 	if opts.DryRun {
 		return rel, nil
 	}
-	if err := e.ensureExternalNetworks(ctx, rel.Manifest); err != nil {
+	created, err := e.ensureExternalNetworks(ctx, rel.Manifest)
+	if err != nil {
 		rel.Status = StatusFailed
+		for _, n := range created {
+			_ = e.Backend.RemoveOverlayNetwork(ctx, n)
+		}
 		return rel, err
 	}
 	if err := e.Backend.DeployStack(rel.Name, rel.Manifest); err != nil {
 		rel.Status = StatusFailed
+		// Roll back networks we auto-created for this install so a failed deploy
+		// leaves no trace; pre-existing networks are untouched.
+		for _, n := range created {
+			_ = e.Backend.RemoveOverlayNetwork(ctx, n)
+		}
 		// Do not record on failure: a failed deploy must leave no release Config
 		// behind, so the release stays retryable (no orphaned "already exists").
 		return rel, fmt.Errorf("deploy failed: %w", err)
 	}
+	// The deploy mutated swarm state; invalidate the shared cache so the
+	// convergence poll and any follow-up status read see fresh data.
+	_ = e.Backend.RefreshSnapshot()
 	if err := e.record(ctx, rel); err != nil {
-		return rel, fmt.Errorf("deployed, but recording release failed: %w", err)
+		return rel, fmt.Errorf("stack %q was deployed but recording its release history failed: %w; re-run install/upgrade to reconcile", rel.Name, err)
 	}
 	if opts.Wait {
 		if err := e.waitReady(rel.Name, opts.Timeout); err != nil {
@@ -232,14 +251,16 @@ func (e *Engine) deployAndRecord(ctx context.Context, rel *Release, opts Install
 // networks are created as attachable swarm overlays; networks that exist with a
 // non-swarm scope, or that cannot be created, are reported with the manual
 // `docker network create` commands needed to resolve them.
-func (e *Engine) ensureExternalNetworks(ctx context.Context, manifest string) error {
+// ensureExternalNetworks returns the names of networks it auto-created, so a
+// caller can roll them back if a later step (the deploy) fails.
+func (e *Engine) ensureExternalNetworks(ctx context.Context, manifest string) (created []string, err error) {
 	names, err := externalNetworks(manifest)
 	if err != nil || len(names) == 0 {
-		return err
+		return nil, err
 	}
 	scopes, err := e.Backend.NetworkScopes(ctx)
 	if err != nil {
-		return fmt.Errorf("checking external networks: %w", err)
+		return nil, fmt.Errorf("checking external networks: %w", err)
 	}
 	var reasons, needCreate []string
 	for _, name := range names {
@@ -253,11 +274,13 @@ func (e *Engine) ensureExternalNetworks(ctx context.Context, manifest string) er
 			if cerr := e.Backend.CreateOverlayNetwork(ctx, name); cerr != nil {
 				reasons = append(reasons, fmt.Sprintf("  %s: auto-create failed: %v", name, cerr))
 				needCreate = append(needCreate, name)
+			} else {
+				created = append(created, name)
 			}
 		}
 	}
 	if len(reasons) == 0 {
-		return nil
+		return created, nil
 	}
 	msg := "external network(s) required by this chart are unavailable:\n" + strings.Join(reasons, "\n")
 	if len(needCreate) > 0 {
@@ -267,7 +290,7 @@ func (e *Engine) ensureExternalNetworks(ctx context.Context, manifest string) er
 		}
 		msg += "\ncreate them on a swarm manager, then retry:\n" + strings.TrimRight(cmds.String(), "\n")
 	}
-	return fmt.Errorf("%s", msg)
+	return created, fmt.Errorf("%s", msg)
 }
 
 // Uninstall removes the release's stack and, unless keepHistory, its recorded
@@ -281,28 +304,35 @@ func (e *Engine) Uninstall(ctx context.Context, release string, purgeVolumes boo
 		return fmt.Errorf("release %q not found", release)
 	}
 
+	// Continue cleanup on partial failure rather than aborting: a stranded
+	// history Config or volume must not be left behind because an earlier step
+	// failed (e.g. a retry where the stack is already gone). Errors are
+	// aggregated and returned together.
+	var errs []error
 	if err := e.Backend.RemoveStack(release); err != nil {
-		return fmt.Errorf("removing stack: %w", err)
+		errs = append(errs, fmt.Errorf("removing stack: %w", err))
+	} else {
+		_ = e.Backend.RefreshSnapshot()
 	}
 
 	if purgeVolumes {
-		vols, err := e.Backend.StackVolumes(ctx, release)
-		if err != nil {
-			return fmt.Errorf("listing volumes: %w", err)
-		}
-		for _, v := range vols {
-			if err := e.Backend.RemoveVolume(ctx, v); err != nil {
-				return fmt.Errorf("removing volume %q: %w", v, err)
+		if vols, err := e.Backend.StackVolumes(ctx, release); err != nil {
+			errs = append(errs, fmt.Errorf("listing volumes: %w", err))
+		} else {
+			for _, v := range vols {
+				if err := e.Backend.RemoveVolume(ctx, v); err != nil {
+					errs = append(errs, fmt.Errorf("removing volume %q: %w", v, err))
+				}
 			}
 		}
 	}
 
 	for _, r := range revs {
 		if err := e.Backend.DeleteConfig(ctx, releaseConfigName(release, r.Revision)); err != nil {
-			return fmt.Errorf("deleting release config: %w", err)
+			errs = append(errs, fmt.Errorf("deleting release config: %w", err))
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // List returns the current (highest) revision of every release.
@@ -405,8 +435,38 @@ func nextRevision(revs []Release) int {
 	return revs[len(revs)-1].Revision + 1
 }
 
-// record stores a release revision as a gzipped, labeled Docker Config.
+// maxRecordRetries bounds the TOCTOU retry when a concurrent install/upgrade
+// claims the same revision number.
+const maxRecordRetries = 5
+
+// record stores a release revision as a gzipped, labeled Docker Config. The
+// revision number is computed before deploy, so a concurrent install/upgrade
+// can claim the same name; CreateConfig is atomic on the name, so on collision
+// we re-read the history and retry with the next free revision, keeping the
+// append-only log consistent.
 func (e *Engine) record(ctx context.Context, rel *Release) error {
+	for attempt := 0; attempt <= maxRecordRetries; attempt++ {
+		err := e.storeRevision(ctx, rel)
+		if err == nil || !isAlreadyExists(err) {
+			return err
+		}
+		revs, rerr := e.revisions(ctx, rel.Name)
+		if rerr != nil {
+			return err // surface the original collision error
+		}
+		rel.Revision = nextRevision(revs)
+	}
+	return fmt.Errorf("could not allocate a free revision for release %q after %d attempts", rel.Name, maxRecordRetries)
+}
+
+// isAlreadyExists reports whether err is a Docker "config already exists"
+// conflict (the name was claimed concurrently).
+func isAlreadyExists(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "already exists")
+}
+
+// storeRevision writes a single release revision as a gzipped, labeled Config.
+func (e *Engine) storeRevision(ctx context.Context, rel *Release) error {
 	payload, err := yaml.Marshal(rel)
 	if err != nil {
 		return err
@@ -462,6 +522,11 @@ func (e *Engine) waitReady(release string, timeout time.Duration) error {
 
 func allConverged(states []ServiceState) bool {
 	for _, s := range states {
+		// A rolling update in flight is not converged even if the (old)
+		// replica ratio still reads N/N — wait for the update to settle.
+		if inProgressStatus(s.Status) {
+			return false
+		}
 		if s.Replicas == "" {
 			continue // global services: no replica ratio to check
 		}
@@ -471,6 +536,16 @@ func allConverged(states []ServiceState) bool {
 		}
 	}
 	return true
+}
+
+// inProgressStatus reports whether a service's status string (as produced by
+// docker.getServiceStatus) indicates an in-flight create/update/rollback.
+func inProgressStatus(status string) bool {
+	switch status {
+	case "updating", "paused", "rolling back", "rollback paused":
+		return true
+	}
+	return false
 }
 
 func releaseConfigName(release string, rev int) string {
@@ -495,9 +570,12 @@ func decodeRelease(gz []byte) (*Release, error) {
 		return nil, err
 	}
 	defer func() { _ = r.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(r, maxChartFileSize))
+	raw, err := io.ReadAll(io.LimitReader(r, maxChartFileSize+1))
 	if err != nil {
 		return nil, err
+	}
+	if len(raw) > maxChartFileSize {
+		return nil, fmt.Errorf("release payload exceeds %d bytes", maxChartFileSize)
 	}
 	var rel Release
 	if err := yaml.Unmarshal(raw, &rel); err != nil {

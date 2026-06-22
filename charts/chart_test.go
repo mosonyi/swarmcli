@@ -7,6 +7,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,42 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+// packEntries packs in-memory files into a gzipped tar for archive-loader tests.
+func packEntries(t *testing.T, files map[string]string) string {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	for name, body := range files {
+		require.NoError(t, tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(body)), Typeflag: tar.TypeReg}))
+		_, err := tw.Write([]byte(body))
+		require.NoError(t, err)
+	}
+	require.NoError(t, tw.Close())
+	require.NoError(t, gz.Close())
+	return buf.String()
+}
+
+func TestLoadChartArchiveCorruptGzip(t *testing.T) {
+	_, err := LoadChartArchive(strings.NewReader("not a gzip stream"))
+	require.ErrorContains(t, err, "open gzip")
+}
+
+func TestLoadChartArchiveMissingChartfile(t *testing.T) {
+	tgz := packEntries(t, map[string]string{"demo/templates/x.yaml": "services: {}"})
+	_, err := LoadChartArchive(strings.NewReader(tgz))
+	require.ErrorContains(t, err, "name is required")
+}
+
+func TestLoadChartArchiveTooManyFiles(t *testing.T) {
+	files := map[string]string{}
+	for i := 0; i <= maxChartFiles; i++ {
+		files[fmt.Sprintf("demo/templates/f%d.yaml", i)] = "x"
+	}
+	_, err := LoadChartArchive(strings.NewReader(packEntries(t, files)))
+	require.ErrorContains(t, err, "too many files")
+}
 
 // packDirToTgz packs a directory into a gzipped tar whose entries are prefixed
 // with prefix/, matching the layout of a packaged chart.

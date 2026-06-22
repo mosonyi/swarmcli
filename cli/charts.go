@@ -321,10 +321,15 @@ func chartsUpgrade(args []string) int {
 	var base map[string]any
 	if f.reuseValues {
 		cur, err := charts.NewEngine().GetRevision(context.Background(), release, 0)
-		if err != nil {
+		switch {
+		case err == nil:
+			base = cur.Values
+		case !f.install:
 			return fail(err)
+			// With --install and no existing release there are no prior values to
+			// reuse; fall through with base=nil so chart defaults apply. Upgrade
+			// re-validates the release, so a genuine backend error still surfaces.
 		}
-		base = cur.Values
 	}
 	manifest, values, rc, code := prepare(release, ref, f, base)
 	if code >= 0 {

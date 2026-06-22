@@ -43,7 +43,20 @@ func NewRepoStore() (*RepoStore, error) {
 
 // NewRepoStoreAt returns a store rooted at dir (used in tests).
 func NewRepoStoreAt(dir string) *RepoStore {
-	return &RepoStore{dir: dir, client: &http.Client{Timeout: httpTimeout}}
+	return &RepoStore{dir: dir, client: &http.Client{Timeout: httpTimeout, CheckRedirect: checkRedirect}}
+}
+
+// checkRedirect bounds redirects and refuses any hop to a non-http(s) URL,
+// blocking scheme-downgrade tricks (e.g. file://) when following a chart or
+// index download to an attacker-influenced location.
+func checkRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return fmt.Errorf("stopped after 10 redirects")
+	}
+	if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+		return fmt.Errorf("refusing redirect to non-http(s) URL %q", req.URL.Redacted())
+	}
+	return nil
 }
 
 func (s *RepoStore) reposFile() string { return filepath.Join(s.dir, "repos.json") }
@@ -273,8 +286,18 @@ func (s *RepoStore) Pull(entry IndexEntry, baseURL string) (*Chart, error) {
 		return nil, fmt.Errorf("chart %q has no download URL", entry.Name)
 	}
 	tarURL := entry.URLs[0]
-	if u, err := url.Parse(tarURL); err == nil && !u.IsAbs() {
+	u, err := url.Parse(tarURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid chart download URL %q: %w", tarURL, err)
+	}
+	if !u.IsAbs() {
 		tarURL = strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(tarURL, "/")
+		if u, err = url.Parse(tarURL); err != nil {
+			return nil, fmt.Errorf("invalid chart download URL %q: %w", tarURL, err)
+		}
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, fmt.Errorf("chart download URL must be http(s), got %q", tarURL)
 	}
 	resp, err := s.client.Get(tarURL)
 	if err != nil {

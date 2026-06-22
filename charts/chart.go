@@ -28,6 +28,14 @@ const (
 // against decompression bombs in downloaded tarballs.
 const maxChartFileSize = 10 << 20 // 10 MiB
 
+// maxChartFiles and maxChartTotalSize bound the whole archive (entry count and
+// cumulative decompressed size) so a hostile tarball cannot exhaust memory with
+// many large or many tiny entries despite the per-entry cap.
+const (
+	maxChartFiles     = 4096
+	maxChartTotalSize = 64 << 20 // 64 MiB
+)
+
 // LoadChartDir loads a chart from a directory on disk.
 func LoadChartDir(dir string) (*Chart, error) {
 	ch := &Chart{Templates: map[string]string{}}
@@ -98,6 +106,8 @@ func LoadChartArchive(r io.Reader) (*Chart, error) {
 
 	ch := &Chart{Templates: map[string]string{}, Values: map[string]any{}}
 	tr := tar.NewReader(gz)
+	var files int
+	var total int64
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -109,6 +119,9 @@ func LoadChartArchive(r io.Reader) (*Chart, error) {
 		if hdr.Typeflag != tar.TypeReg {
 			continue
 		}
+		if files++; files > maxChartFiles {
+			return nil, fmt.Errorf("archive has too many files (limit %d)", maxChartFiles)
+		}
 		rel := stripLeadingDir(path.Clean(hdr.Name))
 		if rel == "" || strings.HasPrefix(rel, "..") {
 			continue
@@ -119,6 +132,9 @@ func LoadChartArchive(r io.Reader) (*Chart, error) {
 		}
 		if len(body) > maxChartFileSize {
 			return nil, fmt.Errorf("archive entry %s exceeds %d bytes", rel, maxChartFileSize)
+		}
+		if total += int64(len(body)); total > maxChartTotalSize {
+			return nil, fmt.Errorf("archive decompresses to more than %d bytes", maxChartTotalSize)
 		}
 
 		switch {

@@ -146,6 +146,46 @@ func TestRepoStoreAddRejectsBadURL(t *testing.T) {
 	require.Error(t, s.Add("x", "ftp://example.com"))
 }
 
+// Pull must refuse a chart URL that is not http(s) (e.g. a malicious index
+// pointing at file://), before any download happens.
+func TestPullRejectsNonHTTPScheme(t *testing.T) {
+	s := NewRepoStoreAt(t.TempDir())
+	_, err := s.Pull(IndexEntry{Name: "demo", URLs: []string{"file:///etc/passwd"}}, "http://example.com")
+	require.ErrorContains(t, err, "http(s)")
+}
+
+func TestUpdateUnknownRepo(t *testing.T) {
+	s := NewRepoStoreAt(t.TempDir())
+	_, _, err := s.Update("ghost")
+	require.ErrorContains(t, err, "not found")
+}
+
+func TestLoadIndexMissing(t *testing.T) {
+	s := NewRepoStoreAt(t.TempDir())
+	_, err := s.LoadIndex("ghost")
+	require.ErrorContains(t, err, "no cached index")
+}
+
+// Update over all repos surfaces a mid-loop fetch failure with the repo name.
+func TestUpdateReportsFetchFailure(t *testing.T) {
+	serve := true
+	idx := "apiVersion: v1\nentries: {}\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serve && strings.HasSuffix(r.URL.Path, "/index.yaml") {
+			_, _ = w.Write([]byte(idx))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	s := NewRepoStoreAt(t.TempDir())
+	require.NoError(t, s.Add("eldara", srv.URL))
+	serve = false
+	_, _, err := s.Update("") // all repos
+	require.ErrorContains(t, err, `update "eldara"`)
+}
+
 // A failed index download must not leave the repository half-added: List stays
 // empty and the name can be reused once the index is reachable.
 func TestRepoStoreAddIndexFailureDoesNotPersist(t *testing.T) {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 // fakeBackend is an in-memory Backend for lifecycle tests.
@@ -22,6 +23,8 @@ type fakeBackend struct {
 	createNetErr  map[string]error  // network name -> error to return on create
 	failNext      bool
 	rmStackErr    error
+	refreshErr    error
+	onCreate      func(name string) error // hook to simulate concurrent config creation
 }
 
 type fakeConfig struct {
@@ -55,7 +58,13 @@ func (f *fakeBackend) RemoveStack(name string) error {
 	delete(f.deployed, name)
 	return nil
 }
+func (f *fakeBackend) RefreshSnapshot() error { return f.refreshErr }
 func (f *fakeBackend) CreateConfig(_ context.Context, name string, data []byte, labels map[string]string) error {
+	if f.onCreate != nil {
+		if err := f.onCreate(name); err != nil {
+			return err
+		}
+	}
 	if _, ok := f.configs[name]; ok {
 		return fmt.Errorf("config %q already exists", name)
 	}
@@ -109,6 +118,10 @@ func (f *fakeBackend) CreateOverlayNetwork(_ context.Context, name string) error
 		return err
 	}
 	f.networkScopes[name] = "swarm"
+	return nil
+}
+func (f *fakeBackend) RemoveOverlayNetwork(_ context.Context, name string) error {
+	delete(f.networkScopes, name)
 	return nil
 }
 
@@ -189,6 +202,17 @@ func TestInstallExternalNetworkPresent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, StatusDeployed, rel.Status)
 	require.Equal(t, extNetManifest, fb.deployed["demo"])
+}
+
+// A deploy failure must roll back any network this install auto-created, so a
+// failed install leaves no trace behind.
+func TestInstallRollsBackAutoCreatedNetworkOnDeployFailure(t *testing.T) {
+	fb := newFakeBackend()
+	fb.failNext = true // DeployStack fails
+	e := testEngine(fb)
+	_, err := e.Install(context.Background(), "demo", ReleaseChart{Name: "demo", Version: "1"}, nil, extNetManifest, InstallOptions{})
+	require.Error(t, err)
+	require.NotContains(t, fb.networkScopes, "traefik-public")
 }
 
 func TestInstallExternalNetworkAutoCreated(t *testing.T) {
@@ -275,4 +299,66 @@ func TestStatusReturnsServices(t *testing.T) {
 	require.Equal(t, 1, rel.Revision)
 	require.Len(t, svcs, 1)
 	require.Equal(t, "app", svcs[0].Name)
+}
+
+func mustGzipRelease(t *testing.T, rel *Release) []byte {
+	t.Helper()
+	payload, err := yaml.Marshal(rel)
+	require.NoError(t, err)
+	gz, err := gzipBytes(payload)
+	require.NoError(t, err)
+	return gz
+}
+
+// A converged service whose update is still in flight must not count as ready.
+func TestAllConvergedRejectsInProgress(t *testing.T) {
+	require.True(t, allConverged([]ServiceState{{Replicas: "2/2", Status: "active"}}))
+	require.True(t, allConverged([]ServiceState{{Replicas: "1/1", Status: "updated"}}))
+	require.False(t, allConverged([]ServiceState{{Replicas: "2/2", Status: "updating"}}))
+	require.False(t, allConverged([]ServiceState{{Replicas: "1/1", Status: "rolling back"}}))
+	require.False(t, allConverged([]ServiceState{{Replicas: "1/2", Status: "active"}}))
+}
+
+// When a concurrent actor claims the next revision number between read and
+// write, record() must re-read the history and bump to the next free revision
+// rather than colliding.
+func TestRecordRetriesOnRevisionCollision(t *testing.T) {
+	fb := newFakeBackend()
+	e := testEngine(fb)
+	ctx := context.Background()
+
+	_, err := e.Install(ctx, "demo", ReleaseChart{Name: "demo", Version: "1"}, nil, "services:\n  a:\n    image: x\n", InstallOptions{})
+	require.NoError(t, err)
+
+	// Simulate another actor recording v2 first: the create for v2 collides and
+	// the colliding revision becomes visible, so the retry must allocate v3.
+	fb.onCreate = func(name string) error {
+		if name == releaseConfigName("demo", 2) {
+			fb.onCreate = nil
+			fb.configs[name] = fakeConfig{
+				data:   mustGzipRelease(t, &Release{Name: "demo", Revision: 2, Status: StatusDeployed, Chart: ReleaseChart{Name: "demo", Version: "1"}}),
+				labels: map[string]string{LabelType: TypeRelease, LabelRelease: "demo", LabelRevision: "2"},
+			}
+			return fmt.Errorf("config %q already exists", name)
+		}
+		return nil
+	}
+	rel, err := e.Upgrade(ctx, "demo", ReleaseChart{Name: "demo", Version: "2"}, nil, "services:\n  a:\n    image: y\n", InstallOptions{})
+	require.NoError(t, err)
+	require.Equal(t, 3, rel.Revision)
+}
+
+// A stack-removal failure during uninstall must not strand the release history:
+// cleanup continues and the aggregated error is still reported.
+func TestUninstallContinuesOnPartialFailure(t *testing.T) {
+	fb := newFakeBackend()
+	e := testEngine(fb)
+	ctx := context.Background()
+	_, err := e.Install(ctx, "demo", ReleaseChart{Name: "demo", Version: "1"}, nil, "services:\n  a:\n    image: x\n", InstallOptions{})
+	require.NoError(t, err)
+
+	fb.rmStackErr = fmt.Errorf("stack gone")
+	err = e.Uninstall(ctx, "demo", false)
+	require.ErrorContains(t, err, "removing stack")
+	require.Empty(t, fb.configs) // history cleaned up despite the stack-removal failure
 }

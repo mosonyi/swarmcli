@@ -23,6 +23,11 @@ func (dockerBackend) RemoveStack(name string) error {
 	return docker.RemoveStackCLI(name)
 }
 
+func (dockerBackend) RefreshSnapshot() error {
+	_, err := docker.RefreshSnapshot()
+	return err
+}
+
 func (dockerBackend) CreateConfig(ctx context.Context, name string, data []byte, labels map[string]string) error {
 	_, err := docker.CreateConfig(ctx, name, data, labels)
 	return err
@@ -103,4 +108,17 @@ func (dockerBackend) NetworkScopes(ctx context.Context) (map[string]string, erro
 func (dockerBackend) CreateOverlayNetwork(ctx context.Context, name string) error {
 	_, _, err := docker.CreateNetwork(ctx, name, network.CreateOptions{Driver: "overlay", Attachable: true})
 	return err
+}
+
+func (dockerBackend) RemoveOverlayNetwork(ctx context.Context, name string) error {
+	nets, err := docker.ListNetworks(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range nets {
+		if n.Name == name {
+			return docker.RemoveNetwork(ctx, n.ID)
+		}
+	}
+	return nil // already gone
 }

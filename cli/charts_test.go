@@ -11,7 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// capture redirects stdout/stderr to buffers for the duration of fn.
+// capture redirects stdout/stderr to separate buffers for the duration of fn
+// and returns (stdout, stderr) so callers can assert on the exact stream.
 func capture(t *testing.T, fn func()) (string, string) {
 	t.Helper()
 	var outBuf, errBuf bytes.Buffer
@@ -19,7 +20,7 @@ func capture(t *testing.T, fn func()) (string, string) {
 	stdout, stderr = &outBuf, &errBuf
 	defer func() { stdout, stderr = origOut, origErr }()
 	fn()
-	return outBuf.String(), outBuf.String() + errBuf.String() // second = combined for convenience
+	return outBuf.String(), errBuf.String()
 }
 
 func TestDispatchVersion(t *testing.T) {
@@ -48,11 +49,11 @@ func TestChartsTemplateLocalDir(t *testing.T) {
 
 func TestChartsTemplateSchemaRejection(t *testing.T) {
 	var code int
-	_, combined := capture(t, func() {
+	_, errOut := capture(t, func() {
 		code = Dispatch([]string{"charts", "template", "x", "../charts/testdata/demo", "--set", "replicas=0"}, "dev")
 	})
 	require.Equal(t, 1, code)
-	require.Contains(t, combined, "schema validation")
+	require.Contains(t, errOut, "schema validation")
 }
 
 func TestChartsTemplateUnknownFlag(t *testing.T) {
@@ -87,4 +88,14 @@ func TestParseArgsInlineValue(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"a=1"}, f.sets)
 	require.Equal(t, "2.0.0", f.version)
+}
+
+func TestParseIntRejectsGarbage(t *testing.T) {
+	n, err := parseInt("3")
+	require.NoError(t, err)
+	require.Equal(t, 3, n)
+	for _, bad := range []string{"2x", "-1", "", " ", "1.5", "0x10"} {
+		_, err := parseInt(bad)
+		require.Errorf(t, err, "expected %q to be rejected", bad)
+	}
 }

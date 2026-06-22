@@ -5,6 +5,7 @@ package cli
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -133,8 +134,13 @@ func splitFlag(a string) (name, val string, hasVal bool) {
 	return a, "", false
 }
 
+// parseInt parses a non-negative integer, rejecting trailing garbage (unlike
+// fmt.Sscanf, which stops at the first non-digit) and negative values, which
+// none of the callers (--revision, --history-max) accept.
 func parseInt(s string) (int, error) {
-	var n int
-	_, err := fmt.Sscanf(s, "%d", &n)
-	return n, err
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("not a non-negative integer: %q", s)
+	}
+	return n, nil
 }

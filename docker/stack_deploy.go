@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -117,6 +118,12 @@ func RemoveStackCLI(stackName string) error {
 	cmd.Env = os.Environ()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		// An already-absent stack is success: makes uninstall idempotent so a
+		// retry after a partial teardown can still finish cleanup.
+		if strings.Contains(string(output), "Nothing found in stack") {
+			l().Infof("Stack %q already absent", stackName)
+			return nil
+		}
 		return fmt.Errorf("failed to remove stack: %w\nOutput: %s", err, string(output))
 	}
 	l().Infof("Stack %q removed", stackName)

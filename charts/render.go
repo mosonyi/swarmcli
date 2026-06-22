@@ -92,7 +92,7 @@ func Render(ch *Chart, ctx RenderContext) (string, error) {
 // and {{ template }} / {{ include }} references resolve) and executes the named
 // one against ctx.
 func renderOne(ch *Chart, name string, ctx RenderContext) (string, error) {
-	tmpl := template.New(name).Funcs(sprig.TxtFuncMap()).Funcs(extraFuncs())
+	tmpl := template.New(name).Funcs(renderFuncs()).Funcs(extraFuncs())
 	// Parse all templates into the set so helpers are available.
 	for _, n := range sortedTemplateNames(ch.Templates) {
 		if _, err := tmpl.New(n).Parse(ch.Templates[n]); err != nil {
@@ -104,6 +104,18 @@ func renderOne(ch *Chart, name string, ctx RenderContext) (string, error) {
 		return "", fmt.Errorf("template %s: %w", name, err)
 	}
 	return buf.String(), nil
+}
+
+// renderFuncs returns the Sprig function map with host-reaching helpers removed.
+// Charts may come from untrusted repos, so `env`/`expandenv`/`getHostByName`
+// are denied to stop a template from exfiltrating host environment or DNS data
+// into the rendered manifest (which is stored verbatim in a Docker Config).
+func renderFuncs() template.FuncMap {
+	fm := sprig.TxtFuncMap()
+	for _, name := range []string{"env", "expandenv", "getHostByName"} {
+		delete(fm, name)
+	}
+	return fm
 }
 
 // extraFuncs adds Helm-style helpers that Sprig does not provide. "include"
