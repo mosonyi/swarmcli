@@ -85,14 +85,21 @@ func (s *RepoStore) Add(name, repoURL string) error {
 			return fmt.Errorf("repository %q already exists", name)
 		}
 	}
-	repos = append(repos, RepoEntry{Name: name, URL: strings.TrimRight(repoURL, "/")})
-	if err := s.save(repos); err != nil {
+	repoURL = strings.TrimRight(repoURL, "/")
+	// Download and validate the index before persisting anything, so a failed
+	// download leaves no half-added repository behind.
+	idx, err := s.fetchIndex(repoURL)
+	if err != nil {
+		return fmt.Errorf("index download failed, repository not added: %w%s", err, githubPagesHint(repoURL))
+	}
+	if err := os.MkdirAll(filepath.Dir(s.indexFile(name)), 0o755); err != nil {
 		return err
 	}
-	if _, err := s.Update(name); err != nil {
-		return fmt.Errorf("repository added but index download failed: %w", err)
+	if err := os.WriteFile(s.indexFile(name), idx, 0o644); err != nil {
+		return err
 	}
-	return nil
+	repos = append(repos, RepoEntry{Name: name, URL: repoURL})
+	return s.save(repos)
 }
 
 // Remove deletes a repository and its cached index.
@@ -267,6 +274,22 @@ func (s *RepoStore) Pull(entry IndexEntry, baseURL string) (*Chart, error) {
 		return nil, fmt.Errorf("download chart: HTTP %s", resp.Status)
 	}
 	return LoadChartArchive(resp.Body)
+}
+
+// githubPagesHint suggests the GitHub Pages URL when a user points the store at
+// a github.com repository page, which serves an HTML view rather than a chart
+// index. Returns "" for any other host.
+func githubPagesHint(repoURL string) string {
+	u, err := url.Parse(repoURL)
+	if err != nil || (u.Host != "github.com" && u.Host != "www.github.com") {
+		return ""
+	}
+	const base = "\nhint: github.com serves repository pages, not chart indexes; use the GitHub Pages URL"
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		return base + " (https://<org>.github.io/<repo>)"
+	}
+	return fmt.Sprintf("%s https://%s.github.io/%s", base, strings.ToLower(parts[0]), parts[1])
 }
 
 func (s *RepoStore) fetchIndex(repoURL string) ([]byte, error) {

@@ -74,6 +74,47 @@ func TestRepoStoreAddRejectsBadURL(t *testing.T) {
 	require.Error(t, s.Add("x", "ftp://example.com"))
 }
 
+// A failed index download must not leave the repository half-added: List stays
+// empty and the name can be reused once the index is reachable.
+func TestRepoStoreAddIndexFailureDoesNotPersist(t *testing.T) {
+	var serve bool
+	idx := "apiVersion: v1\nentries: {}\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serve && strings.HasSuffix(r.URL.Path, "/index.yaml") {
+			_, _ = w.Write([]byte(idx))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	s := NewRepoStoreAt(t.TempDir())
+
+	// index 404s → add fails and persists nothing
+	require.Error(t, s.Add("eldara", srv.URL))
+	repos, err := s.List()
+	require.NoError(t, err)
+	require.Empty(t, repos)
+
+	// same name succeeds once the index is reachable
+	serve = true
+	require.NoError(t, s.Add("eldara", srv.URL))
+	repos, err = s.List()
+	require.NoError(t, err)
+	require.Len(t, repos, 1)
+}
+
+// A github.com repository URL never serves a chart index; the hint should point
+// the user at the lowercased GitHub Pages URL. Other hosts get no hint.
+func TestGithubPagesHint(t *testing.T) {
+	require.Contains(t,
+		githubPagesHint("https://github.com/Eldara-Tech/swarmcli-charts"),
+		"https://eldara-tech.github.io/swarmcli-charts")
+	require.Contains(t, githubPagesHint("https://github.com/Eldara-Tech"), "<org>.github.io")
+	require.Empty(t, githubPagesHint("https://eldara-tech.github.io/swarmcli-charts"))
+	require.Empty(t, githubPagesHint("https://example.com/charts"))
+}
+
 func TestPullChart(t *testing.T) {
 	tgz := packDirToTgz(t, "testdata/demo", "demo")
 	idx := `apiVersion: v1
