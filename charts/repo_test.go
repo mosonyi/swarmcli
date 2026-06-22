@@ -68,6 +68,40 @@ entries:
 	require.Error(t, s.Remove("eldara")) // gone
 }
 
+// Resolve must accept both the plain SemVer chart version ("0.1.3") and the
+// "v"-prefixed form users copy from the release git tag ("v0.1.3").
+func TestResolveVersionPrefixNormalization(t *testing.T) {
+	idx := `apiVersion: v1
+entries:
+  whoami:
+    - name: whoami
+      version: 0.1.3
+      description: demo chart
+      urls: ["whoami-v0.1.3.tgz"]
+`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/index.yaml") {
+			_, _ = w.Write([]byte(idx))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	s := NewRepoStoreAt(t.TempDir())
+	require.NoError(t, s.Add("eldara", srv.URL))
+
+	for _, want := range []string{"0.1.3", "v0.1.3"} {
+		e, _, err := s.Resolve("eldara/whoami", want)
+		require.NoErrorf(t, err, "version %q should resolve", want)
+		require.Equal(t, "0.1.3", e.Version)
+	}
+
+	// A genuinely absent version still errors, prefixed or not.
+	_, _, err := s.Resolve("eldara/whoami", "v9.9.9")
+	require.Error(t, err)
+}
+
 func TestRepoStoreAddRejectsBadURL(t *testing.T) {
 	s := NewRepoStoreAt(t.TempDir())
 	require.Error(t, s.Add("x", "not-a-url"))

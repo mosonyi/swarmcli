@@ -248,7 +248,11 @@ func (s *RepoStore) Resolve(ref, version string) (IndexEntry, string, error) {
 		return latestVersion(versions), baseURL, nil
 	}
 	for _, v := range versions {
-		if v.Version == version {
+		// SemVer-aware match: a chart version is plain SemVer ("0.1.3"), but the
+		// release git tag carries a "v" prefix ("v0.1.3"), so users naturally type
+		// either. compareVersions normalizes both and falls back to exact string
+		// equality for non-SemVer versions.
+		if compareVersions(v.Version, version) == 0 {
 			return v, baseURL, nil
 		}
 	}
