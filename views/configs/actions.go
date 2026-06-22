@@ -195,8 +195,9 @@ func (m *Model) inspectRawConfigCmd(name string) tea.Cmd {
 			}
 		}
 
-		// Use *plain content*, same as editor:
-		raw := string(cfg.Data)
+		// Use *plain content*, same as editor (decompressing gzip payloads such
+		// as chart release records so the raw view shows text, not binary):
+		raw := string(cfg.DisplayData())
 
 		return view.NavigateToMsg{
 			ViewName: inspectview.ViewName,

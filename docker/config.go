@@ -5,9 +5,11 @@ package docker
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"regexp"
 	"sort"
 	"strconv"
@@ -33,6 +35,21 @@ type ConfigWithDecodedData struct {
 	Data   []byte
 }
 
+// DisplayData returns the config payload in a human-readable form. Some payloads
+// are stored gzip-compressed (e.g. SwarmCLI chart release records); those are
+// transparently decompressed so the inspect/raw views show text rather than
+// binary. Non-gzip payloads are returned unchanged.
+func (cfg *ConfigWithDecodedData) DisplayData() []byte {
+	if len(cfg.Data) >= 2 && cfg.Data[0] == 0x1f && cfg.Data[1] == 0x8b {
+		if zr, err := gzip.NewReader(bytes.NewReader(cfg.Data)); err == nil {
+			if out, err := io.ReadAll(zr); err == nil {
+				return out
+			}
+		}
+	}
+	return cfg.Data
+}
+
 func (cfg *ConfigWithDecodedData) JSON() ([]byte, error) {
 	type jsonConfig struct {
 		Config     swarm.Config `json:"Config"`
@@ -41,10 +58,11 @@ func (cfg *ConfigWithDecodedData) JSON() ([]byte, error) {
 
 	obj := jsonConfig{Config: cfg.Config}
 
+	data := cfg.DisplayData()
 	parsedMap := make(map[string]string)
 	parsed := true
 
-	for _, line := range strings.Split(string(cfg.Data), "\n") {
+	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -71,7 +89,7 @@ func (cfg *ConfigWithDecodedData) JSON() ([]byte, error) {
 		}
 		obj.DataParsed = ordered
 	} else {
-		obj.DataParsed = string(cfg.Data)
+		obj.DataParsed = string(data)
 	}
 
 	return json.Marshal(obj)
