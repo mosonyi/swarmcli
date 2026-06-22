@@ -148,15 +148,20 @@ func chartsRepo(args []string) int {
 		} else if len(rest) > 1 {
 			return usageErr("charts repo update [name]")
 		}
-		refreshed, err := store.Update(name)
+		changed, unchanged, err := store.Update(name)
 		if err != nil {
 			return fail(err)
 		}
-		if len(refreshed) == 0 {
+		if len(changed)+len(unchanged) == 0 {
 			outln("No repositories to update.")
 			return 0
 		}
-		outf("Updated %d repositor%s: %s\n", len(refreshed), plural(len(refreshed), "y", "ies"), strings.Join(refreshed, ", "))
+		if len(changed) > 0 {
+			outf("Updated %d repositor%s: %s\n", len(changed), plural(len(changed), "y", "ies"), strings.Join(changed, ", "))
+		}
+		if len(unchanged) > 0 {
+			outf("Already up-to-date: %s\n", strings.Join(unchanged, ", "))
+		}
 		return 0
 	case "remove", "rm":
 		if len(rest) != 1 {

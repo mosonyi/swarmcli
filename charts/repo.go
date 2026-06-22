@@ -4,6 +4,7 @@
 package charts
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -129,32 +130,38 @@ func (s *RepoStore) Remove(name string) error {
 
 // Update downloads and caches the index for one repository (or all when name is
 // empty) and returns the names refreshed.
-func (s *RepoStore) Update(name string) ([]string, error) {
+func (s *RepoStore) Update(name string) (changed, unchanged []string, err error) {
 	repos, err := s.List()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	var refreshed []string
 	for _, r := range repos {
 		if name != "" && r.Name != name {
 			continue
 		}
 		idx, err := s.fetchIndex(r.URL)
 		if err != nil {
-			return refreshed, fmt.Errorf("update %q: %w", r.Name, err)
+			return changed, unchanged, fmt.Errorf("update %q: %w", r.Name, err)
+		}
+		// The served index is byte-stable between releases, so an identical
+		// payload means nothing new — report it as already up-to-date.
+		existing, _ := os.ReadFile(s.indexFile(r.Name))
+		if existing != nil && bytes.Equal(existing, idx) {
+			unchanged = append(unchanged, r.Name)
+			continue
 		}
 		if err := os.MkdirAll(filepath.Dir(s.indexFile(r.Name)), 0o755); err != nil {
-			return refreshed, err
+			return changed, unchanged, err
 		}
 		if err := os.WriteFile(s.indexFile(r.Name), idx, 0o644); err != nil {
-			return refreshed, err
+			return changed, unchanged, err
 		}
-		refreshed = append(refreshed, r.Name)
+		changed = append(changed, r.Name)
 	}
-	if name != "" && len(refreshed) == 0 {
-		return nil, fmt.Errorf("repository %q not found", name)
+	if name != "" && len(changed)+len(unchanged) == 0 {
+		return nil, nil, fmt.Errorf("repository %q not found", name)
 	}
-	return refreshed, nil
+	return changed, unchanged, nil
 }
 
 // LoadIndex returns the cached, parsed index for a repository.

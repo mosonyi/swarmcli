@@ -63,6 +63,12 @@ func Render(ch *Chart, ctx RenderContext) (string, error) {
 		merged = deepMerge(merged, frag)
 	}
 
+	// The top-level compose `version` key is obsolete for `docker stack deploy`
+	// (the engine ignores it) and, because the merged manifest is re-encoded from
+	// a map with sorted keys, it would otherwise surface as a confusing trailing
+	// line. Drop it so the rendered stack is clean.
+	delete(merged, "version")
+
 	if len(merged) == 0 {
 		return "", fmt.Errorf("chart %q rendered an empty manifest", ch.Metadata.Name)
 	}

@@ -102,6 +102,44 @@ entries:
 	require.Error(t, err)
 }
 
+// Update reports a repo as unchanged when the served index is byte-identical to
+// the cached copy, and as changed once the served content differs.
+func TestUpdateReportsChangedVsUnchanged(t *testing.T) {
+	body := `apiVersion: v1
+entries:
+  demo:
+    - {name: demo, version: 0.1.0, urls: ["demo-0.1.0.tgz"]}
+`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/index.yaml") {
+			_, _ = w.Write([]byte(body))
+		} else {
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	s := NewRepoStoreAt(t.TempDir())
+	require.NoError(t, s.Add("eldara", srv.URL)) // Add caches the index
+
+	// Nothing changed since Add → already up-to-date.
+	changed, unchanged, err := s.Update("eldara")
+	require.NoError(t, err)
+	require.Empty(t, changed)
+	require.Equal(t, []string{"eldara"}, unchanged)
+
+	// Serve different content → reported as changed.
+	body = `apiVersion: v1
+entries:
+  demo:
+    - {name: demo, version: 0.2.0, urls: ["demo-0.2.0.tgz"]}
+`
+	changed, unchanged, err = s.Update("eldara")
+	require.NoError(t, err)
+	require.Equal(t, []string{"eldara"}, changed)
+	require.Empty(t, unchanged)
+}
+
 func TestRepoStoreAddRejectsBadURL(t *testing.T) {
 	s := NewRepoStoreAt(t.TempDir())
 	require.Error(t, s.Add("x", "not-a-url"))

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"swarmcli/charts"
 	"swarmcli/docker"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/view"
@@ -289,6 +290,27 @@ func TestConfirmResult_Delete(t *testing.T) {
 	cmd := m.Update(confirmdialog.ResultMsg{Confirmed: true})
 	require.False(t, m.confirmDialog.Visible)
 	require.NotNil(t, cmd)
+}
+
+func TestDeleteConfirmPrompt(t *testing.T) {
+	plain := &docker.ConfigWithDecodedData{Config: swarm.Config{Spec: swarm.ConfigSpec{
+		Annotations: swarm.Annotations{Name: "plain"},
+	}}}
+	require.Equal(t, "Delete config plain?", deleteConfirmPrompt("plain", plain))
+
+	// nil config falls back to the plain prompt.
+	require.Equal(t, "Delete config gone?", deleteConfirmPrompt("gone", nil))
+
+	// A config owned by a chart release gets the warning naming the release.
+	owned := &docker.ConfigWithDecodedData{Config: swarm.Config{Spec: swarm.ConfigSpec{
+		Annotations: swarm.Annotations{Name: "whoami.v1", Labels: map[string]string{
+			charts.LabelType:    charts.TypeRelease,
+			charts.LabelRelease: "whoami",
+		}},
+	}}}
+	got := deleteConfirmPrompt("whoami.v1", owned)
+	require.Contains(t, got, "chart release \"whoami\"")
+	require.Contains(t, got, "charts uninstall")
 }
 
 func TestConfirmResult_Cancelled(t *testing.T) {

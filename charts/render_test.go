@@ -71,6 +71,9 @@ func TestRenderInterpolatesAndGates(t *testing.T) {
 	// extras.enabled is false by default -> sidecar gated out
 	require.NotContains(t, services, "sidecar")
 	require.Contains(t, out, "my-demo")
+	// the obsolete top-level compose `version` key (present in the template) is
+	// stripped from the rendered manifest
+	require.NotContains(t, doc, "version")
 }
 
 func TestRenderConditionalServiceEnabled(t *testing.T) {

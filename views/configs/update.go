@@ -10,7 +10,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"swarmcli/charts"
 	"swarmcli/core/primitives/hash"
+	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
@@ -21,6 +23,18 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// deleteConfirmPrompt is the confirmation shown before deleting a config. When
+// the config backs a chart release (labeled by the charts engine) it warns that
+// deleting it can corrupt the release's recorded state and points at the proper
+// `charts uninstall` path, but still lets the user proceed.
+func deleteConfirmPrompt(cfgName string, cfg *docker.ConfigWithDecodedData) string {
+	if cfg != nil && cfg.Config.Spec.Labels[charts.LabelType] == charts.TypeRelease {
+		rel := cfg.Config.Spec.Labels[charts.LabelRelease]
+		return fmt.Sprintf("Config %s belongs to chart release %q — deleting it may corrupt the release (use `charts uninstall`). Delete anyway?", cfgName, rel)
+	}
+	return fmt.Sprintf("Delete config %s?", cfgName)
+}
 
 // parseLabels parses a comma-separated list of key=value pairs into a map
 // Example: "a=b,c=d" -> map[string]string{"a": "b", "c": "d"}
@@ -466,7 +480,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			cfg, _ := m.findConfigByName(cfgName)
 			m.pendingAction = "delete"
 			m.configToDelete = cfg
-			m.confirmDialog = m.confirmDialog.Show(fmt.Sprintf("Delete config %s?", cfgName))
+			m.confirmDialog = m.confirmDialog.Show(deleteConfirmPrompt(cfgName, cfg))
 			return nil
 
 		case "e":
