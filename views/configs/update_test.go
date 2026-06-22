@@ -292,6 +292,33 @@ func TestConfirmResult_Delete(t *testing.T) {
 	require.NotNil(t, cmd)
 }
 
+func TestEditBlockedForChartConfig(t *testing.T) {
+	m := testModel()
+	owned := docker.ConfigWithDecodedData{Config: swarm.Config{
+		ID: "id-rel",
+		Spec: swarm.ConfigSpec{Annotations: swarm.Annotations{
+			Name: "whoami.v1",
+			Labels: map[string]string{
+				charts.LabelType:    charts.TypeRelease,
+				charts.LabelRelease: "whoami",
+			},
+		}},
+	}}
+	loadConfigs(m, []docker.ConfigWithDecodedData{owned})
+
+	// Pressing <e> on a chart-owned config opens a dismiss-only info popup
+	// explaining why, rather than launching the editor.
+	m.Update(key("e"))
+	require.True(t, m.confirmDialog.Visible)
+	require.True(t, m.confirmDialog.InfoMode)
+	require.Contains(t, m.confirmDialog.Message, "chart release")
+	require.Contains(t, m.confirmDialog.Message, "charts upgrade")
+
+	// Dismissing it clears the info mode so a later confirm dialog still works.
+	m.Update(confirmdialog.ResultMsg{Confirmed: false})
+	require.False(t, m.confirmDialog.InfoMode)
+}
+
 func TestDeleteConfirmPrompt(t *testing.T) {
 	plain := &docker.ConfigWithDecodedData{Config: swarm.Config{Spec: swarm.ConfigSpec{
 		Annotations: swarm.Annotations{Name: "plain"},

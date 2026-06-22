@@ -413,6 +413,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		defer func() {
 			m.pendingAction = ""
 			m.confirmDialog.Visible = false
+			// Reset transient dialog modes so the next dialog (e.g. a delete
+			// confirm) isn't left in dismiss-only Info/Error mode.
+			m.confirmDialog.InfoMode = false
+			m.confirmDialog.ErrorMode = false
+			m.confirmDialog.CheckboxLabel = ""
 			m.configToRotateFrom = nil
 			m.configToRotateInto = nil
 			m.configToDelete = nil
@@ -495,9 +500,15 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		case "e":
 			cfgName := m.selectedConfig()
 			// Editing/rotating a chart release record would corrupt the install;
-			// block it from the TUI and point at the chart workflow instead.
+			// block it from the TUI and explain why via a dismissable popup.
 			if cfg, _ := m.findConfigByName(cfgName); chartReleaseOf(cfg) != "" {
-				return tea.Printf("Config %s belongs to chart release %q — edit it with `charts upgrade`, not from here.", cfgName, chartReleaseOf(cfg))
+				m.pendingAction = ""
+				m.confirmDialog.ErrorMode = false
+				m.confirmDialog.InfoMode = true
+				m.confirmDialog.CheckboxLabel = ""
+				m.confirmDialog = m.confirmDialog.Show(fmt.Sprintf(
+					"Config %s belongs to chart release %q.\n\nEditing or rotating it here would corrupt the release.\nUse `charts upgrade` instead.", cfgName, chartReleaseOf(cfg)))
+				return nil
 			}
 			l().Infof("Edit key pressed for config: %s", cfgName)
 			// Start editor; the editCmd will send back editConfigDoneMsg or editConfigErrorMsg
