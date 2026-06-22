@@ -112,6 +112,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// systeminfo header; avoid subtracting extra lines here.
 		m.configsList.Viewport.Height = msg.Height
 		m.configsList.SetOuterSize(msg.Width, msg.Height)
+		// Size the confirm dialog so the component renderer (used for
+		// dismiss-only Info/Error dialogs) word-wraps to the terminal width.
+		m.confirmDialog.Width = msg.Width
+		m.confirmDialog.Height = msg.Height
 		if m.usedByViewActive {
 			m.usedByList.Viewport.Width = msg.Width
 			m.usedByList.Viewport.Height = msg.Height

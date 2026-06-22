@@ -314,6 +314,13 @@ func TestEditBlockedForChartConfig(t *testing.T) {
 	require.Contains(t, m.confirmDialog.Message, "chart release")
 	require.Contains(t, m.confirmDialog.Message, "charts upgrade")
 
+	// It must render as dismiss-only: the footer reads "Close", not a y/n
+	// prompt whose keys do nothing in info mode (PR #415 review feedback).
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	rendered := m.View()
+	require.Contains(t, rendered, "Close")
+	require.NotContains(t, rendered, "Yes")
+
 	// Dismissing it clears the info mode so a later confirm dialog still works.
 	m.Update(confirmdialog.ResultMsg{Confirmed: false})
 	require.False(t, m.confirmDialog.InfoMode)
