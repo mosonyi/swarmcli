@@ -4,8 +4,10 @@
 package main
 
 import (
+	"os"
 	"runtime/debug"
 	"swarmcli/app"
+	"swarmcli/cli"
 	swarmlog "swarmcli/utils/log"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -28,6 +30,12 @@ func init() {
 }
 
 func main() {
+	// When invoked with arguments, run the non-interactive CLI (e.g.
+	// `swarmcli charts install ...`) and exit. A bare `swarmcli` launches the TUI.
+	if len(os.Args) > 1 {
+		os.Exit(cli.Dispatch(os.Args[1:], version))
+	}
+
 	p := tea.NewProgram(app.InitialModel(), tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {

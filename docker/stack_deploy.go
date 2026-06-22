@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -98,6 +99,34 @@ func DeployStack(stackName string, yamlContent string) error {
 	}
 
 	l().Infof("Stack %q deployed successfully", stackName)
+	return nil
+}
+
+// RemoveStackCLI tears down a stack via `docker stack rm`, the symmetric
+// counterpart to DeployStack. Unlike RemoveStack (services only), this removes
+// the stack's services, networks, configs and secrets while leaving volumes
+// intact — matching standard Docker stack semantics.
+func RemoveStackCLI(stackName string) error {
+	if stackName == "" {
+		return fmt.Errorf("stack name cannot be empty")
+	}
+	ctx, err := GetDockerContext()
+	if err != nil {
+		return fmt.Errorf("failed to get docker context: %w", err)
+	}
+	cmd := exec.Command("docker", "--context", ctx, "stack", "rm", stackName)
+	cmd.Env = os.Environ()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		// An already-absent stack is success: makes uninstall idempotent so a
+		// retry after a partial teardown can still finish cleanup.
+		if strings.Contains(string(output), "Nothing found in stack") {
+			l().Infof("Stack %q already absent", stackName)
+			return nil
+		}
+		return fmt.Errorf("failed to remove stack: %w\nOutput: %s", err, string(output))
+	}
+	l().Infof("Stack %q removed", stackName)
 	return nil
 }
 

@@ -1,0 +1,9 @@
+version: "3.9"
+
+services:
+  app:
+    image: {{ .Values.image.repo }}:{{ .Values.image.tag }}
+    deploy:
+      replicas: {{ .Values.replicas }}
+      labels:
+        com.swarmcli.release: {{ .Release.Name }}

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"swarmcli/charts"
 	"swarmcli/docker"
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/view"
@@ -289,6 +290,61 @@ func TestConfirmResult_Delete(t *testing.T) {
 	cmd := m.Update(confirmdialog.ResultMsg{Confirmed: true})
 	require.False(t, m.confirmDialog.Visible)
 	require.NotNil(t, cmd)
+}
+
+func TestEditBlockedForChartConfig(t *testing.T) {
+	m := testModel()
+	owned := docker.ConfigWithDecodedData{Config: swarm.Config{
+		ID: "id-rel",
+		Spec: swarm.ConfigSpec{Annotations: swarm.Annotations{
+			Name: "whoami.v1",
+			Labels: map[string]string{
+				charts.LabelType:    charts.TypeRelease,
+				charts.LabelRelease: "whoami",
+			},
+		}},
+	}}
+	loadConfigs(m, []docker.ConfigWithDecodedData{owned})
+
+	// Pressing <e> on a chart-owned config opens a dismiss-only info popup
+	// explaining why, rather than launching the editor.
+	m.Update(key("e"))
+	require.True(t, m.confirmDialog.Visible)
+	require.True(t, m.confirmDialog.InfoMode)
+	require.Contains(t, m.confirmDialog.Message, "chart release")
+	require.Contains(t, m.confirmDialog.Message, "charts upgrade")
+
+	// It must render as dismiss-only: the footer reads "Close", not a y/n
+	// prompt whose keys do nothing in info mode (PR #415 review feedback).
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	rendered := m.View()
+	require.Contains(t, rendered, "Close")
+	require.NotContains(t, rendered, "Yes")
+
+	// Dismissing it clears the info mode so a later confirm dialog still works.
+	m.Update(confirmdialog.ResultMsg{Confirmed: false})
+	require.False(t, m.confirmDialog.InfoMode)
+}
+
+func TestDeleteConfirmPrompt(t *testing.T) {
+	plain := &docker.ConfigWithDecodedData{Config: swarm.Config{Spec: swarm.ConfigSpec{
+		Annotations: swarm.Annotations{Name: "plain"},
+	}}}
+	require.Equal(t, "Delete config plain?", deleteConfirmPrompt("plain", plain))
+
+	// nil config falls back to the plain prompt.
+	require.Equal(t, "Delete config gone?", deleteConfirmPrompt("gone", nil))
+
+	// A config owned by a chart release gets the warning naming the release.
+	owned := &docker.ConfigWithDecodedData{Config: swarm.Config{Spec: swarm.ConfigSpec{
+		Annotations: swarm.Annotations{Name: "whoami.v1", Labels: map[string]string{
+			charts.LabelType:    charts.TypeRelease,
+			charts.LabelRelease: "whoami",
+		}},
+	}}}
+	got := deleteConfirmPrompt("whoami.v1", owned)
+	require.Contains(t, got, "chart release \"whoami\"")
+	require.Contains(t, got, "charts uninstall")
 }
 
 func TestConfirmResult_Cancelled(t *testing.T) {

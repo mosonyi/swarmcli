@@ -10,7 +10,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"swarmcli/charts"
 	"swarmcli/core/primitives/hash"
+	"swarmcli/docker"
 	"swarmcli/ui"
 	filterlist "swarmcli/ui/components/filterable/list"
 	"swarmcli/views/confirmdialog"
@@ -21,6 +23,27 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// chartReleaseOf returns the name of the chart release a config backs, or "" if
+// the config is not a chart-managed release record (labeled by the charts
+// engine). Used to guard destructive TUI actions on chart-owned configs.
+func chartReleaseOf(cfg *docker.ConfigWithDecodedData) string {
+	if cfg != nil && cfg.Config.Spec.Labels[charts.LabelType] == charts.TypeRelease {
+		return cfg.Config.Spec.Labels[charts.LabelRelease]
+	}
+	return ""
+}
+
+// deleteConfirmPrompt is the confirmation shown before deleting a config. When
+// the config backs a chart release it warns that deleting it can corrupt the
+// release's recorded state and points at the proper `charts uninstall` path, but
+// still lets the user proceed.
+func deleteConfirmPrompt(cfgName string, cfg *docker.ConfigWithDecodedData) string {
+	if rel := chartReleaseOf(cfg); rel != "" {
+		return fmt.Sprintf("Config %s belongs to chart release %q — deleting it may corrupt the release (use `charts uninstall`). Delete anyway?", cfgName, rel)
+	}
+	return fmt.Sprintf("Delete config %s?", cfgName)
+}
 
 // parseLabels parses a comma-separated list of key=value pairs into a map
 // Example: "a=b,c=d" -> map[string]string{"a": "b", "c": "d"}
@@ -89,6 +112,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// systeminfo header; avoid subtracting extra lines here.
 		m.configsList.Viewport.Height = msg.Height
 		m.configsList.SetOuterSize(msg.Width, msg.Height)
+		// Size the confirm dialog so the component renderer (used for
+		// dismiss-only Info/Error dialogs) word-wraps to the terminal width.
+		m.confirmDialog.Width = msg.Width
+		m.confirmDialog.Height = msg.Height
 		if m.usedByViewActive {
 			m.usedByList.Viewport.Width = msg.Width
 			m.usedByList.Viewport.Height = msg.Height
@@ -390,6 +417,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		defer func() {
 			m.pendingAction = ""
 			m.confirmDialog.Visible = false
+			// Reset transient dialog modes so the next dialog (e.g. a delete
+			// confirm) isn't left in dismiss-only Info/Error mode.
+			m.confirmDialog.InfoMode = false
+			m.confirmDialog.ErrorMode = false
+			m.confirmDialog.CheckboxLabel = ""
 			m.configToRotateFrom = nil
 			m.configToRotateInto = nil
 			m.configToDelete = nil
@@ -466,11 +498,22 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			cfg, _ := m.findConfigByName(cfgName)
 			m.pendingAction = "delete"
 			m.configToDelete = cfg
-			m.confirmDialog = m.confirmDialog.Show(fmt.Sprintf("Delete config %s?", cfgName))
+			m.confirmDialog = m.confirmDialog.Show(deleteConfirmPrompt(cfgName, cfg))
 			return nil
 
 		case "e":
 			cfgName := m.selectedConfig()
+			// Editing/rotating a chart release record would corrupt the install;
+			// block it from the TUI and explain why via a dismissable popup.
+			if cfg, _ := m.findConfigByName(cfgName); chartReleaseOf(cfg) != "" {
+				m.pendingAction = ""
+				m.confirmDialog.ErrorMode = false
+				m.confirmDialog.InfoMode = true
+				m.confirmDialog.CheckboxLabel = ""
+				m.confirmDialog = m.confirmDialog.Show(fmt.Sprintf(
+					"Config %s belongs to chart release %q.\n\nEditing or rotating it here would corrupt the release.\nUse `charts upgrade` instead.", cfgName, chartReleaseOf(cfg)))
+				return nil
+			}
 			l().Infof("Edit key pressed for config: %s", cfgName)
 			// Start editor; the editCmd will send back editConfigDoneMsg or editConfigErrorMsg
 			return m.editConfigInEditorCmd(cfgName)

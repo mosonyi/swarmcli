@@ -122,7 +122,15 @@ func (m *Model) FrameContent() string {
 		createDialog := m.renderCreateDialog()
 		content = ui.OverlayCentered(content, createDialog, width, 0)
 	} else if m.confirmDialog.Visible {
-		dialogView := ui.RenderConfirmDialog(m.confirmDialog.Message)
+		// Dismiss-only Info/Error dialogs render via the component so the footer
+		// reads "Enter/Esc Close"; ui.RenderConfirmDialog is y/n-only and
+		// mode-blind, so it would show a y/n prompt that does nothing here.
+		var dialogView string
+		if m.confirmDialog.InfoMode || m.confirmDialog.ErrorMode {
+			dialogView = m.confirmDialog.View()
+		} else {
+			dialogView = ui.RenderConfirmDialog(m.confirmDialog.Message)
+		}
 		content = ui.OverlayCentered(content, dialogView, width, 0)
 	} else if m.errorDialogActive {
 		errorDialog := errordialog.Render(fmt.Sprintf("%v", m.err))

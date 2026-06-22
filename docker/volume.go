@@ -114,3 +114,17 @@ func volumeInfoFromSummary(v *volume.Volume, host string) VolumeInfo {
 		Raw:        v,
 	}
 }
+
+// RemoveVolume removes a named volume on the connected node. force deletes it
+// even if it is referenced. Like ListVolumes, this acts on the connected node
+// only; cross-node removal is left as an extension point.
+func RemoveVolume(ctx context.Context, name string, force bool) error {
+	c, err := GetClient()
+	if err != nil {
+		return fmt.Errorf("docker client: %w", err)
+	}
+	if err := c.VolumeRemove(ctx, name, force); err != nil {
+		return fmt.Errorf("removing volume %q: %w", name, err)
+	}
+	return nil
+}

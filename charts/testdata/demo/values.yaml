@@ -1,0 +1,6 @@
+replicas: 1
+image:
+  repo: traefik
+  tag: v3.0.0
+extras:
+  enabled: false
