@@ -14,12 +14,14 @@ import (
 
 // fakeBackend is an in-memory Backend for lifecycle tests.
 type fakeBackend struct {
-	configs    map[string]fakeConfig
-	deployed   map[string]string // stack name -> manifest
-	volumes    map[string][]string
-	services   map[string][]ServiceState
-	failNext   bool
-	rmStackErr error
+	configs       map[string]fakeConfig
+	deployed      map[string]string // stack name -> manifest
+	volumes       map[string][]string
+	services      map[string][]ServiceState
+	networkScopes map[string]string // network name -> scope
+	createNetErr  map[string]error  // network name -> error to return on create
+	failNext      bool
+	rmStackErr    error
 }
 
 type fakeConfig struct {
@@ -29,10 +31,12 @@ type fakeConfig struct {
 
 func newFakeBackend() *fakeBackend {
 	return &fakeBackend{
-		configs:  map[string]fakeConfig{},
-		deployed: map[string]string{},
-		volumes:  map[string][]string{},
-		services: map[string][]ServiceState{},
+		configs:       map[string]fakeConfig{},
+		deployed:      map[string]string{},
+		volumes:       map[string][]string{},
+		services:      map[string][]ServiceState{},
+		networkScopes: map[string]string{},
+		createNetErr:  map[string]error{},
 	}
 }
 
@@ -93,6 +97,21 @@ func (f *fakeBackend) RemoveVolume(_ context.Context, name string) error {
 	return nil
 }
 
+func (f *fakeBackend) NetworkScopes(context.Context) (map[string]string, error) {
+	out := map[string]string{}
+	for k, v := range f.networkScopes {
+		out[k] = v
+	}
+	return out, nil
+}
+func (f *fakeBackend) CreateOverlayNetwork(_ context.Context, name string) error {
+	if err := f.createNetErr[name]; err != nil {
+		return err
+	}
+	f.networkScopes[name] = "swarm"
+	return nil
+}
+
 func testEngine(b Backend) *Engine {
 	e := NewEngineWith(b)
 	e.now = func() time.Time { return time.Unix(1700000000, 0).UTC() }
@@ -138,14 +157,71 @@ func TestInstallDryRunDoesNotDeploy(t *testing.T) {
 	require.Empty(t, fb.configs)
 }
 
-func TestInstallFailureRecordsFailed(t *testing.T) {
+// A failed deploy must record nothing, so the install stays retryable rather
+// than leaving an orphaned "already exists" release Config behind.
+func TestInstallFailureDoesNotRecord(t *testing.T) {
 	fb := newFakeBackend()
 	fb.failNext = true
 	e := testEngine(fb)
-	rel, err := e.Install(context.Background(), "demo", ReleaseChart{Name: "demo", Version: "1"}, nil, "services:\n  a:\n    image: x\n", InstallOptions{})
+	manifest := "services:\n  a:\n    image: x\n"
+
+	rel, err := e.Install(context.Background(), "demo", ReleaseChart{Name: "demo", Version: "1"}, nil, manifest, InstallOptions{})
 	require.Error(t, err)
 	require.Equal(t, StatusFailed, rel.Status)
-	require.Equal(t, StatusFailed, fb.configs[releaseConfigName("demo", 1)].labels[LabelStatus])
+	require.Empty(t, fb.configs, "failed deploy must not persist a release Config")
+
+	// failNext cleared itself; a retry now succeeds at revision 1.
+	rel, err = e.Install(context.Background(), "demo", ReleaseChart{Name: "demo", Version: "1"}, nil, manifest, InstallOptions{})
+	require.NoError(t, err)
+	require.Equal(t, 1, rel.Revision)
+	require.Equal(t, StatusDeployed, rel.Status)
+}
+
+const extNetManifest = "version: \"3.9\"\n" +
+	"services:\n  app:\n    image: x\n" +
+	"networks:\n  traefik-public:\n    external: true\n"
+
+func TestInstallExternalNetworkPresent(t *testing.T) {
+	fb := newFakeBackend()
+	fb.networkScopes["traefik-public"] = "swarm"
+	e := testEngine(fb)
+	rel, err := e.Install(context.Background(), "demo", ReleaseChart{Name: "demo", Version: "1"}, nil, extNetManifest, InstallOptions{})
+	require.NoError(t, err)
+	require.Equal(t, StatusDeployed, rel.Status)
+	require.Equal(t, extNetManifest, fb.deployed["demo"])
+}
+
+func TestInstallExternalNetworkAutoCreated(t *testing.T) {
+	fb := newFakeBackend()
+	e := testEngine(fb)
+	rel, err := e.Install(context.Background(), "demo", ReleaseChart{Name: "demo", Version: "1"}, nil, extNetManifest, InstallOptions{})
+	require.NoError(t, err)
+	require.Equal(t, StatusDeployed, rel.Status)
+	require.Equal(t, "swarm", fb.networkScopes["traefik-public"], "missing external network should be auto-created swarm-scoped")
+	require.Equal(t, extNetManifest, fb.deployed["demo"])
+}
+
+func TestInstallExternalNetworkCreateFails(t *testing.T) {
+	fb := newFakeBackend()
+	fb.createNetErr["traefik-public"] = fmt.Errorf("not a swarm manager")
+	e := testEngine(fb)
+	rel, err := e.Install(context.Background(), "demo", ReleaseChart{Name: "demo", Version: "1"}, nil, extNetManifest, InstallOptions{})
+	require.Error(t, err)
+	require.Equal(t, StatusFailed, rel.Status)
+	require.Contains(t, err.Error(), "docker network create --driver overlay --attachable traefik-public")
+	require.Empty(t, fb.deployed, "deploy must not run when an external network is unavailable")
+	require.Empty(t, fb.configs, "nothing should be recorded")
+}
+
+func TestInstallExternalNetworkScopeClash(t *testing.T) {
+	fb := newFakeBackend()
+	fb.networkScopes["traefik-public"] = "local"
+	e := testEngine(fb)
+	_, err := e.Install(context.Background(), "demo", ReleaseChart{Name: "demo", Version: "1"}, nil, extNetManifest, InstallOptions{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "non-swarm")
+	require.Empty(t, fb.deployed)
+	require.Empty(t, fb.configs)
 }
 
 func TestListReturnsCurrentRevisions(t *testing.T) {

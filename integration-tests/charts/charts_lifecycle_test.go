@@ -217,3 +217,76 @@ func TestChartsRepoInstallLifecycle(t *testing.T) {
 	_, err = docker.InspectConfig(ctx, fmt.Sprintf("swarmcli.release.%s.v1", release))
 	require.Error(t, err, "release config should be gone after uninstall")
 }
+
+// writeExtNetChart writes a chart whose stack attaches to (and declares as
+// external) the given network name, returning the chart dir.
+func writeExtNetChart(t *testing.T, netName string) string {
+	t.Helper()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Chart.yaml"),
+		[]byte("apiVersion: v2\nname: itest\nversion: 0.1.0\nappVersion: \"1.0\"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "values.yaml"),
+		[]byte("replicas: 1\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "templates"), 0o755))
+	stack := "version: \"3.9\"\n\n" +
+		"services:\n" +
+		"  whoami:\n" +
+		"    image: traefik/whoami:v1.10\n" +
+		"    networks:\n      - " + netName + "\n" +
+		"    deploy:\n      replicas: {{ .Values.replicas }}\n\n" +
+		"networks:\n  " + netName + ":\n    external: true\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "templates", "stack.yaml"), []byte(stack), 0o644))
+	return dir
+}
+
+// TestChartsExternalNetworkAutoCreate verifies that installing a chart which
+// declares a not-yet-existing external network auto-creates it as a swarm
+// overlay and then deploys successfully (rather than failing the deploy).
+func TestChartsExternalNetworkAutoCreate(t *testing.T) {
+	swarmlog.InitTestIfTestLogEnv()
+
+	ctx := context.Background()
+	netName := fmt.Sprintf("itest-ext-%d", time.Now().UnixNano())
+	release := fmt.Sprintf("itest-extnet-%d", time.Now().UnixNano())
+
+	ch, err := charts.LoadChartDir(writeExtNetChart(t, netName))
+	require.NoError(t, err)
+	values, err := charts.MergeValues(ch.Values, nil, nil)
+	require.NoError(t, err)
+	manifest, err := charts.Render(ch, charts.RenderContext{
+		Values:  values,
+		Release: charts.ReleaseMeta{Name: release, Namespace: release, Revision: 1},
+		Chart:   charts.ChartMeta{Name: ch.Metadata.Name, Version: ch.Metadata.Version},
+	})
+	require.NoError(t, err)
+
+	eng := charts.NewEngine()
+	defer func() {
+		_ = eng.Uninstall(ctx, release, true)
+		_ = docker.RemoveNetwork(ctx, netName) // external nets survive stack rm
+	}()
+
+	// Precondition: the external network does not exist yet.
+	nets, err := docker.ListNetworks(ctx)
+	require.NoError(t, err)
+	for _, n := range nets {
+		require.NotEqual(t, netName, n.Name, "test network must not pre-exist")
+	}
+
+	rel, err := eng.Install(ctx, release, charts.ReleaseChart{Name: ch.Metadata.Name, Version: ch.Metadata.Version},
+		values, manifest, charts.InstallOptions{Wait: true, Timeout: 90 * time.Second})
+	require.NoError(t, err, "install should auto-create the external network and deploy")
+	require.Equal(t, charts.StatusDeployed, rel.Status)
+
+	// The external network now exists and is swarm-scoped.
+	nets, err = docker.ListNetworks(ctx)
+	require.NoError(t, err)
+	found := false
+	for _, n := range nets {
+		if n.Name == netName {
+			found = true
+			require.Equal(t, "swarm", n.Scope, "auto-created network should be swarm-scoped")
+		}
+	}
+	require.True(t, found, "external network should have been auto-created")
+}

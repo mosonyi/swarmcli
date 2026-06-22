@@ -7,6 +7,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/docker/docker/api/types/network"
+
 	"swarmcli/docker"
 )
 
@@ -84,4 +86,21 @@ func (dockerBackend) StackVolumes(ctx context.Context, name string) ([]string, e
 
 func (dockerBackend) RemoveVolume(ctx context.Context, name string) error {
 	return docker.RemoveVolume(ctx, name, false)
+}
+
+func (dockerBackend) NetworkScopes(ctx context.Context) (map[string]string, error) {
+	nets, err := docker.ListNetworks(ctx)
+	if err != nil {
+		return nil, err
+	}
+	scopes := make(map[string]string, len(nets))
+	for _, n := range nets {
+		scopes[n.Name] = n.Scope
+	}
+	return scopes, nil
+}
+
+func (dockerBackend) CreateOverlayNetwork(ctx context.Context, name string) error {
+	_, _, err := docker.CreateNetwork(ctx, name, network.CreateOptions{Driver: "overlay", Attachable: true})
+	return err
 }

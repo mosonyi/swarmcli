@@ -48,6 +48,11 @@ type Backend interface {
 	StackServices(name string) []ServiceState
 	StackVolumes(ctx context.Context, name string) ([]string, error)
 	RemoveVolume(ctx context.Context, name string) error
+	// NetworkScopes returns existing network names mapped to their scope
+	// (e.g. "swarm", "local"), used to pre-flight a chart's external networks.
+	NetworkScopes(ctx context.Context) (map[string]string, error)
+	// CreateOverlayNetwork creates an attachable, swarm-scoped overlay network.
+	CreateOverlayNetwork(ctx context.Context, name string) error
 }
 
 // Engine drives release lifecycle operations against a Backend.
@@ -105,10 +110,14 @@ func (e *Engine) Install(ctx context.Context, release string, chart ReleaseChart
 		return rel, nil
 	}
 
+	if err := e.ensureExternalNetworks(ctx, manifest); err != nil {
+		rel.Status = StatusFailed
+		return rel, err
+	}
 	if err := e.Backend.DeployStack(release, manifest); err != nil {
 		rel.Status = StatusFailed
-		// Best-effort: record the failed revision for auditability.
-		_ = e.record(ctx, rel)
+		// Do not record on failure: a failed deploy must leave no release Config
+		// behind, so the install stays retryable (no orphaned "already exists").
 		return rel, fmt.Errorf("deploy failed: %w", err)
 	}
 	if err := e.record(ctx, rel); err != nil {
@@ -123,6 +132,49 @@ func (e *Engine) Install(ctx context.Context, release string, chart ReleaseChart
 		e.pruneHistory(ctx, release, opts.HistoryMax)
 	}
 	return rel, nil
+}
+
+// ensureExternalNetworks makes sure every network the manifest declares
+// external exists and is swarm-scoped before the stack is deployed. Missing
+// networks are created as attachable swarm overlays; networks that exist with a
+// non-swarm scope, or that cannot be created, are reported with the manual
+// `docker network create` commands needed to resolve them.
+func (e *Engine) ensureExternalNetworks(ctx context.Context, manifest string) error {
+	names, err := externalNetworks(manifest)
+	if err != nil || len(names) == 0 {
+		return err
+	}
+	scopes, err := e.Backend.NetworkScopes(ctx)
+	if err != nil {
+		return fmt.Errorf("checking external networks: %w", err)
+	}
+	var reasons, needCreate []string
+	for _, name := range names {
+		switch scope, exists := scopes[name]; {
+		case exists && scope == "swarm":
+			// already usable
+		case exists:
+			reasons = append(reasons,
+				fmt.Sprintf("  %s: a non-swarm (%s) network of this name already exists; remove or rename it", name, scope))
+		default:
+			if cerr := e.Backend.CreateOverlayNetwork(ctx, name); cerr != nil {
+				reasons = append(reasons, fmt.Sprintf("  %s: auto-create failed: %v", name, cerr))
+				needCreate = append(needCreate, name)
+			}
+		}
+	}
+	if len(reasons) == 0 {
+		return nil
+	}
+	msg := "external network(s) required by this chart are unavailable:\n" + strings.Join(reasons, "\n")
+	if len(needCreate) > 0 {
+		var cmds strings.Builder
+		for _, name := range needCreate {
+			fmt.Fprintf(&cmds, "  docker network create --driver overlay --attachable %s\n", name)
+		}
+		msg += "\ncreate them on a swarm manager, then retry:\n" + strings.TrimRight(cmds.String(), "\n")
+	}
+	return fmt.Errorf("%s", msg)
 }
 
 // Uninstall removes the release's stack and, unless keepHistory, its recorded
