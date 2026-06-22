@@ -6,10 +6,16 @@
 package charts
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -100,6 +106,113 @@ func TestChartsReleaseLifecycle(t *testing.T) {
 	require.NotEmpty(t, svcs, "status should list services")
 
 	// Uninstall removes the stack and the release Configs.
+	require.NoError(t, eng.Uninstall(ctx, release, true))
+	_, err = docker.InspectConfig(ctx, fmt.Sprintf("swarmcli.release.%s.v1", release))
+	require.Error(t, err, "release config should be gone after uninstall")
+}
+
+// packChartTgz packages dir into a gzipped tar whose entries are nested under
+// prefix/, matching the layout LoadChartArchive expects.
+func packChartTgz(t *testing.T, dir, prefix string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	err := filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return err
+		}
+		rel, err := filepath.Rel(dir, p)
+		if err != nil {
+			return err
+		}
+		body, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		hdr := &tar.Header{Name: prefix + "/" + filepath.ToSlash(rel), Mode: 0o644, Size: int64(len(body)), Typeflag: tar.TypeReg}
+		if err := tw.WriteHeader(hdr); err != nil {
+			return err
+		}
+		_, err = tw.Write(body)
+		return err
+	})
+	require.NoError(t, err)
+	require.NoError(t, tw.Close())
+	require.NoError(t, gz.Close())
+	return buf.Bytes()
+}
+
+// TestChartsRepoInstallLifecycle exercises the full repository path end to end:
+// a chart served over HTTP is added, searched, resolved, pulled, rendered, and
+// installed against the live Swarm, then uninstalled. This covers the
+// add→search→resolve→pull chain that the engine-only lifecycle test skips.
+func TestChartsRepoInstallLifecycle(t *testing.T) {
+	swarmlog.InitTestIfTestLogEnv()
+
+	ctx := context.Background()
+
+	// Serve an index.yaml plus the packaged chart from a local HTTP server.
+	const tgzName = "itest-0.1.0.tgz"
+	tgz := packChartTgz(t, writeDemoChart(t), "itest")
+	index := "apiVersion: v1\n" +
+		"entries:\n" +
+		"  itest:\n" +
+		"    - name: itest\n" +
+		"      version: \"0.1.0\"\n" +
+		"      description: integration test chart\n" +
+		"      urls: [\"" + tgzName + "\"]\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/index.yaml"):
+			_, _ = w.Write([]byte(index))
+		case strings.HasSuffix(r.URL.Path, tgzName):
+			_, _ = w.Write(tgz)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	// Add the repo (downloads + validates the index), then find and fetch the
+	// chart through the public store API.
+	store := charts.NewRepoStoreAt(t.TempDir())
+	require.NoError(t, store.Add("itest-repo", srv.URL))
+
+	hits, err := store.Search("itest")
+	require.NoError(t, err)
+	require.NotEmpty(t, hits, "search should find the served chart")
+
+	entry, base, err := store.Resolve("itest-repo/itest", "")
+	require.NoError(t, err)
+
+	ch, err := store.Pull(entry, base)
+	require.NoError(t, err)
+	require.Equal(t, "itest", ch.Metadata.Name)
+
+	// Render the pulled chart and install it on the live Swarm.
+	release := fmt.Sprintf("itest-repo-%d", time.Now().UnixNano())
+	values, err := charts.MergeValues(ch.Values, nil, []string{"replicas=2"})
+	require.NoError(t, err)
+	manifest, err := charts.Render(ch, charts.RenderContext{
+		Values:  values,
+		Release: charts.ReleaseMeta{Name: release, Namespace: release, Revision: 1},
+		Chart:   charts.ChartMeta{Name: ch.Metadata.Name, Version: ch.Metadata.Version},
+	})
+	require.NoError(t, err)
+
+	eng := charts.NewEngine()
+	defer func() { _ = eng.Uninstall(ctx, release, true) }()
+
+	rel, err := eng.Install(ctx, release, charts.ReleaseChart{Name: ch.Metadata.Name, Version: ch.Metadata.Version},
+		values, manifest, charts.InstallOptions{Wait: true, Timeout: 90 * time.Second})
+	require.NoError(t, err, "install of pulled chart should succeed")
+	require.Equal(t, charts.StatusDeployed, rel.Status)
+
+	_, svcs, err := eng.Status(ctx, release)
+	require.NoError(t, err)
+	require.NotEmpty(t, svcs, "status should list services")
+
 	require.NoError(t, eng.Uninstall(ctx, release, true))
 	_, err = docker.InspectConfig(ctx, fmt.Sprintf("swarmcli.release.%s.v1", release))
 	require.Error(t, err, "release config should be gone after uninstall")
