@@ -24,13 +24,22 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// deleteConfirmPrompt is the confirmation shown before deleting a config. When
-// the config backs a chart release (labeled by the charts engine) it warns that
-// deleting it can corrupt the release's recorded state and points at the proper
-// `charts uninstall` path, but still lets the user proceed.
-func deleteConfirmPrompt(cfgName string, cfg *docker.ConfigWithDecodedData) string {
+// chartReleaseOf returns the name of the chart release a config backs, or "" if
+// the config is not a chart-managed release record (labeled by the charts
+// engine). Used to guard destructive TUI actions on chart-owned configs.
+func chartReleaseOf(cfg *docker.ConfigWithDecodedData) string {
 	if cfg != nil && cfg.Config.Spec.Labels[charts.LabelType] == charts.TypeRelease {
-		rel := cfg.Config.Spec.Labels[charts.LabelRelease]
+		return cfg.Config.Spec.Labels[charts.LabelRelease]
+	}
+	return ""
+}
+
+// deleteConfirmPrompt is the confirmation shown before deleting a config. When
+// the config backs a chart release it warns that deleting it can corrupt the
+// release's recorded state and points at the proper `charts uninstall` path, but
+// still lets the user proceed.
+func deleteConfirmPrompt(cfgName string, cfg *docker.ConfigWithDecodedData) string {
+	if rel := chartReleaseOf(cfg); rel != "" {
 		return fmt.Sprintf("Config %s belongs to chart release %q — deleting it may corrupt the release (use `charts uninstall`). Delete anyway?", cfgName, rel)
 	}
 	return fmt.Sprintf("Delete config %s?", cfgName)
@@ -485,6 +494,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 		case "e":
 			cfgName := m.selectedConfig()
+			// Editing/rotating a chart release record would corrupt the install;
+			// block it from the TUI and point at the chart workflow instead.
+			if cfg, _ := m.findConfigByName(cfgName); chartReleaseOf(cfg) != "" {
+				return tea.Printf("Config %s belongs to chart release %q — edit it with `charts upgrade`, not from here.", cfgName, chartReleaseOf(cfg))
+			}
 			l().Infof("Edit key pressed for config: %s", cfgName)
 			// Start editor; the editCmd will send back editConfigDoneMsg or editConfigErrorMsg
 			return m.editConfigInEditorCmd(cfgName)

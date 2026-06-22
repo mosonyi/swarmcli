@@ -12,6 +12,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"swarmcli/charts"
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
 	"swarmcli/ui"
@@ -202,6 +203,19 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.confirmDialog.Visible = true
 		m.confirmDialog.ErrorMode = true
 		m.confirmDialog.Message = fmt.Sprintf("Failed to remove stack %q:\n%v", msg.StackName, msg.Error)
+		return nil
+
+	case StackDeleteIntentMsg:
+		m.pendingAction = "remove"
+		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = false
+		if msg.ChartRelease != "" {
+			m.confirmDialog.Message = fmt.Sprintf("Stack %q belongs to chart release %q.\n\nRemoving it here may corrupt the release — prefer `charts uninstall`.\nThis removes all services in the stack and cannot be undone!", msg.StackName, msg.ChartRelease)
+		} else {
+			m.confirmDialog.Message = fmt.Sprintf("Remove stack %q?\n\nThis will remove all services in the stack.\nThis action cannot be undone!", msg.StackName)
+		}
+		m.confirmDialog.CheckboxLabel = "Also remove associated networks"
+		m.confirmDialog.CheckboxChecked = true // Checked by default
 		return nil
 
 	case editorContentMsg:
@@ -497,16 +511,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 
-		// 'ctrl+d' removes selected stack
+		// 'ctrl+d' removes selected stack. First check (async) whether the stack
+		// belongs to a chart release so the confirm dialog can warn.
 		if msg.String() == "ctrl+d" {
 			if m.List.Cursor < len(m.List.Filtered) {
 				selected := m.List.Filtered[m.List.Cursor]
-				m.pendingAction = "remove"
-				m.confirmDialog.Visible = true
-				m.confirmDialog.ErrorMode = false
-				m.confirmDialog.Message = fmt.Sprintf("Remove stack %q?\n\nThis will remove all services in the stack.\nThis action cannot be undone!", selected.Name)
-				m.confirmDialog.CheckboxLabel = "Also remove associated networks"
-				m.confirmDialog.CheckboxChecked = true // Checked by default
+				return m.stackDeleteIntentCmd(selected.Name)
 			}
 		}
 
@@ -1002,6 +1012,33 @@ func (m *Model) handleSaveDialogKey(msg tea.KeyMsg) tea.Cmd {
 }
 
 // saveStackToFileCmd reconstructs and saves stack YAML to a file
+// stackDeleteIntentCmd checks whether a stack about to be removed belongs to a
+// chart release (by looking for a non-uninstalled release config labeled with
+// the stack name) and emits a StackDeleteIntentMsg so the confirm dialog can
+// warn. The lookup runs off the main loop so the UI never blocks on it.
+func (m *Model) stackDeleteIntentCmd(name string) tea.Cmd {
+	configOps := m.deps.Configs
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
+		defer cancel()
+		release := ""
+		if cfgs, err := configOps.ListConfigs(ctx); err != nil {
+			l().Warnf("stackDeleteIntentCmd: ListConfigs failed: %v", err)
+		} else {
+			for _, c := range cfgs {
+				lbl := c.Spec.Labels
+				if lbl[charts.LabelType] == charts.TypeRelease &&
+					lbl[charts.LabelRelease] == name &&
+					lbl[charts.LabelStatus] != charts.StatusUninstalled {
+					release = name
+					break
+				}
+			}
+		}
+		return StackDeleteIntentMsg{StackName: name, ChartRelease: release}
+	}
+}
+
 func (m *Model) saveStackToFileCmd(stackName, filePath string) tea.Cmd {
 	stackOps := m.deps.Stacks
 	return func() tea.Msg {

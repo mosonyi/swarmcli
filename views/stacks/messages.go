@@ -39,6 +39,14 @@ type RemoveErrorMsg struct {
 	Error     error
 }
 
+// StackDeleteIntentMsg carries the result of checking, when a stack delete is
+// requested, whether that stack belongs to a chart release. ChartRelease is
+// non-empty when it does, so the confirm dialog can warn before removal.
+type StackDeleteIntentMsg struct {
+	StackName    string
+	ChartRelease string
+}
+
 // editorContentMsg is sent when editor returns content
 type editorContentMsg struct {
 	Content         string

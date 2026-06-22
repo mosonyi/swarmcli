@@ -220,13 +220,25 @@ func TestKey_C_OpensCreateDialog(t *testing.T) {
 	require.Equal(t, "source", m.createDialogStep)
 }
 
-func TestKey_CtrlD_OpensConfirmDialog(t *testing.T) {
+func TestKey_CtrlD_StackDeleteIntent(t *testing.T) {
 	m := testModel()
 	loadStacks(m, fakeStacks("mystack"))
-	m.Update(key("ctrl+d"))
+	// ctrl+d dispatches an async chart-ownership check; the dialog is not opened
+	// until the resulting StackDeleteIntentMsg is handled.
+	cmd := m.Update(key("ctrl+d"))
+	require.NotNil(t, cmd)
+	require.False(t, m.confirmDialog.Visible)
+
+	// A plain stack gets the generic remove confirmation.
+	m.Update(StackDeleteIntentMsg{StackName: "mystack"})
 	require.True(t, m.confirmDialog.Visible)
 	require.Equal(t, "remove", m.pendingAction)
 	require.Contains(t, m.confirmDialog.Message, "mystack")
+
+	// A chart-managed stack warns about the release and points at charts uninstall.
+	m.Update(StackDeleteIntentMsg{StackName: "whoami", ChartRelease: "whoami"})
+	require.Contains(t, m.confirmDialog.Message, "chart release")
+	require.Contains(t, m.confirmDialog.Message, "charts uninstall")
 }
 
 func TestKey_P_TogglesExpand(t *testing.T) {
