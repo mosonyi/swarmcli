@@ -33,9 +33,11 @@ tail -f ~/.local/state/swarmcli/app.log          # prod mode (JSON)
 ## Architecture
 
 ```
-main.go                    Entry point; version injection via ldflags, tea.NewProgram()
+main.go                    Entry point; version injection via ldflags. With args, dispatches non-interactive CLI subcommands via cli.Dispatch(); bare invocation launches the TUI (tea.NewProgram())
+cli/                       Arg-based CLI dispatch (cli.Dispatch): `charts`, `version`, `help`
+charts/                    Helm-like package manager (repos, chart rendering, releases)
 app/
-  app.go                   View factory registry, Init(), command autoload via _ "swarmcli/commands"
+  app.go                   Init(); triggers command autoload via _ "swarmcli/commands" and view autoload via _ "swarmcli/views" (view factory registry lives in views/view/registry.go)
   hooks.go                 PreUpdateHook registration; StartupOverlay; RegisterShutdownHook / RunShutdownHooks (BE port-forward manager registers CloseAll here)
   model.go                 Central state: Model struct (viewport, currentView, viewStack, commandInput, searchInput, systemInfo)
   update.go                Main message router: navigation, resize, events, key dispatch
@@ -62,7 +64,7 @@ views/
   viewstack/               Navigation stack (push/pop)
 commands/
   api/                     Command context & arg parsing
-  command/                 Built-in commands (help, contexts, stacks, services, etc.)
+  command/                 Top-level built-in commands (help.go, contexts.go, quit.go, alias.go, bootstrap.go); docker-entity commands live under command/docker/<entity>/ls.go (service, node, network, volume, secret, config)
   autoload.go              Blank import triggers init() registration
 docker/
   client.go                Context-aware Docker client factory
@@ -82,7 +84,7 @@ utils/log/
 
 - **Bubble Tea MVC**: Input → Update() → tea.Cmd → View(). All state changes via `tea.Msg` types.
 - **View Stack**: `viewStack.Push(old)` / `Pop()` for breadcrumb navigation.
-- **View Factory**: `viewRegistry[name]` maps view names to constructor functions, registered in `app.Init()`.
+- **View Factory**: Views auto-register via `init()` + `view.RegisterView(name, factory)` in each view's `register.go` (registry in `views/view/registry.go`, looked up with `GetFactory`). `app/app.go`'s blank import `_ "swarmcli/views"` pulls `views/autoload.go`, which blank-imports every view — exactly mirroring the command autoload pattern.
 - **Command Registry**: Commands in `commands/command/` auto-register via `init()` + `registry.Register()`. Accessed via `:` input.
 - **Command Spec**: Commands optionally implement `registry.CommandWithSpec` (`Spec() registry.CommandSpec`, discovered by type assertion like `Aliaser`). The spec declares `Usage`, `Flags` (the allow-list), and `Examples`. `api.ParseInput` is the single chokepoint that, in order: short-circuits `Passthrough` specs, intercepts `--help`/`-h`/`-help` (and `:help <cmd>`) into a per-command help screen reusing the detailed help view, then rejects any undeclared flag (**global strict**, with a `did you mean --x?` suggestion). Unknown-flag rejection means every registered command MUST declare a spec — a missing/empty spec rejects all flags. `Passthrough:true` is the narrow escape-hatch for delegating/unavailable stubs (e.g. the OSS `bootstrap` stub): it skips both help interception and validation so every arg reaches `Execute` unchanged and the command keeps its own messaging (and no Pro flag internals leak into OSS — see Pro Feature Boundary).
 - **Snapshot Cache**: `docker.GetSnapshot()` / `docker.RefreshSnapshot()` — 3s TTL, background event-driven invalidation.
@@ -92,7 +94,7 @@ utils/log/
 
 **New command**: Create `commands/command/mycommand.go`, implement `registry.Command` (Name/Description/Execute), call `registry.Register()` in `init()`. Also implement `Spec() registry.CommandSpec` — declare every flag the command reads (`a.Has`/`a.Get`) plus `Usage`/`Examples`, or `:cmd --help` shows only a fallback and strict validation rejects the command's own flags. Aliases (`Aliaser`) inherit the primary's spec; do not add a spec to the alias. See `commands/command/docker/node/ls.go` for a zero-flag spec and `swarmcli-be/commands/pro/bootstrap.go` for the full worked example.
 
-**New view**: Create `views/myview/`, implement `view.View` interface, register factory in `app/app.go` `Init()`.
+**New view**: Create `views/myview/`, implement `view.View` interface, and add a `register.go` whose `init()` calls `view.RegisterView(name, factory)`. Add its blank import to `views/autoload.go` so the package is loaded. See `views/nodes/register.go`.
 
 ## Environment Variables
 

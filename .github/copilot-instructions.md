@@ -4,7 +4,7 @@ This document gives focused, actionable knowledge to help an AI coding agent be 
 
 High-level architecture
 - **CLI app entry:** [main.go](main.go) creates a Bubble Tea `Program` and calls `app.Init()`.
-- **App bootstrap & view registry:** [app/app.go](app/app.go) initializes logging, command autoload (`import "swarmcli/commands"`), and registers views via `registerView(name, factory)`. Views are built with the `view.Factory` pattern.
+- **App bootstrap:** [app/app.go](app/app.go) initializes logging and triggers autoload via blank imports — commands (`_ "swarmcli/commands"`) and views (`_ "swarmcli/views"`). Views self-register with the `view.Factory` pattern; the registry lives in [views/view/registry.go](views/view/registry.go).
 - **Views & UI:** UI components live under `views/` and `ui/`. Each view is a Bubble Tea model; common patterns: `Init()` returns a `tea.Cmd`, views expose `SetSize`, `View()`, and handle messages in `update.go`.
 - **Docker integration:** The `docker/` package wraps Docker CLI + SDK. `docker.GetClient()` respects `DOCKER_CONTEXT` (or `docker context show`) and TLS cert layout. See [docker/client.go](docker/client.go) and [docker/context.go](docker/context.go).
 - **Commands registry:** The `commands` package uses autoloading to register CLI commands with `registry`. See [app/app.go](app/app.go) and `commands/` for patterns.
@@ -16,7 +16,7 @@ Key developer workflows
 - Docker contexts for tests: The project creates a Docker context pointing at a local DinD manager; `DOCKER_CONTEXT` environment variable is honored by `docker.GetClient()` and tests (see `integration-tests/*` and `test-setup/testenv.sh`).
 
 Project-specific conventions & patterns
-- Bubble Tea / view factory: Views are registered centrally in `app.Init()` and must return `(view.View, tea.Cmd)`. Prefer returning a ready-to-run `tea.Cmd` (often `model.Init()` or `tea.Batch(...)`). Example registration: services, nodes, contexts in [app/app.go](app/app.go).
+- Bubble Tea / view factory: Each view self-registers from its own `register.go` `init()` via `view.RegisterView(name, factory)`; the factory signature is `func(deps docker.Deps, width, height int, payload any) (view.View, tea.Cmd)`. Prefer returning a ready-to-run `tea.Cmd` (often `model.Init()` or `tea.Batch(...)`). The package must be blank-imported in [views/autoload.go](views/autoload.go). Example: [views/nodes/register.go](views/nodes/register.go).
 - UI composition: Shared UI helpers are under `ui/` (framed boxes, overlays, status bar). Prefer these helpers for consistent look/feel (examples in `views/configs/view.go` and `views/stacks/*`).
 - Filterable lists: Use the `ui/components/filterable` package for lists (cursor, search modes). Items implement `FilterValue()`, `Title()`, `Description()` — see `views/configs/view.go` for concrete types.
 - Error & dialogs: Reuse `ui/components/errordialog` and `ui.RenderConfirmDialog` for modal flows; views typically toggle `...DialogActive` booleans and overlay rendered content with `ui.OverlayCentered()`.
@@ -27,7 +27,7 @@ Integration points & external dependencies
 - Test harness: `test-setup` uses Docker Compose to spin up a small Swarm cluster (DinD). The integration test harness relies on `docker context create` and `docker --context ... stack deploy` flow.
 
 Helpful code pointers (quick examples)
-- Registering views: [app/app.go](app/app.go) — follow its `registerView` usage.
+- Registering views: [views/view/registry.go](views/view/registry.go) and each view's `register.go` — follow the `view.RegisterView` + autoload pattern.
 - Docker client: [docker/client.go](docker/client.go) — honor `DOCKER_CONTEXT` and TLS cert layout; use `GetClient()` for network calls.
 - Filterable item example: `views/configs/view.go` defines `configItem` (methods `FilterValue`, `Title`, `Description`).
 - Test runner: `test-setup/testenv.sh` and `integration-tests/` — run the full integration environment from the repo root.
@@ -41,6 +41,7 @@ Coding agent DOs and DON'Ts (repo-specific)
 
 If unsure, inspect these files first
 - [app/app.go](app/app.go)
+- [views/view/registry.go](views/view/registry.go) and a view's `register.go` (e.g. [views/nodes/register.go](views/nodes/register.go))
 - [main.go](main.go)
 - [docker/client.go](docker/client.go)
 - [test-setup/testenv.sh](test-setup/testenv.sh)

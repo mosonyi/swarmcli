@@ -62,8 +62,40 @@ swarmcli
 - **Instant Logs**: No more `docker service logs -f`. Just press `l` on any service.
 - **Secrets & Configs**: Manage, rotate, and — with [Business Edition](#business-edition) — **reveal** secrets for debugging.
 - **Management Actions**: Scale, restart, remove, and update services with single keystrokes.
+- **Chart Package Manager**: Helm-like packaging for Swarm — install, upgrade, roll back, and diff releases from chart repositories via `swarmcli charts`.
 - **Zero Config**: Works out-of-the-box with your local Docker engine or remote via SSH/Contexts.
 - **Lightweight**: Built with Go. Single static binary (< 20MB). Zero dependencies.
+
+## Charts (CLI)
+
+A bare `swarmcli` launches the TUI, but a few commands run non-interactively
+when arguments are supplied: `swarmcli version`, `swarmcli help`, and the
+Helm-like chart package manager `swarmcli charts <command>`:
+
+```bash
+# Repositories
+swarmcli charts repo add <name> <url>     # add a repo and download its index
+swarmcli charts repo list                 # list configured repos
+swarmcli charts repo update [name]        # refresh indexes (all, or one)
+swarmcli charts repo remove <name>        # remove a repo
+
+# Discovery
+swarmcli charts search [keyword]          # search charts across repos
+swarmcli charts show chart  <repo/chart>  # chart metadata (also: values, schema)
+
+# Releases
+swarmcli charts template <release> <repo/chart>   # render manifest (no deploy)
+swarmcli charts install  <release> <repo/chart>   # install a chart as a release
+swarmcli charts upgrade  <release> <repo/chart>   # upgrade to a new revision
+swarmcli charts diff upgrade <release> <repo/chart>  # preview upgrade changes
+swarmcli charts rollback <release> <revision>     # re-deploy a past revision
+swarmcli charts uninstall <release>               # remove a release
+swarmcli charts history <release>                 # revision history
+swarmcli charts list                              # list releases
+swarmcli charts status <release>                  # release status and services
+```
+
+Run `swarmcli charts --help` for the full command and option reference.
 
 ## Business Edition
 
@@ -173,7 +205,6 @@ TEST_LOG=1 ./test-setup/testenv.sh test
 | `:secret`  | Navigate to Secret    |
 | `:network` | Navigate to Networks  |
 | `:volume`  | Navigate to Volumes   |
-| `:node`  | Navigate to Nodes       |
 | `l`      | View Logs               |
 | `s`      | Scale Service           |
 | `r`      | Restart Service         |
