@@ -122,3 +122,15 @@ func (dockerBackend) RemoveOverlayNetwork(ctx context.Context, name string) erro
 	}
 	return nil // already gone
 }
+
+func (dockerBackend) SecretNames(ctx context.Context) (map[string]struct{}, error) {
+	secs, err := docker.ListSecrets(ctx)
+	if err != nil {
+		return nil, err
+	}
+	names := make(map[string]struct{}, len(secs))
+	for _, s := range secs {
+		names[s.Spec.Name] = struct{}{}
+	}
+	return names, nil
+}

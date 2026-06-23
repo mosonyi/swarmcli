@@ -60,6 +60,9 @@ type Backend interface {
 	// RemoveOverlayNetwork removes a network by name, used to roll back networks
 	// auto-created for an install whose deploy then failed. A no-op if absent.
 	RemoveOverlayNetwork(ctx context.Context, name string) error
+	// SecretNames returns the set of existing swarm secret names, used to
+	// pre-flight a chart's external secrets (which cannot be auto-created).
+	SecretNames(ctx context.Context) (map[string]struct{}, error)
 }
 
 // Engine drives release lifecycle operations against a Backend.
@@ -210,6 +213,13 @@ func (e *Engine) deployAndRecord(ctx context.Context, rel *Release, opts Install
 	if opts.DryRun {
 		return rel, nil
 	}
+	// Validate prerequisites that cannot be auto-created (external secrets and
+	// configs) before mutating any swarm state, so a missing one fails fast
+	// without leaving auto-created networks behind.
+	if err := e.ensureExternalSecretsConfigs(ctx, rel.Manifest); err != nil {
+		rel.Status = StatusFailed
+		return rel, err
+	}
 	created, err := e.ensureExternalNetworks(ctx, rel.Manifest)
 	if err != nil {
 		rel.Status = StatusFailed
@@ -291,6 +301,59 @@ func (e *Engine) ensureExternalNetworks(ctx context.Context, manifest string) (c
 		msg += "\ncreate them on a swarm manager, then retry:\n" + strings.TrimRight(cmds.String(), "\n")
 	}
 	return created, fmt.Errorf("%s", msg)
+}
+
+// ensureExternalSecretsConfigs verifies that every secret and config the
+// manifest declares external already exists on the swarm. Unlike networks,
+// these cannot be auto-created — their content is not part of the chart — so a
+// missing one is a hard error that lists the `docker secret/config create`
+// commands needed to resolve it. A manifest with no external secrets/configs is
+// a no-op.
+func (e *Engine) ensureExternalSecretsConfigs(ctx context.Context, manifest string) error {
+	secrets := externalResourceNames(manifest, "secrets")
+	configs := externalResourceNames(manifest, "configs")
+	if len(secrets) == 0 && len(configs) == 0 {
+		return nil
+	}
+
+	var reasons, cmds []string
+
+	if len(secrets) > 0 {
+		have, err := e.Backend.SecretNames(ctx)
+		if err != nil {
+			return fmt.Errorf("checking external secrets: %w", err)
+		}
+		for _, name := range secrets {
+			if _, ok := have[name]; !ok {
+				reasons = append(reasons, fmt.Sprintf("  secret %q does not exist", name))
+				cmds = append(cmds, fmt.Sprintf("  docker secret create %s <file>", name))
+			}
+		}
+	}
+
+	if len(configs) > 0 {
+		metas, err := e.Backend.ListConfigs(ctx)
+		if err != nil {
+			return fmt.Errorf("checking external configs: %w", err)
+		}
+		have := make(map[string]struct{}, len(metas))
+		for _, m := range metas {
+			have[m.Name] = struct{}{}
+		}
+		for _, name := range configs {
+			if _, ok := have[name]; !ok {
+				reasons = append(reasons, fmt.Sprintf("  config %q does not exist", name))
+				cmds = append(cmds, fmt.Sprintf("  docker config create %s <file>", name))
+			}
+		}
+	}
+
+	if len(reasons) == 0 {
+		return nil
+	}
+	return fmt.Errorf("external secret(s)/config(s) required by this chart do not exist:\n%s\n"+
+		"create them on a swarm manager, then retry:\n%s",
+		strings.Join(reasons, "\n"), strings.Join(cmds, "\n"))
 }
 
 // Uninstall removes the release's stack and, unless keepHistory, its recorded
