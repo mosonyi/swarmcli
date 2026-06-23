@@ -19,11 +19,13 @@ type fakeBackend struct {
 	deployed      map[string]string // stack name -> manifest
 	volumes       map[string][]string
 	services      map[string][]ServiceState
-	networkScopes map[string]string // network name -> scope
-	createNetErr  map[string]error  // network name -> error to return on create
+	networkScopes map[string]string   // network name -> scope
+	secrets       map[string]struct{} // existing secret names
+	createNetErr  map[string]error    // network name -> error to return on create
 	failNext      bool
 	rmStackErr    error
 	refreshErr    error
+	secretsErr    error                   // error to return from SecretNames
 	onCreate      func(name string) error // hook to simulate concurrent config creation
 }
 
@@ -39,6 +41,7 @@ func newFakeBackend() *fakeBackend {
 		volumes:       map[string][]string{},
 		services:      map[string][]ServiceState{},
 		networkScopes: map[string]string{},
+		secrets:       map[string]struct{}{},
 		createNetErr:  map[string]error{},
 	}
 }
@@ -123,6 +126,16 @@ func (f *fakeBackend) CreateOverlayNetwork(_ context.Context, name string) error
 func (f *fakeBackend) RemoveOverlayNetwork(_ context.Context, name string) error {
 	delete(f.networkScopes, name)
 	return nil
+}
+func (f *fakeBackend) SecretNames(context.Context) (map[string]struct{}, error) {
+	if f.secretsErr != nil {
+		return nil, f.secretsErr
+	}
+	out := make(map[string]struct{}, len(f.secrets))
+	for k := range f.secrets {
+		out[k] = struct{}{}
+	}
+	return out, nil
 }
 
 func testEngine(b Backend) *Engine {
