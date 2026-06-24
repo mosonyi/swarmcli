@@ -426,6 +426,11 @@ func chartsPrune(args []string) int {
 		return fail(err)
 	}
 
+	if f.historyMax <= 0 {
+		errf("no --history-max retention window given; all revisions kept (pass --history-max <n> to prune)\n")
+		return 0
+	}
+
 	rows := make([][]string, 0)
 	deleted := 0
 	for _, res := range results {
@@ -443,10 +448,6 @@ func chartsPrune(args []string) int {
 	}
 	table([]string{"RELEASE", "REVISION", "ACTION"}, rows)
 
-	if f.historyMax <= 0 {
-		errf("no --history-max retention window given; all revisions kept (pass --history-max <n> to prune)\n")
-		return 0
-	}
 	if f.dryRun {
 		outf("dry-run: %d revision(s) would be pruned\n", deleted)
 	} else {

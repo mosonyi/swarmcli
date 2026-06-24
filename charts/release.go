@@ -604,6 +604,13 @@ func (e *Engine) Prune(ctx context.Context, release string, keep int, dryRun boo
 	if len(revs) == 0 {
 		return PruneResult{}, fmt.Errorf("release %q not found", release)
 	}
+	return e.pruneRevs(ctx, release, revs, keep, dryRun)
+}
+
+// pruneRevs applies the retention plan to a release whose revisions are already
+// loaded (ascending, non-empty). Splitting this out lets PruneAll prune from the
+// single allRevisions load instead of re-reading every config per release.
+func (e *Engine) pruneRevs(ctx context.Context, release string, revs []Release, keep int, dryRun bool) (PruneResult, error) {
 	res := PruneResult{Release: release, Actions: planPrune(revs, keep)}
 	if dryRun {
 		return res, nil
@@ -636,7 +643,7 @@ func (e *Engine) PruneAll(ctx context.Context, keep int, dryRun bool) ([]PruneRe
 	var results []PruneResult
 	var errs []error
 	for _, name := range names {
-		res, perr := e.Prune(ctx, name, keep, dryRun)
+		res, perr := e.pruneRevs(ctx, name, byRelease[name], keep, dryRun)
 		if perr != nil {
 			errs = append(errs, perr)
 		}
