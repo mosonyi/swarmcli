@@ -6,9 +6,58 @@ package docker
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/docker/docker/api/types/swarm"
 )
+
+// nodeUpdateMaxAttempts bounds how many times a spec update is retried when the
+// daemon rejects it with "update out of sequence". Swarm bumps a node's version
+// index on background status/heartbeat writes as well as spec changes, so a
+// fetch-then-update can race a concurrent bump and submit a stale version index;
+// re-fetching and retrying resolves it.
+const nodeUpdateMaxAttempts = 5
+
+// nodeUpdater is the subset of the Docker client used to mutate a node's spec.
+// *client.Client satisfies it; it exists so updateNodeSpec is unit-testable
+// without a live daemon.
+type nodeUpdater interface {
+	NodeInspectWithRaw(ctx context.Context, nodeID string) (swarm.Node, []byte, error)
+	NodeUpdate(ctx context.Context, nodeID string, version swarm.Version, spec swarm.NodeSpec) error
+}
+
+// isUpdateOutOfSequence reports whether err is the daemon's optimistic-concurrency
+// rejection ("update out of sequence"), raised when NodeUpdate is given a version
+// index that no longer matches the store.
+func isUpdateOutOfSequence(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "update out of sequence")
+}
+
+// updateNodeSpec fetches the node, applies mutate to a copy of its spec, and
+// submits the update using the node's current version index. On an "update out
+// of sequence" rejection it re-fetches and retries, up to nodeUpdateMaxAttempts.
+func updateNodeSpec(ctx context.Context, c nodeUpdater, nodeID string, mutate func(*swarm.NodeSpec)) error {
+	var lastErr error
+	for attempt := 0; attempt < nodeUpdateMaxAttempts; attempt++ {
+		node, _, err := c.NodeInspectWithRaw(ctx, nodeID)
+		if err != nil {
+			return fmt.Errorf("inspect node: %w", err)
+		}
+
+		spec := node.Spec
+		mutate(&spec)
+
+		err = c.NodeUpdate(ctx, nodeID, node.Version, spec)
+		if err == nil {
+			return nil
+		}
+		if !isUpdateOutOfSequence(err) {
+			return err
+		}
+		lastErr = err
+	}
+	return fmt.Errorf("after %d attempts: %w", nodeUpdateMaxAttempts, lastErr)
+}
 
 // GetLocalNodeID returns the swarm node ID of the daemon the active Docker
 // client is connected to, or "" if it is not an active swarm node.
@@ -50,18 +99,9 @@ func DemoteNode(ctx context.Context, nodeID string) error {
 		return err
 	}
 
-	// Fetch current node to get the version and current spec
-	node, _, err := c.NodeInspectWithRaw(ctx, nodeID)
-	if err != nil {
-		return fmt.Errorf("inspect node: %w", err)
-	}
-
-	// Modify spec to set worker role
-	spec := node.Spec
-	spec.Role = swarm.NodeRoleWorker
-
-	// Perform update using the node's current version index
-	if err := c.NodeUpdate(ctx, nodeID, node.Version, spec); err != nil {
+	if err := updateNodeSpec(ctx, c, nodeID, func(spec *swarm.NodeSpec) {
+		spec.Role = swarm.NodeRoleWorker
+	}); err != nil {
 		return fmt.Errorf("demote node: %w", err)
 	}
 	return nil
@@ -74,18 +114,9 @@ func PromoteNode(ctx context.Context, nodeID string) error {
 		return err
 	}
 
-	// Fetch current node to get the version and current spec
-	node, _, err := c.NodeInspectWithRaw(ctx, nodeID)
-	if err != nil {
-		return fmt.Errorf("inspect node: %w", err)
-	}
-
-	// Modify spec to set manager role
-	spec := node.Spec
-	spec.Role = swarm.NodeRoleManager
-
-	// Perform update using the node's current version index
-	if err := c.NodeUpdate(ctx, nodeID, node.Version, spec); err != nil {
+	if err := updateNodeSpec(ctx, c, nodeID, func(spec *swarm.NodeSpec) {
+		spec.Role = swarm.NodeRoleManager
+	}); err != nil {
 		return fmt.Errorf("promote node: %w", err)
 	}
 	return nil
@@ -98,18 +129,9 @@ func SetNodeAvailability(ctx context.Context, nodeID string, availability swarm.
 		return err
 	}
 
-	// Fetch current node to get the version and current spec
-	node, _, err := c.NodeInspectWithRaw(ctx, nodeID)
-	if err != nil {
-		return fmt.Errorf("inspect node: %w", err)
-	}
-
-	// Modify spec to set availability
-	spec := node.Spec
-	spec.Availability = availability
-
-	// Perform update using the node's current version index
-	if err := c.NodeUpdate(ctx, nodeID, node.Version, spec); err != nil {
+	if err := updateNodeSpec(ctx, c, nodeID, func(spec *swarm.NodeSpec) {
+		spec.Availability = availability
+	}); err != nil {
 		return fmt.Errorf("set node availability: %w", err)
 	}
 	return nil
@@ -122,21 +144,12 @@ func AddNodeLabel(ctx context.Context, nodeID string, key string, value string) 
 		return err
 	}
 
-	// Fetch current node to get the version and current spec
-	node, _, err := c.NodeInspectWithRaw(ctx, nodeID)
-	if err != nil {
-		return fmt.Errorf("inspect node: %w", err)
-	}
-
-	// Modify spec to add/update label
-	spec := node.Spec
-	if spec.Labels == nil {
-		spec.Labels = make(map[string]string)
-	}
-	spec.Labels[key] = value
-
-	// Perform update using the node's current version index
-	if err := c.NodeUpdate(ctx, nodeID, node.Version, spec); err != nil {
+	if err := updateNodeSpec(ctx, c, nodeID, func(spec *swarm.NodeSpec) {
+		if spec.Labels == nil {
+			spec.Labels = make(map[string]string)
+		}
+		spec.Labels[key] = value
+	}); err != nil {
 		return fmt.Errorf("add node label: %w", err)
 	}
 	return nil
@@ -149,20 +162,11 @@ func RemoveNodeLabel(ctx context.Context, nodeID string, key string) error {
 		return err
 	}
 
-	// Fetch current node to get the version and current spec
-	node, _, err := c.NodeInspectWithRaw(ctx, nodeID)
-	if err != nil {
-		return fmt.Errorf("inspect node: %w", err)
-	}
-
-	// Modify spec to remove label
-	spec := node.Spec
-	if spec.Labels != nil {
-		delete(spec.Labels, key)
-	}
-
-	// Perform update using the node's current version index
-	if err := c.NodeUpdate(ctx, nodeID, node.Version, spec); err != nil {
+	if err := updateNodeSpec(ctx, c, nodeID, func(spec *swarm.NodeSpec) {
+		if spec.Labels != nil {
+			delete(spec.Labels, key)
+		}
+	}); err != nil {
 		return fmt.Errorf("remove node label: %w", err)
 	}
 	return nil
