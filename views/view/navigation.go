@@ -22,3 +22,6 @@ type AppErrorMsg struct {
 
 // GoBackMsg requests the app to pop the current view and return to the previous one.
 type GoBackMsg struct{}
+
+// OpenUnlockDialogMsg requests the app to open the swarm unlock-key dialog.
+type OpenUnlockDialogMsg struct{}

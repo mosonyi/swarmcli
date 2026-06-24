@@ -4,6 +4,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -18,7 +19,9 @@ import (
 	"swarmcli/views/searchinput"
 	stacksview "swarmcli/views/stacks"
 	systeminfoview "swarmcli/views/systeminfo"
+	"swarmcli/views/unlockdialog"
 	"swarmcli/views/view"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -78,6 +81,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.previousContext = ""
 		// Replace loading with stacks view
 		cmd := m.replaceView(stacksview.ViewName, nil)
+		// A locked swarm loads as an empty, flagged snapshot. Tell the user why
+		// the lists are empty and how to unlock — without reverting the switch.
+		if snap := docker.GetSnapshot(); snap != nil && snap.Locked {
+			m.showAppInfo(
+				"Swarm is locked — its resources stay hidden until it is unlocked.\n\n"+
+					"Type :unlock to enter the unlock key, or run `docker swarm unlock` in a terminal.",
+				"",
+			)
+		}
 		return m, cmd
 	case commandinput.SubmitMsg:
 		raw := strings.TrimSpace(msg.Command)
@@ -129,9 +141,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		// If app-level error dialog is active, route all keys to handleKey
+		// If an app-level dialog is active, route all keys to handleKey
 		// which forwards them to the dialog exclusively.
-		if m.appErrorDialogActive {
+		if m.appErrorDialogActive || m.unlockDialogActive {
 			return m.handleKey(msg)
 		}
 
@@ -286,7 +298,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.systemInfo.LoadStatus(),
 			cmd,
 			// Load snapshot and navigate to stacks when ready
-			loadSnapshotAndNavigateToStacksCmd(),
+			loadSnapshotAsync(),
 		)
 
 	case view.AppErrorMsg:
@@ -308,11 +320,40 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := m.delegateToCurrentView(msg)
 		return m, cmd
 
+	case view.OpenUnlockDialogMsg:
+		m.unlockDialog.Show()
+		m.unlockDialogActive = true
+		return m, m.unlockDialog.Init()
+
+	case unlockdialog.ResultMsg:
+		m.unlockDialogActive = false
+		m.unlockDialog.Hide()
+		if !msg.Confirmed || strings.TrimSpace(msg.Key) == "" {
+			return m, nil
+		}
+		key := msg.Key
+		return m, func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			return unlockResultMsg{Err: docker.UnlockSwarm(ctx, key)}
+		}
+
+	case unlockResultMsg:
+		if msg.Err != nil {
+			m.showAppError("Failed to unlock swarm: "+msg.Err.Error(), "")
+			return m, nil
+		}
+		docker.InvalidateSnapshot()
+		return m, tea.Batch(loadSnapshotAsync(), m.systemInfo.LoadStatus())
+
 	default:
 		cmd := m.delegateToCurrentView(msg)
 		return m, cmd
 	}
 }
+
+// unlockResultMsg carries the outcome of a docker.UnlockSwarm call.
+type unlockResultMsg struct{ Err error }
 
 func (m *Model) delegateToCurrentView(msg tea.Msg) tea.Cmd {
 	cmd := m.currentView.Update(msg)
@@ -400,6 +441,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// If app-level error dialog is active, forward keys to it exclusively
 	if m.appErrorDialogActive {
 		cmd := m.errorDialog.Update(msg)
+		return m, cmd
+	}
+
+	// If the unlock dialog is active, forward keys to it exclusively
+	if m.unlockDialogActive {
+		cmd := m.unlockDialog.Update(msg)
 		return m, cmd
 	}
 
