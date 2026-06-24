@@ -553,14 +553,111 @@ func (e *Engine) storeRevision(ctx context.Context, rel *Release) error {
 	return e.Backend.CreateConfig(ctx, releaseConfigName(rel.Name, rel.Revision), gz, labels)
 }
 
-// pruneHistory deletes the oldest revisions beyond keep (best-effort).
+// PruneAction is the keep/delete decision for one revision in a prune.
+type PruneAction struct {
+	Revision int
+	Delete   bool
+	Current  bool // the live (highest) revision; never deleted
+}
+
+// PruneResult reports what a prune did (or, for a dry run, would do) for one
+// release. Actions are ascending by revision.
+type PruneResult struct {
+	Release string
+	Actions []PruneAction
+}
+
+// Deleted returns the revision numbers Prune removed (or would remove).
+func (r PruneResult) Deleted() []int {
+	var out []int
+	for _, a := range r.Actions {
+		if a.Delete {
+			out = append(out, a.Revision)
+		}
+	}
+	return out
+}
+
+// planPrune decides, for revisions sorted ascending, which to delete to retain
+// the newest keep. keep <= 0 keeps everything. The highest (current) revision is
+// always retained regardless of keep, so the live release is never destroyed.
+func planPrune(revs []Release, keep int) []PruneAction {
+	actions := make([]PruneAction, len(revs))
+	top := len(revs) - 1
+	for i, r := range revs {
+		current := i == top
+		del := keep > 0 && i < len(revs)-keep && !current
+		actions[i] = PruneAction{Revision: r.Revision, Delete: del, Current: current}
+	}
+	return actions
+}
+
+// Prune deletes superseded revisions of one release beyond the keep window,
+// always retaining the current (highest) revision. keep <= 0 keeps everything.
+// On a dry run no Config is touched. Deletion failures are aggregated and
+// returned, but pruning of the remaining revisions continues.
+func (e *Engine) Prune(ctx context.Context, release string, keep int, dryRun bool) (PruneResult, error) {
+	revs, err := e.revisions(ctx, release)
+	if err != nil {
+		return PruneResult{}, err
+	}
+	if len(revs) == 0 {
+		return PruneResult{}, fmt.Errorf("release %q not found", release)
+	}
+	res := PruneResult{Release: release, Actions: planPrune(revs, keep)}
+	if dryRun {
+		return res, nil
+	}
+	var errs []error
+	for _, a := range res.Actions {
+		if !a.Delete {
+			continue
+		}
+		if derr := e.Backend.DeleteConfig(ctx, releaseConfigName(release, a.Revision)); derr != nil {
+			errs = append(errs, fmt.Errorf("deleting %s: %w", releaseConfigName(release, a.Revision), derr))
+		}
+	}
+	return res, errors.Join(errs...)
+}
+
+// PruneAll prunes every release to the keep window, returning one result per
+// release (sorted by name). Per-release errors are aggregated; a failing release
+// does not stop the others.
+func (e *Engine) PruneAll(ctx context.Context, keep int, dryRun bool) ([]PruneResult, error) {
+	byRelease, err := e.allRevisions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(byRelease))
+	for name := range byRelease {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var results []PruneResult
+	var errs []error
+	for _, name := range names {
+		res, perr := e.Prune(ctx, name, keep, dryRun)
+		if perr != nil {
+			errs = append(errs, perr)
+		}
+		results = append(results, res)
+	}
+	return results, errors.Join(errs...)
+}
+
+// pruneHistory trims a release's history to keep revisions after a successful
+// deploy. It is best-effort: deletion errors are ignored because the deploy
+// itself already succeeded and recorded. Retention logic is shared with Prune
+// via planPrune, so the keep <= 0 / current-revision guarantees hold here too.
 func (e *Engine) pruneHistory(ctx context.Context, release string, keep int) {
 	revs, err := e.revisions(ctx, release)
-	if err != nil || len(revs) <= keep {
+	if err != nil {
 		return
 	}
-	for _, r := range revs[:len(revs)-keep] {
-		_ = e.Backend.DeleteConfig(ctx, releaseConfigName(release, r.Revision))
+	for _, a := range planPrune(revs, keep) {
+		if a.Delete {
+			_ = e.Backend.DeleteConfig(ctx, releaseConfigName(release, a.Revision))
+		}
 	}
 }
 

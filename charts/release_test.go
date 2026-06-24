@@ -27,6 +27,7 @@ type fakeBackend struct {
 	refreshErr    error
 	secretsErr    error                   // error to return from SecretNames
 	onCreate      func(name string) error // hook to simulate concurrent config creation
+	deleteCfgErr  map[string]error        // config name -> error to return on delete
 }
 
 type fakeConfig struct {
@@ -89,6 +90,9 @@ func (f *fakeBackend) InspectConfig(_ context.Context, name string) ([]byte, err
 	return c.data, nil
 }
 func (f *fakeBackend) DeleteConfig(_ context.Context, name string) error {
+	if err := f.deleteCfgErr[name]; err != nil {
+		return err
+	}
 	delete(f.configs, name)
 	return nil
 }

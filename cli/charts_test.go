@@ -64,6 +64,23 @@ func TestChartsTemplateUnknownFlag(t *testing.T) {
 	require.Equal(t, 2, code)
 }
 
+func TestChartsPruneTooManyArgs(t *testing.T) {
+	var code int
+	_, errOut := capture(t, func() {
+		code = Dispatch([]string{"charts", "prune", "rel-a", "rel-b"}, "dev")
+	})
+	require.Equal(t, 2, code)
+	require.Contains(t, errOut, "charts prune [release]")
+}
+
+func TestChartsPruneUnknownFlag(t *testing.T) {
+	var code int
+	capture(t, func() {
+		code = Dispatch([]string{"charts", "prune", "--bogus"}, "dev")
+	})
+	require.Equal(t, 2, code)
+}
+
 func TestChartsShowValues(t *testing.T) {
 	var code int
 	o, _ := capture(t, func() {
