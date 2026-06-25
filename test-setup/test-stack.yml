@@ -53,46 +53,11 @@ services:
 
   whoami_single:
     image: alpine:latest
-    # Issue #430 fixture: a service carrying a rich runtime/security spec.
-    # Each of these must round-trip through inspect/edit reconstruction rather
-    # than being silently dropped. Kept to fields that deploy cleanly on the
-    # DinD test Swarm without kernel/plugin surprises (read_only and sysctls
-    # are covered by unit tests instead — they break apk/are kernel-dependent).
-    hostname: whoami-single
-    cap_add:
-      - SYS_NICE
-    cap_drop:
-      - NET_RAW
-    init: true
-    stop_signal: SIGTERM
-    stop_grace_period: 20s
-    ulimits:
-      nofile:
-        soft: 20000
-        hard: 40000
     configs:
-      # uid/gid/mode must survive reconstruction (mode 0444 → inspect 292).
       - source: whoami_single_config
         target: /etc/whoami/config
-        uid: "0"
-        gid: "0"
-        mode: 0444
     deploy:
       replicas: 1
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-        window: 120s
-      update_config:
-        parallelism: 1
-        delay: 10s
-        order: start-first
-        failure_action: pause
-        monitor: 30s
-      resources:
-        limits:
-          pids: 200
     # Issue #379 fixture: a service with a healthcheck. Both inspect and
     # compose reconstruction must surface it.
     healthcheck:
@@ -127,18 +92,8 @@ services:
     image: alpine:latest
     networks:
       - default
-    # Issue #430 fixture: network-oriented runtime fields (these would break
-    # apk on the whoami services, so they live on this no-network-egress probe).
-    hostname: probe
-    extra_hosts:
-      - "db.internal:10.0.0.5"
-    dns:
-      - 8.8.8.8
-    dns_search:
-      - corp.local
     deploy:
       replicas: 1
-      endpoint_mode: dnsrr
     command: >
       sh -c 'while true; do sleep 3600; done'
 

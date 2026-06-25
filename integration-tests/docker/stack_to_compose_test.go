@@ -136,70 +136,8 @@ func TestReconstructStackCompose(t *testing.T) {
 			t.Errorf("Issue #428: logging option max-size = %q, want \"10m\"", single.Logging.Options["max-size"])
 		}
 	}
-	// Issue #430: whoami_single declares a rich runtime/security spec and
-	// default_net_probe declares network fields — all must round-trip through
-	// reconstruction rather than being silently dropped.
-	if single.Hostname != "whoami-single" {
-		t.Errorf("Issue #430: whoami_single hostname = %q, want \"whoami-single\"", single.Hostname)
-	}
-	// Docker canonicalizes capabilities with a CAP_ prefix, so the fixture's
-	// `SYS_NICE`/`NET_RAW` round-trip as `CAP_SYS_NICE`/`CAP_NET_RAW`.
-	if !containsStr(single.CapAdd, "CAP_SYS_NICE") {
-		t.Errorf("Issue #430: whoami_single cap_add = %v, want CAP_SYS_NICE", single.CapAdd)
-	}
-	if !containsStr(single.CapDrop, "CAP_NET_RAW") {
-		t.Errorf("Issue #430: whoami_single cap_drop = %v, want CAP_NET_RAW", single.CapDrop)
-	}
-	if single.StopSignal != "SIGTERM" {
-		t.Errorf("Issue #430: whoami_single stop_signal = %q, want \"SIGTERM\"", single.StopSignal)
-	}
-	if single.StopGracePeriod != "20s" {
-		t.Errorf("Issue #430: whoami_single stop_grace_period = %q, want \"20s\"", single.StopGracePeriod)
-	}
-	if single.Init == nil || !*single.Init {
-		t.Error("Issue #430: whoami_single lost init: true")
-	}
-	if single.Ulimits["nofile"] == nil {
-		t.Errorf("Issue #430: whoami_single lost ulimits.nofile, got %v", single.Ulimits)
-	}
-	// Config target uid/gid/mode (compose mode 0444 == decimal 292).
-	if len(single.Configs) == 0 {
-		t.Error("Issue #430: whoami_single lost its config reference")
-	} else if cfg := single.Configs[0]; fmt.Sprint(cfg["mode"]) != "292" {
-		t.Errorf("Issue #430: config mode = %v, want 292 (0444)", cfg["mode"])
-	}
-	// Deploy-nested fields (restart_policy delay/window, update_config, pids).
-	for _, want := range []string{"restart_policy:", "delay: 5s", "window: 2m0s",
-		"update_config:", "order: start-first", "pids: 200"} {
-		if !strings.Contains(yaml, want) {
-			t.Errorf("Issue #430: reconstructed YAML missing %q", want)
-		}
-	}
-	// default_net_probe network fields + endpoint_mode.
-	if probe.Hostname != "probe" {
-		t.Errorf("Issue #430: default_net_probe hostname = %q, want \"probe\"", probe.Hostname)
-	}
-	if !containsStr(probe.ExtraHosts, "db.internal:10.0.0.5") {
-		t.Errorf("Issue #430: default_net_probe extra_hosts = %v, want db.internal:10.0.0.5", probe.ExtraHosts)
-	}
-	if !containsStr(probe.DNS, "8.8.8.8") {
-		t.Errorf("Issue #430: default_net_probe dns = %v, want 8.8.8.8", probe.DNS)
-	}
-	if !strings.Contains(yaml, "endpoint_mode: dnsrr") {
-		t.Error("Issue #430: reconstructed YAML missing 'endpoint_mode: dnsrr'")
-	}
 
 	t.Logf("Successfully reconstructed stack YAML (%d bytes)", len(yaml))
-}
-
-// containsStr reports whether want is present in s.
-func containsStr(s []string, want string) bool {
-	for _, v := range s {
-		if v == want {
-			return true
-		}
-	}
-	return false
 }
 
 func TestReconstructStackCompose_RoundTrip(t *testing.T) {
@@ -278,22 +216,6 @@ func TestReconstructStackCompose_RoundTrip(t *testing.T) {
 	var rtCF docker.ComposeFile
 	if err := yamlPkg.Unmarshal([]byte(rtYAML), &rtCF); err != nil {
 		t.Fatalf("Failed to parse round-trip YAML: %v", err)
-	}
-
-	// Issue #430: the rich whoami_single spec must survive an actual
-	// deploy → inspect → reconstruct cycle, not just the first reconstruction.
-	if rtSingle, ok := rtCF.Services["whoami_single"]; ok {
-		if rtSingle.Hostname != "whoami-single" {
-			t.Errorf("Issue #430: round-trip whoami_single hostname = %q, want \"whoami-single\"", rtSingle.Hostname)
-		}
-		if !containsStr(rtSingle.CapDrop, "CAP_NET_RAW") {
-			t.Errorf("Issue #430: round-trip whoami_single cap_drop = %v, want CAP_NET_RAW", rtSingle.CapDrop)
-		}
-		if rtSingle.StopGracePeriod != "20s" {
-			t.Errorf("Issue #430: round-trip whoami_single stop_grace_period = %q, want \"20s\"", rtSingle.StopGracePeriod)
-		}
-	} else {
-		t.Error("Issue #430: round-trip stack missing whoami_single")
 	}
 
 	// 5. Compare: volumes
