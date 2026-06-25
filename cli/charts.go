@@ -36,6 +36,7 @@ Releases:
   uninstall <release>         Remove a release (keeps volumes)
   rollback <release> <rev>    Re-deploy the contents of a past revision
   history <release>           Show a release's revision history
+  prune [release]             Delete old revisions beyond --history-max
   get values|manifest <rel>   Show stored values or rendered manifest
   diff upgrade <rel> <chart>  Preview manifest changes before upgrading
   list                        List releases
@@ -88,6 +89,8 @@ func chartsMain(args []string) int {
 		return chartsRollback(rest)
 	case "history":
 		return chartsHistory(rest)
+	case "prune":
+		return chartsPrune(rest)
 	case "get":
 		return chartsGet(rest)
 	case "diff":
@@ -403,6 +406,59 @@ func chartsHistory(args []string) int {
 		rows = append(rows, []string{strconv.Itoa(r.Revision), r.Status, r.Chart.Name + "-" + r.Chart.Version, r.Created})
 	}
 	table([]string{"REVISION", "STATUS", "CHART", "UPDATED"}, rows)
+	return 0
+}
+
+func chartsPrune(args []string) int {
+	pos, f, err := parseArgs(args)
+	if err != nil {
+		return usageErr(err.Error())
+	}
+	if len(pos) > 1 {
+		return usageErr("charts prune [release] [--history-max <n>] [--dry-run]")
+	}
+	e := charts.NewEngine()
+	ctx := context.Background()
+
+	var results []charts.PruneResult
+	if len(pos) == 1 {
+		var res charts.PruneResult
+		res, err = e.Prune(ctx, pos[0], f.historyMax, f.dryRun)
+		results = []charts.PruneResult{res}
+	} else {
+		results, err = e.PruneAll(ctx, f.historyMax, f.dryRun)
+	}
+	if err != nil {
+		return fail(err)
+	}
+
+	if f.historyMax <= 0 {
+		errf("no --history-max retention window given; all revisions kept (pass --history-max <n> to prune)\n")
+		return 0
+	}
+
+	rows := make([][]string, 0)
+	deleted := 0
+	for _, res := range results {
+		for _, a := range res.Actions {
+			action := "keep"
+			switch {
+			case a.Delete:
+				action = "delete"
+				deleted++
+			case a.Current:
+				action = "keep (current)"
+			}
+			rows = append(rows, []string{res.Release, strconv.Itoa(a.Revision), action})
+		}
+	}
+	table([]string{"RELEASE", "REVISION", "ACTION"}, rows)
+
+	if f.dryRun {
+		outf("dry-run: %d revision(s) would be pruned\n", deleted)
+	} else {
+		outf("pruned %d revision(s)\n", deleted)
+	}
 	return 0
 }
 

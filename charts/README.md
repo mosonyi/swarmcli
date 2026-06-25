@@ -85,6 +85,37 @@ external database.
 docker config ls --filter label=com.swarmcli.release=my-traefik
 ```
 
+## Pruning release history
+
+Because every revision is its own Config, history grows without bound. Trim it
+with the retention window — keep only the newest `N` revisions:
+
+```bash
+# Apply a window inline, after the deploy:
+swarmcli charts install my-traefik eldara/traefik --history-max 20
+swarmcli charts upgrade my-traefik eldara/traefik --history-max 20
+
+# Or prune existing history on demand:
+swarmcli charts prune my-traefik --history-max 20   # one release
+swarmcli charts prune --history-max 20              # every release
+swarmcli charts prune my-traefik --history-max 20 --dry-run  # preview only
+```
+
+`prune` deletes the oldest revisions beyond the window and **always keeps the
+current (highest) revision**, so the live release and rollback targets inside the
+window are preserved. Without `--history-max` (or with `0`) it keeps everything
+and reports that no window was given. `--dry-run` prints the keep/delete decision
+without touching Docker.
+
+> **Use `swarmcli charts prune`, not raw Docker.** `docker config prune`,
+> `docker system prune` and `docker config rm swarmcli.release.*` are not
+> SwarmCLI-aware and will corrupt release history, rollback targets and audit
+> lineage. SwarmCLI is the only sanctioned way to delete a release's resources.
+
+Per-revision protection labels (`com.swarmcli.keep`, `com.swarmcli.protected`)
+are a planned Phase-3 addition; today the current revision plus the newest-`N`
+window are the protections.
+
 ## Notes & limitations
 
 - **`install --dry-run`** renders, validates, and computes the next revision
