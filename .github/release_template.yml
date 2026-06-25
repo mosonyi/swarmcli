@@ -1,28 +1,38 @@
 name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
-exclude-labels:
-  - 'E0-silent'
 # Categories key off the mutually-exclusive A-type (and D0) labels only.
 # B (urgency) and C (breaking) are orthogonal axes: release-drafter places
 # a PR in *every* matching category (by design, no per-category exclude),
 # so keeping B2/C1 categories duplicated those PRs into their type section.
 # Breaking-ness is conveyed by the version/RC itself.
+# The leading pre-exclude category replaces the deprecated top-level
+# exclude-labels (release-drafter PR #1558); 'when:' wrappers replace the
+# deprecated per-category 'labels:' field.
 categories:
+  - type: 'pre-exclude'
+    when:
+      labels:
+        - 'E0-silent'
   - title: '[UI]'
-    labels:
-      - 'A0-ui'
+    when:
+      labels:
+        - 'A0-ui'
   - title: ' [Feature] '
-    labels:
-      - 'A1-feature'
+    when:
+      labels:
+        - 'A1-feature'
   - title: ' [Bug Fixes] '
-    labels:
-      - 'A2-bugfix'
+    when:
+      labels:
+        - 'A2-bugfix'
   - title: ' [Technical] '
-    labels:
-      - 'A3-technical'
+    when:
+      labels:
+        - 'A3-technical'
   - title: ' [Dependencies] '
-    labels:
-      - 'D0-dependency'
+    when:
+      labels:
+        - 'D0-dependency'
 change-template: '- $TITLE (#$NUMBER) @$AUTHOR '
 change-title-escapes: '\<*_&' # You can add # and @ to disable mentions, and add ` to disable code blocks.
 template: |

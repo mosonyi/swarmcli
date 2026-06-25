@@ -19,6 +19,11 @@ jobs:
           config-name: release_template.yml
           tag: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
+          # On a tag push, release-drafter defaults the release target_commitish
+          # to the tag ref, which GitHub rejects ("not supported as release
+          # target, falling back to default branch"). Point it at the default
+          # branch explicitly — the same value the fallback already used.
+          commitish: ${{ github.event.repository.default_branch }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
