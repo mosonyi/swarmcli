@@ -97,6 +97,11 @@ func New(deps docker.Deps, version, edition string) *Model {
 	}
 }
 
+// Latest returns the newest release reported by the version check, or "" if
+// none has been observed yet. The app reads it to populate the on-demand
+// update notice (the proactive notice is driven by LatestVersionMsg directly).
+func (m *Model) Latest() string { return m.latest }
+
 func (m *Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.tickCmd(), m.spinnerTickCmd()}
 	if cmd := m.CheckLatestVersion(); cmd != nil {
@@ -131,7 +136,7 @@ func (m *Model) CheckLatestVersion() tea.Cmd {
 		}
 
 		return LatestVersionMsg{
-			latestVersion: latestVersion,
+			LatestVersion: latestVersion,
 		}
 	}
 }

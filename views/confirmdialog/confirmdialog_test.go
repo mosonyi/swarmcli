@@ -151,6 +151,48 @@ func TestErrorMode_SpaceCloses(t *testing.T) {
 	require.False(t, msg.Confirmed)
 }
 
+func TestInfoMode_Checkbox_SpaceToggles_EnterCloses(t *testing.T) {
+	m := New(80, 24)
+	m.InfoMode = true
+	m.CheckboxLabel = "Do not show again"
+	m.Show("update available")
+
+	// Space toggles the checkbox instead of closing the notice.
+	require.False(t, m.CheckboxChecked)
+	cmd := m.Update(key(" "))
+	require.Nil(t, cmd)
+	require.True(t, m.Visible)
+	require.True(t, m.CheckboxChecked)
+
+	// Enter closes and reports the checkbox state.
+	cmd = m.Update(key("enter"))
+	require.False(t, m.Visible)
+	msg := runCmd(cmd).(ResultMsg)
+	require.False(t, msg.Confirmed)
+	require.True(t, msg.CheckboxChecked)
+}
+
+func TestInfoMode_NoCheckbox_SpaceCloses(t *testing.T) {
+	m := New(80, 24)
+	m.InfoMode = true
+	m.Show("notice")
+	cmd := m.Update(key(" "))
+	require.False(t, m.Visible)
+	msg := runCmd(cmd).(ResultMsg)
+	require.False(t, msg.Confirmed)
+}
+
+func TestView_InfoMode_Checkbox_ShowsLabelAndHelp(t *testing.T) {
+	m := New(80, 24)
+	m.InfoMode = true
+	m.CheckboxLabel = "Do not show again"
+	m.Show("update available")
+	out := m.View()
+	require.Contains(t, out, "Do not show again")
+	require.Contains(t, out, "Toggle")
+	require.Contains(t, out, "Info")
+}
+
 func TestView_NotVisible_Empty(t *testing.T) {
 	m := New(80, 24)
 	require.Equal(t, "", m.View())

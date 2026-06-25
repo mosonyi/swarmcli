@@ -43,6 +43,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return func() tea.Msg { return ResultMsg{Confirmed: false, CheckboxChecked: m.CheckboxChecked} }
 		}
 		if m.ErrorMode || m.InfoMode {
+			// Info mode with a checkbox: Space toggles it instead of closing,
+			// so a notice can carry a "do not show again" opt-out. Enter/Esc
+			// still close and report the checkbox state.
+			if m.InfoMode && m.CheckboxLabel != "" && msg.String() == " " {
+				m.CheckboxChecked = !m.CheckboxChecked
+				return nil
+			}
 			// In error/info mode, any key closes the dialog
 			switch msg.String() {
 			case "enter", "esc", " ":
@@ -148,8 +155,8 @@ func (m *Model) View() string {
 	}
 	lines = append(lines, messageStyle.Render(wrappedMessage))
 
-	// Add checkbox if label is provided
-	if m.CheckboxLabel != "" && !m.ErrorMode && !m.InfoMode {
+	// Add checkbox if label is provided (confirm or info mode; never error mode)
+	if m.CheckboxLabel != "" && !m.ErrorMode {
 		checkboxStyle := lipgloss.NewStyle().
 			Padding(0, 2).
 			Width(contentWidth)
@@ -165,19 +172,22 @@ func (m *Model) View() string {
 	}
 
 	var helpText string
-	if m.ErrorMode || m.InfoMode {
+	switch {
+	case m.InfoMode && m.CheckboxLabel != "":
+		helpText = fmt.Sprintf("%s Toggle • %s Close",
+			keyStyle.Render("<Space>"),
+			keyStyle.Render("<Enter/Esc>"))
+	case m.ErrorMode || m.InfoMode:
 		helpText = fmt.Sprintf("%s Close", keyStyle.Render("<Enter/Esc>"))
-	} else {
-		if m.CheckboxLabel != "" {
-			helpText = fmt.Sprintf("%s Yes • %s No • %s Toggle",
-				keyStyle.Render("<y>"),
-				keyStyle.Render("<n/Esc>"),
-				keyStyle.Render("<Space>"))
-		} else {
-			helpText = fmt.Sprintf("%s Yes • %s No",
-				keyStyle.Render("<y>"),
-				keyStyle.Render("<n/Esc>"))
-		}
+	case m.CheckboxLabel != "":
+		helpText = fmt.Sprintf("%s Yes • %s No • %s Toggle",
+			keyStyle.Render("<y>"),
+			keyStyle.Render("<n/Esc>"),
+			keyStyle.Render("<Space>"))
+	default:
+		helpText = fmt.Sprintf("%s Yes • %s No",
+			keyStyle.Render("<y>"),
+			keyStyle.Render("<n/Esc>"))
 	}
 	lines = append(lines, helpStyle.Render(helpText))
 

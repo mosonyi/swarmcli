@@ -11,6 +11,8 @@ import (
 	"swarmcli/commands/api"
 	cmdpkg "swarmcli/commands/command"
 	"swarmcli/docker"
+	"swarmcli/settings"
+	swarmlog "swarmcli/utils/log"
 	"swarmcli/views/commandinput"
 	"swarmcli/views/confirmdialog"
 	contextsview "swarmcli/views/contexts"
@@ -143,7 +145,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		// If an app-level dialog is active, route all keys to handleKey
 		// which forwards them to the dialog exclusively.
-		if m.appErrorDialogActive || m.unlockDialogActive {
+		if m.appErrorDialogActive || m.unlockDialogActive || m.updateDialogActive {
 			return m.handleKey(msg)
 		}
 
@@ -279,6 +281,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		return m.handleTick(msg)
 
+	case systeminfoview.LatestVersionMsg:
+		// Keep the header badge in sync first, then raise the one-time startup
+		// notice — unless a startup overlay (e.g. a BE proactive nudge) already
+		// owns the screen, another app dialog is up, or the user opted out of
+		// this version.
+		cmd := m.systemInfo.Update(msg)
+		if startupOverlay != nil && startupOverlay.Active() {
+			return m, cmd
+		}
+		if m.appErrorDialogActive || m.unlockDialogActive || m.updateDialogActive {
+			return m, cmd
+		}
+		if msg.LatestVersion != settings.Load().DismissedUpdateVersion {
+			m.showUpdateNotice(msg.LatestVersion)
+		}
+		return m, cmd
+
 	case systeminfoview.SystemInfoMsg:
 		return m, m.systemInfo.Update(msg)
 
@@ -306,6 +325,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case confirmdialog.ResultMsg:
+		if m.updateDialogActive {
+			m.updateDialogActive = false
+			m.updateDialog.Visible = false
+			if msg.CheckboxChecked && m.pendingUpdateVersion != "" {
+				if err := (settings.Settings{DismissedUpdateVersion: m.pendingUpdateVersion}).Save(); err != nil {
+					swarmlog.L().Infow("failed to persist update-notice dismissal", "error", err)
+				}
+			}
+			m.pendingUpdateVersion = ""
+			return m, nil
+		}
 		if m.appErrorDialogActive {
 			m.appErrorDialogActive = false
 			m.errorDialog.Visible = false
@@ -324,6 +354,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.unlockDialog.Show()
 		m.unlockDialogActive = true
 		return m, m.unlockDialog.Init()
+
+	case view.OpenUpdateDialogMsg:
+		// On-demand (dev-only) preview: force-show regardless of dismissal.
+		latest := strings.TrimSpace(msg.Version)
+		if latest == "" {
+			latest = m.systemInfo.Latest()
+		}
+		if latest == "" {
+			latest = version + " (preview)"
+		}
+		m.showUpdateNotice(latest)
+		return m, nil
 
 	case unlockdialog.ResultMsg:
 		m.unlockDialogActive = false
@@ -447,6 +489,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// If the unlock dialog is active, forward keys to it exclusively
 	if m.unlockDialogActive {
 		cmd := m.unlockDialog.Update(msg)
+		return m, cmd
+	}
+
+	// If the update notice is active, forward keys to it exclusively
+	if m.updateDialogActive {
+		cmd := m.updateDialog.Update(msg)
 		return m, cmd
 	}
 

@@ -25,3 +25,11 @@ type GoBackMsg struct{}
 
 // OpenUnlockDialogMsg requests the app to open the swarm unlock-key dialog.
 type OpenUnlockDialogMsg struct{}
+
+// OpenUpdateDialogMsg requests the app to force-show the "update available"
+// notice on demand (the dev-only :dev-update command), bypassing the
+// per-version dismissal. Version overrides the displayed latest version when
+// set; otherwise the app falls back to the last checked version or a stub.
+type OpenUpdateDialogMsg struct {
+	Version string
+}

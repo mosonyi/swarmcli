@@ -200,7 +200,7 @@ func TestCheckLatestVersion_SendsVersionAndEdition(t *testing.T) {
 
 	latestMsg, ok := msg.(LatestVersionMsg)
 	require.True(t, ok)
-	require.Equal(t, "1.3.3", latestMsg.latestVersion)
+	require.Equal(t, "1.3.3", latestMsg.LatestVersion)
 	require.Equal(t, "1.2.2", received.Version)
 	require.Equal(t, "ce", received.Edition)
 }
@@ -274,7 +274,7 @@ func TestIsNewerVersion(t *testing.T) {
 
 func TestUpdate_LatestVersionMsg(t *testing.T) {
 	m := New(testDeps(), "1.2.2", "ce")
-	cmd := m.Update(LatestVersionMsg{latestVersion: "1.3.3"})
+	cmd := m.Update(LatestVersionMsg{LatestVersion: "1.3.3"})
 	require.Nil(t, cmd)
 	require.Equal(t, "1.3.3", m.latest)
 	require.Contains(t, m.content, "1.2.2")
@@ -297,7 +297,7 @@ func TestView_VersionLineDoesNotWrap_LongVersions(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			m := New(testDeps(), tc.version, "ce")
-			m.Update(LatestVersionMsg{latestVersion: tc.latest})
+			m.Update(LatestVersionMsg{LatestVersion: tc.latest})
 
 			rendered := m.View()
 			lines := strings.Split(strings.TrimRight(rendered, "\n"), "\n")

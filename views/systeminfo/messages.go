@@ -37,8 +37,11 @@ type TickMsg time.Time
 
 type SpinnerTickMsg time.Time
 
+// LatestVersionMsg reports that the version API returned a newer release than
+// the running build. The app layer reads LatestVersion to raise the startup
+// update notice, so the field is exported.
 type LatestVersionMsg struct {
-	latestVersion string
+	LatestVersion string
 }
 
 type NoVersionUpdateMsg struct{}
