@@ -63,11 +63,42 @@ type Dependency struct {
 // Chart is a loaded chart: its metadata, default values, optional values
 // schema, and raw template sources keyed by their path under templates/.
 type Chart struct {
-	Metadata  Chartfile
-	Values    map[string]any    // parsed values.yaml (defaults)
-	Schema    []byte            // raw values.schema.json, nil if absent
-	Templates map[string]string // template path -> source, e.g. "templates/stack.yaml"
-	Readme    string            // README.md, empty if absent
+	Metadata     Chartfile
+	Values       map[string]any    // parsed values.yaml (defaults)
+	Schema       []byte            // raw values.schema.json, nil if absent
+	Templates    map[string]string // template path -> source, e.g. "templates/stack.yaml"
+	Readme       string            // README.md, empty if absent
+	Requirements *Requirements     // parsed requirements.yaml, nil if absent
+}
+
+// Requirements is the parsed, defaulted requirements.yaml: the external
+// networks/secrets/configs a chart needs. It is optional — a chart without it
+// falls back to manifest-driven pre-flight. When present it is authoritative:
+// every external resource the rendered manifest references must be declared.
+type Requirements struct {
+	Networks []NetworkRequirement  `yaml:"networks"`
+	Secrets  []ResourceRequirement `yaml:"secrets"`
+	Configs  []ResourceRequirement `yaml:"configs"`
+}
+
+// NetworkRequirement declares one external network a chart needs. AutoCreate and
+// Attachable are pointers so an omitted key defaults to true (preserving the
+// historical auto-create-as-attachable-overlay behaviour) while an explicit
+// false is distinguishable. After parseRequirements they are always non-nil and
+// Driver is non-empty.
+type NetworkRequirement struct {
+	Name        string `yaml:"name"`
+	Driver      string `yaml:"driver"`     // default "overlay"
+	Attachable  *bool  `yaml:"attachable"` // default true
+	AutoCreate  *bool  `yaml:"autoCreate"` // default true; false => validate-only
+	Description string `yaml:"description"`
+}
+
+// ResourceRequirement declares one external secret or config a chart needs.
+// These cannot be auto-created; Description enriches the remediation message.
+type ResourceRequirement struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
 }
 
 // RepoEntry is a configured chart repository (name -> index URL).
@@ -104,6 +135,11 @@ type Release struct {
 	Manifest  string         `yaml:"manifest"` // rendered Compose document
 	Created   string         `yaml:"created"`  // RFC3339
 	Namespace string         `yaml:"namespace"`
+	// ManagedNetworks are the external networks swarmcli auto-created for this
+	// revision. Persisted so uninstall can report what it left behind (it does
+	// not remove them — they may be shared). Omitted for revisions that created
+	// none and for records written before this field existed.
+	ManagedNetworks []string `yaml:"managedNetworks,omitempty"`
 }
 
 // ReleaseChart is the chart reference recorded in a Release.

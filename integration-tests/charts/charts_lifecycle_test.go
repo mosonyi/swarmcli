@@ -73,7 +73,7 @@ func TestChartsReleaseLifecycle(t *testing.T) {
 	eng := charts.NewEngine()
 
 	// Ensure teardown even if assertions fail mid-way.
-	defer func() { _ = eng.Uninstall(ctx, release, true) }()
+	defer func() { _, _ = eng.Uninstall(ctx, release, true) }()
 
 	rel, err := eng.Install(ctx, release, charts.ReleaseChart{Name: ch.Metadata.Name, Version: ch.Metadata.Version},
 		values, manifest, charts.InstallOptions{Wait: true, Timeout: 90 * time.Second})
@@ -128,7 +128,8 @@ func TestChartsReleaseLifecycle(t *testing.T) {
 	require.Equal(t, 3, rb.Revision)
 
 	// Uninstall removes the stack and the release Configs.
-	require.NoError(t, eng.Uninstall(ctx, release, true))
+	_, err = eng.Uninstall(ctx, release, true)
+	require.NoError(t, err)
 	_, err = docker.InspectConfig(ctx, fmt.Sprintf("swarmcli.release.%s.v1", release))
 	require.Error(t, err, "release config should be gone after uninstall")
 }
@@ -224,7 +225,7 @@ func TestChartsRepoInstallLifecycle(t *testing.T) {
 	require.NoError(t, err)
 
 	eng := charts.NewEngine()
-	defer func() { _ = eng.Uninstall(ctx, release, true) }()
+	defer func() { _, _ = eng.Uninstall(ctx, release, true) }()
 
 	rel, err := eng.Install(ctx, release, charts.ReleaseChart{Name: ch.Metadata.Name, Version: ch.Metadata.Version},
 		values, manifest, charts.InstallOptions{Wait: true, Timeout: 90 * time.Second})
@@ -235,13 +236,16 @@ func TestChartsRepoInstallLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, svcs, "status should list services")
 
-	require.NoError(t, eng.Uninstall(ctx, release, true))
+	_, err = eng.Uninstall(ctx, release, true)
+	require.NoError(t, err)
 	_, err = docker.InspectConfig(ctx, fmt.Sprintf("swarmcli.release.%s.v1", release))
 	require.Error(t, err, "release config should be gone after uninstall")
 }
 
 // writeExtNetChart writes a chart whose stack attaches to (and declares as
-// external) the given network name, returning the chart dir.
+// external) the given network name, returning the chart dir. The network is
+// declared in requirements.yaml with autoCreate:true so the pre-flight creates
+// it.
 func writeExtNetChart(t *testing.T, netName string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -249,6 +253,8 @@ func writeExtNetChart(t *testing.T, netName string) string {
 		[]byte("apiVersion: v2\nname: itest\nversion: 0.1.0\nappVersion: \"1.0\"\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "values.yaml"),
 		[]byte("replicas: 1\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "requirements.yaml"),
+		[]byte("networks:\n  - name: "+netName+"\n    autoCreate: true\n    description: itest overlay\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "templates"), 0o755))
 	stack := "version: \"3.9\"\n\n" +
 		"services:\n" +
@@ -284,7 +290,7 @@ func TestChartsExternalNetworkAutoCreate(t *testing.T) {
 
 	eng := charts.NewEngine()
 	defer func() {
-		_ = eng.Uninstall(ctx, release, true)
+		_, _ = eng.Uninstall(ctx, release, true)
 		_ = docker.RemoveNetwork(ctx, netName) // external nets survive stack rm
 	}()
 
@@ -296,9 +302,10 @@ func TestChartsExternalNetworkAutoCreate(t *testing.T) {
 	}
 
 	rel, err := eng.Install(ctx, release, charts.ReleaseChart{Name: ch.Metadata.Name, Version: ch.Metadata.Version},
-		values, manifest, charts.InstallOptions{Wait: true, Timeout: 90 * time.Second})
+		values, manifest, charts.InstallOptions{Wait: true, Timeout: 90 * time.Second, Requirements: ch.Requirements})
 	require.NoError(t, err, "install should auto-create the external network and deploy")
 	require.Equal(t, charts.StatusDeployed, rel.Status)
+	require.Equal(t, []string{netName}, rel.ManagedNetworks, "the auto-created network is recorded on the revision")
 
 	// The external network now exists and is swarm-scoped.
 	nets, err = docker.ListNetworks(ctx)
@@ -311,4 +318,19 @@ func TestChartsExternalNetworkAutoCreate(t *testing.T) {
 		}
 	}
 	require.True(t, found, "external network should have been auto-created")
+
+	// Uninstall leaves the auto-created network in place and reports it as
+	// orphaned so the operator can reclaim it.
+	res, err := eng.Uninstall(ctx, release, true)
+	require.NoError(t, err)
+	require.Equal(t, []string{netName}, res.OrphanedNetworks)
+	nets, err = docker.ListNetworks(ctx)
+	require.NoError(t, err)
+	stillThere := false
+	for _, n := range nets {
+		if n.Name == netName {
+			stillThere = true
+		}
+	}
+	require.True(t, stillThere, "uninstall must not remove the shared external network")
 }

@@ -41,6 +41,10 @@ Releases:
   list                        List releases
   status <release>            Show release status and services
 
+A chart may declare its external networks/secrets/configs in requirements.yaml:
+install pre-flights them (auto-creating networks marked autoCreate, validating
+the rest) and uninstall reports any auto-created networks it leaves in place.
+
 Common options:
   -f, --values <file>   Values file (repeatable)
       --set k=v         Override a value (repeatable)
@@ -275,7 +279,7 @@ func chartsTemplate(args []string) int {
 		return usageErr("charts template <release> <repo/chart>")
 	}
 	release, ref := pos[0], pos[1]
-	manifest, _, _, code := prepare(release, ref, f, nil)
+	manifest, _, _, _, code := prepare(release, ref, f, nil)
 	if code >= 0 {
 		return code
 	}
@@ -292,15 +296,16 @@ func chartsInstall(args []string) int {
 		return usageErr("charts install <release> <repo/chart>")
 	}
 	release, ref := pos[0], pos[1]
-	manifest, values, rc, code := prepare(release, ref, f, nil)
+	manifest, values, rc, req, code := prepare(release, ref, f, nil)
 	if code >= 0 {
 		return code
 	}
 	rel, err := charts.NewEngine().Install(context.Background(), release, rc, values, manifest, charts.InstallOptions{
-		DryRun:     f.dryRun,
-		Wait:       f.wait,
-		Timeout:    f.timeout,
-		HistoryMax: f.historyMax,
+		DryRun:       f.dryRun,
+		Wait:         f.wait,
+		Timeout:      f.timeout,
+		HistoryMax:   f.historyMax,
+		Requirements: req,
 	})
 	if err != nil {
 		return fail(err)
@@ -331,16 +336,17 @@ func chartsUpgrade(args []string) int {
 			// re-validates the release, so a genuine backend error still surfaces.
 		}
 	}
-	manifest, values, rc, code := prepare(release, ref, f, base)
+	manifest, values, rc, req, code := prepare(release, ref, f, base)
 	if code >= 0 {
 		return code
 	}
 	rel, err := charts.NewEngine().Upgrade(context.Background(), release, rc, values, manifest, charts.InstallOptions{
-		DryRun:     f.dryRun,
-		Wait:       f.wait,
-		Install:    f.install,
-		Timeout:    f.timeout,
-		HistoryMax: f.historyMax,
+		DryRun:       f.dryRun,
+		Wait:         f.wait,
+		Install:      f.install,
+		Timeout:      f.timeout,
+		HistoryMax:   f.historyMax,
+		Requirements: req,
 	})
 	if err != nil {
 		return fail(err)
@@ -452,7 +458,7 @@ func chartsDiff(args []string) int {
 	if f.reuseValues {
 		base = cur.Values
 	}
-	next, _, _, code := prepare(release, ref, f, base)
+	next, _, _, _, code := prepare(release, ref, f, base)
 	if code >= 0 {
 		return code
 	}
@@ -467,24 +473,24 @@ func chartsDiff(args []string) int {
 // prepare loads the chart, merges + validates values, and renders the manifest.
 // base, when non-nil, replaces the chart defaults as the merge base (used by
 // `upgrade --reuse-values` to layer overrides over the previous release).
-func prepare(release, ref string, f flags, base map[string]any) (manifest string, values map[string]any, rc charts.ReleaseChart, code int) {
+func prepare(release, ref string, f flags, base map[string]any) (manifest string, values map[string]any, rc charts.ReleaseChart, req *charts.Requirements, code int) {
 	ch, _, c := loadChart(ref, f.version)
 	if c >= 0 {
-		return "", nil, rc, c
+		return "", nil, rc, nil, c
 	}
 	if base == nil {
 		base = ch.Values
 	}
 	files, err := readValuesFiles(f.values)
 	if err != nil {
-		return "", nil, rc, fail(err)
+		return "", nil, rc, nil, fail(err)
 	}
 	values, err = charts.MergeValues(base, files, f.sets)
 	if err != nil {
-		return "", nil, rc, fail(err)
+		return "", nil, rc, nil, fail(err)
 	}
 	if err := charts.ValidateValues(ch.Schema, values); err != nil {
-		return "", nil, rc, fail(err)
+		return "", nil, rc, nil, fail(err)
 	}
 	manifest, err = charts.Render(ch, charts.RenderContext{
 		Values:  values,
@@ -492,10 +498,10 @@ func prepare(release, ref string, f flags, base map[string]any) (manifest string
 		Chart:   charts.ChartMeta{Name: ch.Metadata.Name, Version: ch.Metadata.Version, AppVersion: ch.Metadata.AppVersion},
 	})
 	if err != nil {
-		return "", nil, rc, fail(err)
+		return "", nil, rc, nil, fail(err)
 	}
 	rc = charts.ReleaseChart{Name: ch.Metadata.Name, Version: ch.Metadata.Version, AppVersion: ch.Metadata.AppVersion}
-	return manifest, values, rc, -1
+	return manifest, values, rc, ch.Requirements, -1
 }
 
 // --- uninstall / list / status ---
@@ -508,10 +514,22 @@ func chartsUninstall(args []string) int {
 	if len(pos) != 1 {
 		return usageErr("charts uninstall <release> [--purge-volumes]")
 	}
-	if err := charts.NewEngine().Uninstall(context.Background(), pos[0], f.purge); err != nil {
+	res, err := charts.NewEngine().Uninstall(context.Background(), pos[0], f.purge)
+	if err != nil {
 		return fail(err)
 	}
 	outf("release %q uninstalled\n", pos[0])
+	if res != nil && len(res.OrphanedNetworks) > 0 {
+		out("\nswarmcli auto-created the following external network(s) on install and left\n" +
+			"them in place (they may be shared with other stacks):\n")
+		for _, n := range res.OrphanedNetworks {
+			outf("  %s\n", n)
+		}
+		out("remove any you no longer need:\n")
+		for _, n := range res.OrphanedNetworks {
+			outf("  docker network rm %s\n", n)
+		}
+	}
 	return 0
 }
 
