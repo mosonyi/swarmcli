@@ -149,6 +149,22 @@ func TestInspectStack(t *testing.T) {
 		} else if svc.Healthcheck != nil {
 			t.Errorf("Service %q: expected no healthcheck, got %+v", svc.Name, svc.Healthcheck)
 		}
+
+		// Issue #428: whoami_single declares a logging driver; others do not.
+		if strings.HasSuffix(svc.Name, "whoami_single") {
+			if svc.Logging == nil {
+				t.Errorf("Service %q: expected a logging driver, got nil", svc.Name)
+			} else {
+				if svc.Logging.Driver != "json-file" {
+					t.Errorf("Service %q: logging driver = %q, want \"json-file\"", svc.Name, svc.Logging.Driver)
+				}
+				if svc.Logging.Options["max-size"] != "10m" {
+					t.Errorf("Service %q: logging option max-size = %q, want \"10m\"", svc.Name, svc.Logging.Options["max-size"])
+				}
+			}
+		} else if svc.Logging != nil {
+			t.Errorf("Service %q: expected no logging driver, got %+v", svc.Name, svc.Logging)
+		}
 	}
 
 	t.Logf("Successfully inspected stack: %d services, %d tasks", inspection.ServiceCount, inspection.TaskCount)

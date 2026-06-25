@@ -121,6 +121,22 @@ func TestReconstructStackCompose(t *testing.T) {
 		}
 	}
 
+	// Issue #428: whoami_single declares a logging driver — it must round-trip
+	// through reconstruction rather than being silently dropped.
+	if !strings.Contains(yaml, "logging:") {
+		t.Error("Issue #428: reconstructed YAML missing 'logging:' section")
+	}
+	if single.Logging == nil {
+		t.Error("Issue #428: 'whoami_single' lost its logging driver during reconstruction")
+	} else {
+		if single.Logging.Driver != "json-file" {
+			t.Errorf("Issue #428: logging driver = %q, want \"json-file\"", single.Logging.Driver)
+		}
+		if single.Logging.Options["max-size"] != "10m" {
+			t.Errorf("Issue #428: logging option max-size = %q, want \"10m\"", single.Logging.Options["max-size"])
+		}
+	}
+
 	t.Logf("Successfully reconstructed stack YAML (%d bytes)", len(yaml))
 }
 

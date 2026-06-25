@@ -42,7 +42,17 @@ type ComposeService struct {
 	Configs     []map[string]any  `yaml:"configs,omitempty"`
 	Deploy      map[string]any    `yaml:"deploy,omitempty"`
 	Healthcheck *Healthcheck      `yaml:"healthcheck,omitempty"`
+	Logging     *Logging          `yaml:"logging,omitempty"`
 	Extra       map[string]any    `yaml:",inline,omitempty"` // fallback
+}
+
+// Logging is the compose-shaped view of a service's log driver, mirroring the
+// Swarm `TaskTemplate.LogDriver` (`*swarm.Driver`). It is used both in
+// reconstructed Compose YAML and in stack-inspect JSON. The compose `logging:`
+// block carries a `driver:` name and an `options:` map.
+type Logging struct {
+	Driver  string            `json:"driver,omitempty" yaml:"driver,omitempty"`
+	Options map[string]string `json:"options,omitempty" yaml:"options,omitempty"`
 }
 
 // Healthcheck is the compose-shaped view of a service healthcheck, used both
@@ -89,7 +99,15 @@ type TaskTemplate struct {
 	Placement     *Placement     `json:"Placement,omitempty"`
 	Networks      []NetRef       `json:"Networks,omitempty"`
 	ForceUpdate   uint64         `json:"ForceUpdate,omitempty"`
-	LogDriver     any            `json:"LogDriver,omitempty"`
+	LogDriver     *LogDriver     `json:"LogDriver,omitempty"`
+}
+
+// LogDriver represents the Swarm `TaskTemplate.LogDriver` (`*swarm.Driver`):
+// the logging driver name plus its options. It is nil when the service does
+// not pin a log driver (the daemon default is used).
+type LogDriver struct {
+	Name    string            `json:"Name,omitempty"`
+	Options map[string]string `json:"Options,omitempty"`
 }
 
 // ContainerSpec represents the container specification
@@ -404,6 +422,11 @@ func ReconstructStackCompose(stackName string) (string, error) {
 			}
 		}
 
+		// Logging driver — TaskTemplate.LogDriver → compose `logging:`
+		if ld := si.Spec.TaskTemplate.LogDriver; ld != nil {
+			cs.Logging = composeLogging(ld.Name, ld.Options)
+		}
+
 		// Ports
 		if si.Spec.EndpointSpec != nil {
 			for _, p := range si.Spec.EndpointSpec.Ports {
@@ -675,6 +698,21 @@ func composeHealthcheck(test []string, intervalNs, timeoutNs, startPeriodNs,
 	}
 	hc.Retries = retries
 	return hc
+}
+
+// composeLogging builds the compose-shaped Logging block from a service's log
+// driver name and options. Returns nil when the service pins no log driver
+// (Swarm reports LogDriver: nil / empty), so the daemon default is used and no
+// `logging:` block is emitted. A driver with no name but with options still
+// round-trips its options.
+func composeLogging(name string, options map[string]string) *Logging {
+	if name == "" && len(options) == 0 {
+		return nil
+	}
+	return &Logging{
+		Driver:  name,
+		Options: options,
+	}
 }
 
 // escapeComposeArgs applies escapeComposeInterpolation to each element.
