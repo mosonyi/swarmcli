@@ -38,6 +38,7 @@ type ServiceSummary struct {
 	Configs     []string          `json:"configs,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	Healthcheck *Healthcheck      `json:"healthcheck,omitempty"`
+	Logging     *Logging          `json:"logging,omitempty"`
 	CreatedAt   time.Time         `json:"created_at"`
 	UpdatedAt   time.Time         `json:"updated_at"`
 }
@@ -170,6 +171,12 @@ func GetStackInspection(stackName string) (string, error) {
 		sort.Strings(svcSecrets)
 		sort.Strings(svcConfigs)
 
+		// Logging driver — TaskTemplate.LogDriver → `logging:`
+		var logging *Logging
+		if ld := svc.Spec.TaskTemplate.LogDriver; ld != nil {
+			logging = composeLogging(ld.Name, ld.Options)
+		}
+
 		// Add service summary
 		desc.Services = append(desc.Services, ServiceSummary{
 			Name:        svc.Spec.Name,
@@ -182,6 +189,7 @@ func GetStackInspection(stackName string) (string, error) {
 			Configs:     svcConfigs,
 			Labels:      svc.Spec.Labels,
 			Healthcheck: healthcheck,
+			Logging:     logging,
 			CreatedAt:   svc.CreatedAt,
 			UpdatedAt:   svc.UpdatedAt,
 		})

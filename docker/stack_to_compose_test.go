@@ -4,6 +4,7 @@
 package docker
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -378,4 +379,87 @@ func TestComposeService_HealthcheckOmittedWhenNil(t *testing.T) {
 	out, err := yaml.Marshal(&cs)
 	require.NoError(t, err)
 	require.NotContains(t, string(out), "healthcheck")
+}
+
+// Issue #428: a service deployed with a logging driver+options must round-trip
+// into the compose `logging:` block.
+func TestComposeLogging_DriverAndOptions(t *testing.T) {
+	lg := composeLogging("loki:latest", map[string]string{
+		"loki-url": "http://loki:3100/loki/api/v1/push",
+	})
+	require.NotNil(t, lg)
+	require.Equal(t, "loki:latest", lg.Driver)
+	require.Equal(t, "http://loki:3100/loki/api/v1/push", lg.Options["loki-url"])
+}
+
+func TestComposeLogging_DriverOnly(t *testing.T) {
+	lg := composeLogging("json-file", nil)
+	require.NotNil(t, lg)
+	require.Equal(t, "json-file", lg.Driver)
+	require.Empty(t, lg.Options)
+}
+
+func TestComposeLogging_OptionsOnly(t *testing.T) {
+	lg := composeLogging("", map[string]string{"max-size": "10m"})
+	require.NotNil(t, lg)
+	require.Empty(t, lg.Driver)
+	require.Equal(t, "10m", lg.Options["max-size"])
+}
+
+func TestComposeLogging_NoDriverReturnsNil(t *testing.T) {
+	require.Nil(t, composeLogging("", nil))
+	require.Nil(t, composeLogging("", map[string]string{}))
+}
+
+func TestComposeService_LoggingYAML(t *testing.T) {
+	cs := ComposeService{
+		Image: "nginx:latest",
+		Logging: &Logging{
+			Driver:  "loki:latest",
+			Options: map[string]string{"loki-url": "http://loki:3100/loki/api/v1/push"},
+		},
+	}
+	out, err := yaml.Marshal(&cs)
+	require.NoError(t, err)
+	yamlStr := string(out)
+	require.Contains(t, yamlStr, "logging:")
+	require.Contains(t, yamlStr, "driver: loki:latest")
+	require.Contains(t, yamlStr, "options:")
+	require.Contains(t, yamlStr, "loki-url: http://loki:3100/loki/api/v1/push")
+}
+
+func TestComposeService_LoggingOmittedWhenNil(t *testing.T) {
+	cs := ComposeService{Image: "nginx:latest"}
+	out, err := yaml.Marshal(&cs)
+	require.NoError(t, err)
+	require.NotContains(t, string(out), "logging")
+}
+
+// Capture side: the `docker service inspect` JSON LogDriver block must
+// unmarshal into TaskTemplate.LogDriver (issue #428).
+func TestServiceInspect_CapturesLogDriver(t *testing.T) {
+	raw := []byte(`{
+		"Spec": {
+			"Name": "web",
+			"TaskTemplate": {
+				"LogDriver": {
+					"Name": "loki:latest",
+					"Options": {"loki-url": "http://loki:3100/loki/api/v1/push"}
+				}
+			}
+		}
+	}`)
+	var si ServiceInspect
+	require.NoError(t, json.Unmarshal(raw, &si))
+	require.NotNil(t, si.Spec.TaskTemplate.LogDriver)
+	require.Equal(t, "loki:latest", si.Spec.TaskTemplate.LogDriver.Name)
+	require.Equal(t, "http://loki:3100/loki/api/v1/push",
+		si.Spec.TaskTemplate.LogDriver.Options["loki-url"])
+}
+
+func TestServiceInspect_NoLogDriverIsNil(t *testing.T) {
+	raw := []byte(`{"Spec":{"Name":"web","TaskTemplate":{}}}`)
+	var si ServiceInspect
+	require.NoError(t, json.Unmarshal(raw, &si))
+	require.Nil(t, si.Spec.TaskTemplate.LogDriver)
 }
