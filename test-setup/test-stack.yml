@@ -33,13 +33,18 @@ services:
         target: /etc/whoami/config
     deploy:
       replicas: 2
+    # Uses alpine's built-in busybox `nc` (no `apk add`) so a task restart does
+    # NOT depend on network access to the package CDN. Re-installing
+    # netcat-openbsd on every container start made multi-replica restarts flake
+    # under slow-network windows (TestRestartServiceWithProgress). The `|| sleep`
+    # guard keeps the container up even if a connection attempt errors — no test
+    # exercises the HTTP endpoint, only that tasks stay running.
     command: >
       sh -c '
-        apk add --no-cache netcat-openbsd;
         echo "Starting whoami service...";
         while true; do
           printf "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nService: whoami\nConfig:\n%s\n\n" "$$(cat /etc/whoami/config)" \
-          | nc -l -p 80 -q 1;
+          | nc -l -p 80 2>/dev/null || sleep 1;
         done
       '
 
@@ -69,13 +74,13 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    # See whoami above: built-in busybox `nc`, no `apk add` on restart.
     command: >
       sh -c '
-        apk add --no-cache netcat-openbsd;
         echo "Starting whoami_single service...";
         while true; do
           printf "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nService: whoami_single\nConfig:\n%s\n\n" "$$(cat /etc/whoami/config)" \
-          | nc -l -p 80 -q 1;
+          | nc -l -p 80 2>/dev/null || sleep 1;
         done
       '
     ports:
