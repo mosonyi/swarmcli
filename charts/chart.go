@@ -17,11 +17,12 @@ import (
 )
 
 const (
-	chartfileName = "Chart.yaml"
-	valuesName    = "values.yaml"
-	schemaName    = "values.schema.json"
-	readmeName    = "README.md"
-	templatesDir  = "templates"
+	chartfileName    = "Chart.yaml"
+	valuesName       = "values.yaml"
+	schemaName       = "values.schema.json"
+	readmeName       = "README.md"
+	requirementsName = "requirements.yaml"
+	templatesDir     = "templates"
 )
 
 // maxChartFileSize bounds any single file read from a chart archive to guard
@@ -63,6 +64,14 @@ func LoadChartDir(dir string) (*Chart, error) {
 		ch.Schema = s
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read %s: %w", schemaName, err)
+	}
+
+	if rq, err := os.ReadFile(filepath.Join(dir, requirementsName)); err == nil {
+		if ch.Requirements, err = parseRequirements(rq); err != nil {
+			return nil, err
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read %s: %w", requirementsName, err)
 	}
 
 	if r, err := os.ReadFile(filepath.Join(dir, readmeName)); err == nil {
@@ -148,6 +157,10 @@ func LoadChartArchive(r io.Reader) (*Chart, error) {
 			}
 		case rel == schemaName:
 			ch.Schema = body
+		case rel == requirementsName:
+			if ch.Requirements, err = parseRequirements(body); err != nil {
+				return nil, err
+			}
 		case rel == readmeName:
 			ch.Readme = string(body)
 		case strings.HasPrefix(rel, templatesDir+"/") && !strings.ContainsRune(rel[len(templatesDir)+1:], '/'):

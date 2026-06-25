@@ -55,8 +55,10 @@ type Backend interface {
 	// NetworkScopes returns existing network names mapped to their scope
 	// (e.g. "swarm", "local"), used to pre-flight a chart's external networks.
 	NetworkScopes(ctx context.Context) (map[string]string, error)
-	// CreateOverlayNetwork creates an attachable, swarm-scoped overlay network.
-	CreateOverlayNetwork(ctx context.Context, name string) error
+	// CreateOverlayNetwork creates a swarm-scoped network with the given driver
+	// and attachability (driver defaults to "overlay" when a chart does not
+	// declare one in requirements.yaml).
+	CreateOverlayNetwork(ctx context.Context, name, driver string, attachable bool) error
 	// RemoveOverlayNetwork removes a network by name, used to roll back networks
 	// auto-created for an install whose deploy then failed. A no-op if absent.
 	RemoveOverlayNetwork(ctx context.Context, name string) error
@@ -89,6 +91,12 @@ type InstallOptions struct {
 	Install    bool // upgrade: create the release if it does not exist
 	Timeout    time.Duration
 	HistoryMax int // 0 = keep all
+	// Requirements is the chart's parsed requirements.yaml, when present. It
+	// drives the external-resource pre-flight (auto-create vs validate-only, the
+	// network driver/attachability, and remediation descriptions) and, when set,
+	// every external resource the manifest references must be declared in it. Nil
+	// falls back to manifest-driven pre-flight (auto-create attachable overlays).
+	Requirements *Requirements
 }
 
 // Install deploys a freshly rendered manifest as revision 1 of a new release and
@@ -216,11 +224,11 @@ func (e *Engine) deployAndRecord(ctx context.Context, rel *Release, opts Install
 	// Validate prerequisites that cannot be auto-created (external secrets and
 	// configs) before mutating any swarm state, so a missing one fails fast
 	// without leaving auto-created networks behind.
-	if err := e.ensureExternalSecretsConfigs(ctx, rel.Manifest); err != nil {
+	if err := e.ensureExternalSecretsConfigs(ctx, rel.Manifest, opts.Requirements); err != nil {
 		rel.Status = StatusFailed
 		return rel, err
 	}
-	created, err := e.ensureExternalNetworks(ctx, rel.Manifest)
+	created, err := e.ensureExternalNetworks(ctx, rel.Manifest, opts.Requirements)
 	if err != nil {
 		rel.Status = StatusFailed
 		for _, n := range created {
@@ -242,6 +250,11 @@ func (e *Engine) deployAndRecord(ctx context.Context, rel *Release, opts Install
 	// The deploy mutated swarm state; invalidate the shared cache so the
 	// convergence poll and any follow-up status read see fresh data.
 	_ = e.Backend.RefreshSnapshot()
+	// Persist the networks we auto-created this revision so uninstall can report
+	// what it leaves behind (see Uninstall). Networks already present from an
+	// earlier revision are not re-created here, so uninstall unions across all
+	// revisions.
+	rel.ManagedNetworks = created
 	if err := e.record(ctx, rel); err != nil {
 		return rel, fmt.Errorf("stack %q was deployed but recording its release history failed: %w; re-run install/upgrade to reconcile", rel.Name, err)
 	}
@@ -257,33 +270,57 @@ func (e *Engine) deployAndRecord(ctx context.Context, rel *Release, opts Install
 }
 
 // ensureExternalNetworks makes sure every network the manifest declares
-// external exists and is swarm-scoped before the stack is deployed. Missing
-// networks are created as attachable swarm overlays; networks that exist with a
-// non-swarm scope, or that cannot be created, are reported with the manual
-// `docker network create` commands needed to resolve them.
-// ensureExternalNetworks returns the names of networks it auto-created, so a
-// caller can roll them back if a later step (the deploy) fails.
-func (e *Engine) ensureExternalNetworks(ctx context.Context, manifest string) (created []string, err error) {
+// external exists and is swarm-scoped before the stack is deployed.
+//
+// When the chart ships a requirements.yaml (req != nil) it is authoritative:
+// every external network the manifest references must be declared there, and the
+// declaration drives behaviour — autoCreate:true networks are created with the
+// declared driver/attachability, autoCreate:false networks are only validated
+// (a missing one is a hard error with the declared description, never created).
+// Without a requirements.yaml (req == nil) it falls back to the historical
+// behaviour: create any missing network as an attachable overlay.
+//
+// Networks that exist with a non-swarm scope, that cannot be created, or that
+// are required-present-but-missing are reported with the manual remediation
+// needed to resolve them. ensureExternalNetworks returns the names of networks
+// it auto-created, so a caller can roll them back if a later step (the deploy)
+// fails.
+func (e *Engine) ensureExternalNetworks(ctx context.Context, manifest string, req *Requirements) (created []string, err error) {
 	names, err := externalNetworks(manifest)
 	if err != nil || len(names) == 0 {
+		return nil, err
+	}
+	// Enforce the requirements.yaml contract first: an undeclared external
+	// resource is a chart-authoring error, distinct from one being unavailable.
+	if err := requireDeclared(req, names, "network", "networks"); err != nil {
 		return nil, err
 	}
 	scopes, err := e.Backend.NetworkScopes(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("checking external networks: %w", err)
 	}
-	var reasons, needCreate []string
+	var reasons, fixes []string
 	for _, name := range names {
-		switch scope, exists := scopes[name]; {
+		nr, declared := req.network(name) // declared == (req != nil), per the contract check above
+		scope, exists := scopes[name]
+		switch {
 		case exists && scope == "swarm":
 			// already usable
 		case exists:
 			reasons = append(reasons,
 				fmt.Sprintf("  %s: a non-swarm (%s) network of this name already exists; remove or rename it", name, scope))
+		case declared && !*nr.AutoCreate:
+			// Validate-only: the chart depends on a network it must not create.
+			reasons = append(reasons, fmt.Sprintf("  %s: does not exist%s", name, describe(nr.Description)))
+			fixes = append(fixes, fmt.Sprintf("  docker network create --driver %s%s %s", networkDriver(nr), attachableFlag(nr), name))
 		default:
-			if cerr := e.Backend.CreateOverlayNetwork(ctx, name); cerr != nil {
+			driver, attachable := "overlay", true
+			if declared {
+				driver, attachable = networkDriver(nr), *nr.Attachable
+			}
+			if cerr := e.Backend.CreateOverlayNetwork(ctx, name, driver, attachable); cerr != nil {
 				reasons = append(reasons, fmt.Sprintf("  %s: auto-create failed: %v", name, cerr))
-				needCreate = append(needCreate, name)
+				fixes = append(fixes, fmt.Sprintf("  docker network create --driver %s%s %s", driver, attachableFlagBool(attachable), name))
 			} else {
 				created = append(created, name)
 			}
@@ -293,14 +330,70 @@ func (e *Engine) ensureExternalNetworks(ctx context.Context, manifest string) (c
 		return created, nil
 	}
 	msg := "external network(s) required by this chart are unavailable:\n" + strings.Join(reasons, "\n")
-	if len(needCreate) > 0 {
-		var cmds strings.Builder
-		for _, name := range needCreate {
-			fmt.Fprintf(&cmds, "  docker network create --driver overlay --attachable %s\n", name)
-		}
-		msg += "\ncreate them on a swarm manager, then retry:\n" + strings.TrimRight(cmds.String(), "\n")
+	if len(fixes) > 0 {
+		msg += "\ncreate them on a swarm manager, then retry:\n" + strings.Join(fixes, "\n")
 	}
 	return created, fmt.Errorf("%s", msg)
+}
+
+// requireDeclared enforces the requirements.yaml contract: when req is non-nil,
+// every external resource name the manifest references must be declared in it.
+// It returns a chart-authoring error listing any undeclared names, or nil when
+// req is nil (no requirements.yaml — manifest-driven fallback) or all declared.
+func requireDeclared(req *Requirements, names []string, kind, key string) error {
+	if req == nil {
+		return nil
+	}
+	var undeclared []string
+	for _, n := range names {
+		var ok bool
+		switch key {
+		case "networks":
+			_, ok = req.network(n)
+		case "secrets":
+			_, ok = req.secret(n)
+		case "configs":
+			_, ok = req.config(n)
+		}
+		if !ok {
+			undeclared = append(undeclared, fmt.Sprintf("  %s", n))
+		}
+	}
+	if len(undeclared) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s(s) the manifest declares external are not declared in %s:\n%s\n"+
+		"declare them under %s: in %s (it is authoritative when present)",
+		kind, requirementsName, strings.Join(undeclared, "\n"), key, requirementsName)
+}
+
+// networkDriver returns the declared driver, defaulting to overlay (defaults are
+// normally applied at parse time; this guards direct callers/tests).
+func networkDriver(nr *NetworkRequirement) string {
+	if nr.Driver == "" {
+		return "overlay"
+	}
+	return nr.Driver
+}
+
+func attachableFlag(nr *NetworkRequirement) string {
+	return attachableFlagBool(nr.Attachable == nil || *nr.Attachable)
+}
+
+func attachableFlagBool(attachable bool) string {
+	if attachable {
+		return " --attachable"
+	}
+	return ""
+}
+
+// describe renders an optional requirement description as a trailing " (…)"
+// clause for remediation messages, or "" when absent.
+func describe(desc string) string {
+	if desc == "" {
+		return ""
+	}
+	return " (" + desc + ")"
 }
 
 // ensureExternalSecretsConfigs verifies that every secret and config the
@@ -309,11 +402,23 @@ func (e *Engine) ensureExternalNetworks(ctx context.Context, manifest string) (c
 // missing one is a hard error that lists the `docker secret/config create`
 // commands needed to resolve it. A manifest with no external secrets/configs is
 // a no-op.
-func (e *Engine) ensureExternalSecretsConfigs(ctx context.Context, manifest string) error {
+//
+// When the chart ships a requirements.yaml (req != nil) it is authoritative:
+// every external secret/config the manifest references must be declared there
+// (else a hard error), and a declared description enriches the remediation.
+func (e *Engine) ensureExternalSecretsConfigs(ctx context.Context, manifest string, req *Requirements) error {
 	secrets := externalResourceNames(manifest, "secrets")
 	configs := externalResourceNames(manifest, "configs")
 	if len(secrets) == 0 && len(configs) == 0 {
 		return nil
+	}
+	// Enforce the requirements.yaml contract first (chart-authoring error),
+	// separately from the existence check below (operator remediation).
+	if err := requireDeclared(req, secrets, "secret", "secrets"); err != nil {
+		return err
+	}
+	if err := requireDeclared(req, configs, "config", "configs"); err != nil {
+		return err
 	}
 
 	var reasons, cmds []string
@@ -324,8 +429,9 @@ func (e *Engine) ensureExternalSecretsConfigs(ctx context.Context, manifest stri
 			return fmt.Errorf("checking external secrets: %w", err)
 		}
 		for _, name := range secrets {
+			rr, _ := req.secret(name)
 			if _, ok := have[name]; !ok {
-				reasons = append(reasons, fmt.Sprintf("  secret %q does not exist", name))
+				reasons = append(reasons, fmt.Sprintf("  secret %q does not exist%s", name, requirementDescription(rr)))
 				cmds = append(cmds, fmt.Sprintf("  docker secret create %s <file>", name))
 			}
 		}
@@ -341,8 +447,9 @@ func (e *Engine) ensureExternalSecretsConfigs(ctx context.Context, manifest stri
 			have[m.Name] = struct{}{}
 		}
 		for _, name := range configs {
+			rr, _ := req.config(name)
 			if _, ok := have[name]; !ok {
-				reasons = append(reasons, fmt.Sprintf("  config %q does not exist", name))
+				reasons = append(reasons, fmt.Sprintf("  config %q does not exist%s", name, requirementDescription(rr)))
 				cmds = append(cmds, fmt.Sprintf("  docker config create %s <file>", name))
 			}
 		}
@@ -356,15 +463,35 @@ func (e *Engine) ensureExternalSecretsConfigs(ctx context.Context, manifest stri
 		strings.Join(reasons, "\n"), strings.Join(cmds, "\n"))
 }
 
-// Uninstall removes the release's stack and, unless keepHistory, its recorded
-// revisions. Volumes are retained unless purgeVolumes is set.
-func (e *Engine) Uninstall(ctx context.Context, release string, purgeVolumes bool) error {
+// requirementDescription renders a resource requirement's description as a
+// trailing " (…)" clause, or "" when there is no requirement or description.
+func requirementDescription(rr *ResourceRequirement) string {
+	if rr == nil {
+		return ""
+	}
+	return describe(rr.Description)
+}
+
+// UninstallResult reports what an uninstall left behind. OrphanedNetworks are
+// the external networks swarmcli auto-created for the release that still exist
+// after the stack is removed — `docker stack rm` does not remove external
+// networks, and swarmcli deliberately leaves them (they may be shared with other
+// stacks) and reports them instead.
+type UninstallResult struct {
+	OrphanedNetworks []string
+}
+
+// Uninstall removes the release's stack and its recorded revisions, retaining
+// volumes unless purgeVolumes is set. It returns an UninstallResult describing
+// the auto-created external networks left in place so the caller can surface
+// them; the networks themselves are not removed.
+func (e *Engine) Uninstall(ctx context.Context, release string, purgeVolumes bool) (*UninstallResult, error) {
 	revs, err := e.revisions(ctx, release)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(revs) == 0 {
-		return fmt.Errorf("release %q not found", release)
+		return nil, fmt.Errorf("release %q not found", release)
 	}
 
 	// Continue cleanup on partial failure rather than aborting: a stranded
@@ -390,12 +517,50 @@ func (e *Engine) Uninstall(ctx context.Context, release string, purgeVolumes boo
 		}
 	}
 
+	// Collect the networks swarmcli auto-created across all revisions (a network
+	// created in an early revision is not re-created later, so it only appears on
+	// that revision's record — union them), keeping only those that still exist.
+	result := &UninstallResult{OrphanedNetworks: e.orphanedManagedNetworks(ctx, revs)}
+
 	for _, r := range revs {
 		if err := e.Backend.DeleteConfig(ctx, releaseConfigName(release, r.Revision)); err != nil {
 			errs = append(errs, fmt.Errorf("deleting release config: %w", err))
 		}
 	}
-	return errors.Join(errs...)
+	return result, errors.Join(errs...)
+}
+
+// orphanedManagedNetworks returns the sorted, de-duplicated set of networks
+// swarmcli auto-created for the release (recorded per-revision) that still exist
+// on the swarm. A failure to query existing networks degrades to reporting the
+// recorded union (better to over-report a cleanup hint than to hide it).
+func (e *Engine) orphanedManagedNetworks(ctx context.Context, revs []Release) []string {
+	seen := map[string]struct{}{}
+	var managed []string
+	for _, r := range revs {
+		for _, n := range r.ManagedNetworks {
+			if _, ok := seen[n]; !ok {
+				seen[n] = struct{}{}
+				managed = append(managed, n)
+			}
+		}
+	}
+	if len(managed) == 0 {
+		return nil
+	}
+	scopes, err := e.Backend.NetworkScopes(ctx)
+	if err != nil {
+		sort.Strings(managed)
+		return managed
+	}
+	var still []string
+	for _, n := range managed {
+		if _, ok := scopes[n]; ok {
+			still = append(still, n)
+		}
+	}
+	sort.Strings(still)
+	return still
 }
 
 // List returns the current (highest) revision of every release.

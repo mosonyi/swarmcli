@@ -19,9 +19,10 @@ type fakeBackend struct {
 	deployed      map[string]string // stack name -> manifest
 	volumes       map[string][]string
 	services      map[string][]ServiceState
-	networkScopes map[string]string   // network name -> scope
-	secrets       map[string]struct{} // existing secret names
-	createNetErr  map[string]error    // network name -> error to return on create
+	networkScopes map[string]string     // network name -> scope
+	secrets       map[string]struct{}   // existing secret names
+	createNetErr  map[string]error      // network name -> error to return on create
+	createdNets   map[string]createdNet // network name -> driver/attachable used on create
 	failNext      bool
 	rmStackErr    error
 	refreshErr    error
@@ -33,6 +34,11 @@ type fakeBackend struct {
 type fakeConfig struct {
 	data   []byte
 	labels map[string]string
+}
+
+type createdNet struct {
+	driver     string
+	attachable bool
 }
 
 func newFakeBackend() *fakeBackend {
@@ -120,10 +126,14 @@ func (f *fakeBackend) NetworkScopes(context.Context) (map[string]string, error) 
 	}
 	return out, nil
 }
-func (f *fakeBackend) CreateOverlayNetwork(_ context.Context, name string) error {
+func (f *fakeBackend) CreateOverlayNetwork(_ context.Context, name, driver string, attachable bool) error {
 	if err := f.createNetErr[name]; err != nil {
 		return err
 	}
+	if f.createdNets == nil {
+		f.createdNets = map[string]createdNet{}
+	}
+	f.createdNets[name] = createdNet{driver: driver, attachable: attachable}
 	f.networkScopes[name] = "swarm"
 	return nil
 }
@@ -287,12 +297,14 @@ func TestUninstallRemovesStackAndConfigsKeepsVolumes(t *testing.T) {
 	_, err := e.Install(ctx, "demo", ReleaseChart{Name: "demo", Version: "1"}, nil, "services:\n  s:\n    image: x\n", InstallOptions{})
 	require.NoError(t, err)
 
-	require.NoError(t, e.Uninstall(ctx, "demo", false))
+	_, err = e.Uninstall(ctx, "demo", false)
+	require.NoError(t, err)
 	require.Empty(t, fb.deployed)
 	require.Empty(t, fb.configs)
 	require.Equal(t, []string{"demo_data"}, fb.volumes["demo"]) // volume retained
 
-	require.Error(t, e.Uninstall(ctx, "demo", false)) // already gone
+	_, err = e.Uninstall(ctx, "demo", false) // already gone
+	require.Error(t, err)
 }
 
 func TestUninstallPurgeVolumes(t *testing.T) {
@@ -301,7 +313,8 @@ func TestUninstallPurgeVolumes(t *testing.T) {
 	e := testEngine(fb)
 	ctx := context.Background()
 	_, _ = e.Install(ctx, "demo", ReleaseChart{Name: "demo", Version: "1"}, nil, "services:\n  s:\n    image: x\n", InstallOptions{})
-	require.NoError(t, e.Uninstall(ctx, "demo", true))
+	_, err := e.Uninstall(ctx, "demo", true)
+	require.NoError(t, err)
 	require.Empty(t, fb.volumes["demo"])
 }
 
@@ -375,7 +388,7 @@ func TestUninstallContinuesOnPartialFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	fb.rmStackErr = fmt.Errorf("stack gone")
-	err = e.Uninstall(ctx, "demo", false)
+	_, err = e.Uninstall(ctx, "demo", false)
 	require.ErrorContains(t, err, "removing stack")
 	require.Empty(t, fb.configs) // history cleaned up despite the stack-removal failure
 }

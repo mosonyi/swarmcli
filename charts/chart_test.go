@@ -100,3 +100,54 @@ func TestLoadChartDirNoTemplates(t *testing.T) {
 	require.Error(t, err)
 	require.True(t, strings.Contains(err.Error(), "templates"))
 }
+
+func writeMinimalChart(t *testing.T, dir string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "templates"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Chart.yaml"), []byte("name: x\nversion: 1.0.0\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "templates", "stack.yaml"), []byte("services: {}\n"), 0o644))
+}
+
+func TestLoadChartDirParsesRequirements(t *testing.T) {
+	dir := t.TempDir()
+	writeMinimalChart(t, dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "requirements.yaml"),
+		[]byte("networks:\n  - name: traefik-public\n    description: shared\n"), 0o644))
+
+	ch, err := LoadChartDir(dir)
+	require.NoError(t, err)
+	require.NotNil(t, ch.Requirements)
+	require.Len(t, ch.Requirements.Networks, 1)
+	require.Equal(t, "traefik-public", ch.Requirements.Networks[0].Name)
+	require.True(t, *ch.Requirements.Networks[0].AutoCreate) // defaulted
+}
+
+func TestLoadChartDirNoRequirementsIsNil(t *testing.T) {
+	dir := t.TempDir()
+	writeMinimalChart(t, dir)
+	ch, err := LoadChartDir(dir)
+	require.NoError(t, err)
+	require.Nil(t, ch.Requirements)
+}
+
+func TestLoadChartArchiveParsesRequirements(t *testing.T) {
+	tgz := packEntries(t, map[string]string{
+		"demo/Chart.yaml":           "name: demo\nversion: 1.0.0\n",
+		"demo/templates/stack.yaml": "services: {}\n",
+		"demo/requirements.yaml":    "networks:\n  - name: traefik-public\n",
+	})
+	ch, err := LoadChartArchive(strings.NewReader(tgz))
+	require.NoError(t, err)
+	require.NotNil(t, ch.Requirements)
+	require.Equal(t, "traefik-public", ch.Requirements.Networks[0].Name)
+}
+
+func TestLoadChartArchiveInvalidRequirements(t *testing.T) {
+	tgz := packEntries(t, map[string]string{
+		"demo/Chart.yaml":           "name: demo\nversion: 1.0.0\n",
+		"demo/templates/stack.yaml": "services: {}\n",
+		"demo/requirements.yaml":    "networks:\n  - description: nameless\n",
+	})
+	_, err := LoadChartArchive(strings.NewReader(tgz))
+	require.ErrorContains(t, err, "networks[0] has no name")
+}

@@ -105,8 +105,8 @@ func (dockerBackend) NetworkScopes(ctx context.Context) (map[string]string, erro
 	return scopes, nil
 }
 
-func (dockerBackend) CreateOverlayNetwork(ctx context.Context, name string) error {
-	_, _, err := docker.CreateNetwork(ctx, name, network.CreateOptions{Driver: "overlay", Attachable: true})
+func (dockerBackend) CreateOverlayNetwork(ctx context.Context, name, driver string, attachable bool) error {
+	_, _, err := docker.CreateNetwork(ctx, name, network.CreateOptions{Driver: driver, Attachable: attachable})
 	return err
 }
 
