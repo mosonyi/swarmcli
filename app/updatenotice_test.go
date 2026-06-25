@@ -36,6 +36,32 @@ func TestUpdateNoticeMessage_BE(t *testing.T) {
 	require.NotContains(t, msg, "Try Business Edition") // no CE→BE upsell line for BE
 }
 
+// Unlicensed BE: the build flag is "be" but BusinessEditionActive is overridden
+// to report false (no valid license), so the notice shows the CE copy + upsell,
+// matching the Community Edition presentation the rest of the UI uses.
+func TestUpdateNoticeMessage_UnlicensedBE_ShowsUpsell(t *testing.T) {
+	origV, origE, origP := version, edition, BusinessEditionActive
+	defer func() { version, edition, BusinessEditionActive = origV, origE, origP }()
+	version, edition = "v1.8.0", "be"
+	BusinessEditionActive = func() bool { return false }
+
+	msg := updateNoticeMessage("v1.9.0")
+	require.Contains(t, msg, installDocsURLCommunity)
+	require.Contains(t, msg, "Try Business Edition")
+}
+
+// Licensed BE: predicate true → BE copy, no upsell, regardless of build flag.
+func TestUpdateNoticeMessage_LicensedBE_NoUpsell(t *testing.T) {
+	origV, origE, origP := version, edition, BusinessEditionActive
+	defer func() { version, edition, BusinessEditionActive = origV, origE, origP }()
+	version, edition = "v1.8.0", "ce" // build flag deliberately not "be"
+	BusinessEditionActive = func() bool { return true }
+
+	msg := updateNoticeMessage("v1.9.0")
+	require.Contains(t, msg, installDocsURLBusiness)
+	require.NotContains(t, msg, "Try Business Edition")
+}
+
 func TestShowUpdateNotice_SetsInfoDialogWithCheckbox(t *testing.T) {
 	m := newTestAppModel(&stubView{name: "test"})
 	m.updateDialog = confirmdialog.New(200, 50)

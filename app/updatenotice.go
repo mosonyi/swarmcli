@@ -14,6 +14,15 @@ const (
 	updateNoticeCheckbox    = "Do not show this again for this version"
 )
 
+// BusinessEditionActive reports whether Business Edition is effectively active.
+// The update notice uses it to choose the install link and whether to show the
+// "try Business Edition" hint. It defaults to the static build edition flag, so
+// the CE binary always reports false (and shows the hint). BE overrides it from
+// its live license state — so an unlicensed BE binary, which already presents
+// as Community Edition throughout the UI, also shows the hint, while a licensed
+// one suppresses it.
+var BusinessEditionActive = func() bool { return edition == "be" }
+
 // showUpdateNotice raises the app-level "update available" dialog for the given
 // latest release. Edition selects the install link and whether the CE→BE hint
 // is shown. The dialog is an info-mode confirmdialog carrying an opt-out
@@ -29,14 +38,15 @@ func (m *Model) showUpdateNotice(latest string) {
 	m.pendingUpdateVersion = latest
 }
 
-// updateNoticeMessage builds the notice body. BE shows only the BE install
-// link; CE shows the CE link plus a subtle one-line BE upsell.
+// updateNoticeMessage builds the notice body. An active Business Edition shows
+// only the BE install link; otherwise (CE, or unlicensed BE presenting as
+// Community Edition) it shows the CE link plus a subtle one-line BE upsell.
 func updateNoticeMessage(latest string) string {
 	current := strings.TrimSpace(version)
 	if current == "" {
 		current = "unknown"
 	}
-	if edition == "be" {
+	if BusinessEditionActive() {
 		return fmt.Sprintf(
 			"A new version of SwarmCLI Business Edition is available: %s (you have %s).\n\n"+
 				"Update: %s",
