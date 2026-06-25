@@ -463,3 +463,206 @@ func TestServiceInspect_NoLogDriverIsNil(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &si))
 	require.Nil(t, si.Spec.TaskTemplate.LogDriver)
 }
+
+// --- Issue #430: field-coverage of the reconstruction round-trip path ---
+
+// TestReconstruct_DropsRichSpec is the fat-fixture coverage guard: one
+// `docker service inspect`-shaped JSON exercising every newly-supported field
+// is fed through the pure assembler, and each field is asserted to survive.
+// It exercises BOTH halves of the path — capture (JSON → hand-rolled structs)
+// and render (structs → compose) — so it catches parse-drops and render-drops
+// alike. Before the #430 fix this fails; after it passes.
+func TestReconstruct_DropsRichSpec(t *testing.T) {
+	const raw = `{
+	  "Spec": {
+	    "Name": "demo_web",
+	    "Labels": {"com.docker.stack.namespace": "demo", "tier": "frontend"},
+	    "TaskTemplate": {
+	      "ContainerSpec": {
+	        "Image": "nginx:1.27@sha256:deadbeef",
+	        "Hostname": "web1",
+	        "CapabilityAdd": ["NET_ADMIN"],
+	        "CapabilityDrop": ["CHOWN"],
+	        "Sysctls": {"net.core.somaxconn": "1024"},
+	        "Ulimits": [{"Name": "nofile", "Soft": 20000, "Hard": 40000}],
+	        "Hosts": ["10.0.0.5 db.internal db"],
+	        "DNSConfig": {"Nameservers": ["8.8.8.8"], "Search": ["corp.local"], "Options": ["ndots:2"]},
+	        "ReadOnly": true,
+	        "Init": true,
+	        "StopSignal": "SIGTERM",
+	        "StopGracePeriod": 30000000000,
+	        "Secrets": [
+	          {"SecretName": "demo_api_key", "File": {"Name": "api_key", "UID": "100", "GID": "101", "Mode": 292}}
+	        ]
+	      },
+	      "Resources": {"Limits": {"NanoCPUs": 500000000, "MemoryBytes": 268435456, "Pids": 100}},
+	      "RestartPolicy": {"Condition": "on-failure", "Delay": 5000000000, "MaxAttempts": 3, "Window": 120000000000},
+	      "Placement": {"Constraints": ["node.role==worker"], "MaxReplicas": 2},
+	      "LogDriver": {"Name": "json-file", "Options": {"max-size": "10m"}}
+	    },
+	    "Mode": {"Replicated": {"Replicas": 3}},
+	    "EndpointSpec": {"Mode": "dnsrr", "Ports": [{"Protocol": "tcp", "TargetPort": 80, "PublishedPort": 8080}]},
+	    "UpdateConfig": {"Parallelism": 2, "Delay": 10000000000, "FailureAction": "rollback", "Monitor": 60000000000, "MaxFailureRatio": 0.25, "Order": "start-first"},
+	    "RollbackConfig": {"Parallelism": 1, "Order": "stop-first"}
+	  }
+	}`
+
+	var si ServiceInspect
+	require.NoError(t, json.Unmarshal([]byte(raw), &si))
+
+	cf := assembleCompose([]ServiceInspect{si}, "demo", nil)
+	cs, ok := cf.Services["web"]
+	require.True(t, ok, "service should be keyed by its stack-stripped name")
+
+	// Container-level fields
+	require.Equal(t, "nginx:1.27", cs.Image) // digest stripped (#363)
+	require.Equal(t, "web1", cs.Hostname)
+	require.Equal(t, []string{"NET_ADMIN"}, cs.CapAdd)
+	require.Equal(t, []string{"CHOWN"}, cs.CapDrop)
+	require.Equal(t, "1024", cs.Sysctls["net.core.somaxconn"])
+	require.Equal(t, map[string]any{"soft": int64(20000), "hard": int64(40000)}, cs.Ulimits["nofile"])
+	require.Equal(t, []string{"db.internal:10.0.0.5", "db:10.0.0.5"}, cs.ExtraHosts)
+	require.Equal(t, []string{"8.8.8.8"}, cs.DNS)
+	require.Equal(t, []string{"corp.local"}, cs.DNSSearch)
+	require.Equal(t, []string{"ndots:2"}, cs.DNSOpt)
+	require.True(t, cs.ReadOnly)
+	require.NotNil(t, cs.Init)
+	require.True(t, *cs.Init)
+	require.Equal(t, "SIGTERM", cs.StopSignal)
+	require.Equal(t, "30s", cs.StopGracePeriod)
+
+	// Logging driver (folded in from #428/#429 — now covered by the guard).
+	require.NotNil(t, cs.Logging)
+	require.Equal(t, "json-file", cs.Logging.Driver)
+	require.Equal(t, "10m", cs.Logging.Options["max-size"])
+
+	// Secret target permissions (mode 292 == 0o444)
+	require.Len(t, cs.Secrets, 1)
+	require.Equal(t, "demo_api_key", cs.Secrets[0]["source"])
+	require.Equal(t, "api_key", cs.Secrets[0]["target"])
+	require.Equal(t, "100", cs.Secrets[0]["uid"])
+	require.Equal(t, "101", cs.Secrets[0]["gid"])
+	require.Equal(t, 292, cs.Secrets[0]["mode"])
+
+	// Deploy block
+	dep := cs.Deploy
+	require.Equal(t, 3, dep["replicas"])
+	require.Equal(t, "dnsrr", dep["endpoint_mode"])
+
+	placement := dep["placement"].(map[string]any)
+	require.Equal(t, []string{"node.role==worker"}, placement["constraints"])
+	require.Equal(t, 2, placement["max_replicas_per_node"])
+
+	limits := dep["resources"].(map[string]any)["limits"].(map[string]any)
+	require.Equal(t, int64(100), limits["pids"])
+
+	rp := dep["restart_policy"].(map[string]any)
+	require.Equal(t, "on-failure", rp["condition"])
+	require.Equal(t, "5s", rp["delay"])
+	require.Equal(t, 3, rp["max_attempts"])
+	require.Equal(t, "2m0s", rp["window"])
+
+	uc := dep["update_config"].(map[string]any)
+	require.Equal(t, 2, uc["parallelism"])
+	require.Equal(t, "10s", uc["delay"])
+	require.Equal(t, "rollback", uc["failure_action"])
+	require.Equal(t, "1m0s", uc["monitor"])
+	require.Equal(t, float32(0.25), uc["max_failure_ratio"])
+	require.Equal(t, "start-first", uc["order"])
+
+	rc := dep["rollback_config"].(map[string]any)
+	require.Equal(t, 1, rc["parallelism"])
+	require.Equal(t, "stop-first", rc["order"])
+
+	// Service-level labels are filtered to user keys → deploy.labels.
+	require.Equal(t, map[string]string{"tier": "frontend"}, dep["labels"])
+
+	// The whole file still marshals to YAML carrying the new keys.
+	out, err := yaml.Marshal(&cf)
+	require.NoError(t, err)
+	y := string(out)
+	for _, want := range []string{
+		"hostname: web1", "cap_add:", "cap_drop:", "sysctls:", "ulimits:",
+		"extra_hosts:", "dns:", "dns_search:", "dns_opt:", "read_only: true",
+		"stop_signal: SIGTERM", "stop_grace_period: 30s",
+		"endpoint_mode: dnsrr", "max_replicas_per_node:", "pids:",
+		"delay: 5s", "window: 2m0s", "update_config:", "rollback_config:",
+		"mode: 292", "uid:", "gid:", "logging:", "driver: json-file",
+	} {
+		require.Contains(t, y, want, "reconstructed YAML missing %q", want)
+	}
+}
+
+func TestComposeUpdateConfig_FullAndNil(t *testing.T) {
+	require.Nil(t, composeUpdateConfig(nil))
+	require.Nil(t, composeUpdateConfig(&UpdateConfig{}))
+	uc := composeUpdateConfig(&UpdateConfig{
+		Parallelism: 2, Delay: int64(10 * time.Second), FailureAction: "pause",
+		Monitor: int64(time.Minute), MaxFailureRatio: 0.5, Order: "start-first",
+	})
+	require.Equal(t, 2, uc["parallelism"])
+	require.Equal(t, "10s", uc["delay"])
+	require.Equal(t, "pause", uc["failure_action"])
+	require.Equal(t, "1m0s", uc["monitor"])
+	require.Equal(t, float32(0.5), uc["max_failure_ratio"])
+	require.Equal(t, "start-first", uc["order"])
+}
+
+func TestComposeExtraHosts_Reorder(t *testing.T) {
+	// Swarm host-file order "IP host [aliases]" → compose "host:IP" per name.
+	got := composeExtraHosts([]string{"10.0.0.1 db.local db", "192.168.0.2 cache"})
+	require.Equal(t, []string{"db.local:10.0.0.1", "db:10.0.0.1", "cache:192.168.0.2"}, got)
+	require.Nil(t, composeExtraHosts(nil))
+	require.Nil(t, composeExtraHosts([]string{"malformed"})) // no hostname → skipped
+}
+
+func TestComposeUlimits_MapShape(t *testing.T) {
+	require.Nil(t, composeUlimits(nil))
+	got := composeUlimits([]Ulimit{{Name: "nofile", Soft: 1000, Hard: 2000}, {Name: ""}})
+	require.Equal(t, map[string]any{"nofile": map[string]any{"soft": int64(1000), "hard": int64(2000)}}, got)
+}
+
+func TestApplyFilePerms(t *testing.T) {
+	ref := map[string]any{"source": "s"}
+	applyFilePerms(ref, "0", "0", 0o444)
+	require.Equal(t, "0", ref["uid"])
+	require.Equal(t, "0", ref["gid"])
+	require.Equal(t, 292, ref["mode"]) // 0o444 == 292
+	bare := map[string]any{}
+	applyFilePerms(bare, "", "", 0)
+	require.Empty(t, bare)
+}
+
+// Capture side: the new rich ContainerSpec / ServiceSpec fields must unmarshal
+// from `docker service inspect` JSON (mirrors the parse-drop class of #430).
+func TestServiceInspect_CapturesRichContainerSpec(t *testing.T) {
+	raw := []byte(`{"Spec":{"TaskTemplate":{"ContainerSpec":{
+		"CapabilityAdd":["NET_ADMIN"],"Sysctls":{"k":"v"},
+		"Ulimits":[{"Name":"nofile","Soft":1,"Hard":2}],
+		"Hosts":["1.2.3.4 h"],"DNSConfig":{"Nameservers":["8.8.8.8"]},
+		"ReadOnly":true,"Init":true,"StopSignal":"SIGINT","StopGracePeriod":5000000000}}}}`)
+	var si ServiceInspect
+	require.NoError(t, json.Unmarshal(raw, &si))
+	cspec := si.Spec.TaskTemplate.ContainerSpec
+	require.Equal(t, []string{"NET_ADMIN"}, cspec.CapabilityAdd)
+	require.Equal(t, "v", cspec.Sysctls["k"])
+	require.Equal(t, []Ulimit{{Name: "nofile", Soft: 1, Hard: 2}}, cspec.Ulimits)
+	require.Equal(t, []string{"1.2.3.4 h"}, cspec.Hosts)
+	require.Equal(t, []string{"8.8.8.8"}, cspec.DNSConfig.Nameservers)
+	require.True(t, cspec.ReadOnly)
+	require.NotNil(t, cspec.Init)
+	require.Equal(t, "SIGINT", cspec.StopSignal)
+	require.Equal(t, int64(5000000000), cspec.StopGracePeriod)
+}
+
+func TestServiceInspect_CapturesUpdateConfigAndEndpointMode(t *testing.T) {
+	raw := []byte(`{"Spec":{"UpdateConfig":{"Parallelism":2,"Order":"start-first"},
+		"EndpointSpec":{"Mode":"dnsrr"}}}`)
+	var si ServiceInspect
+	require.NoError(t, json.Unmarshal(raw, &si))
+	require.NotNil(t, si.Spec.UpdateConfig)
+	require.Equal(t, uint64(2), si.Spec.UpdateConfig.Parallelism)
+	require.Equal(t, "start-first", si.Spec.UpdateConfig.Order)
+	require.NotNil(t, si.Spec.EndpointSpec)
+	require.Equal(t, "dnsrr", si.Spec.EndpointSpec.Mode)
+}

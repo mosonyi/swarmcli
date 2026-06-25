@@ -28,19 +28,20 @@ type StackInspection struct {
 
 // ServiceSummary contains summary information about a service
 type ServiceSummary struct {
-	Name        string            `json:"name"`
-	ID          string            `json:"id"`
-	Image       string            `json:"image"`
-	Mode        string            `json:"mode"`
-	Replicas    string            `json:"replicas"`
-	Ports       []string          `json:"ports,omitempty"`
-	Secrets     []string          `json:"secrets,omitempty"`
-	Configs     []string          `json:"configs,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Healthcheck *Healthcheck      `json:"healthcheck,omitempty"`
-	Logging     *Logging          `json:"logging,omitempty"`
-	CreatedAt   time.Time         `json:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at"`
+	Name            string            `json:"name"`
+	ID              string            `json:"id"`
+	Image           string            `json:"image"`
+	Mode            string            `json:"mode"`
+	Replicas        string            `json:"replicas"`
+	Ports           []string          `json:"ports,omitempty"`
+	Secrets         []string          `json:"secrets,omitempty"`
+	Configs         []string          `json:"configs,omitempty"`
+	Labels          map[string]string `json:"labels,omitempty"`
+	ContainerLabels map[string]string `json:"container_labels,omitempty"`
+	Healthcheck     *Healthcheck      `json:"healthcheck,omitempty"`
+	Logging         *Logging          `json:"logging,omitempty"`
+	CreatedAt       time.Time         `json:"created_at"`
+	UpdatedAt       time.Time         `json:"updated_at"`
 }
 
 // GetStackInspection returns detailed information about a stack in JSON format
@@ -141,7 +142,9 @@ func GetStackInspection(stackName string) (string, error) {
 		// Collect secrets, configs, volumes, and healthcheck
 		var svcSecrets, svcConfigs []string
 		var healthcheck *Healthcheck
+		var containerLabels map[string]string
 		if svc.Spec.TaskTemplate.ContainerSpec != nil {
+			containerLabels = filterLabels(svc.Spec.TaskTemplate.ContainerSpec.Labels)
 			for _, s := range svc.Spec.TaskTemplate.ContainerSpec.Secrets {
 				if s.SecretName != "" {
 					secretsMap[s.SecretName] = true
@@ -179,19 +182,20 @@ func GetStackInspection(stackName string) (string, error) {
 
 		// Add service summary
 		desc.Services = append(desc.Services, ServiceSummary{
-			Name:        svc.Spec.Name,
-			ID:          svc.ID,
-			Image:       image,
-			Mode:        mode,
-			Replicas:    replicas,
-			Ports:       ports,
-			Secrets:     svcSecrets,
-			Configs:     svcConfigs,
-			Labels:      svc.Spec.Labels,
-			Healthcheck: healthcheck,
-			Logging:     logging,
-			CreatedAt:   svc.CreatedAt,
-			UpdatedAt:   svc.UpdatedAt,
+			Name:            svc.Spec.Name,
+			ID:              svc.ID,
+			Image:           image,
+			Mode:            mode,
+			Replicas:        replicas,
+			Ports:           ports,
+			Secrets:         svcSecrets,
+			Configs:         svcConfigs,
+			Labels:          filterLabels(svc.Spec.Labels),
+			ContainerLabels: containerLabels,
+			Healthcheck:     healthcheck,
+			Logging:         logging,
+			CreatedAt:       svc.CreatedAt,
+			UpdatedAt:       svc.UpdatedAt,
 		})
 	}
 
