@@ -53,6 +53,7 @@ func LoadChartDir(dir string) (*Chart, error) {
 		if err := yaml.Unmarshal(v, &ch.Values); err != nil {
 			return nil, fmt.Errorf("parse %s: %w", valuesName, err)
 		}
+		ch.ValuesRaw = v
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read %s: %w", valuesName, err)
 	}
@@ -155,6 +156,7 @@ func LoadChartArchive(r io.Reader) (*Chart, error) {
 			if err := yaml.Unmarshal(body, &ch.Values); err != nil {
 				return nil, fmt.Errorf("parse %s: %w", valuesName, err)
 			}
+			ch.ValuesRaw = body
 		case rel == schemaName:
 			ch.Schema = body
 		case rel == requirementsName:

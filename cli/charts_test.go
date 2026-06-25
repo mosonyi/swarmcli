@@ -5,6 +5,8 @@ package cli
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -88,6 +90,24 @@ func TestChartsShowValues(t *testing.T) {
 	})
 	require.Equal(t, 0, code)
 	require.Contains(t, o, "replicas: 1")
+}
+
+// show values must print values.yaml verbatim — its comments and key order are
+// documentation and must survive (re-marshalling the parsed map would drop both).
+func TestChartsShowValuesPreservesComments(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "templates"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Chart.yaml"), []byte("name: demo\nversion: 1.0.0\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "templates", "stack.yaml"), []byte("services: {}\n"), 0o644))
+	raw := "# leading comment\nreplicas: 1  # inline comment\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "values.yaml"), []byte(raw), 0o644))
+
+	var code int
+	o, _ := capture(t, func() {
+		code = Dispatch([]string{"charts", "show", "values", dir}, "dev")
+	})
+	require.Equal(t, 0, code)
+	require.Equal(t, raw, o)
 }
 
 func TestParseArgs(t *testing.T) {
