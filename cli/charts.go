@@ -235,6 +235,13 @@ func chartsShow(args []string) int {
 	case "chart":
 		printChartMeta(ch)
 	case "values":
+		// Print the chart's values.yaml verbatim so its comments and key order
+		// survive (re-marshalling the parsed map would drop both). Fall back to
+		// marshalling for a chart that ships no values.yaml.
+		if len(ch.ValuesRaw) > 0 {
+			_, _ = stdout.Write(ch.ValuesRaw)
+			break
+		}
 		data, err := yaml.Marshal(ch.Values)
 		if err != nil {
 			return fail(err)

@@ -65,6 +65,7 @@ type Dependency struct {
 type Chart struct {
 	Metadata     Chartfile
 	Values       map[string]any    // parsed values.yaml (defaults)
+	ValuesRaw    []byte            // raw values.yaml bytes, nil if absent (preserves comments/order)
 	Schema       []byte            // raw values.schema.json, nil if absent
 	Templates    map[string]string // template path -> source, e.g. "templates/stack.yaml"
 	Readme       string            // README.md, empty if absent

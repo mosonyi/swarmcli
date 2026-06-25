@@ -130,6 +130,39 @@ func TestLoadChartDirNoRequirementsIsNil(t *testing.T) {
 	require.Nil(t, ch.Requirements)
 }
 
+func TestLoadChartDirRetainsValuesRaw(t *testing.T) {
+	dir := t.TempDir()
+	writeMinimalChart(t, dir)
+	raw := "# a comment\nfoo: bar  # inline\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "values.yaml"), []byte(raw), 0o644))
+
+	ch, err := LoadChartDir(dir)
+	require.NoError(t, err)
+	require.Equal(t, raw, string(ch.ValuesRaw)) // verbatim: comments + order preserved
+	require.Equal(t, "bar", ch.Values["foo"])   // still parsed
+}
+
+func TestLoadChartDirNoValuesRawIsNil(t *testing.T) {
+	dir := t.TempDir()
+	writeMinimalChart(t, dir)
+	ch, err := LoadChartDir(dir)
+	require.NoError(t, err)
+	require.Nil(t, ch.ValuesRaw)
+}
+
+func TestLoadChartArchiveRetainsValuesRaw(t *testing.T) {
+	raw := "# a comment\nfoo: bar\n"
+	tgz := packEntries(t, map[string]string{
+		"demo/Chart.yaml":           "name: demo\nversion: 1.0.0\n",
+		"demo/templates/stack.yaml": "services: {}\n",
+		"demo/values.yaml":          raw,
+	})
+	ch, err := LoadChartArchive(strings.NewReader(tgz))
+	require.NoError(t, err)
+	require.Equal(t, raw, string(ch.ValuesRaw))
+	require.Equal(t, "bar", ch.Values["foo"])
+}
+
 func TestLoadChartArchiveParsesRequirements(t *testing.T) {
 	tgz := packEntries(t, map[string]string{
 		"demo/Chart.yaml":           "name: demo\nversion: 1.0.0\n",
