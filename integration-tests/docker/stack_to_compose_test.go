@@ -142,11 +142,13 @@ func TestReconstructStackCompose(t *testing.T) {
 	if single.Hostname != "whoami-single" {
 		t.Errorf("Issue #430: whoami_single hostname = %q, want \"whoami-single\"", single.Hostname)
 	}
-	if !containsStr(single.CapAdd, "SYS_NICE") {
-		t.Errorf("Issue #430: whoami_single cap_add = %v, want SYS_NICE", single.CapAdd)
+	// Docker canonicalizes capabilities with a CAP_ prefix, so the fixture's
+	// `SYS_NICE`/`NET_RAW` round-trip as `CAP_SYS_NICE`/`CAP_NET_RAW`.
+	if !containsStr(single.CapAdd, "CAP_SYS_NICE") {
+		t.Errorf("Issue #430: whoami_single cap_add = %v, want CAP_SYS_NICE", single.CapAdd)
 	}
-	if !containsStr(single.CapDrop, "NET_RAW") {
-		t.Errorf("Issue #430: whoami_single cap_drop = %v, want NET_RAW", single.CapDrop)
+	if !containsStr(single.CapDrop, "CAP_NET_RAW") {
+		t.Errorf("Issue #430: whoami_single cap_drop = %v, want CAP_NET_RAW", single.CapDrop)
 	}
 	if single.StopSignal != "SIGTERM" {
 		t.Errorf("Issue #430: whoami_single stop_signal = %q, want \"SIGTERM\"", single.StopSignal)
@@ -284,8 +286,8 @@ func TestReconstructStackCompose_RoundTrip(t *testing.T) {
 		if rtSingle.Hostname != "whoami-single" {
 			t.Errorf("Issue #430: round-trip whoami_single hostname = %q, want \"whoami-single\"", rtSingle.Hostname)
 		}
-		if !containsStr(rtSingle.CapDrop, "NET_RAW") {
-			t.Errorf("Issue #430: round-trip whoami_single cap_drop = %v, want NET_RAW", rtSingle.CapDrop)
+		if !containsStr(rtSingle.CapDrop, "CAP_NET_RAW") {
+			t.Errorf("Issue #430: round-trip whoami_single cap_drop = %v, want CAP_NET_RAW", rtSingle.CapDrop)
 		}
 		if rtSingle.StopGracePeriod != "20s" {
 			t.Errorf("Issue #430: round-trip whoami_single stop_grace_period = %q, want \"20s\"", rtSingle.StopGracePeriod)
