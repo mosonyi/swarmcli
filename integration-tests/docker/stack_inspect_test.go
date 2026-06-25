@@ -167,6 +167,20 @@ func TestInspectStack(t *testing.T) {
 		}
 	}
 
+	// Issue #430: inspect must filter Docker-internal labels — no
+	// com.docker.stack.* keys should leak into the JSON output (the edit path
+	// already filters these; this aligns the inspect path).
+	if strings.Contains(jsonOutput, "com.docker.stack.") {
+		t.Error("Issue #430: inspect JSON leaked internal com.docker.stack.* labels")
+	}
+	for _, svc := range inspection.Services {
+		for k := range svc.Labels {
+			if strings.HasPrefix(k, "com.docker.stack.") {
+				t.Errorf("Issue #430: service %q labels leaked internal key %q", svc.Name, k)
+			}
+		}
+	}
+
 	t.Logf("Successfully inspected stack: %d services, %d tasks", inspection.ServiceCount, inspection.TaskCount)
 }
 
