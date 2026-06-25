@@ -64,7 +64,7 @@ views/
   viewstack/               Navigation stack (push/pop)
 commands/
   api/                     Command context & arg parsing
-  command/                 Top-level built-in commands (help.go, contexts.go, quit.go, alias.go, bootstrap.go); docker-entity commands live under command/docker/<entity>/ls.go (service, node, network, volume, secret, config)
+  command/                 Top-level built-in commands (help.go, contexts.go, quit.go, alias.go, bootstrap.go, devupdate.go); docker-entity commands live under command/docker/<entity>/ls.go (service, node, network, volume, secret, config). devupdate.go registers `:dev-update` only when SWARMCLI_ENV=dev (force-shows the update-available notice for previewing)
   autoload.go              Blank import triggers init() registration
 docker/
   client.go                Context-aware Docker client factory
@@ -100,7 +100,7 @@ utils/log/
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `SWARMCLI_ENV` | `dev` (console logs) or `prod` (JSON logs) | `prod` |
+| `SWARMCLI_ENV` | `dev` (console logs) or `prod` (JSON logs); also registers the dev-only `:dev-update` command (force-shows the update-available notice for previewing) | `prod` |
 | `LOG_LEVEL` | `debug`/`info`/`warn`/`error` | `debug` (dev), `info` (prod) |
 | `DOCKER_CONTEXT` | Override Docker context | `docker context show` |
 | `TEST_LOG` | Enable logging in tests | unset |

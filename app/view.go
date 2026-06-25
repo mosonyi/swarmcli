@@ -19,7 +19,7 @@ func (m *Model) View() string {
 		header := m.currentView.FrameHeader()
 		content := m.currentView.FrameContent()
 		out := ui.RenderViewFrame(title, header, content, "", m.terminalWidth, m.terminalHeight, true)
-		return m.overlayStartup(m.overlayUnlock(m.overlayAppError(out)))
+		return m.overlayStartup(m.overlayUnlock(m.overlayAppError(m.overlayUpdate(out))))
 	}
 
 	systemInfo := m.systemInfo.View()
@@ -74,7 +74,7 @@ func (m *Model) View() string {
 			framedView,
 			m.renderStackBar(),
 		)
-		return m.overlayStartup(m.overlayUnlock(m.overlayAppError(out)))
+		return m.overlayStartup(m.overlayUnlock(m.overlayAppError(m.overlayUpdate(out))))
 	}
 
 	if m.searchInput.Visible() {
@@ -95,7 +95,7 @@ func (m *Model) View() string {
 			framedView,
 			m.renderStackBar(),
 		)
-		return m.overlayStartup(m.overlayUnlock(m.overlayAppError(out)))
+		return m.overlayStartup(m.overlayUnlock(m.overlayAppError(m.overlayUpdate(out))))
 	}
 
 	if frameHeight < 1 {
@@ -109,7 +109,7 @@ func (m *Model) View() string {
 		framedView,
 		m.renderStackBar(),
 	)
-	return m.overlayStartup(m.overlayUnlock(m.overlayAppError(out)))
+	return m.overlayStartup(m.overlayUnlock(m.overlayAppError(m.overlayUpdate(out))))
 }
 
 // overlayAppError overlays the app-level error dialog on top of the rendered output.
@@ -126,6 +126,14 @@ func (m *Model) overlayUnlock(base string) string {
 		return base
 	}
 	return ui.OverlayCentered(base, m.unlockDialog.View(), m.terminalWidth, 0)
+}
+
+// overlayUpdate overlays the "update available" notice on top of the output.
+func (m *Model) overlayUpdate(base string) string {
+	if !m.updateDialog.Visible {
+		return base
+	}
+	return ui.OverlayCentered(base, m.updateDialog.View(), m.terminalWidth, 0)
 }
 
 // overlayStartup composites the startup overlay on top of the rendered output.

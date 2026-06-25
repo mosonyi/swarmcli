@@ -46,6 +46,13 @@ type Model struct {
 	unlockDialog       *unlockdialog.Model
 	unlockDialogActive bool
 
+	// App-level "update available" notice, raised once per new release at
+	// startup (and on demand via :dev-update). Driven by the systeminfo
+	// version check; dismissal opt-out persists via the settings package.
+	updateDialog         *confirmdialog.Model
+	updateDialogActive   bool
+	pendingUpdateVersion string // version to persist if the opt-out box is ticked
+
 	// Terminal dimensions
 	terminalWidth  int
 	terminalHeight int
@@ -101,6 +108,7 @@ func InitialModel() *Model {
 		searchInput:    searchinput.New(),
 		errorDialog:    confirmdialog.New(terminalWidth, terminalHeight),
 		unlockDialog:   unlockdialog.New(terminalWidth, terminalHeight),
+		updateDialog:   confirmdialog.New(terminalWidth, terminalHeight),
 		terminalWidth:  terminalWidth,
 		terminalHeight: terminalHeight,
 	}
