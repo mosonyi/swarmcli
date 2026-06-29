@@ -39,11 +39,15 @@ jobs:
         # Fixed in: N/A — docker/docker@v28.5.2 is the latest release with no
         # upstream fix available. govulncheck has no native ignore flag, so the
         # JSON output is filtered to suppress only these known false-positives.
+        # GO-2026-5746/5668/5617 are likewise daemon-side docker cp/archive
+        # false-positives (the container-archive exec and two docker cp races);
+        # this client never invokes those paths and they share the N/A fix state.
         run: |
           python3 - <<'PYEOF'
           import subprocess, sys, json
 
-          SUPPRESSED = {"GO-2026-4887", "GO-2026-4883"}
+          SUPPRESSED = {"GO-2026-4883", "GO-2026-4887",
+                        "GO-2026-5617", "GO-2026-5668", "GO-2026-5746"}
 
           # -format json exits 0 and streams JSON; vulnerability data is in the stream.
           proc = subprocess.run(
