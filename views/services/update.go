@@ -816,7 +816,7 @@ func (m *Model) setRenderItem() {
 					taskNode := filterlist.TruncateRunes(task.NodeName, 12)
 					taskDesired := filterlist.TruncateRunes(task.DesiredState, 13)
 					taskCurrent := filterlist.TruncateRunes(task.CurrentState, 40)
-					taskHealth := dashIfEmpty(task.Health)
+					taskHealth := dashIfEmpty(filterlist.TruncateRunes(task.Health, 9))
 					taskPorts := dashIfEmpty(filterlist.TruncateRunes(task.Ports, 20))
 					taskErr := filterlist.TruncateRunes(task.Error, 30)
 					rowText := formatTaskRow(taskName, taskNode, taskDesired, taskCurrent,
