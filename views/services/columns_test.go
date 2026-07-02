@@ -4,6 +4,7 @@
 package servicesview
 
 import (
+	"strings"
 	"testing"
 
 	"swarmcli/docker"
@@ -50,6 +51,43 @@ func TestColumns_StackOnlyInAllFilter(t *testing.T) {
 		require.Len(t, m.layoutColumns(), tc.wantLen, "filter %v", tc.ft)
 		require.Equal(t, tc.wantStack, hasColumn(m, "STACK"), "filter %v stack presence", tc.ft)
 	}
+}
+
+func TestColumns_HealthOnlyWhenPresent(t *testing.T) {
+	// No row carries health → the HEALTH column is absent (default CE behavior).
+	m := testModel()
+	loadWithFilter(m, AllFilter, fakeEntries("web", "api"))
+	require.False(t, hasColumn(m, "HEALTH"), "HEALTH must be hidden when no row has health")
+	baseLen := len(m.layoutColumns())
+
+	// A populated Health summary reveals the column, inserted after STATUS.
+	entries := fakeEntries("web", "api")
+	entries[0].Health = "1/1 healthy"
+	m2 := testModel()
+	loadWithFilter(m2, AllFilter, entries)
+	require.True(t, hasColumn(m2, "HEALTH"), "HEALTH must appear when a row has health")
+	require.Len(t, m2.layoutColumns(), baseLen+1)
+	require.Equal(t, colLabelIndex(m2, "STATUS")+1, colLabelIndex(m2, "HEALTH"),
+		"HEALTH should sit immediately after STATUS")
+}
+
+func TestFormatTaskRow_ConditionalColumns(t *testing.T) {
+	// Neither flag set → layout matches the pre-existing NAME…ERROR row.
+	plain := formatTaskRow("web.1", "node-1", "Running", "running 8m", "healthy", "8000/tcp", "boom", false, false)
+	require.NotContains(t, plain, "healthy")
+	require.NotContains(t, plain, "8000/tcp")
+	require.Contains(t, plain, "boom")
+
+	// Both flags set → HEALTH and PORTS appear before ERROR.
+	full := formatTaskRow("web.1", "node-1", "Running", "running 8m", "healthy", "8000/tcp", "boom", true, true)
+	require.Contains(t, full, "healthy")
+	require.Contains(t, full, "8000/tcp")
+	require.Less(t, indexOf(full, "healthy"), indexOf(full, "boom"))
+	require.Less(t, indexOf(full, "8000/tcp"), indexOf(full, "boom"))
+}
+
+func indexOf(s, sub string) int {
+	return strings.Index(s, sub)
 }
 
 func TestColWidths_LengthMatchesHeader(t *testing.T) {

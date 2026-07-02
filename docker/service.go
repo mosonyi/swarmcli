@@ -356,8 +356,14 @@ type ServiceEntry struct {
 	Mode           string
 	Image          string
 	Ports          string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// Health is an aggregate health summary for the service's running replicas
+	// (e.g. "2/2 healthy"); "" when unknown. The swarm API does not expose
+	// container health, so the default loaders leave it empty; it is an
+	// extension point populated by a ServiceOps decorator that can reach
+	// per-node container state.
+	Health    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 func LoadNodeServices(nodeID string) []ServiceEntry {

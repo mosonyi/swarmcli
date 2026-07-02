@@ -24,8 +24,14 @@ type TaskEntry struct {
 	CurrentState string
 	Error        string
 	Ports        string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	// Health is the container-level health status (e.g. "healthy",
+	// "unhealthy", "starting"); "" when the container has no healthcheck or
+	// the status is unknown. The swarm task snapshot does not carry it, so the
+	// default loaders leave it empty; it is an extension point populated by a
+	// TaskOps decorator that can reach per-node container state.
+	Health    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // GetTasksForStack returns all tasks for services in the given stack
