@@ -71,6 +71,47 @@ func TestColumns_HealthOnlyWhenPresent(t *testing.T) {
 		"HEALTH should sit immediately after STATUS")
 }
 
+func TestExpandedRow_ContainerStateFallback(t *testing.T) {
+	m := testModel()
+	loadWithFilter(m, AllFilter, fakeEntries("web"))
+	// Expand the service and give it a replica that is erroring with no
+	// healthcheck (Health empty). The container's live state must still surface
+	// as the HEALTH fallback so failures show for images without a HEALTHCHECK.
+	m.expandedServices["id-web"] = true
+	m.serviceTasks["id-web"] = []docker.TaskEntry{{
+		Name: "web.1", NodeName: "node-1", DesiredState: "Running",
+		CurrentState: "running 8m", ContainerID: "c1", ContainerState: "exited",
+	}}
+	m.setRenderItem()
+
+	out := m.List.RenderItem(m.List.Filtered[0], false, 0)
+	require.Contains(t, out, "HEALTH", "HEALTH column must appear when a replica carries container state")
+	require.Contains(t, out, "exited", "the container's live state must render as the HEALTH fallback")
+}
+
+func TestTaskRowStyle_TintsFailureStates(t *testing.T) {
+	red, yellow, grey := lipgloss.Color("9"), lipgloss.Color("3"), lipgloss.Color("7")
+	cases := map[string]lipgloss.Color{
+		"unhealthy":  red,
+		"exited":     red,
+		"dead":       red,
+		"starting":   yellow,
+		"restarting": yellow,
+		"healthy":    grey,
+		"running":    grey,
+		"":           grey,
+	}
+	for status, want := range cases {
+		require.Equal(t, want, taskRowStyle(status).GetForeground(), "status %q", status)
+	}
+}
+
+func TestFirstNonEmpty(t *testing.T) {
+	require.Equal(t, "healthy", firstNonEmpty("healthy", "running"))
+	require.Equal(t, "exited", firstNonEmpty("", "exited"))
+	require.Equal(t, "", firstNonEmpty("", ""))
+}
+
 func TestFormatTaskRow_ConditionalColumns(t *testing.T) {
 	// Neither flag set → layout matches the pre-existing NAME…ERROR row.
 	plain := formatTaskRow("web.1", "node-1", "Running", "running 8m", "healthy", "8000/tcp", "boom", false, false)

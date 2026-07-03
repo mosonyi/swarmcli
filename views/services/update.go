@@ -792,10 +792,13 @@ func (m *Model) setRenderItem() {
 			if len(tasks) > 0 {
 				// HEALTH and PORTS are per-container data the swarm API does not
 				// expose; they are populated by a TaskOps decorator and stay
-				// empty otherwise, so only show those columns when present.
+				// empty otherwise, so only show those columns when present. The
+				// HEALTH cell shows the healthcheck token when present, else the
+				// container's live state (running / restarting / exited), so the
+				// column appears whenever the decorator is active.
 				showHealth, showPorts := false, false
 				for _, t := range tasks {
-					if t.Health != "" {
+					if t.Health != "" || t.ContainerState != "" {
 						showHealth = true
 					}
 					if t.Ports != "" {
@@ -816,7 +819,7 @@ func (m *Model) setRenderItem() {
 					taskNode := filterlist.TruncateRunes(task.NodeName, 12)
 					taskDesired := filterlist.TruncateRunes(task.DesiredState, 13)
 					taskCurrent := filterlist.TruncateRunes(task.CurrentState, 40)
-					taskHealth := dashIfEmpty(filterlist.TruncateRunes(task.Health, 9))
+					taskHealth := dashIfEmpty(filterlist.TruncateRunes(firstNonEmpty(task.Health, task.ContainerState), 9))
 					taskPorts := dashIfEmpty(filterlist.TruncateRunes(task.Ports, 20))
 					taskErr := filterlist.TruncateRunes(task.Error, 30)
 					rowText := formatTaskRow(taskName, taskNode, taskDesired, taskCurrent,
@@ -838,9 +841,10 @@ func (m *Model) setRenderItem() {
 							}
 						}
 					} else {
-						// Tint the whole row by health so unhealthy replicas stand
-						// out, mirroring the service-level error coloring above.
-						taskLine = taskRowStyle(task.Health).Render(rowText)
+						// Tint the whole row by container status so unhealthy or
+						// failing replicas stand out, mirroring the service-level
+						// error coloring above.
+						taskLine = taskRowStyle(firstNonEmpty(task.Health, task.ContainerState)).Render(rowText)
 					}
 					lineStr += "\n" + taskLine
 				}
@@ -870,14 +874,15 @@ func formatTaskRow(name, node, desired, current, health, ports, errText string, 
 	return s + "  " + errText
 }
 
-// taskRowStyle tints an expanded task sub-row by container health: unhealthy
-// red, starting yellow, everything else (healthy / no healthcheck) the default
-// grey used for normal task rows.
-func taskRowStyle(health string) lipgloss.Style {
-	switch health {
-	case "unhealthy":
+// taskRowStyle tints an expanded task sub-row by container status: failed
+// states (unhealthy / exited / dead) red, transient states (starting /
+// restarting) yellow, everything else (healthy / running / no healthcheck) the
+// default grey used for normal task rows.
+func taskRowStyle(status string) lipgloss.Style {
+	switch status {
+	case "unhealthy", "exited", "dead":
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-	case "starting":
+	case "starting", "restarting":
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
 	default:
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
@@ -890,6 +895,15 @@ func dashIfEmpty(s string) string {
 		return "—"
 	}
 	return s
+}
+
+// firstNonEmpty returns the first non-empty string, used to fall back from the
+// healthcheck token to the container's live state in the HEALTH cell.
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 // formatRelativeTime formats a time as a relative duration (e.g., "2h ago", "3d ago")
