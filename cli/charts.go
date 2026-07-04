@@ -51,6 +51,7 @@ Common options:
       --set k=v         Override a value (repeatable)
       --version <ver>   Chart version (default: latest)
       --dry-run         Render and validate without deploying
+      --requirements    template: emit rendered requirements.yaml, not the manifest
       --wait            Wait for services to converge
       --timeout <dur>   Wait timeout, e.g. 10m (default 5m)
       --history-max <n> Max release revisions to retain
@@ -289,9 +290,23 @@ func chartsTemplate(args []string) int {
 		return usageErr("charts template <release> <repo/chart>")
 	}
 	release, ref := pos[0], pos[1]
-	manifest, _, _, _, code := prepare(release, ref, f, nil)
+	manifest, _, _, req, code := prepare(release, ref, f, nil)
 	if code >= 0 {
 		return code
+	}
+	// --requirements emits the chart's requirements.yaml rendered with the same
+	// values as the manifest (the resolved external-resource contract), instead of
+	// the manifest. A chart with no requirements.yaml emits nothing.
+	if f.requirements {
+		if req == nil {
+			return 0
+		}
+		out, err := yaml.Marshal(req)
+		if err != nil {
+			return fail(err)
+		}
+		outln(strings.TrimRight(string(out), "\n"))
+		return 0
 	}
 	outln(manifest)
 	return 0
@@ -555,16 +570,24 @@ func prepare(release, ref string, f flags, base map[string]any) (manifest string
 	if err := charts.ValidateValues(ch.Schema, values); err != nil {
 		return "", nil, rc, nil, fail(err)
 	}
-	manifest, err = charts.Render(ch, charts.RenderContext{
+	ctx := charts.RenderContext{
 		Values:  values,
 		Release: charts.ReleaseMeta{Name: release, Namespace: release, Revision: 1},
 		Chart:   charts.ChartMeta{Name: ch.Metadata.Name, Version: ch.Metadata.Version, AppVersion: ch.Metadata.AppVersion},
-	})
+	}
+	manifest, err = charts.Render(ch, ctx)
+	if err != nil {
+		return "", nil, rc, nil, fail(err)
+	}
+	// requirements.yaml is rendered with the same values as the manifest, so an
+	// operator-chosen network/secret name (e.g. database.network) is validated
+	// against the name the manifest actually references.
+	req, err = charts.RenderRequirements(ch, ctx)
 	if err != nil {
 		return "", nil, rc, nil, fail(err)
 	}
 	rc = charts.ReleaseChart{Name: ch.Metadata.Name, Version: ch.Metadata.Version, AppVersion: ch.Metadata.AppVersion}
-	return manifest, values, rc, ch.Requirements, -1
+	return manifest, values, rc, req, -1
 }
 
 // --- uninstall / list / status ---
