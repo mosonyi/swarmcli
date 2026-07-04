@@ -127,6 +127,13 @@ func TestParseArgsInlineValue(t *testing.T) {
 	require.Equal(t, "2.0.0", f.version)
 }
 
+func TestParseArgsRequirements(t *testing.T) {
+	pos, f, err := parseArgs([]string{"rel", "repo/chart", "--requirements"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"rel", "repo/chart"}, pos)
+	require.True(t, f.requirements)
+}
+
 func TestParseIntRejectsGarbage(t *testing.T) {
 	n, err := parseInt("3")
 	require.NoError(t, err)

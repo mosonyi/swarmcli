@@ -63,13 +63,14 @@ type Dependency struct {
 // Chart is a loaded chart: its metadata, default values, optional values
 // schema, and raw template sources keyed by their path under templates/.
 type Chart struct {
-	Metadata     Chartfile
-	Values       map[string]any    // parsed values.yaml (defaults)
-	ValuesRaw    []byte            // raw values.yaml bytes, nil if absent (preserves comments/order)
-	Schema       []byte            // raw values.schema.json, nil if absent
-	Templates    map[string]string // template path -> source, e.g. "templates/stack.yaml"
-	Readme       string            // README.md, empty if absent
-	Requirements *Requirements     // parsed requirements.yaml, nil if absent
+	Metadata        Chartfile
+	Values          map[string]any    // parsed values.yaml (defaults)
+	ValuesRaw       []byte            // raw values.yaml bytes, nil if absent (preserves comments/order)
+	Schema          []byte            // raw values.schema.json, nil if absent
+	Templates       map[string]string // template path -> source, e.g. "templates/stack.yaml"
+	Readme          string            // README.md, empty if absent
+	Requirements    *Requirements     // parsed requirements.yaml (raw, unrendered), nil if absent
+	RequirementsRaw []byte            // raw requirements.yaml bytes, nil if absent; re-rendered with values at pre-flight
 }
 
 // Requirements is the parsed, defaulted requirements.yaml: the external

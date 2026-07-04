@@ -68,6 +68,7 @@ func LoadChartDir(dir string) (*Chart, error) {
 	}
 
 	if rq, err := os.ReadFile(filepath.Join(dir, requirementsName)); err == nil {
+		ch.RequirementsRaw = rq
 		if ch.Requirements, err = parseRequirements(rq); err != nil {
 			return nil, err
 		}
@@ -160,6 +161,7 @@ func LoadChartArchive(r io.Reader) (*Chart, error) {
 		case rel == schemaName:
 			ch.Schema = body
 		case rel == requirementsName:
+			ch.RequirementsRaw = body
 			if ch.Requirements, err = parseRequirements(body); err != nil {
 				return nil, err
 			}

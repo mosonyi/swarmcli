@@ -106,6 +106,52 @@ func renderOne(ch *Chart, name string, ctx RenderContext) (string, error) {
 	return buf.String(), nil
 }
 
+// renderString parses all of the chart's templates into a set (so named
+// helpers / {{ include }} resolve) plus an extra template `src` under `name`,
+// then executes `src` against ctx. Used to render auxiliary files such as
+// requirements.yaml with the same engine, functions, and context as the manifest.
+func renderString(ch *Chart, name, src string, ctx RenderContext) (string, error) {
+	tmpl := template.New(name).Funcs(renderFuncs()).Funcs(extraFuncs())
+	for _, n := range sortedTemplateNames(ch.Templates) {
+		if _, err := tmpl.New(n).Parse(ch.Templates[n]); err != nil {
+			return "", fmt.Errorf("template %s: parse error: %w", n, err)
+		}
+	}
+	if _, err := tmpl.New(name).Parse(src); err != nil {
+		return "", fmt.Errorf("template %s: parse error: %w", name, err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, name, ctx); err != nil {
+		return "", fmt.Errorf("template %s: %w", name, err)
+	}
+	return buf.String(), nil
+}
+
+// RenderRequirements renders the chart's requirements.yaml through the same
+// template engine and context as the manifest, then parses the result. This lets
+// requirements.yaml reference .Values (e.g. an operator-chosen network name) while
+// staying authoritative — the declared names are resolved against the same values
+// that produced the manifest. Returns (nil, nil) when the chart ships no
+// requirements.yaml.
+//
+// Templated values must be quoted (name: "{{ .Values.x }}") so requirements.yaml
+// still parses as YAML at chart-load time; the real value is resolved here, at the
+// install/upgrade pre-flight.
+func RenderRequirements(ch *Chart, ctx RenderContext) (*Requirements, error) {
+	if ch.RequirementsRaw == nil {
+		return nil, nil
+	}
+	rendered, err := renderString(ch, requirementsName, string(ch.RequirementsRaw), ctx)
+	if err != nil {
+		return nil, fmt.Errorf("render %s: %w", requirementsName, err)
+	}
+	req, err := parseRequirements([]byte(rendered))
+	if err != nil {
+		return nil, err
+	}
+	return req, nil
+}
+
 // renderFuncs returns the Sprig function map with host-reaching helpers removed.
 // Charts may come from untrusted repos, so `env`/`expandenv`/`getHostByName`
 // are denied to stop a template from exfiltrating host environment or DNS data
