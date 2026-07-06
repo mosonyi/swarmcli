@@ -23,11 +23,16 @@ type serviceColumn struct {
 // serviceColumns returns the columns for the current scope. The STACK column is
 // dropped unless we're showing services from every stack (AllFilter), since in a
 // single-stack/node scope every row carries the same stack value. The HEALTH
-// column is dropped unless some row carries a health summary — ServiceEntry.Health
-// is empty in the default (remote-API) loaders, so it is invisible unless a
-// ServiceOps decorator populates it. Cell closures capture the model so the ERROR
-// column can read the per-service error text.
+// column shows live per-container health when a ServiceOps decorator populates
+// ServiceEntry.Health; when there is none but a footer note explains why (CE
+// upsell, or a non-managed context — see healthFooterHint) it stays visible with
+// a "*" placeholder tying rows to that footnote, and is dropped only when there
+// is neither. Cell closures capture the model so the ERROR column can read the
+// per-service error text.
 func (m *Model) serviceColumns() []serviceColumn {
+	// footnoted: HEALTH carries no live data but a footer note explains it, so
+	// keep the column with a "*" placeholder instead of dropping it.
+	footnoted := healthFooterHint() != ""
 	all := []serviceColumn{
 		{sort: SortByName, hasSort: true, col: filterlist.Column[docker.ServiceEntry]{
 			Label: "SERVICE", MinWidth: 8, Flex: true,
@@ -49,10 +54,13 @@ func (m *Model) serviceColumns() []serviceColumn {
 		{isHealth: true, col: filterlist.Column[docker.ServiceEntry]{
 			Label: "HEALTH", MinWidth: 6,
 			Cell: func(e docker.ServiceEntry) string {
-				if e.Health == "" {
-					return "—"
+				if e.Health != "" {
+					return e.Health
 				}
-				return e.Health
+				if footnoted {
+					return "*"
+				}
+				return "—"
 			}}},
 		{col: filterlist.Column[docker.ServiceEntry]{
 			Label: "MODE", MinWidth: 6,
@@ -74,7 +82,7 @@ func (m *Model) serviceColumns() []serviceColumn {
 			Cell: func(e docker.ServiceEntry) string { return m.serviceErrorText[e.ServiceID] }}},
 	}
 	dropStack := m.filterType != AllFilter
-	dropHealth := !m.anyServiceHealth()
+	dropHealth := !m.anyServiceHealth() && !footnoted
 	if !dropStack && !dropHealth {
 		return all
 	}
@@ -92,7 +100,8 @@ func (m *Model) serviceColumns() []serviceColumn {
 }
 
 // anyServiceHealth reports whether any loaded service row carries a health
-// summary, which gates the HEALTH column.
+// summary — one of the two conditions (the other being a footer note) that keep
+// the HEALTH column visible.
 func (m *Model) anyServiceHealth() bool {
 	for _, e := range m.List.Items {
 		if e.Health != "" {

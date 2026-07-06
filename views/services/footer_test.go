@@ -46,7 +46,8 @@ func TestFrameFooter_AppendsHint(t *testing.T) {
 	view.ServicesHealthHint = func() string { return "needs the managed context" }
 	t.Cleanup(func() { view.ServicesHealthHint = nil })
 	foot := m.FrameFooter()
-	require.Contains(t, foot, "needs the managed context")
+	// The note is prefixed with "* " to tie it to the "*" HEALTH-column cells.
+	require.Contains(t, foot, "* needs the managed context")
 	require.NotContains(t, foot, view.BELandingURL)
 
 	// Flag on + no note (managed context, health works): neither hint.

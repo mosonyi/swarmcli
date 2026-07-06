@@ -12,7 +12,8 @@ func (m *Model) FrameHeader() string { return m.List.RenderHeader() }
 func (m *Model) FrameFooter() string {
 	footer := m.List.RenderFooter()
 	if hint := healthFooterHint(); hint != "" {
-		footer += "\n" + ui.StatusBarStyle.Render(hint)
+		// "* " ties the note to the "*" placeholders in the HEALTH column.
+		footer += "\n" + ui.StatusBarStyle.Render("* "+hint)
 	}
 	return footer
 }
