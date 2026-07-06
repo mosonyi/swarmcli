@@ -9,7 +9,13 @@ import (
 
 func (m *Model) FrameTitle() string  { return m.title }
 func (m *Model) FrameHeader() string { return m.List.RenderHeader() }
-func (m *Model) FrameFooter() string { return m.List.RenderFooter() }
+func (m *Model) FrameFooter() string {
+	footer := m.List.RenderFooter()
+	if hint := healthFooterHint(); hint != "" {
+		footer += "\n" + ui.StatusBarStyle.Render(hint)
+	}
+	return footer
+}
 
 func (m *Model) FrameContent() string {
 	header := m.FrameHeader()

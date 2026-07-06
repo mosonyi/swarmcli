@@ -55,3 +55,10 @@ func FeatureLockedCmd(featureName string) tea.Cmd {
 	}
 	return nil
 }
+
+// ServicesHealthHint, when set by the BE module, returns a one-line services-
+// view footer note (e.g. why container health is unavailable on the current
+// context), or "" when there is nothing to say. It lets BE surface a context-
+// specific note without CE having to know about managed contexts. Set in
+// init(); read on the render goroutine.
+var ServicesHealthHint func() string
