@@ -24,8 +24,22 @@ type TaskEntry struct {
 	CurrentState string
 	Error        string
 	Ports        string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	// Health is the container-level health status (e.g. "healthy",
+	// "unhealthy", "starting"); "" when the container has no healthcheck or
+	// the status is unknown. The swarm task snapshot does not carry it, so the
+	// default loaders leave it empty; it is an extension point populated by a
+	// TaskOps decorator that can reach per-node container state.
+	Health string
+	// ContainerState is the container's live lifecycle state as reported by the
+	// on-node agent (e.g. "running", "restarting", "exited", "dead"); "" by
+	// default. Like Health it is an extension point populated by a TaskOps
+	// decorator. Unlike CurrentState (the swarm task state) it reflects the
+	// container's `docker ps` state, which the remote Swarm API cannot report;
+	// the services view shows it as a fallback when Health is empty so container
+	// errors surface even for images without a healthcheck.
+	ContainerState string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 // GetTasksForStack returns all tasks for services in the given stack
