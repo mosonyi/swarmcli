@@ -324,6 +324,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.showAppError(msg.Error, msg.FallbackView)
 		return m, nil
 
+	case view.AppInfoMsg:
+		m.showAppInfo(msg.Message, msg.FallbackView)
+		return m, nil
+
 	case confirmdialog.ResultMsg:
 		if m.updateDialogActive {
 			m.updateDialogActive = false
