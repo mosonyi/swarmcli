@@ -20,6 +20,16 @@ type AppErrorMsg struct {
 	FallbackView string
 }
 
+// AppInfoMsg signals that a view (or the app layer) wants to show an
+// informational notice — the AppErrorMsg counterpart for non-error content.
+// The app shows the same modal styled as a neutral "Info" notice (not an
+// error). On dismiss it navigates to FallbackView (if non-empty) or calls
+// goBack(). Generic extension point: senders decide what warrants a notice.
+type AppInfoMsg struct {
+	Message      string
+	FallbackView string
+}
+
 // GoBackMsg requests the app to pop the current view and return to the previous one.
 type GoBackMsg struct{}
 
