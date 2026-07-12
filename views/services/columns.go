@@ -50,7 +50,14 @@ func (m *Model) serviceColumns() []serviceColumn {
 			}}},
 		{sort: SortByStatus, hasSort: true, col: filterlist.Column[docker.ServiceEntry]{
 			Label: "STATUS", MinWidth: 8,
-			Cell: func(e docker.ServiceEntry) string { return e.Status }}},
+			Cell: func(e docker.ServiceEntry) string {
+				// A service still pulling its image reads as a bare "active"; show
+				// the pull instead while one is in flight.
+				if e.PullProgress != "" {
+					return e.PullProgress
+				}
+				return e.Status
+			}}},
 		{isHealth: true, col: filterlist.Column[docker.ServiceEntry]{
 			Label: "HEALTH", MinWidth: 6,
 			Cell: func(e docker.ServiceEntry) string {

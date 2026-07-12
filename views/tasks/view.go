@@ -110,7 +110,7 @@ func (m *Model) renderTasks() string {
 		node := truncate(task.NodeName, colWidths[3])
 		desiredState := truncate(task.DesiredState, colWidths[4])
 
-		status := task.CurrentState
+		status := task.StatusText()
 		if task.Error != "" {
 			status = "Failed: " + task.Error
 		}

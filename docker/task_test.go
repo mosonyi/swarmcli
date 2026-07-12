@@ -67,3 +67,32 @@ func TestSortTasksByServiceAndTime_Empty(t *testing.T) {
 	sortTasksByServiceAndTime(tasks) // should not panic
 	require.Empty(t, tasks)
 }
+
+func TestTaskEntry_StatusText(t *testing.T) {
+	tests := []struct {
+		name string
+		e    TaskEntry
+		want string
+	}{
+		{
+			name: "no pull in flight falls back to the swarm task state",
+			e:    TaskEntry{CurrentState: "running 3 minutes ago"},
+			want: "running 3 minutes ago",
+		},
+		{
+			name: "a pull in flight replaces the bare preparing state",
+			e:    TaskEntry{CurrentState: "preparing 2 minutes ago", PullProgress: "pulling · 3/12 layers · 412 MB"},
+			want: "pulling · 3/12 layers · 412 MB",
+		},
+		{
+			name: "empty entry yields empty status",
+			e:    TaskEntry{},
+			want: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, tt.e.StatusText())
+		})
+	}
+}
