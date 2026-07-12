@@ -38,8 +38,26 @@ type TaskEntry struct {
 	// the services view shows it as a fallback when Health is empty so container
 	// errors surface even for images without a healthcheck.
 	ContainerState string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// PullProgress summarizes the image pull the task's node is currently
+	// performing for it (e.g. "pulling · 3/12 layers · 412 MB"); "" when nothing
+	// is being pulled or the progress is unavailable. A task whose image is still
+	// downloading sits in "preparing" with no further detail — the Swarm API
+	// carries no pull progress at all — so the default loaders leave this empty;
+	// it is an extension point populated by a TaskOps decorator that can reach
+	// the node performing the pull.
+	PullProgress string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+// StatusText is the task's status cell: the live image-pull summary when a
+// decorator supplied one (a pulling task otherwise shows only a bare
+// "preparing"), else the swarm task state.
+func (t TaskEntry) StatusText() string {
+	if t.PullProgress != "" {
+		return t.PullProgress
+	}
+	return t.CurrentState
 }
 
 // GetTasksForStack returns all tasks for services in the given stack

@@ -1482,7 +1482,7 @@ func (m *Model) setRenderItem() {
 						taskName := truncateWithEllipsis(task.Name, 22)
 						taskNode := truncateWithEllipsis(task.NodeName, 12)
 						taskDesired := truncateWithEllipsis(task.DesiredState, 13)
-						taskCurrent := truncateWithEllipsis(task.CurrentState, 40)
+						taskCurrent := truncateWithEllipsis(task.StatusText(), 40)
 						taskErr := truncateWithEllipsis(task.Error, 30)
 						taskSelected := m.selectedTaskIndex == ti
 						if taskSelected {
@@ -1524,7 +1524,7 @@ func (m *Model) setRenderItem() {
 					taskName := truncateWithEllipsis(task.Name, 22)
 					taskNode := truncateWithEllipsis(task.NodeName, 12)
 					taskDesired := truncateWithEllipsis(task.DesiredState, 13)
-					taskCurrent := truncateWithEllipsis(task.CurrentState, 40)
+					taskCurrent := truncateWithEllipsis(task.StatusText(), 40)
 					taskErr := truncateWithEllipsis(task.Error, 30)
 					taskStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
 					line += "\n" + taskStyle.Render(fmt.Sprintf("   %-22s  %-12s  %-13s  %-40s  %s", taskName, taskNode, taskDesired, taskCurrent, taskErr))

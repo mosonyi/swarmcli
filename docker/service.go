@@ -361,9 +361,16 @@ type ServiceEntry struct {
 	// container health, so the default loaders leave it empty; it is an
 	// extension point populated by a ServiceOps decorator that can reach
 	// per-node container state.
-	Health    string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	Health string
+	// PullProgress summarizes an image pull in flight for this service's tasks
+	// (e.g. "pulling · 3/12 layers · 412 MB"); "" when nothing is being pulled or
+	// the progress is unavailable. Like Health it is an extension point populated
+	// by a ServiceOps decorator that can reach the nodes performing the pull; the
+	// services view shows it in place of Status while it is set, since a service
+	// whose image is still downloading otherwise reads as a bare "active".
+	PullProgress string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 func LoadNodeServices(nodeID string) []ServiceEntry {
