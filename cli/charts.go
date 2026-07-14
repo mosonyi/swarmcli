@@ -110,6 +110,7 @@ func newStore() (*charts.RepoStore, int) {
 	if err != nil {
 		return nil, fail(err)
 	}
+	s.Warnf = errf
 	return s, -1
 }
 
@@ -686,9 +687,9 @@ func loadChart(ref, version string) (*charts.Chart, charts.ReleaseChart, int) {
 		return ch, releaseChartOf(ch), -1
 	}
 
-	store, err := charts.NewRepoStore()
-	if err != nil {
-		return nil, charts.ReleaseChart{}, fail(err)
+	store, code := newStore()
+	if code >= 0 {
+		return nil, charts.ReleaseChart{}, code
 	}
 	entry, base, err := store.Resolve(ref, version)
 	if err != nil {

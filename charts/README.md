@@ -73,6 +73,31 @@ a tarball URL (Helm repository format) — hostable on GitHub Pages/Releases, S3
 or any static host. Configured repos and cached indexes live under
 `$XDG_STATE_HOME/swarmcli/charts` (default `~/.local/state/swarmcli/charts`).
 
+### Integrity
+
+The index is fetched over HTTPS from the repository, but a chart's tarball URL may
+point anywhere — a GitHub Release asset, a CDN. The `digest` the index publishes
+for each version is what binds the two together, so swarmcli **verifies it**:
+
+| Index entry | Behaviour on `install`/`upgrade`/`template` |
+|---|---|
+| `digest: sha256:<hex>` matches the download | installs |
+| digest does **not** match | **fatal** — `digest mismatch … refusing to install` |
+| digest uses an algorithm other than sha256 | **fatal** — verification cannot be performed, so it is not skipped |
+| entry publishes **no** digest | installs, with a warning on stderr |
+
+An absent digest warns rather than fails because nothing was verified before this
+existed, so rejecting would break every repository that publishes none — including
+older and hand-written ones. Both the bare-hex form (`helm repo index`) and the
+`sha256:`-prefixed form are accepted.
+
+Chart archives are also capped at 20 MiB on the wire (the decompressed contents
+have their own limits), so a hostile or truncated download cannot exhaust memory
+before it is hashed.
+
+TLS is not sufficient on its own here: it authenticates the *host* you downloaded
+from, not that the bytes are the ones the repository index vouched for.
+
 ## Release storage
 
 Each release revision is stored as an immutable, gzipped Docker Config named
@@ -126,6 +151,9 @@ window are the protections.
   readable by anyone with Docker access. Do **not** inline secret material in
   templates — reference Docker secrets as separate objects instead. A redaction
   pass is planned before charts ship broadly.
+- **Chart integrity** is only as good as the index: a repository that publishes
+  no `digest` gets a warning, not a refusal (see [Integrity](#integrity)). Chart
+  archives are capped at 20 MiB on the wire.
 - `docker stack deploy` is used under the hood, so only the Compose-on-Swarm
   subset is supported and the `docker` CLI must be on `PATH`.
 
