@@ -316,6 +316,16 @@ func TestPullVerifiesDigest(t *testing.T) {
 		require.Equal(t, "demo", ch.Metadata.Name)
 	})
 
+	// Hex is case-insensitive, and index generators differ. Without this case,
+	// replacing strings.EqualFold with != still passes the suite — while rejecting
+	// every repository that publishes uppercase hex.
+	t.Run("uppercase hex digest matches", func(t *testing.T) {
+		s, e, base := serveChart(t, "sha256:"+strings.ToUpper(good), tgz)
+		ch, err := s.Pull(e, base)
+		require.NoError(t, err)
+		require.Equal(t, "demo", ch.Metadata.Name)
+	})
+
 	t.Run("mismatch is fatal", func(t *testing.T) {
 		s, e, base := serveChart(t, "sha256:"+strings.Repeat("0", 64), tgz)
 		ch, err := s.Pull(e, base)
