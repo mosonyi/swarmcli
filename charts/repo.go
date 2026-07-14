@@ -5,7 +5,10 @@ package charts
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,11 +28,21 @@ const httpTimeout = 30 * time.Second
 // maxIndexSize bounds an index.yaml download (defense against huge responses).
 const maxIndexSize = 16 << 20 // 16 MiB
 
+// maxChartArchiveSize bounds a chart tarball download. LoadChartArchive bounds
+// the decompressed size; this bounds the compressed transfer, so the whole body
+// can be buffered and hashed before any of it reaches the archive parser.
+const maxChartArchiveSize = 20 << 20 // 20 MiB
+
 // RepoStore persists configured repositories and caches their indexes under a
 // base directory (default: the XDG state dir, ~/.local/state/swarmcli/charts).
 type RepoStore struct {
 	dir    string
 	client *http.Client
+
+	// Warnf, when set, receives non-fatal diagnostics — currently a chart whose
+	// index entry publishes no digest, so its integrity could not be verified.
+	// nil is silent; cli wires it to stderr.
+	Warnf func(format string, a ...any)
 }
 
 // NewRepoStore returns a store rooted at the standard charts state directory.
@@ -307,7 +320,66 @@ func (s *RepoStore) Pull(entry IndexEntry, baseURL string) (*Chart, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("download chart: HTTP %s", resp.Status)
 	}
-	return LoadChartArchive(resp.Body)
+	// Buffer the whole archive before parsing it: the digest must be checked
+	// against the complete body, and a streaming parser would have consumed
+	// unverified bytes by the time the hash was known.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxChartArchiveSize+1))
+	if err != nil {
+		return nil, fmt.Errorf("download chart: %w", err)
+	}
+	if len(body) > maxChartArchiveSize {
+		return nil, fmt.Errorf("chart archive exceeds %d bytes", maxChartArchiveSize)
+	}
+	if err := verifyDigest(entry, body); err != nil {
+		if errors.Is(err, errNoDigest) {
+			s.warnf("chart %q version %s: repository index publishes no digest; integrity not verified\n",
+				entry.Name, entry.Version)
+		} else {
+			return nil, err
+		}
+	}
+	return LoadChartArchive(bytes.NewReader(body))
+}
+
+// errNoDigest reports an index entry that carries no digest, so the archive
+// cannot be verified. It is a warning rather than an error: nothing was verified
+// before this check existed, and failing closed would break every repository —
+// including hand-written and older ones — that does not publish digests.
+var errNoDigest = errors.New("no digest in index entry")
+
+// verifyDigest checks a downloaded chart archive against the digest published in
+// the repository index. The index is fetched over HTTPS from the repository, but
+// the tarball URL may point anywhere (a GitHub Release asset, a CDN) — the digest
+// is what binds the two together, so a mismatch is always fatal.
+func verifyDigest(entry IndexEntry, body []byte) error {
+	want := entry.Digest
+	if want == "" {
+		return errNoDigest
+	}
+	// Helm's `repo index` writes a bare hex sha256; this repo's generated index
+	// writes the "sha256:" prefixed form. Accept both, but reject any algorithm
+	// we cannot actually check rather than silently skipping verification.
+	if alg, hexsum, ok := strings.Cut(want, ":"); ok {
+		if alg != "sha256" {
+			return fmt.Errorf("chart %q version %s: unsupported digest algorithm %q",
+				entry.Name, entry.Version, alg)
+		}
+		want = hexsum
+	}
+	sum := sha256.Sum256(body)
+	got := hex.EncodeToString(sum[:])
+	if !strings.EqualFold(got, want) {
+		return fmt.Errorf("chart %q version %s: digest mismatch (index says %s, download is %s); "+
+			"the repository index and the chart archive disagree — refusing to install",
+			entry.Name, entry.Version, want, got)
+	}
+	return nil
+}
+
+func (s *RepoStore) warnf(format string, a ...any) {
+	if s.Warnf != nil {
+		s.Warnf(format, a...)
+	}
 }
 
 // githubPagesHint suggests the GitHub Pages URL when a user points the store at

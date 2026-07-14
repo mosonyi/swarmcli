@@ -4,6 +4,10 @@
 package charts
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -255,6 +259,99 @@ entries:
 	ch, err := s.Pull(e, base)
 	require.NoError(t, err)
 	require.Equal(t, "demo", ch.Metadata.Name)
+}
+
+// serveChart stands up a repository whose index entry for demo-0.1.0 carries the
+// given digest (verbatim — "" means the entry publishes none), and returns the
+// store plus the resolved entry and base URL, ready to Pull.
+func serveChart(t *testing.T, digest string, tgz []byte) (*RepoStore, IndexEntry, string) {
+	t.Helper()
+	digestLine := ""
+	if digest != "" {
+		digestLine = "\n      digest: " + digest
+	}
+	idx := `apiVersion: v1
+entries:
+  demo:
+    - name: demo
+      version: 0.1.0
+      urls: ["demo-0.1.0.tgz"]` + digestLine + "\n"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/index.yaml"):
+			_, _ = w.Write([]byte(idx))
+		case strings.HasSuffix(r.URL.Path, "demo-0.1.0.tgz"):
+			_, _ = w.Write(tgz)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	s := NewRepoStoreAt(t.TempDir())
+	require.NoError(t, s.Add("eldara", srv.URL))
+	e, base, err := s.Resolve("eldara/demo", "")
+	require.NoError(t, err)
+	return s, e, base
+}
+
+func TestPullVerifiesDigest(t *testing.T) {
+	tgz := []byte(packDirToTgz(t, "testdata/demo", "demo"))
+	sum := sha256.Sum256(tgz)
+	good := hex.EncodeToString(sum[:])
+
+	t.Run("prefixed digest matches", func(t *testing.T) {
+		s, e, base := serveChart(t, "sha256:"+good, tgz)
+		ch, err := s.Pull(e, base)
+		require.NoError(t, err)
+		require.Equal(t, "demo", ch.Metadata.Name)
+	})
+
+	// `helm repo index` writes a bare hex sum, with no algorithm prefix.
+	t.Run("bare hex digest matches", func(t *testing.T) {
+		s, e, base := serveChart(t, good, tgz)
+		ch, err := s.Pull(e, base)
+		require.NoError(t, err)
+		require.Equal(t, "demo", ch.Metadata.Name)
+	})
+
+	t.Run("mismatch is fatal", func(t *testing.T) {
+		s, e, base := serveChart(t, "sha256:"+strings.Repeat("0", 64), tgz)
+		ch, err := s.Pull(e, base)
+		require.ErrorContains(t, err, "digest mismatch")
+		require.Nil(t, ch)
+	})
+
+	// An algorithm we cannot check must fail closed rather than silently skip
+	// verification.
+	t.Run("unsupported algorithm is fatal", func(t *testing.T) {
+		s, e, base := serveChart(t, "sha512:"+good, tgz)
+		ch, err := s.Pull(e, base)
+		require.ErrorContains(t, err, "unsupported digest algorithm")
+		require.Nil(t, ch)
+	})
+
+	// Nothing was verified before this check existed, so an index that publishes
+	// no digest still installs — loudly.
+	t.Run("absent digest warns but installs", func(t *testing.T) {
+		s, e, base := serveChart(t, "", tgz)
+		var warnings []string
+		s.Warnf = func(format string, a ...any) {
+			warnings = append(warnings, fmt.Sprintf(format, a...))
+		}
+		ch, err := s.Pull(e, base)
+		require.NoError(t, err)
+		require.Equal(t, "demo", ch.Metadata.Name)
+		require.Len(t, warnings, 1)
+		require.Contains(t, warnings[0], "no digest")
+	})
+}
+
+func TestPullRejectsOversizedArchive(t *testing.T) {
+	s, e, base := serveChart(t, "", bytes.Repeat([]byte{0}, maxChartArchiveSize+1))
+	_, err := s.Pull(e, base)
+	require.ErrorContains(t, err, "exceeds")
 }
 
 func TestCompareVersions(t *testing.T) {
