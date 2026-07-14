@@ -143,3 +143,58 @@ func TestParseIntRejectsGarbage(t *testing.T) {
 		require.Errorf(t, err, "expected %q to be rejected", bad)
 	}
 }
+
+// --- apply (Docker-free paths only; the engine is covered in charts/) ---
+
+func TestChartsApplyRequiresExactlyOneFile(t *testing.T) {
+	var code int
+	capture(t, func() { code = chartsApply(nil) })
+	require.Equal(t, 2, code, "no release file")
+
+	capture(t, func() { code = chartsApply([]string{"-f", "a.yaml", "-f", "b.yaml"}) })
+	require.Equal(t, 2, code, "two release files")
+}
+
+func TestChartsApplyMissingFile(t *testing.T) {
+	var code int
+	_, e := capture(t, func() { code = chartsApply([]string{"-f", filepath.Join(t.TempDir(), "nope.yaml")}) })
+	require.Equal(t, 1, code)
+	require.Contains(t, e, "nope.yaml")
+}
+
+// A typo in a file an automated updater rewrites must fail loudly and name the key.
+//
+//nolint:misspell // "verison" is a deliberate typo — it is what the test rejects.
+func TestChartsApplyRejectsUnknownKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rel.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("releases:\n  - name: a\n    chart: r/c\n    verison: \"1\"\n"), 0o600))
+
+	var code int
+	_, e := capture(t, func() { code = chartsApply([]string{"-f", path}) })
+	require.Equal(t, 1, code)
+	require.Contains(t, e, "verison")
+}
+
+// The charts flag set is global, so every subcommand parses every flag. apply must
+// REJECT the ones it does not honour rather than silently ignoring them: its whole
+// contract is that the file is the only source of truth.
+func TestChartsApplyRejectsUnsupportedFlags(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rel.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("releases:\n  - {name: a, chart: r/c, version: \"1\"}\n"), 0o600))
+
+	for _, flag := range [][]string{
+		{"--set", "a=1"},
+		{"--version", "1.0.0"},
+		{"--reuse-values"},
+		{"--install"},
+		{"--purge-volumes"},
+	} {
+		t.Run(flag[0], func(t *testing.T) {
+			var code int
+			_, e := capture(t, func() { code = chartsApply(append([]string{"-f", path}, flag...)) })
+			require.Equal(t, 2, code)
+			require.Contains(t, e, flag[0])
+			require.Contains(t, e, "only source of truth")
+		})
+	}
+}

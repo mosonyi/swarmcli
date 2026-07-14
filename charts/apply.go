@@ -1,0 +1,276 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright © 2026 Eldara Tech
+
+package charts
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Action is what apply will do to one release.
+type Action string
+
+const (
+	ActionInstall   Action = "install"
+	ActionUpgrade   Action = "upgrade"
+	ActionUnchanged Action = "unchanged"
+)
+
+// ReleasePlan is the computed desired state of one release.
+type ReleasePlan struct {
+	Name   string
+	Ref    string
+	Action Action
+	// FromVersion is the currently deployed chart version, empty for an install.
+	FromVersion string
+	ToVersion   string
+
+	Chart        ReleaseChart
+	Values       map[string]any
+	Manifest     string
+	Requirements *Requirements
+	// CurrentManifest is the deployed manifest, for diffing. Empty for an install.
+	CurrentManifest string
+}
+
+// Plan is what apply would do to the whole swarm.
+type Plan struct {
+	// Releases, in file order.
+	Releases []ReleasePlan
+	// Unmanaged names releases that exist on the swarm but are absent from the
+	// file. Apply never touches them — see Engine.Apply.
+	Unmanaged []string
+}
+
+// Counts summarises a plan.
+func (p *Plan) Counts() (install, upgrade, unchanged int) {
+	for _, r := range p.Releases {
+		switch r.Action {
+		case ActionInstall:
+			install++
+		case ActionUpgrade:
+			upgrade++
+		case ActionUnchanged:
+			unchanged++
+		}
+	}
+	return install, upgrade, unchanged
+}
+
+// PlanApply computes what Apply would do, without writing anything.
+//
+// Every release is resolved, merged, schema-validated and rendered BEFORE any of
+// them is deployed. A bad value in the third release therefore aborts the whole
+// apply instead of leaving the swarm half-converged — and `--dry-run` is just
+// "stop after planning".
+func (e *Engine) PlanApply(ctx context.Context, rf *ReleaseFile, src ChartSource) (*Plan, error) {
+	current, err := e.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	deployed := make(map[string]Release, len(current))
+	for _, rel := range current {
+		deployed[rel.Name] = rel
+	}
+
+	plan := &Plan{}
+	managed := map[string]bool{}
+
+	for _, spec := range rf.Releases {
+		managed[spec.Name] = true
+
+		rp, err := e.planRelease(rf, spec, src, deployed)
+		if err != nil {
+			return nil, err
+		}
+		plan.Releases = append(plan.Releases, rp)
+	}
+
+	for _, rel := range current {
+		if !managed[rel.Name] {
+			plan.Unmanaged = append(plan.Unmanaged, rel.Name)
+		}
+	}
+	return plan, nil
+}
+
+func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource, deployed map[string]Release) (ReleasePlan, error) {
+	ref := rf.ChartRef(spec)
+
+	ch, err := src.Load(ref, spec.Version)
+	if err != nil {
+		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
+	}
+
+	files, err := readFiles(rf.ValuesPaths(spec))
+	if err != nil {
+		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
+	}
+	// No --set equivalent: the file is the only source of truth, so a value that
+	// is not in it cannot influence what gets deployed.
+	values, err := MergeValues(ch.Values, files, nil)
+	if err != nil {
+		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
+	}
+	if err := ValidateValues(ch.Schema, values); err != nil {
+		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
+	}
+
+	rc := ReleaseChartOf(ch)
+	rctx := RenderContext{
+		Values:  values,
+		Release: ReleaseMeta{Name: spec.Name, Namespace: spec.Name, Revision: 1},
+		Chart:   ChartMeta{Name: rc.Name, Version: rc.Version, AppVersion: rc.AppVersion},
+	}
+	manifest, err := Render(ch, rctx)
+	if err != nil {
+		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
+	}
+	req, err := RenderRequirements(ch, rctx)
+	if err != nil {
+		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
+	}
+
+	rp := ReleasePlan{
+		Name:         spec.Name,
+		Ref:          spec.Chart,
+		ToVersion:    rc.Version,
+		Chart:        rc,
+		Values:       values,
+		Manifest:     manifest,
+		Requirements: req,
+	}
+
+	cur, ok := deployed[spec.Name]
+	switch {
+	case !ok:
+		rp.Action = ActionInstall
+	default:
+		rp.FromVersion = cur.Chart.Version
+		rp.CurrentManifest = cur.Manifest
+		same, err := unchanged(&cur, rc, values, manifest)
+		if err != nil {
+			return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
+		}
+		if same {
+			rp.Action = ActionUnchanged
+		} else {
+			rp.Action = ActionUpgrade
+		}
+	}
+	return rp, nil
+}
+
+// ApplyResult is what Apply actually did to one release.
+type ApplyResult struct {
+	Name     string
+	Action   Action
+	Revision int // 0 when unchanged (nothing was recorded)
+}
+
+// Apply converges the swarm to a plan, in file order.
+//
+// It never deletes. A release on the swarm that is absent from the file is
+// reported (Plan.Unmanaged) and left alone: a Release carries no marker saying
+// which manifest produced it, so a prune could not distinguish a release owned by
+// a second manifest, or one installed by hand, from a genuinely obsolete one.
+//
+// Unchanged releases are skipped entirely. That is not an optimisation but a
+// requirement: history is one Docker Config per revision, so an apply that
+// recorded a revision even when nothing changed would grow the swarm's config
+// store on every CI run, forever.
+//
+// It stops at the first failure and returns the results completed so far
+// alongside the error, so a partial apply still reports what it did. Re-running
+// is safe: the successful releases become no-ops.
+func (e *Engine) Apply(ctx context.Context, plan *Plan, opts InstallOptions) ([]ApplyResult, error) {
+	var results []ApplyResult
+	for _, rp := range plan.Releases {
+		if rp.Action == ActionUnchanged {
+			results = append(results, ApplyResult{Name: rp.Name, Action: ActionUnchanged})
+			continue
+		}
+		o := opts
+		o.Requirements = rp.Requirements
+		// Always Upgrade with Install set, never Install: a release that appeared
+		// between planning and applying then upgrades cleanly instead of failing
+		// with "already exists".
+		o.Install = true
+		rel, err := e.Upgrade(ctx, rp.Name, rp.Chart, rp.Values, rp.Manifest, o)
+		if err != nil {
+			return results, fmt.Errorf("release %q: %w", rp.Name, err)
+		}
+		results = append(results, ApplyResult{Name: rp.Name, Action: rp.Action, Revision: rel.Revision})
+	}
+	return results, nil
+}
+
+// unchanged reports whether the current revision already encodes the desired
+// state: same chart, same rendered manifest, same values.
+func unchanged(cur *Release, chart ReleaseChart, values map[string]any, manifest string) (bool, error) {
+	if cur == nil || cur.Status == StatusUninstalled {
+		return false, nil
+	}
+	if cur.Chart.Name != chart.Name || cur.Chart.Version != chart.Version {
+		return false, nil
+	}
+	if cur.Manifest != manifest {
+		return false, nil
+	}
+	return sameValues(cur.Values, values)
+}
+
+// sameValues compares a freshly merged values map against one decoded from a
+// stored release.
+//
+// reflect.DeepEqual is wrong here. The stored map came back through YAML, so a
+// value written as 1.0 may decode as int(1) where the in-memory merge holds
+// float64(1.0). DeepEqual would call those different, every release would look
+// changed, and apply would write a new revision on every single run — the exact
+// failure this function exists to prevent. Round-tripping both through the same
+// encoder erases the type skew, and yaml.Marshal sorts map keys, so the result is
+// canonical and order-independent. It is also precisely the encoding that gets
+// persisted, so this compares what is actually stored.
+func sameValues(a, b map[string]any) (bool, error) {
+	ca, err := canonicalValues(a)
+	if err != nil {
+		return false, err
+	}
+	cb, err := canonicalValues(b)
+	if err != nil {
+		return false, err
+	}
+	return ca == cb, nil
+}
+
+func canonicalValues(v map[string]any) (string, error) {
+	first, err := yaml.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	var back map[string]any
+	if err := yaml.Unmarshal(first, &back); err != nil {
+		return "", err
+	}
+	second, err := yaml.Marshal(back)
+	if err != nil {
+		return "", err
+	}
+	return string(second), nil
+}
+
+func readFiles(paths []string) ([][]byte, error) {
+	var out [][]byte
+	for _, p := range paths {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return nil, fmt.Errorf("read values file %q: %w", p, err)
+		}
+		out = append(out, b)
+	}
+	return out, nil
+}

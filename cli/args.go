@@ -23,6 +23,7 @@ type flags struct {
 	purge        bool          // --purge-volumes
 	install      bool          // --install (upgrade)
 	reuseValues  bool          // --reuse-values (upgrade)
+	diff         bool          // --diff (apply): show each changed release's manifest diff
 	revision     int           // --revision (get)
 	timeout      time.Duration // --timeout
 	historyMax   int           // --history-max
@@ -109,6 +110,8 @@ func parseArgs(args []string) ([]string, flags, error) {
 			f.revision = n
 		case "--reuse-values":
 			f.reuseValues = true
+		case "--diff":
+			f.diff = true
 		case "--dry-run":
 			f.dryRun = true
 		case "--wait":

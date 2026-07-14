@@ -42,6 +42,25 @@ Releases:
   list                        List releases
   status <release>            Show release status and services
 
+GitOps:
+  apply -f <file>             Converge the swarm to a declarative release file
+  outdated                    Show releases with a newer chart version available
+
+A release file pins each release to a chart version, so it is reproducible and an
+automated updater (e.g. Renovate) has something concrete to bump. apply installs
+what is missing, upgrades what changed, and skips what already matches. It never
+removes a release the file does not mention — it reports those instead.
+
+  # swarmcli-release.yaml
+  repositories:
+    - name: swarmcli-charts
+      url: https://eldara-tech.github.io/swarmcli-charts
+  releases:
+    - name: edge
+      chart: swarmcli-charts/traefik
+      version: "0.1.1"
+      values: [./traefik.yaml]     # relative to the release file, not the CWD
+
 A chart may declare its external networks/secrets/configs in requirements.yaml:
 install pre-flights them (auto-creating networks marked autoCreate, validating
 the rest) and uninstall reports any auto-created networks it leaves in place.
@@ -59,6 +78,7 @@ Common options:
       --reuse-values    upgrade/diff: layer overrides on previous values
       --revision <n>    get: select a specific revision
       --purge-volumes   uninstall: also remove the release's volumes
+      --diff            apply: show each changed release's manifest diff (implies --dry-run)
 `
 
 // chartsMain dispatches `swarmcli charts ...`.
@@ -100,6 +120,10 @@ func chartsMain(args []string) int {
 		return chartsList(rest)
 	case "status":
 		return chartsStatus(rest)
+	case "apply":
+		return chartsApply(rest)
+	case "outdated":
+		return chartsOutdated(rest)
 	default:
 		return usageErr(fmt.Sprintf("unknown charts command %q\n\n%s", sub, chartsUsage))
 	}
@@ -669,49 +693,18 @@ func chartsStatus(args []string) int {
 
 // loadChart resolves a chart reference: an existing local directory or .tgz
 // path, otherwise a "repo/chart" reference pulled from a configured repository.
+// The resolution itself lives in charts.ChartSource, so apply and the imperative
+// commands cannot drift apart.
 func loadChart(ref, version string) (*charts.Chart, charts.ReleaseChart, int) {
-	if info, err := os.Stat(ref); err == nil {
-		var (
-			ch   *charts.Chart
-			lerr error
-		)
-		if info.IsDir() {
-			ch, lerr = charts.LoadChartDir(ref)
-		} else {
-			ch, lerr = loadArchivePath(ref)
-		}
-		if lerr != nil {
-			return nil, charts.ReleaseChart{}, fail(lerr)
-		}
-		return ch, releaseChartOf(ch), -1
+	store, code := newStore()
+	if code >= 0 {
+		return nil, charts.ReleaseChart{}, code
 	}
-
-	store, err := charts.NewRepoStore()
+	ch, err := charts.NewChartSource(store).Load(ref, version)
 	if err != nil {
 		return nil, charts.ReleaseChart{}, fail(err)
 	}
-	entry, base, err := store.Resolve(ref, version)
-	if err != nil {
-		return nil, charts.ReleaseChart{}, fail(err)
-	}
-	ch, err := store.Pull(entry, base)
-	if err != nil {
-		return nil, charts.ReleaseChart{}, fail(err)
-	}
-	return ch, releaseChartOf(ch), -1
-}
-
-func loadArchivePath(path string) (*charts.Chart, error) {
-	fh, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = fh.Close() }()
-	return charts.LoadChartArchive(fh)
-}
-
-func releaseChartOf(ch *charts.Chart) charts.ReleaseChart {
-	return charts.ReleaseChart{Name: ch.Metadata.Name, Version: ch.Metadata.Version, AppVersion: ch.Metadata.AppVersion}
+	return ch, charts.ReleaseChartOf(ch), -1
 }
 
 func readValuesFiles(paths []string) ([][]byte, error) {
