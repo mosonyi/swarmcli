@@ -62,7 +62,7 @@ swarmcli
 - **Instant Logs**: No more `docker service logs -f`. Just press `l` on any service.
 - **Secrets & Configs**: Manage, rotate, and — with [Business Edition](#business-edition) — **reveal** secrets for debugging.
 - **Management Actions**: Scale, restart, remove, and update services with single keystrokes.
-- **Chart Package Manager**: Helm-like packaging for Swarm — install, upgrade, roll back, and diff releases from chart repositories via `swarmcli charts`.
+- **Chart Package Manager**: Helm-like packaging for Swarm — install, upgrade, roll back, and diff releases from chart repositories via `swarmcli charts`, or converge the swarm to a committed release file with `swarmcli charts apply`.
 - **Zero Config**: Works out-of-the-box with your local Docker engine or remote via SSH/Contexts.
 - **Lightweight**: Built with Go. Single static binary (< 20MB). Zero dependencies.
 
@@ -93,7 +93,17 @@ swarmcli charts uninstall <release>               # remove a release
 swarmcli charts history <release>                 # revision history
 swarmcli charts list                              # list releases
 swarmcli charts status <release>                  # release status and services
+
+# GitOps — converge the swarm to a file you commit
+swarmcli charts apply -f swarmcli-release.yaml    # install/upgrade/skip to match the file
+swarmcli charts apply -f swarmcli-release.yaml --diff   # preview, never deploys
+swarmcli charts outdated                          # releases with a newer chart available
 ```
+
+`apply` reads a release file pinning each release to a chart version, so the
+deployed state is reproducible and an automated updater (e.g. Renovate) has
+something concrete to bump. It never removes a release the file does not mention —
+it reports those instead. See [charts/README.md](charts/README.md#declarative-releases-gitops).
 
 Run `swarmcli charts --help` for the full command and option reference.
 

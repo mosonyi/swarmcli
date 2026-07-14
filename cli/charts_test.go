@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"swarmcli/charts"
 )
 
 // capture redirects stdout/stderr to separate buffers for the duration of fn
@@ -142,4 +144,108 @@ func TestParseIntRejectsGarbage(t *testing.T) {
 		_, err := parseInt(bad)
 		require.Errorf(t, err, "expected %q to be rejected", bad)
 	}
+}
+
+// --- apply (Docker-free paths only; the engine is covered in charts/) ---
+
+func TestChartsApplyRequiresExactlyOneFile(t *testing.T) {
+	var code int
+	capture(t, func() { code = chartsApply(nil) })
+	require.Equal(t, 2, code, "no release file")
+
+	capture(t, func() { code = chartsApply([]string{"-f", "a.yaml", "-f", "b.yaml"}) })
+	require.Equal(t, 2, code, "two release files")
+}
+
+func TestChartsApplyMissingFile(t *testing.T) {
+	var code int
+	_, e := capture(t, func() { code = chartsApply([]string{"-f", filepath.Join(t.TempDir(), "nope.yaml")}) })
+	require.Equal(t, 1, code)
+	require.Contains(t, e, "nope.yaml")
+}
+
+// A typo in a file an automated updater rewrites must fail loudly and name the key.
+//
+//nolint:misspell // "verison" is a deliberate typo — it is what the test rejects.
+func TestChartsApplyRejectsUnknownKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rel.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("releases:\n  - name: a\n    chart: r/c\n    verison: \"1\"\n"), 0o600))
+
+	var code int
+	_, e := capture(t, func() { code = chartsApply([]string{"-f", path}) })
+	require.Equal(t, 1, code)
+	require.Contains(t, e, "verison")
+}
+
+// The charts flag set is global, so every subcommand parses every flag. apply must
+// REJECT the ones it does not honour rather than silently ignoring them: its whole
+// contract is that the file is the only source of truth.
+func TestChartsApplyRejectsUnsupportedFlags(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rel.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("releases:\n  - {name: a, chart: r/c, version: \"1\"}\n"), 0o600))
+
+	for _, flag := range [][]string{
+		{"--set", "a=1"},
+		{"--version", "1.0.0"},
+		{"--reuse-values"},
+		{"--install"},
+		{"--purge-volumes"},
+	} {
+		t.Run(flag[0], func(t *testing.T) {
+			var code int
+			_, e := capture(t, func() { code = chartsApply(append([]string{"-f", path}, flag...)) })
+			require.Equal(t, 2, code)
+			require.Contains(t, e, flag[0])
+			require.Contains(t, e, "only source of truth")
+		})
+	}
+}
+
+func TestPrintPlan(t *testing.T) {
+	plan := &charts.Plan{Releases: []charts.ReleasePlan{
+		{Name: "hello", Ref: "r/whoami", Action: charts.ActionInstall, ToVersion: "0.1.8"},
+		{Name: "edge", Ref: "r/traefik", Action: charts.ActionUpgrade, FromVersion: "0.1.0", ToVersion: "0.1.1"},
+		{Name: "cache", Ref: "r/redis", Action: charts.ActionUnchanged, FromVersion: "0.1.1", ToVersion: "0.1.1"},
+	}}
+	o, _ := capture(t, func() { printPlan(plan, false) })
+
+	require.Contains(t, o, "RELEASE")
+	require.Contains(t, o, "hello")
+	require.Contains(t, o, "install")
+	require.Contains(t, o, "upgrade")
+	require.Contains(t, o, "unchanged")
+	// An install has no prior version; it must render as "-", not empty.
+	require.Regexp(t, `hello\s+r/whoami\s+-\s+0\.1\.8\s+install`, o)
+	require.Contains(t, o, "1 to install, 1 to upgrade, 1 unchanged")
+}
+
+// --diff shows a manifest diff for changed releases and skips unchanged ones.
+func TestPrintPlanWithDiff(t *testing.T) {
+	plan := &charts.Plan{Releases: []charts.ReleasePlan{
+		{
+			Name: "edge", Ref: "r/traefik", Action: charts.ActionUpgrade,
+			FromVersion: "0.1.0", ToVersion: "0.1.1",
+			CurrentManifest: "services:\n  a: 1\n", Manifest: "services:\n  a: 2\n",
+		},
+		{Name: "cache", Ref: "r/redis", Action: charts.ActionUnchanged, ToVersion: "0.1.1"},
+	}}
+	o, _ := capture(t, func() { printPlan(plan, true) })
+
+	require.Contains(t, o, "--- edge (upgrade) ---")
+	require.NotContains(t, o, "--- cache", "an unchanged release has nothing to diff")
+}
+
+// apply never deletes; it reports what it left alone, with the command to remove it.
+func TestReportUnmanaged(t *testing.T) {
+	o, _ := capture(t, func() {
+		reportUnmanaged(&charts.Plan{Unmanaged: []string{"legacy", "scratch"}})
+	})
+	require.Contains(t, o, "2 release(s) exist on this swarm but are not in the release file")
+	require.Contains(t, o, "swarmcli charts uninstall legacy")
+	require.Contains(t, o, "swarmcli charts uninstall scratch")
+
+	// Nothing unmanaged must print nothing at all — not a stray header on every
+	// clean apply.
+	o, _ = capture(t, func() { reportUnmanaged(&charts.Plan{}) })
+	require.Empty(t, o)
 }

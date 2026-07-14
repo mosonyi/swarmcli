@@ -39,9 +39,11 @@ type RepoStore struct {
 	dir    string
 	client *http.Client
 
-	// Warnf, when set, receives non-fatal diagnostics — currently a chart whose
-	// index entry publishes no digest, so its integrity could not be verified.
-	// nil is silent; cli wires it to stderr.
+	// Warnf, when set, receives non-fatal diagnostics: a chart whose index entry
+	// publishes no digest, so its integrity could not be verified, and a
+	// repository whose index could not be refreshed, so a cached one is in use.
+	// charts is a library with no output of its own; nil is silent, and cli wires
+	// this to stderr.
 	Warnf func(format string, a ...any)
 }
 
@@ -204,6 +206,69 @@ func (s *RepoStore) LoadIndex(name string) (*Index, error) {
 		return nil, fmt.Errorf("parse index for %q: %w", name, err)
 	}
 	return &idx, nil
+}
+
+// Indexes returns the cached index of every configured repository, keyed by
+// repository name. Repositories with no cached index are skipped, as in Search.
+func (s *RepoStore) Indexes() (map[string]*Index, error) {
+	repos, err := s.List()
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]*Index, len(repos))
+	for _, r := range repos {
+		idx, err := s.LoadIndex(r.Name)
+		if err != nil {
+			continue
+		}
+		out[r.Name] = idx
+	}
+	return out, nil
+}
+
+// EnsureRepos makes the repositories a release manifest declares available,
+// adding those that are absent and refreshing the rest. It exists so that
+// `charts apply -f file` is the only command a CI job needs to run.
+//
+// What it writes is a name-to-URL mapping plus a cached index — a cache, not user
+// data. The one thing it will not do is silently repoint an existing repository
+// at a different origin.
+func (s *RepoStore) EnsureRepos(specs []RepoSpec) error {
+	if len(specs) == 0 {
+		return nil
+	}
+	repos, err := s.List()
+	if err != nil {
+		return err
+	}
+	existing := make(map[string]string, len(repos))
+	for _, r := range repos {
+		existing[r.Name] = r.URL
+	}
+
+	for _, spec := range specs {
+		want := strings.TrimRight(spec.URL, "/")
+		have, ok := existing[spec.Name]
+		switch {
+		case !ok:
+			if err := s.Add(spec.Name, want); err != nil {
+				return err
+			}
+		case have != want:
+			return fmt.Errorf("repository %q is already configured with a different URL (%s); "+
+				"refusing to repoint it — run `swarmcli charts repo remove %s` first if that is intended",
+				spec.Name, have, spec.Name)
+		default:
+			// Refreshing is best-effort. Every version in the manifest is pinned,
+			// so a stale cache can only fail to resolve a chart — it can never
+			// resolve one to the wrong version. Failing the whole apply because
+			// the network blipped would be worse than proceeding offline.
+			if _, _, err := s.Update(spec.Name); err != nil {
+				s.warnf("could not refresh repository %q (%v); using the cached index\n", spec.Name, err)
+			}
+		}
+	}
+	return nil
 }
 
 // ChartHit is a search result: one chart version in a repository.
