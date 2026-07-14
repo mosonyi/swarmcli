@@ -10,6 +10,7 @@ import (
 	"swarmcli/views/confirmdialog"
 	"swarmcli/views/helpbar"
 	"swarmcli/views/searchinput"
+	"swarmcli/views/unlockdialog"
 	"swarmcli/views/view"
 	"swarmcli/views/viewstack"
 
@@ -50,6 +51,26 @@ func (v *searchingStubView) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
+// chromelessStubView owns the whole terminal: it records the keys and window
+// sizes the app hands it, and renders a recognizable sentinel.
+type chromelessStubView struct {
+	stubView
+	receivedKeys  []tea.KeyMsg
+	receivedSizes []tea.WindowSizeMsg
+}
+
+func (v *chromelessStubView) Chromeless() bool { return true }
+func (v *chromelessStubView) View() string     { return "CHROMELESS" }
+func (v *chromelessStubView) Update(msg tea.Msg) tea.Cmd {
+	switch m := msg.(type) {
+	case tea.KeyMsg:
+		v.receivedKeys = append(v.receivedKeys, m)
+	case tea.WindowSizeMsg:
+		v.receivedSizes = append(v.receivedSizes, m)
+	}
+	return nil
+}
+
 func newTestAppModel(cv view.View) *Model {
 	return &Model{
 		viewport:       viewport.New(200, 50),
@@ -58,6 +79,8 @@ func newTestAppModel(cv view.View) *Model {
 		commandInput:   commandinput.New(),
 		searchInput:    searchinput.New(),
 		errorDialog:    confirmdialog.New(200, 50),
+		unlockDialog:   unlockdialog.New(200, 50),
+		updateDialog:   confirmdialog.New(200, 50),
 		terminalWidth:  200,
 		terminalHeight: 50,
 	}

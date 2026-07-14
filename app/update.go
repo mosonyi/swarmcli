@@ -149,6 +149,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleKey(msg)
 		}
 
+		// A chromeless view leaves no room for the ":" command bar or the "/"
+		// search bar, and an unrendered command bar would silently swallow every
+		// subsequent key. Skip straight to the key handler.
+		if view.IsChromeless(m.currentView) {
+			return m.handleKey(msg)
+		}
+
 		if msg.String() == ":" {
 			// If current view is capturing input, don't intercept
 			if viewWithDialog, ok := m.currentView.(interface {
@@ -410,8 +417,6 @@ func (m *Model) delegateToCurrentView(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) updateForResize(msg tea.WindowSizeMsg) tea.Cmd {
-	var cmd tea.Cmd
-
 	// Store terminal dimensions
 	m.terminalWidth = msg.Width
 	m.terminalHeight = msg.Height
@@ -454,9 +459,21 @@ func (m *Model) updateForResize(msg tea.WindowSizeMsg) tea.Cmd {
 	// keep header fixed) and reserve 3 lines by reducing usableHeight above.
 	m.viewport.YPosition = systeminfoview.Height
 
-	cmd = handleViewResize(m.currentView, usableWidth, usableHeight, isFullscreen)
-	return cmd
+	return m.resizeCurrentView()
 }
+
+// resizeView hands v a WindowSizeMsg sized for the chrome it is actually
+// rendered with: a chromeless view gets the raw terminal, a framed view gets the
+// viewport minus help bar, frame and breadcrumb bar. m.viewport itself always
+// stays chrome-sized, so views further down the stack are restored correctly.
+func (m *Model) resizeView(v view.View) tea.Cmd {
+	if view.IsChromeless(v) {
+		return v.Update(tea.WindowSizeMsg{Width: m.terminalWidth, Height: m.terminalHeight})
+	}
+	return handleViewResize(v, m.viewport.Width, m.viewport.Height, m.fullscreen)
+}
+
+func (m *Model) resizeCurrentView() tea.Cmd { return m.resizeView(m.currentView) }
 
 func handleViewResize(view view.View, width, height int, isFullscreen bool) tea.Cmd {
 	var adjustedHeight int
@@ -511,8 +528,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	// Check if current view is in fullscreen or search mode before handling global esc
 	if msg.Type == tea.KeyEsc || msg.String() == "esc" {
-		// If in fullscreen, exit fullscreen first
-		if m.fullscreen {
+		// If in fullscreen, exit fullscreen first. A chromeless view hides the
+		// fullscreen chrome anyway, so clearing the flag here would be invisible
+		// and would cost the user a second Esc to leave the view.
+		if m.fullscreen && !view.IsChromeless(m.currentView) {
 			m.fullscreen = false
 			cmd := m.updateForResize(tea.WindowSizeMsg{
 				Width:  m.terminalWidth,
@@ -609,8 +628,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	// Global fullscreen toggle
-	if msg.String() == "f" {
+	// Global fullscreen toggle. A chromeless view is already borderless, so the
+	// toggle has nothing to hide — pass "f" through to the view instead.
+	if msg.String() == "f" && !view.IsChromeless(m.currentView) {
 		// Don't intercept if view is searching
 		if searchView, ok := m.currentView.(interface{ IsSearching() bool }); ok && searchView.IsSearching() {
 			cmd := m.currentView.Update(msg)
@@ -652,7 +672,7 @@ func (m *Model) goBack() tea.Cmd {
 	enterCmd := m.currentView.OnEnter()
 
 	// Optionally notify the view about terminal size again
-	resizeCmd := handleViewResize(m.currentView, m.viewport.Width, m.viewport.Height, false)
+	resizeCmd := m.resizeCurrentView()
 
 	// Execute all lifecycle commands
 	return tea.Batch(exitCmd, enterCmd, resizeCmd)

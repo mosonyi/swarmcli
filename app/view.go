@@ -13,6 +13,13 @@ import (
 )
 
 func (m *Model) View() string {
+	// Chromeless views own the whole terminal and render themselves; only the
+	// app-level overlays composite on top.
+	if view.IsChromeless(m.currentView) {
+		out := m.currentView.View()
+		return m.overlayStartup(m.overlayUnlock(m.overlayAppError(m.overlayUpdate(out))))
+	}
+
 	// Fullscreen mode: show only the current view (no helpbar, no stackbar)
 	if m.fullscreen {
 		title := m.currentView.FrameTitle()

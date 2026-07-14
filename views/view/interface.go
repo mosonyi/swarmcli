@@ -37,3 +37,30 @@ type Filterable interface {
 	ApplySearchQuery(query string)
 	ClearSearchQuery()
 }
+
+// Chromeless is an opt-in interface for views that own the entire terminal.
+// When Chromeless() reports true, the app renders View() verbatim — no help
+// bar, no view frame, no breadcrumb bar — and hands the view the full terminal
+// size instead of the chrome-reduced viewport. App-level overlays (startup,
+// unlock, error, update) still composite on top. The ":" command bar and "/"
+// search bar are suppressed, as there is nowhere to draw them.
+//
+// Two contracts, both load-bearing:
+//
+// The value must be constant for the view's lifetime. It selects both the
+// chrome and the size handed to the view, and there is no re-resize hook on the
+// render path, so flipping it mid-life leaves the view sized for chrome that is
+// no longer drawn.
+//
+// View() must emit exactly terminalHeight lines with no trailing newline. Bubble
+// Tea drops lines from the *top* when the frame is taller than the terminal, so
+// a single extra line silently eats the view's first row.
+type Chromeless interface {
+	Chromeless() bool
+}
+
+// IsChromeless reports whether v owns the full terminal.
+func IsChromeless(v View) bool {
+	c, ok := v.(Chromeless)
+	return ok && c.Chromeless()
+}

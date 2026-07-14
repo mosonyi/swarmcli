@@ -137,11 +137,14 @@ func (m *Model) switchToView(name string, data any) tea.Cmd {
 	exitCmd := m.currentView.OnExit()
 
 	newView, loadCmd := factory(m.deps, m.viewport.Width, m.viewport.Height, data)
-	resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height, false)
 
 	// Push current view onto stack
 	m.viewStack.Push(m.currentView)
 	m.currentView = newView
+
+	// Size the view for the chrome it will actually be rendered with. Delivered
+	// synchronously, so the view is correctly sized before loadCmd runs.
+	resizeCmd := m.resizeView(newView)
 
 	// Enter hook for new view
 	enterCmd := newView.OnEnter()
@@ -159,10 +162,11 @@ func (m *Model) replaceView(name string, data any) tea.Cmd {
 	exitCmd := m.currentView.OnExit()
 
 	newView, loadCmd := factory(m.deps, m.viewport.Width, m.viewport.Height, data)
-	resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height, false)
 
 	m.currentView = newView
 	m.viewStack.Reset()
+
+	resizeCmd := m.resizeView(newView)
 
 	// Run enter hook on new view
 	enterCmd := newView.OnEnter()
