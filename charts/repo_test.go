@@ -4,6 +4,7 @@
 package charts
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -261,4 +262,148 @@ func TestCompareVersions(t *testing.T) {
 	require.Equal(t, 1, compareVersions("0.2.0", "0.1.0"))
 	require.Equal(t, -1, compareVersions("1.0.0", "1.0.1"))
 	require.Equal(t, 1, compareVersions("v3.5.0", "3.4.0"))
+}
+
+// --- EnsureRepos: the gate every `charts apply` passes through ---
+
+// newIndexServer serves a mutable index and reports whether it is currently up.
+func newIndexServer(t *testing.T, body *string, up *bool) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if *up && strings.HasSuffix(r.URL.Path, "/index.yaml") {
+			_, _ = w.Write([]byte(*body))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestEnsureReposAddsAbsentRepository(t *testing.T) {
+	body := "apiVersion: v1\nentries:\n  demo:\n    - {name: demo, version: 0.1.0, urls: [\"d.tgz\"]}\n"
+	up := true
+	srv := newIndexServer(t, &body, &up)
+
+	s := NewRepoStoreAt(t.TempDir())
+	require.NoError(t, s.EnsureRepos([]RepoSpec{{Name: "eldara", URL: srv.URL}}))
+
+	repos, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, repos, 1)
+	// The index must actually be cached, not merely the name recorded — apply
+	// resolves against the cache immediately afterwards.
+	idx, err := s.LoadIndex("eldara")
+	require.NoError(t, err)
+	require.Contains(t, idx.Entries, "demo")
+}
+
+// A trailing slash in the manifest's URL must take the refresh branch, not the
+// "different URL" hard error. Add normalises with TrimRight, so without this the
+// refusal would fire on every manifest whose url ends in "/".
+func TestEnsureReposRefreshesSameRepositoryAndToleratesTrailingSlash(t *testing.T) {
+	body := "apiVersion: v1\nentries:\n  demo:\n    - {name: demo, version: 0.1.0, urls: [\"d.tgz\"]}\n"
+	up := true
+	srv := newIndexServer(t, &body, &up)
+
+	s := NewRepoStoreAt(t.TempDir())
+	require.NoError(t, s.Add("eldara", srv.URL))
+
+	body = "apiVersion: v1\nentries:\n  demo:\n    - {name: demo, version: 0.2.0, urls: [\"d.tgz\"]}\n"
+	require.NoError(t, s.EnsureRepos([]RepoSpec{{Name: "eldara", URL: srv.URL + "/"}}))
+
+	idx, err := s.LoadIndex("eldara")
+	require.NoError(t, err)
+	require.Equal(t, "0.2.0", idx.Entries["demo"][0].Version, "the index must have been refreshed")
+}
+
+// Never silently repoint an existing repository at a different origin: that would
+// let a manifest swap out where every one of its charts comes from.
+func TestEnsureReposRefusesToRepointADifferentURL(t *testing.T) {
+	body := "apiVersion: v1\nentries: {}\n"
+	up := true
+	srvA := newIndexServer(t, &body, &up)
+	srvB := newIndexServer(t, &body, &up)
+
+	s := NewRepoStoreAt(t.TempDir())
+	require.NoError(t, s.Add("eldara", srvA.URL))
+
+	err := s.EnsureRepos([]RepoSpec{{Name: "eldara", URL: srvB.URL}})
+	require.ErrorContains(t, err, "different URL")
+
+	// The refusal is the point: assert the store was not repointed.
+	repos, lerr := s.List()
+	require.NoError(t, lerr)
+	require.Equal(t, srvA.URL, repos[0].URL)
+}
+
+// A network blip must not fail the apply. Every version in a manifest is pinned,
+// so a stale cache can only fail to resolve a chart — never resolve it to the
+// wrong one. This is the "CI keeps working when the network wobbles" contract.
+func TestEnsureReposWarnsAndUsesCacheWhenRefreshFails(t *testing.T) {
+	body := "apiVersion: v1\nentries:\n  demo:\n    - {name: demo, version: 0.1.0, urls: [\"d.tgz\"]}\n"
+	up := true
+	srv := newIndexServer(t, &body, &up)
+
+	s := NewRepoStoreAt(t.TempDir())
+	require.NoError(t, s.Add("eldara", srv.URL))
+
+	var warnings []string
+	s.Warnf = func(format string, a ...any) { warnings = append(warnings, fmt.Sprintf(format, a...)) }
+
+	up = false // the repository goes away
+	require.NoError(t, s.EnsureRepos([]RepoSpec{{Name: "eldara", URL: srv.URL}}),
+		"a failed refresh must not fail the apply")
+	require.Len(t, warnings, 1)
+	require.Contains(t, warnings[0], "could not refresh repository")
+
+	// The cached index is still usable.
+	idx, err := s.LoadIndex("eldara")
+	require.NoError(t, err)
+	require.Equal(t, "0.1.0", idx.Entries["demo"][0].Version)
+}
+
+func TestEnsureReposNoSpecsIsANoOp(t *testing.T) {
+	s := NewRepoStoreAt(t.TempDir())
+	require.NoError(t, s.EnsureRepos(nil))
+	repos, err := s.List()
+	require.NoError(t, err)
+	require.Empty(t, repos)
+}
+
+// Indexes backs `charts outdated`, which must not blow up on a repository whose
+// index was never fetched.
+func TestIndexesSkipsRepositoriesWithNoCachedIndex(t *testing.T) {
+	body := "apiVersion: v1\nentries:\n  demo:\n    - {name: demo, version: 0.1.0, urls: [\"d.tgz\"]}\n"
+	up := true
+	srv := newIndexServer(t, &body, &up)
+
+	s := NewRepoStoreAt(t.TempDir())
+	require.NoError(t, s.Add("good", srv.URL))
+
+	// A repo recorded with no cached index (e.g. the cache file was cleared).
+	require.NoError(t, s.save([]RepoEntry{{Name: "good", URL: srv.URL}, {Name: "stale", URL: srv.URL}}))
+
+	idxs, err := s.Indexes()
+	require.NoError(t, err)
+	require.Len(t, idxs, 1)
+	require.Contains(t, idxs, "good")
+	require.NotContains(t, idxs, "stale")
+}
+
+// A repository in the manifest that cannot be reached must fail the apply loudly,
+// not be silently skipped — every chart it provides would otherwise fail to
+// resolve with a far more confusing error.
+func TestEnsureReposFailsWhenAnAbsentRepositoryCannotBeAdded(t *testing.T) {
+	body := "apiVersion: v1\nentries: {}\n"
+	up := false
+	srv := newIndexServer(t, &body, &up)
+
+	s := NewRepoStoreAt(t.TempDir())
+	err := s.EnsureRepos([]RepoSpec{{Name: "eldara", URL: srv.URL}})
+	require.Error(t, err)
+
+	repos, lerr := s.List()
+	require.NoError(t, lerr)
+	require.Empty(t, repos, "a failed add must persist nothing")
 }

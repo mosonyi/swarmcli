@@ -11,9 +11,10 @@ produces a **release** — a Docker stack whose revision history is stored in
 Docker Configs.
 
 Implemented so far ([issue #413]): repository management, discovery, templating,
-and the full release lifecycle — install, upgrade, rollback, uninstall, list,
-status, history, diff, and get. Chart-dev tooling (`create`, `lint`,
-`dependency`) and subchart resolution are the remaining phase.
+the full release lifecycle — install, upgrade, rollback, uninstall, list, status,
+history, diff, get, and prune — and declarative releases (`apply`, `outdated`).
+Chart-dev tooling (`create`, `lint`, `dependency`) and subchart resolution are the
+remaining phase.
 
 ## Invocation
 
@@ -37,8 +38,94 @@ swarmcli charts list
 swarmcli charts uninstall my-traefik
 ```
 
-A chart reference is either a configured `repo/chart` (optionally `--version`)
-or a local path to a chart directory or packaged `.tgz`.
+A chart reference is either a configured `repo/chart` or a local path to a chart
+directory or packaged `.tgz`. **`--version` selects a version from a repository
+index, so it applies only to a `repo/chart` reference** — a local chart carries its
+version in its own `Chart.yaml`, and passing `--version` with one is an error
+rather than being silently ignored.
+
+## Declarative releases (GitOps)
+
+The commands above are imperative, and release state lives in the swarm — so
+nothing in git says what *should* be running. `charts apply` closes that gap: it
+converges the swarm to a file you commit.
+
+```yaml
+# swarmcli-release.yaml
+apiVersion: v1
+repositories:
+  - name: swarmcli-charts
+    url: https://eldara-tech.github.io/swarmcli-charts
+releases:
+  - name: edge
+    chart: swarmcli-charts/traefik
+    version: "0.1.1"
+    values: [./traefik.yaml]     # relative to THIS FILE, not the working directory
+  - name: hello
+    chart: swarmcli-charts/whoami
+    version: "0.1.8"
+```
+
+```bash
+swarmcli charts apply -f swarmcli-release.yaml --dry-run   # plan
+swarmcli charts apply -f swarmcli-release.yaml --diff      # plan + manifest diffs
+swarmcli charts apply -f swarmcli-release.yaml             # converge
+swarmcli charts outdated                                   # what has a newer chart?
+```
+
+| Behaviour | |
+|---|---|
+| Missing release | installed |
+| Changed chart version, values, or rendered manifest | upgraded |
+| Identical | **skipped — no new revision** |
+| On the swarm but not in the file | **reported, never removed** |
+
+Two of those deserve the emphasis. Releases are **never deleted**: a release
+records nothing about which file produced it, so a prune could not tell one owned
+by another manifest, or installed by hand, from a genuinely obsolete one — it
+prints the `uninstall` command instead and leaves the decision to you. And an
+unchanged release is skipped **entirely**: history is one Docker Config per
+revision, so re-applying on every CI push would otherwise grow the swarm's config
+store without bound.
+
+For a `repo/chart`, **`version` is required** — a floating pin would silently
+upgrade production on the next `apply`. For a **local** chart path (`chart:
+./charts/mine`, resolved against the file) it must be **omitted**: the chart's own
+`Chart.yaml` sets the version, so there is nothing to select.
+
+Unknown keys are rejected, so a typo fails loudly instead of quietly doing nothing.
+Releases are applied in file order; add `--wait` if a later release needs an
+earlier one live.
+
+`apply` honours `--wait`, `--timeout` and `--history-max`. It **rejects** `--set`,
+`--version`, `--reuse-values`, `--install`, `--purge-volumes`, `--requirements` and
+`--revision` rather than ignoring them — the file is the only source of truth, so a
+value passed on the command line would be a lie. `--diff` implies `--dry-run` and
+never deploys.
+
+### Keeping it up to date automatically
+
+If your charts come from [swarmcli-charts], extend its Renovate preset — that is
+the whole configuration:
+
+```json
+{ "extends": ["github>Eldara-Tech/swarmcli-charts"] }
+```
+
+For any other chart repository, one line does the same job:
+
+```json
+{ "helmfile": { "managerFilePatterns": ["/(^|/)swarmcli-release\\.ya?ml$/"] } }
+```
+
+Both work because the file's key names match [Helmfile](https://helmfile.readthedocs.io/)'s,
+so [Renovate](https://docs.renovatebot.com/)'s **built-in** `helmfile` manager reads
+it — no custom regex to maintain. Renovate resolves each chart against the
+`repositories` you declared and opens a PR bumping `version:` when a new chart
+version is published, with the chart's release notes attached. Merge it, and
+`swarmcli charts apply` in CI rolls it out.
+
+[swarmcli-charts]: https://github.com/Eldara-Tech/swarmcli-charts
 
 ## Chart format
 

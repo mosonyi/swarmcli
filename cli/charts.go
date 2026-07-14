@@ -66,9 +66,10 @@ install pre-flights them (auto-creating networks marked autoCreate, validating
 the rest) and uninstall reports any auto-created networks it leaves in place.
 
 Common options:
-  -f, --values <file>   Values file (repeatable)
+  -f, --values <file>   Values file (repeatable). For apply: the release file.
       --set k=v         Override a value (repeatable)
-      --version <ver>   Chart version (default: latest)
+      --version <ver>   Chart version, for a <repo>/<chart> reference (default: latest).
+                        Not valid with a local chart path — its Chart.yaml sets the version.
       --dry-run         Render and validate without deploying
       --requirements    template: emit rendered requirements.yaml, not the manifest
       --wait            Wait for services to converge
@@ -79,6 +80,12 @@ Common options:
       --revision <n>    get: select a specific revision
       --purge-volumes   uninstall: also remove the release's volumes
       --diff            apply: show each changed release's manifest diff (implies --dry-run)
+
+apply honours --wait, --timeout and --history-max. It REJECTS --set, --version,
+--reuse-values, --install, --purge-volumes, --requirements and --revision rather
+than ignoring them: the release file is the only source of truth, so a value passed
+on the command line would be a lie. outdated refreshes the repository indexes first
+and falls back to the cached ones if the network is unavailable.
 `
 
 // chartsMain dispatches `swarmcli charts ...`.

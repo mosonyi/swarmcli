@@ -294,3 +294,158 @@ func TestPlanCounts(t *testing.T) {
 	require.Equal(t, 1, u)
 	require.Equal(t, 2, n)
 }
+
+// The repository path of apply — repositories: -> EnsureRepos -> Resolve -> Pull
+// -> render -> plan — was covered by NOTHING at any tier: the unit tests use a
+// fakeChartSource that never touches RepoStore, and the integration test passes a
+// nil store with a local chart dir. This is the only test that would catch a break
+// anywhere along the chain a downstream user actually runs.
+func TestPlanApplyAgainstARealRepository(t *testing.T) {
+	store := serveRepo(t, "0.1.0", "0.2.0")
+	repos, err := store.List()
+	require.NoError(t, err)
+	url := repos[0].URL
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "swarmcli-release.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(
+		"repositories:\n  - name: eldara\n    url: "+url+"\n"+
+			"releases:\n  - name: hello\n    chart: eldara/demo\n    version: \"0.1.0\"\n"), 0o600))
+
+	rf, err := LoadReleaseFile(path)
+	require.NoError(t, err)
+
+	// A fresh store, so EnsureRepos genuinely has to add the repository — exactly
+	// what `charts apply -f` does on a CI runner that has never seen it.
+	fresh := NewRepoStoreAt(t.TempDir())
+	require.NoError(t, fresh.EnsureRepos(rf.Repositories))
+
+	e := NewEngineWith(newFakeBackend())
+	plan, err := e.PlanApply(context.Background(), rf, NewChartSource(fresh))
+	require.NoError(t, err)
+	require.Len(t, plan.Releases, 1)
+	require.Equal(t, ActionInstall, plan.Releases[0].Action)
+	require.Equal(t, "0.1.0", plan.Releases[0].ToVersion, "the PINNED version must win, not the latest")
+	require.NotEmpty(t, plan.Releases[0].Manifest)
+
+	res, err := e.Apply(context.Background(), plan, InstallOptions{})
+	require.NoError(t, err)
+	require.Equal(t, 1, res[0].Revision)
+}
+
+// A release row left in StatusUninstalled must plan as an install, not silently
+// no-op as "unchanged".
+func TestPlanApplyReinstallsAnUninstalledRelease(t *testing.T) {
+	e, fb, src, rf := applyEnv(t, oneRelease, "0.1.0")
+	ctx := context.Background()
+
+	plan, err := e.PlanApply(ctx, rf, src)
+	require.NoError(t, err)
+	_, err = e.Apply(ctx, plan, InstallOptions{})
+	require.NoError(t, err)
+
+	_, err = e.Uninstall(ctx, "hello", false)
+	require.NoError(t, err)
+	require.NotContains(t, fb.deployed, "hello")
+
+	plan2, err := e.PlanApply(ctx, rf, src)
+	require.NoError(t, err)
+	require.Equal(t, ActionInstall, plan2.Releases[0].Action,
+		"an uninstalled release must be reinstalled, not reported unchanged")
+
+	_, err = e.Apply(ctx, plan2, InstallOptions{})
+	require.NoError(t, err)
+	require.Contains(t, fb.deployed, "hello")
+}
+
+// Same chart version and same values, but the chart's template changed: the
+// rendered manifest differs, so it is an upgrade. Nothing exercised the manifest
+// half of the comparison on its own.
+func TestPlanApplyDetectsManifestOnlyChange(t *testing.T) {
+	e, _, src, rf := applyEnv(t, oneRelease, "0.1.0")
+	ctx := context.Background()
+
+	plan, err := e.PlanApply(ctx, rf, src)
+	require.NoError(t, err)
+	_, err = e.Apply(ctx, plan, InstallOptions{})
+	require.NoError(t, err)
+
+	// Re-publish the SAME chart version with a different template body. The edit
+	// has to survive rendering: Render deep-merges and re-marshals the Compose
+	// document, so an added comment would be dropped and the manifest would come
+	// out byte-identical.
+	edited := demoChart(t, "0.1.0")
+	edited.Templates["stack.yaml"] += "    stop_grace_period: 42s\n"
+	src.charts["swarmcli-charts/demo@0.1.0"] = edited
+
+	plan2, err := e.PlanApply(ctx, rf, src)
+	require.NoError(t, err)
+	require.Equal(t, ActionUpgrade, plan2.Releases[0].Action)
+}
+
+// A missing values file must abort planning, before anything deploys, naming the
+// path.
+func TestPlanApplyMissingValuesFileFailsBeforeDeploying(t *testing.T) {
+	body := `releases:
+  - name: hello
+    chart: swarmcli-charts/demo
+    version: "0.1.0"
+    values: [./absent.yaml]
+`
+	e, fb, src, rf := applyEnv(t, body, "0.1.0")
+
+	_, err := e.PlanApply(context.Background(), rf, src)
+	require.ErrorContains(t, err, "absent.yaml")
+	require.ErrorContains(t, err, "hello")
+	require.Empty(t, fb.deployed)
+}
+
+// The file path and release name in the error are the whole ergonomic point of the
+// planRelease wrappers.
+func TestPlanApplyErrorsNameTheFileAndRelease(t *testing.T) {
+	e, _, src, rf := applyEnv(t, oneRelease, "0.1.0")
+
+	// A chart version the source cannot serve.
+	rf.Releases[0].Version = "9.9.9"
+	_, err := e.PlanApply(context.Background(), rf, src)
+	require.ErrorContains(t, err, rf.Path)
+	require.ErrorContains(t, err, `release "hello"`)
+}
+
+// A values file that violates the chart's schema must abort planning — before any
+// release deploys — with the file and release named. This is the wrapper that
+// makes a bad value in one release safe for all the others.
+func TestPlanApplyRejectsSchemaViolationBeforeDeploying(t *testing.T) {
+	e, fb, src, rf := applyEnv(t, oneRelease, "0.1.0")
+
+	bad := filepath.Join(rf.Dir, "bad.yaml")
+	require.NoError(t, os.WriteFile(bad, []byte("replicas: 0\n"), 0o600)) // schema: minimum 1
+	rf.Releases[0].Values = []string{"./bad.yaml"}
+
+	_, err := e.PlanApply(context.Background(), rf, src)
+	require.Error(t, err)
+	require.ErrorContains(t, err, rf.Path)
+	require.ErrorContains(t, err, `release "hello"`)
+	require.Empty(t, fb.deployed, "a schema violation must abort before anything deploys")
+}
+
+// Pointing a release at a different chart entirely (not just a new version) is an
+// upgrade, not "unchanged".
+func TestPlanApplyDetectsChartNameChange(t *testing.T) {
+	e, _, src, rf := applyEnv(t, oneRelease, "0.1.0")
+	ctx := context.Background()
+
+	plan, err := e.PlanApply(ctx, rf, src)
+	require.NoError(t, err)
+	_, err = e.Apply(ctx, plan, InstallOptions{})
+	require.NoError(t, err)
+
+	other := demoChart(t, "0.1.0")
+	other.Metadata.Name = "different"
+	src.charts["swarmcli-charts/other@0.1.0"] = other
+	rf.Releases[0].Chart = "swarmcli-charts/other"
+
+	plan2, err := e.PlanApply(ctx, rf, src)
+	require.NoError(t, err)
+	require.Equal(t, ActionUpgrade, plan2.Releases[0].Action)
+}

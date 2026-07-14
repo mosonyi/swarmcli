@@ -100,6 +100,7 @@ func TestParseValidationErrors(t *testing.T) {
 		"dup release":    {"releases:\n  - {name: a, chart: r/c, version: \"1\"}\n  - {name: a, chart: r/d, version: \"1\"}\n", "duplicate release"},
 		"dup repo":       {"repositories:\n  - {name: r, url: http://x}\n  - {name: r, url: http://y}\nreleases:\n  - {name: a, chart: r/c, version: \"1\"}\n", "duplicate repository"},
 		"repo no url":    {"repositories:\n  - {name: r}\nreleases:\n  - {name: a, chart: r/c, version: \"1\"}\n", "url is required"},
+		"repo no name":   {"repositories:\n  - {url: http://x}\nreleases:\n  - {name: a, chart: r/c, version: \"1\"}\n", "name is required"},
 		"bad apiVersion": {"apiVersion: v2\nreleases:\n  - {name: a, chart: r/c, version: \"1\"}\n", "unsupported apiVersion"},
 		"bad rel name":   {"releases:\n  - {name: \"Bad Name\", chart: r/c, version: \"1\"}\n", "Bad Name"},
 	} {
@@ -147,4 +148,12 @@ func TestIsPathRefIsSyntactic(t *testing.T) {
 	for _, ref := range []string{"repo/chart", "chart", "swarmcli-charts/whoami"} {
 		require.False(t, IsPathRef(ref), ref)
 	}
+}
+
+// chartNameOf backs the "run `charts search <chart>`" hint in the version-required
+// error; a reference with no separator must fall back to the whole string.
+func TestChartNameOf(t *testing.T) {
+	require.Equal(t, "whoami", chartNameOf("swarmcli-charts/whoami"))
+	require.Equal(t, "whoami", chartNameOf("whoami"))
+	require.Equal(t, "c", chartNameOf("a/b/c"))
 }
