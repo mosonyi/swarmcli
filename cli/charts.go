@@ -141,6 +141,7 @@ func newStore() (*charts.RepoStore, int) {
 	if err != nil {
 		return nil, fail(err)
 	}
+	s.Warnf = errf
 	return s, -1
 }
 
