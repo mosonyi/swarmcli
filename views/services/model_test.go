@@ -15,6 +15,7 @@ import (
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/stretchr/testify/require"
 )
@@ -676,7 +677,7 @@ func TestLoadServicesForView_AllFilter(t *testing.T) {
 	m := testModel(func(m *Model) { m.deps.Services = mock })
 	entries, title := m.loadServicesForView(AllFilter, "", "")
 	require.Len(t, entries, 2)
-	require.Contains(t, title, "All Services")
+	require.Contains(t, ansi.Strip(title), "Services(all)[2]")
 }
 
 func TestLoadServicesForView_StackFilter(t *testing.T) {
@@ -688,7 +689,7 @@ func TestLoadServicesForView_StackFilter(t *testing.T) {
 	m := testModel(func(m *Model) { m.deps.Services = mock })
 	entries, title := m.loadServicesForView(StackFilter, "", "mystack")
 	require.Len(t, entries, 1)
-	require.Contains(t, title, "mystack")
+	require.Contains(t, ansi.Strip(title), "Services(mystack)[1]")
 }
 
 func TestLoadServicesForView_NodeFilter(t *testing.T) {
@@ -700,7 +701,7 @@ func TestLoadServicesForView_NodeFilter(t *testing.T) {
 	m := testModel(func(m *Model) { m.deps.Services = mock })
 	entries, title := m.loadServicesForView(NodeFilter, "node1", "")
 	require.Len(t, entries, 1)
-	require.Contains(t, title, "node1")
+	require.Contains(t, ansi.Strip(title), "Services(node1)[1]")
 }
 
 func TestFormatRelativeTime_Zero(t *testing.T) {

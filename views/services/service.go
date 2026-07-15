@@ -6,6 +6,7 @@ package servicesview
 import (
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
+	"swarmcli/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -37,21 +38,23 @@ func (m *Model) loadServicesForView(filterType FilterType, nodeID, stackName str
 }
 
 func loadServicesForViewWith(serviceOps docker.ServiceOps, filterType FilterType, nodeID, stackName string) (entries []docker.ServiceEntry, title string) {
+	var scope string
 	switch filterType {
 	case NodeFilter:
 		entries = serviceOps.LoadNodeServices(nodeID)
-		title = "Services on Node: " + nodeID
+		scope = nodeID
 	case StackFilter:
 		entries = serviceOps.LoadStackServices(stackName)
-		title = "Services in Stack: " + stackName
+		scope = stackName
 	case NoStackFilter:
 		// docker marks services without a stack namespace as stack "-".
 		entries = serviceOps.LoadStackServices("-")
-		title = "Services (no stack)"
+		scope = "no stack"
 	default: // All services
 		entries = serviceOps.LoadAllServices()
-		title = "All Services"
+		scope = "all"
 	}
+	title = ui.ScopedTitle("Services", scope, len(entries))
 	return
 }
 

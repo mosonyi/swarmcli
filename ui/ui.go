@@ -32,6 +32,17 @@ var (
 				Bold(true)
 )
 
+// styleFrameTitle applies the default frame-title style to a plain title. A
+// title that already carries its own ANSI styling (e.g. from ScopedTitle) is
+// returned unchanged so the caller's per-segment colours are preserved rather
+// than clobbered by re-wrapping.
+func styleFrameTitle(title string) string {
+	if ansi.Strip(title) != title {
+		return title
+	}
+	return FrameTitleStyle.Render(title)
+}
+
 // RenderFramedBox draws a bordered frame with title, optional header, and content.
 // If width <= 0, defaults to content width + padding.
 // ANSI sequences in content are preserved.
@@ -53,7 +64,7 @@ func RenderFramedBox(title, header, content, footer string, width int) string {
 		width = contentWidth + 4 // padding left/right
 	}
 
-	titleStyled := FrameTitleStyle.Render(" " + title + " ")
+	titleStyled := styleFrameTitle(" " + title + " ")
 	headerStyled := FrameHeaderStyle.Render(header)
 
 	borderWidth := width - 2 // left/right borders

@@ -12,7 +12,7 @@ import (
 )
 
 func (m *Model) FrameTitle() string {
-	return fmt.Sprintf("Stacks on Node (Total: %d)", len(m.List.Items))
+	return ui.ScopedTitle("Stacks", "all", len(m.List.Items))
 }
 
 func (m *Model) FrameHeader() string { return m.List.RenderHeader() }
