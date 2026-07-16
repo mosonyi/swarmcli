@@ -13,14 +13,18 @@ import (
 )
 
 func (m *Model) FrameTitle() string {
-	total := len(m.List.Items)
+	// Count over the post-`/`-filter rows so the header tracks the filter.
 	managers := 0
-	for _, n := range m.List.Items {
+	for _, n := range m.List.Filtered {
 		if n.Manager {
 			managers++
 		}
 	}
-	return fmt.Sprintf("Nodes (%d total, %d manager%s)", total, managers, plural(managers))
+	base := fmt.Sprintf("Nodes (%d total, %d manager%s)", len(m.List.Filtered), managers, plural(managers))
+	// Pre-style the plain base: appending the ANSI FilterFragment would otherwise
+	// make styleFrameTitle treat the whole title as pre-styled and skip
+	// FrameTitleStyle, dropping the base's colour.
+	return ui.FrameTitleStyle.Render(base) + ui.FilterFragment(m.List.Query)
 }
 
 func (m *Model) FrameHeader() string { return m.List.RenderHeader() }

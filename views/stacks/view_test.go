@@ -8,6 +8,7 @@ import (
 
 	"swarmcli/docker"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,9 +24,20 @@ func TestView_WithStacks_ShowsTitle(t *testing.T) {
 	m.setRenderItem()
 	m.List.Viewport.Width = 80
 	m.List.Viewport.Height = 20
-	out := m.View()
-	require.Contains(t, out, "Stacks on Node")
-	require.Contains(t, out, "Total: 2")
+	out := ansi.Strip(m.View())
+	require.Contains(t, out, "Stacks(all)[2]")
+}
+
+func TestView_ActiveFilter_TitleReflectsFilteredCount(t *testing.T) {
+	m := testModel()
+	loadStacks(m, fakeStacks("alpha", "beta"))
+	m.ApplySearchQuery("alp") // matches "alpha" only
+	m.setRenderItem()
+	m.List.Viewport.Width = 80
+	m.List.Viewport.Height = 20
+	out := ansi.Strip(m.View())
+	require.Contains(t, out, "Stacks(all)[1]") // count is the filtered row count
+	require.Contains(t, out, "</alp>")         // active filter appended, k9s-style
 }
 
 func TestView_ShowsStackNames(t *testing.T) {

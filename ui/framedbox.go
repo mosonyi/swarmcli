@@ -15,7 +15,7 @@ import (
 // line and raw content are returned (no borders).
 func RenderViewFrame(title, header, content, footer string, width, height int, fullscreen bool) string {
 	if fullscreen {
-		titleText := FrameTitleStyle.Render(title)
+		titleText := styleFrameTitle(title)
 		titleLine := lipgloss.NewStyle().
 			Width(width).
 			Align(lipgloss.Center).

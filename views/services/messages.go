@@ -9,7 +9,7 @@ import (
 )
 
 type Msg struct {
-	Title      string
+	Scope      string
 	Entries    []docker.ServiceEntry
 	FilterType FilterType
 	NodeID     string

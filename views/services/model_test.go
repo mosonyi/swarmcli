@@ -15,6 +15,7 @@ import (
 	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/stretchr/testify/require"
 )
@@ -210,7 +211,7 @@ func fakeEntries(names ...string) []docker.ServiceEntry {
 
 func loadServices(m *Model, entries []docker.ServiceEntry) {
 	m.Update(Msg{
-		Title:      "Test Services",
+		Scope:      "all",
 		Entries:    entries,
 		FilterType: AllFilter,
 	})
@@ -270,7 +271,7 @@ func TestMsg_SetsContentAndVisible(t *testing.T) {
 func TestMsg_EmptyStackFilter_ShowsDialog(t *testing.T) {
 	m := testModel()
 	m.Update(Msg{
-		Title:      "Test",
+		Scope:      "mystack",
 		Entries:    nil,
 		FilterType: StackFilter,
 	})
@@ -643,6 +644,18 @@ func TestView_ShowsServices(t *testing.T) {
 	require.Contains(t, out, "api")
 }
 
+func TestView_ActiveFilter_TitleReflectsFilteredCount(t *testing.T) {
+	m := testModel()
+	loadServices(m, fakeEntries("web", "api")) // Scope "all"
+	m.ApplySearchQuery("api")                  // matches "api" only
+	m.setRenderItem()
+	m.List.Viewport.Width = 80
+	m.List.Viewport.Height = 20
+	out := ansi.Strip(m.View())
+	require.Contains(t, out, "Services(all)[1]") // count is the filtered row count
+	require.Contains(t, out, "</api>")           // active filter appended, k9s-style
+}
+
 func TestView_ConfirmDialog(t *testing.T) {
 	m := testModel()
 	loadServices(m, fakeEntries("web"))
@@ -674,9 +687,9 @@ func TestLoadServicesForView_AllFilter(t *testing.T) {
 		return fakeEntries("web", "db")
 	}
 	m := testModel(func(m *Model) { m.deps.Services = mock })
-	entries, title := m.loadServicesForView(AllFilter, "", "")
+	entries, scope := m.loadServicesForView(AllFilter, "", "")
 	require.Len(t, entries, 2)
-	require.Contains(t, title, "All Services")
+	require.Equal(t, "all", scope)
 }
 
 func TestLoadServicesForView_StackFilter(t *testing.T) {
@@ -686,9 +699,9 @@ func TestLoadServicesForView_StackFilter(t *testing.T) {
 		return fakeEntries("web")
 	}
 	m := testModel(func(m *Model) { m.deps.Services = mock })
-	entries, title := m.loadServicesForView(StackFilter, "", "mystack")
+	entries, scope := m.loadServicesForView(StackFilter, "", "mystack")
 	require.Len(t, entries, 1)
-	require.Contains(t, title, "mystack")
+	require.Equal(t, "mystack", scope)
 }
 
 func TestLoadServicesForView_NodeFilter(t *testing.T) {
@@ -698,9 +711,9 @@ func TestLoadServicesForView_NodeFilter(t *testing.T) {
 		return fakeEntries("web")
 	}
 	m := testModel(func(m *Model) { m.deps.Services = mock })
-	entries, title := m.loadServicesForView(NodeFilter, "node1", "")
+	entries, scope := m.loadServicesForView(NodeFilter, "node1", "")
 	require.Len(t, entries, 1)
-	require.Contains(t, title, "node1")
+	require.Equal(t, "node1", scope)
 }
 
 func TestFormatRelativeTime_Zero(t *testing.T) {
