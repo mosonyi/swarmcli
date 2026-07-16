@@ -6,6 +6,7 @@ package nodesview
 import (
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 )
 
@@ -88,4 +89,20 @@ func TestView_ManagerCount(t *testing.T) {
 	m.List.Viewport.Height = 20
 	out := m.View()
 	require.Contains(t, out, "1 manager")
+}
+
+func TestView_ActiveFilter_TitleReflectsFilteredCount(t *testing.T) {
+	m := testModel()
+	m.Visible = true
+	m.ready = true
+	entries := fakeNodes("mgr", "worker")
+	entries[0].Manager = true
+	loadNodes(m, entries)
+	m.List.Query = "work" // matches "worker" only
+	m.List.ApplyFilter()
+	m.List.Viewport.Width = 80
+	m.List.Viewport.Height = 20
+	out := ansi.Strip(m.View())
+	require.Contains(t, out, "Nodes (1 total, 0 managers)") // counts over filtered rows
+	require.Contains(t, out, "</work>")                     // active filter appended, k9s-style
 }

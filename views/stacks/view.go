@@ -12,7 +12,7 @@ import (
 )
 
 func (m *Model) FrameTitle() string {
-	return ui.ScopedTitle("Stacks", "all", len(m.List.Items))
+	return ui.ScopedTitleFiltered("Stacks", "all", len(m.List.Filtered), m.List.Query)
 }
 
 func (m *Model) FrameHeader() string { return m.List.RenderHeader() }

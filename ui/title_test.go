@@ -4,6 +4,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -45,6 +46,39 @@ func TestScopedTitle_TokenStyles(t *testing.T) {
 	require.Contains(t, out, titleScopeStyle.Render("postgres-ha"))
 	require.Contains(t, out, titleCountStyle.Render("8"))
 	require.Equal(t, "Services(postgres-ha)[8]", ansi.Strip(out))
+}
+
+func TestScopedTitleFiltered_NoFilter_EqualsScopedTitle(t *testing.T) {
+	// With no active filter the title is identical to the plain ScopedTitle.
+	require.Equal(t, ScopedTitle("Stacks", "all", 3), ScopedTitleFiltered("Stacks", "all", 3, ""))
+}
+
+func TestScopedTitleFiltered_WithFilter_AppendsFragment(t *testing.T) {
+	// k9s-style: scope kept, count is the (caller-supplied, post-filter) value,
+	// filter appended as a " </query>" fragment rather than folded into scope.
+	out := ScopedTitleFiltered("Stacks", "all", 1, "pos")
+	require.Equal(t, "Stacks(all)[1] </pos>", ansi.Strip(out))
+}
+
+func TestFilterFragment_Empty(t *testing.T) {
+	require.Equal(t, "", FilterFragment(""))
+}
+
+func TestFilterFragment_Truncates(t *testing.T) {
+	stripped := ansi.Strip(FilterFragment(strings.Repeat("x", 40)))
+	require.Contains(t, stripped, "…")
+	// " </" + at most maxFilterFragmentRunes runes + ">".
+	require.LessOrEqual(t, len([]rune(stripped)), len(" </>")+maxFilterFragmentRunes)
+}
+
+func TestFilterFragment_TokenStyles(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	out := FilterFragment("pos")
+	require.Contains(t, out, titleScopeStyle.Render("/pos")) // "/query" reuses the scope colour
+	require.Contains(t, out, titleLabelStyle.Render("<"))    // brackets share the label colour
 }
 
 func TestStyleFrameTitle_PassesThroughStyled(t *testing.T) {

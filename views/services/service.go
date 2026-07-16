@@ -6,7 +6,6 @@ package servicesview
 import (
 	"swarmcli/core/primitives/hash"
 	"swarmcli/docker"
-	"swarmcli/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -22,9 +21,9 @@ func (m *Model) refreshServicesCmd(nodeID, stackName string, filterType FilterTy
 			l().Errorf("refreshServicesCmd: RefreshSnapshot failed: %v", err)
 		}
 
-		entries, title := loadServicesForViewWith(serviceOps, filterType, nodeID, stackName)
+		entries, scope := loadServicesForViewWith(serviceOps, filterType, nodeID, stackName)
 		return Msg{
-			Title:      title,
+			Scope:      scope,
 			Entries:    entries,
 			FilterType: filterType,
 			NodeID:     nodeID,
@@ -33,12 +32,15 @@ func (m *Model) refreshServicesCmd(nodeID, stackName string, filterType FilterTy
 	}
 }
 
-func (m *Model) loadServicesForView(filterType FilterType, nodeID, stackName string) (entries []docker.ServiceEntry, title string) {
+func (m *Model) loadServicesForView(filterType FilterType, nodeID, stackName string) (entries []docker.ServiceEntry, scope string) {
 	return loadServicesForViewWith(m.deps.Services, filterType, nodeID, stackName)
 }
 
-func loadServicesForViewWith(serviceOps docker.ServiceOps, filterType FilterType, nodeID, stackName string) (entries []docker.ServiceEntry, title string) {
-	var scope string
+// loadServicesForViewWith loads the services for the given data scope and
+// returns the entries alongside the scope label used in the frame title
+// (nodeID / stackName / "no stack" / "all"). The title itself is built live in
+// FrameTitle so it can reflect the post-`/`-filter row count.
+func loadServicesForViewWith(serviceOps docker.ServiceOps, filterType FilterType, nodeID, stackName string) (entries []docker.ServiceEntry, scope string) {
 	switch filterType {
 	case NodeFilter:
 		entries = serviceOps.LoadNodeServices(nodeID)
@@ -54,7 +56,6 @@ func loadServicesForViewWith(serviceOps docker.ServiceOps, filterType FilterType
 		entries = serviceOps.LoadAllServices()
 		scope = "all"
 	}
-	title = ui.ScopedTitle("Services", scope, len(entries))
 	return
 }
 
@@ -69,7 +70,7 @@ func (m *Model) checkServicesCmd(lastHash uint64, filterType FilterType, nodeID,
 		// and use the cached snapshot for quick checks.
 		snapshotOps.TriggerRefreshIfNeeded()
 
-		entries, title := loadServicesForViewWith(serviceOps, filterType, nodeID, stackName)
+		entries, scope := loadServicesForViewWith(serviceOps, filterType, nodeID, stackName)
 		newHash, err := hash.Compute(entries)
 		if err != nil {
 			l().Errorf("checkServicesCmd: Hash computation failed: %v", err)
@@ -83,7 +84,7 @@ func (m *Model) checkServicesCmd(lastHash uint64, filterType FilterType, nodeID,
 		if newHash != lastHash {
 			l().Info("checkServicesCmd: Change detected! Refreshing service list")
 			return Msg{
-				Title:      title,
+				Scope:      scope,
 				Entries:    entries,
 				FilterType: filterType,
 				NodeID:     nodeID,
