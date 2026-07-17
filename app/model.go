@@ -174,25 +174,85 @@ func (m *Model) replaceView(name string, data any) tea.Cmd {
 // Set from init() to display persistent status (e.g., license mode).
 var StackBarSuffix string
 
+// commandHintText advertises the ":" command bar, which is invisible until
+// pressed. ":help" opens the command list; "?" opens the keybindings — the
+// wording deliberately keeps those two distinct.
+const commandHintText = "Type :help for commands"
+
+// stackBarGap is the minimum number of blank columns kept between the
+// breadcrumbs and the right-aligned block, and between the segments inside it.
+const stackBarGap = 2
+
+// stackBarMaxCrumbs is the most breadcrumb segments shown before the oldest
+// are collapsed into a "…" prefix.
+const stackBarMaxCrumbs = 3
+
+var (
+	stackBarSuffixStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
+	stackBarHintStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+)
+
 func (m *Model) renderStackBar() string {
 	names := make([]string, 0, m.viewStack.Len()+1)
 	for _, v := range m.viewStack.Views() {
 		names = append(names, v.Name())
 	}
 	names = append(names, m.currentView.Name())
-	result := RenderBreadcrumbs(names, 3)
-	if StackBarSuffix == "" {
-		return result
+	crumbs := m.fitBreadcrumbs(names)
+
+	// Try the right-aligned renderings widest-first and take the first that
+	// fits. The hint is dropped before the suffix: the suffix carries
+	// persistent status, the hint is only a discoverability aid.
+	for _, right := range m.stackBarRight() {
+		gap := m.terminalWidth - lipgloss.Width(crumbs) - lipgloss.Width(right)
+		if gap >= stackBarGap {
+			return crumbs + strings.Repeat(" ", gap) + right
+		}
 	}
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
-	suffix := style.Render(StackBarSuffix)
-	crumbWidth := lipgloss.Width(result)
-	suffixWidth := lipgloss.Width(suffix)
-	gap := m.terminalWidth - crumbWidth - suffixWidth
-	if gap < 2 {
-		return result
+	return crumbs
+}
+
+// stackBarRight returns the right-aligned stack bar renderings in preference
+// order, widest first. Empty when there is nothing to right-align.
+func (m *Model) stackBarRight() []string {
+	suffix := ""
+	if StackBarSuffix != "" {
+		suffix = stackBarSuffixStyle.Render(StackBarSuffix)
 	}
-	return result + strings.Repeat(" ", gap) + suffix
+	hint := ""
+	if !m.hidesGlobalKeys() {
+		hint = stackBarHintStyle.Render(commandHintText)
+	}
+
+	switch {
+	case hint != "" && suffix != "":
+		return []string{hint + strings.Repeat(" ", stackBarGap) + suffix, suffix}
+	case suffix != "":
+		return []string{suffix}
+	case hint != "":
+		return []string{hint}
+	default:
+		return nil
+	}
+}
+
+// fitBreadcrumbs renders the breadcrumb trail for names, shedding the oldest
+// segments until the line fits terminalWidth. RenderBreadcrumbs already
+// collapses what it drops into a "…" prefix, so narrowing maxDisplay degrades
+// gracefully and always keeps the current view — the rightmost segment, and
+// the one worth keeping. Truncates only when even a single segment overflows.
+func (m *Model) fitBreadcrumbs(names []string) string {
+	if m.terminalWidth <= 0 {
+		return RenderBreadcrumbs(names, stackBarMaxCrumbs)
+	}
+	crumbs := ""
+	for display := stackBarMaxCrumbs; display >= 1; display-- {
+		crumbs = RenderBreadcrumbs(names, display)
+		if lipgloss.Width(crumbs) <= m.terminalWidth {
+			return crumbs
+		}
+	}
+	return lipgloss.NewStyle().MaxWidth(m.terminalWidth).Render(crumbs)
 }
 
 func cmdBar() *commandinput.Model {
