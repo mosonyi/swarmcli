@@ -14,12 +14,25 @@ import (
 // each network's Driver defaults to "overlay" and its AutoCreate/Attachable
 // default to true. Every entry must carry a non-empty name.
 func parseRequirements(data []byte) (*Requirements, error) {
+	req, err := unmarshalRequirements(data)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateRequirements(req); err != nil {
+		return nil, err
+	}
+	return req, nil
+}
+
+// unmarshalRequirements decodes requirements.yaml WITHOUT validating it. Chart
+// loading needs the two steps apart: requirements.yaml is a Go template, so a chart
+// may `range` over a user-supplied list and the raw bytes then do not parse as YAML
+// at all — which is not an error. A file that DOES parse but declares something
+// invalid still is.
+func unmarshalRequirements(data []byte) (*Requirements, error) {
 	var req Requirements
 	if err := yaml.Unmarshal(data, &req); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", requirementsName, err)
-	}
-	if err := validateRequirements(&req); err != nil {
-		return nil, err
 	}
 	return &req, nil
 }

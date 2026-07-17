@@ -69,7 +69,7 @@ func LoadChartDir(dir string) (*Chart, error) {
 
 	if rq, err := os.ReadFile(filepath.Join(dir, requirementsName)); err == nil {
 		ch.RequirementsRaw = rq
-		if ch.Requirements, err = parseRequirements(rq); err != nil {
+		if err := ch.loadRequirements(rq); err != nil {
 			return nil, err
 		}
 	} else if !os.IsNotExist(err) {
@@ -103,6 +103,30 @@ func LoadChartDir(dir string) (*Chart, error) {
 		return nil, err
 	}
 	return ch, nil
+}
+
+// loadRequirements records the UNRENDERED view of requirements.yaml, shared by both
+// loaders.
+//
+// requirements.yaml is a Go TEMPLATE: a chart may `range` over a user-supplied list
+// (e.g. the extra overlays to attach to), and a template action on its own line is not
+// parseable YAML. When the raw bytes do not parse we therefore keep no unrendered view
+// and defer entirely to RenderRequirements — the AUTHORITATIVE parse, which renders
+// with the release's values first and reports a genuinely broken file at
+// template/install time.
+//
+// When the raw bytes DO parse we still validate eagerly, so a chart that declares
+// something invalid (a nameless network) is rejected at load exactly as before.
+func (ch *Chart) loadRequirements(raw []byte) error {
+	req, err := unmarshalRequirements(raw)
+	if err != nil {
+		return nil // not YAML on its own => a template; RenderRequirements decides.
+	}
+	if err := validateRequirements(req); err != nil {
+		return err
+	}
+	ch.Requirements = req
+	return nil
 }
 
 // LoadChartArchive loads a chart from a gzipped tar (.tgz) stream. The archive
@@ -162,7 +186,7 @@ func LoadChartArchive(r io.Reader) (*Chart, error) {
 			ch.Schema = body
 		case rel == requirementsName:
 			ch.RequirementsRaw = body
-			if ch.Requirements, err = parseRequirements(body); err != nil {
+			if err := ch.loadRequirements(body); err != nil {
 				return nil, err
 			}
 		case rel == readmeName:

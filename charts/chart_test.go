@@ -122,6 +122,56 @@ func TestLoadChartDirParsesRequirements(t *testing.T) {
 	require.True(t, *ch.Requirements.Networks[0].AutoCreate) // defaulted
 }
 
+// requirements.yaml is a Go template, so a chart may `range` over a user-supplied
+// list (e.g. the extra overlays to attach to). Its raw bytes are then not valid YAML
+// on their own — chart load must NOT fail on that, and RenderRequirements must
+// resolve it against the release's values.
+func TestLoadChartDirRequirementsTemplateWithControlFlow(t *testing.T) {
+	dir := t.TempDir()
+	writeMinimalChart(t, dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "requirements.yaml"), []byte(
+		"networks:\n"+
+			"{{- range .Values.extraNetworks }}\n"+
+			"  - name: \"{{ . }}\"\n"+
+			"    autoCreate: false\n"+
+			"{{- end }}\n"), 0o644))
+
+	ch, err := LoadChartDir(dir)
+	require.NoError(t, err, "a templated requirements.yaml must not fail chart load")
+	require.NotNil(t, ch.RequirementsRaw)
+
+	req, err := RenderRequirements(ch, RenderContext{Values: map[string]any{
+		"extraNetworks": []any{"ai-internal", "mail-internal"},
+	}})
+	require.NoError(t, err)
+	require.Len(t, req.Networks, 2)
+	require.Equal(t, "ai-internal", req.Networks[0].Name)
+	require.Equal(t, "mail-internal", req.Networks[1].Name)
+	require.False(t, *req.Networks[0].AutoCreate)
+	require.Equal(t, "overlay", req.Networks[0].Driver) // defaulted
+
+	// An empty list declares nothing at all.
+	empty, err := RenderRequirements(ch, RenderContext{Values: map[string]any{"extraNetworks": []any{}}})
+	require.NoError(t, err)
+	require.Empty(t, empty.Networks)
+}
+
+// Load is best-effort, but the authoritative parse must still reject a genuinely
+// malformed requirements.yaml — the error just surfaces at render time instead.
+func TestRenderRequirementsRejectsMalformedAfterRender(t *testing.T) {
+	dir := t.TempDir()
+	writeMinimalChart(t, dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "requirements.yaml"),
+		[]byte("networks:\n  - name: \"a\"\n   bad-indent: oops\n"), 0o644))
+
+	ch, err := LoadChartDir(dir)
+	require.NoError(t, err)
+
+	_, err = RenderRequirements(ch, RenderContext{Values: map[string]any{}})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), requirementsName)
+}
+
 func TestLoadChartDirNoRequirementsIsNil(t *testing.T) {
 	dir := t.TempDir()
 	writeMinimalChart(t, dir)
