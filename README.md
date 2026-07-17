@@ -105,6 +105,11 @@ deployed state is reproducible and an automated updater (e.g. Renovate) has
 something concrete to bump. It never removes a release the file does not mention —
 it reports those instead. See [charts/README.md](charts/README.md#declarative-releases-gitops).
 
+A chart can declare the swarmcli it needs (`swarmcliVersion: ">= 1.13.0"` in
+`Chart.yaml`). Installing it on an older build fails naming the version to
+upgrade to, instead of breaking somewhere inside the template; `--skip-compat-check`
+proceeds anyway. See [charts/README.md](charts/README.md#declaring-the-swarmcli-a-chart-needs).
+
 Run `swarmcli charts --help` for the full command and option reference.
 
 ## Business Edition

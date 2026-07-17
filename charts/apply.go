@@ -35,6 +35,12 @@ type ReleasePlan struct {
 	Requirements *Requirements
 	// CurrentManifest is the deployed manifest, for diffing. Empty for an install.
 	CurrentManifest string
+	// Compat is the chart's engine requirement checked against this build.
+	// Planning records it but never acts on it: apply's contract is to plan
+	// every release before converging any, so the whole plan is gated at once
+	// by the caller — which is also the layer that knows whether blocking is
+	// appropriate for the verb being run.
+	Compat CompatFinding
 }
 
 // Plan is what apply would do to the whole swarm.
@@ -105,6 +111,7 @@ func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource,
 	if err != nil {
 		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
 	}
+	compat := CheckCompat(ch.Metadata)
 
 	files, err := readFiles(rf.ValuesPaths(spec))
 	if err != nil {
@@ -126,13 +133,16 @@ func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource,
 		Release: ReleaseMeta{Name: spec.Name, Namespace: spec.Name, Revision: 1},
 		Chart:   ChartMeta{Name: rc.Name, Version: rc.Version, AppVersion: rc.AppVersion},
 	}
+	// A chart needing a newer engine usually fails here rather than reaching the
+	// caller's gate, so name the requirement alongside whatever the missing
+	// feature produced (compatHint is empty unless the chart is incompatible).
 	manifest, err := Render(ch, rctx)
 	if err != nil {
-		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
+		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w%s", rf.Path, spec.Name, err, compatHint(compat))
 	}
 	req, err := RenderRequirements(ch, rctx)
 	if err != nil {
-		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
+		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w%s", rf.Path, spec.Name, err, compatHint(compat))
 	}
 
 	rp := ReleasePlan{
@@ -143,6 +153,7 @@ func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource,
 		Values:       values,
 		Manifest:     manifest,
 		Requirements: req,
+		Compat:       compat,
 	}
 
 	cur, ok := deployed[spec.Name]
