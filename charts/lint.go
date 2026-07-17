@@ -36,19 +36,25 @@ const lintRelease = "lint"
 // Lint checks a loaded chart against the chart engine named by engine — this
 // build's, or one the caller is asking about via --for-version.
 //
+// files and sets are extra values layered over the chart defaults for the render
+// check, exactly as `charts template -f/--set` would: a chart that requires an
+// input it deliberately leaves undefaulted (a {{ required }} / {{ fail }} guard)
+// cannot render from bare defaults, so linting it needs the same values a real
+// install would supply. Pass nil for both to lint against defaults alone.
+//
 // It reports everything it finds instead of stopping at the first problem: a
 // chart author wants the list, not a game of whack-a-mole.
 //
 // Structural validation already happened in LoadChartDir / LoadChartArchive,
 // which refuse a chart with no name, version or templates, or an apiVersion this
 // build cannot read. Lint covers what only becomes visible once a chart is
-// rendered with its own defaults.
+// rendered.
 //
 // One thing it deliberately cannot do: prove a chart runs on the version it
 // declares. This binary carries one engine's behaviour and cannot emulate
 // another's — rendering with a real binary of that version is the only thing
 // that settles it. See CheckCompatAgainst.
-func Lint(ch *Chart, engine string) []LintFinding {
+func Lint(ch *Chart, engine string, files [][]byte, sets []string) []LintFinding {
 	var out []LintFinding
 	add := func(s LintSeverity, format string, a ...any) {
 		out = append(out, LintFinding{Severity: s, Message: fmt.Sprintf(format, a...)})
@@ -71,9 +77,9 @@ func Lint(ch *Chart, engine string) []LintFinding {
 		add(LintWarning, "Chart.yaml declares no swarmcliVersion: nothing states which swarmcli this chart needs")
 	}
 
-	values, err := MergeValues(ch.Values, nil, nil)
+	values, err := MergeValues(ch.Values, files, sets)
 	if err != nil {
-		add(LintError, "values.yaml: %v", err)
+		add(LintError, "%v", err)
 		return out // everything below renders from these values
 	}
 	if err := ValidateValues(ch.Schema, values); err != nil {

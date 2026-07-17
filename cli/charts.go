@@ -98,12 +98,14 @@ Common options:
       --for-version <ver>  lint: check the chart's swarmcliVersion against <ver>
                         instead of this build's chart engine
 
-lint renders a chart with its own default values and reports every problem it
-finds: a broken template, values that fail values.schema.json, a swarmcliVersion
-this build does not satisfy. --for-version asks whether the chart's declared
-floor admits some other version — it cannot tell you the chart RUNS on that
-version, because this binary carries only its own engine's behaviour. Rendering
-with a real binary of that version is the only thing that settles that.
+lint renders a chart and reports every problem it finds: a broken template,
+values that fail values.schema.json, a swarmcliVersion this build does not
+satisfy. It renders from the chart defaults, layering any -f/--set on top — a
+chart with a required, undefaulted input needs them supplied, exactly as an
+install would. --for-version asks whether the chart's declared floor admits some
+other version — it cannot tell you the chart RUNS on that version, because this
+binary carries only its own engine's behaviour. Rendering with a real binary of
+that version is the only thing that settles that.
 
 apply honours --wait, --timeout and --history-max. It REJECTS --set, --version,
 --reuse-values, --install, --purge-volumes, --requirements and --revision rather
@@ -344,7 +346,8 @@ func printChartMeta(ch *charts.Chart) {
 
 // chartsLint checks a chart without deploying anything: it is what a chart
 // author runs before publishing, and what a chart repository's CI runs per
-// chart.
+// chart. -f/--set supply the values the render check needs — a chart with a
+// required, undefaulted input cannot render from bare defaults.
 //
 // --for-version lints against a chart-engine version other than this build's,
 // which answers "does this chart's declared floor admit X?". It cannot answer
@@ -361,12 +364,16 @@ func chartsLint(args []string) int {
 	if code >= 0 {
 		return code
 	}
+	files, err := readValuesFiles(f.values)
+	if err != nil {
+		return fail(err)
+	}
 
 	engine := charts.EngineVersion()
 	if f.forVersion != "" {
 		engine = f.forVersion
 	}
-	findings := charts.Lint(ch, engine)
+	findings := charts.Lint(ch, engine, files, f.sets)
 	for _, fd := range findings {
 		errf("%s: %s\n", fd.Severity, fd.Message)
 	}

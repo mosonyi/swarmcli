@@ -31,7 +31,7 @@ func messages(findings []LintFinding) string {
 
 func TestLintCleanChart(t *testing.T) {
 	ch := lintChart(t, func(c *Chart) { c.Metadata.SwarmcliVersion = ">= 1.0.0" })
-	findings := Lint(ch, "1.13.0")
+	findings := Lint(ch, "1.13.0", nil, nil)
 	require.Empty(t, findings, "a satisfied chart must lint silently, got:\n%s", messages(findings))
 	require.False(t, HasErrors(findings))
 }
@@ -39,7 +39,7 @@ func TestLintCleanChart(t *testing.T) {
 // The field is optional, so its absence is advice rather than a failure — but a
 // chart that names no floor is the problem swarmcliVersion exists to fix.
 func TestLintNoSwarmcliVersionWarnsButPasses(t *testing.T) {
-	findings := Lint(lintChart(t, nil), "1.13.0")
+	findings := Lint(lintChart(t, nil), "1.13.0", nil, nil)
 	require.Len(t, findings, 1)
 	require.Equal(t, LintWarning, findings[0].Severity)
 	require.Contains(t, findings[0].Message, "declares no swarmcliVersion")
@@ -48,7 +48,7 @@ func TestLintNoSwarmcliVersionWarnsButPasses(t *testing.T) {
 
 func TestLintUnsatisfiedFloorIsAnError(t *testing.T) {
 	ch := lintChart(t, func(c *Chart) { c.Metadata.SwarmcliVersion = ">= 1.13.0" })
-	findings := Lint(ch, "1.12.0")
+	findings := Lint(ch, "1.12.0", nil, nil)
 	require.True(t, HasErrors(findings))
 	require.Contains(t, messages(findings), "requires swarmcli >= 1.13.0")
 	require.Contains(t, messages(findings), "1.12.0 does not satisfy")
@@ -59,12 +59,12 @@ func TestLintUnsatisfiedFloorIsAnError(t *testing.T) {
 func TestLintDoesNotClaimTheAskedVersionIsThisBuild(t *testing.T) {
 	withEngineVersion(t, "1.13.0") // this build
 	ch := lintChart(t, func(c *Chart) { c.Metadata.SwarmcliVersion = ">= 2.0.0" })
-	require.NotContains(t, messages(Lint(ch, "1.9.0")), "this build provides")
+	require.NotContains(t, messages(Lint(ch, "1.9.0", nil, nil)), "this build provides")
 }
 
 func TestLintUnparseableConstraintWarns(t *testing.T) {
 	ch := lintChart(t, func(c *Chart) { c.Metadata.SwarmcliVersion = "newer than 1.13 please" })
-	findings := Lint(ch, "1.13.0")
+	findings := Lint(ch, "1.13.0", nil, nil)
 	require.False(t, HasErrors(findings), "an unusable constraint is a warning, matching CheckCompat")
 	require.Contains(t, messages(findings), "not a valid SemVer constraint")
 }
@@ -73,7 +73,7 @@ func TestLintUnparseableConstraintWarns(t *testing.T) {
 // That must not manufacture an error.
 func TestLintUnstampedEngineWarns(t *testing.T) {
 	ch := lintChart(t, func(c *Chart) { c.Metadata.SwarmcliVersion = ">= 1.13.0" })
-	findings := Lint(ch, "")
+	findings := Lint(ch, "", nil, nil)
 	require.False(t, HasErrors(findings))
 	require.Contains(t, messages(findings), "no chart-engine version")
 }
@@ -83,10 +83,49 @@ func TestLintBrokenTemplateIsAnError(t *testing.T) {
 		c.Metadata.SwarmcliVersion = ">= 1.0.0"
 		c.Templates = map[string]string{"templates/stack.yaml": "{{ toYamlPretty .Values }}"}
 	})
-	findings := Lint(ch, "1.13.0")
+	findings := Lint(ch, "1.13.0", nil, nil)
 	require.True(t, HasErrors(findings))
 	require.Contains(t, messages(findings), "render with default values failed")
 	require.Contains(t, messages(findings), "toYamlPretty")
+}
+
+// A chart with a required, undefaulted input (a {{ fail }} / {{ required }}
+// guard) cannot render from bare defaults — so lint must accept the same values
+// an install would supply, or it flags a working chart as broken. This is the
+// renovate case found by linting the real charts.
+func TestLintRequiredInputNeedsValues(t *testing.T) {
+	newChart := func() *Chart {
+		return lintChart(t, func(c *Chart) {
+			c.Metadata.SwarmcliVersion = ">= 1.0.0"
+			c.Values = map[string]any{}
+			c.Schema = nil
+			c.Templates = map[string]string{
+				"templates/stack.yaml": `{{ if not .Values.repositories }}{{ fail "set repositories" }}{{ end }}` +
+					"\nservices:\n  app:\n    image: busybox\n",
+			}
+		})
+	}
+
+	bare := Lint(newChart(), "1.13.0", nil, nil)
+	require.True(t, HasErrors(bare), "bare defaults must surface the unmet requirement")
+	require.Contains(t, messages(bare), "set repositories")
+
+	withValues := Lint(newChart(), "1.13.0", [][]byte{[]byte("repositories: [owner/repo]\n")}, nil)
+	require.False(t, HasErrors(withValues), "supplying the value must clear it, got:\n%s", messages(withValues))
+}
+
+// --set reaches the render too.
+func TestLintSetOverride(t *testing.T) {
+	ch := lintChart(t, func(c *Chart) {
+		c.Metadata.SwarmcliVersion = ">= 1.0.0"
+		c.Values = map[string]any{}
+		c.Schema = nil
+		c.Templates = map[string]string{
+			"templates/stack.yaml": `{{ if not .Values.enabled }}{{ fail "set enabled=true" }}{{ end }}` +
+				"\nservices:\n  app:\n    image: busybox\n",
+		}
+	})
+	require.False(t, HasErrors(Lint(ch, "1.13.0", nil, []string{"enabled=true"})))
 }
 
 func TestLintValuesFailingSchemaIsAnError(t *testing.T) {
@@ -94,7 +133,7 @@ func TestLintValuesFailingSchemaIsAnError(t *testing.T) {
 		c.Metadata.SwarmcliVersion = ">= 1.0.0"
 		c.Schema = []byte(`{"type":"object","properties":{"replicas":{"type":"string"}}}`)
 	})
-	findings := Lint(ch, "1.13.0")
+	findings := Lint(ch, "1.13.0", nil, nil)
 	require.True(t, HasErrors(findings))
 	require.Contains(t, messages(findings), "values.schema.json")
 }
@@ -105,7 +144,7 @@ func TestLintReportsEveryProblemNotJustTheFirst(t *testing.T) {
 		c.Metadata.SwarmcliVersion = ">= 1.13.0"                                           // problem 1
 		c.Schema = []byte(`{"type":"object","properties":{"replicas":{"type":"string"}}}`) // problem 2
 	})
-	findings := Lint(ch, "1.12.0")
+	findings := Lint(ch, "1.12.0", nil, nil)
 	require.GreaterOrEqual(t, len(findings), 2, "got:\n%s", messages(findings))
 }
 

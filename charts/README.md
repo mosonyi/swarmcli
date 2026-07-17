@@ -174,16 +174,19 @@ bootstrapping limit Helm's own `apiVersion` gate has.
 ### Linting a chart
 
 ```bash
-swarmcli charts lint ./mychart                      # against this build
-swarmcli charts lint ./mychart --for-version 1.12.0 # against another version
+swarmcli charts lint ./mychart                       # against this build
+swarmcli charts lint ./mychart -f ./ci/default-values.yaml
+swarmcli charts lint ./mychart --for-version 1.12.0  # against another version
 ```
 
-`lint` renders the chart with its own default values and reports every problem it
-finds — a broken template, values that fail `values.schema.json`, a
-`swarmcliVersion` this build does not satisfy — rather than stopping at the
-first. A chart that declares no `swarmcliVersion` gets a warning, not an error:
-the field is optional, but a chart naming no floor leaves an operator on an old
-build nothing to act on.
+`lint` renders the chart and reports every problem it finds — a broken template,
+values that fail `values.schema.json`, a `swarmcliVersion` this build does not
+satisfy — rather than stopping at the first. It renders from the chart defaults,
+layering any `-f`/`--set` on top: a chart with a required, undefaulted input (a
+`{{ required }}` / `{{ fail }}` guard) cannot render from bare defaults, so lint
+it with the values a real install would supply. A chart that declares no
+`swarmcliVersion` gets a warning, not an error: the field is optional, but a
+chart naming no floor leaves an operator on an old build nothing to act on.
 
 `--for-version` asks **whether the chart's declared floor admits that version**.
 It cannot tell you the chart *runs* on it: this binary carries one engine's
