@@ -587,7 +587,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 func (m *Model) SetContent(msg Msg) {
 	l().Infof("ServicesView.SetContent: Updating display with %d services", len(msg.Entries))
 
-	m.title = msg.Title
+	m.titleScope = msg.Scope
 
 	m.List.Items = msg.Entries
 	m.List.ApplyFilter()

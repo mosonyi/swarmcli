@@ -7,7 +7,9 @@ import (
 	"swarmcli/ui"
 )
 
-func (m *Model) FrameTitle() string  { return m.title }
+func (m *Model) FrameTitle() string {
+	return ui.ScopedTitleFiltered("Services", m.titleScope, len(m.List.Filtered), m.List.Query)
+}
 func (m *Model) FrameHeader() string { return m.List.RenderHeader() }
 func (m *Model) FrameFooter() string {
 	footer := m.List.RenderFooter()

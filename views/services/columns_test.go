@@ -31,7 +31,7 @@ const longServiceName = "myproject_some-very-long-service-name"
 
 // loadWithFilter pushes entries into the model under a given scope.
 func loadWithFilter(m *Model, ft FilterType, entries []docker.ServiceEntry) {
-	m.Update(Msg{Title: "T", Entries: entries, FilterType: ft})
+	m.Update(Msg{Scope: "all", Entries: entries, FilterType: ft})
 }
 
 func hasColumn(m *Model, label string) bool {

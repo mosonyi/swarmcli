@@ -56,11 +56,11 @@ func factory(deps docker.Deps, w, h int, payload any) (view.View, tea.Cmd) {
 		v.SetPendingSelectServiceName(selectServiceName)
 	}
 
-	entries, title := v.loadServicesForView(filterType, nodeID, stackName)
+	entries, scope := v.loadServicesForView(filterType, nodeID, stackName)
 
 	// Apply data directly so keys work immediately (no race with async Cmd).
 	msg := Msg{
-		Title:      title,
+		Scope:      scope,
 		Entries:    entries,
 		FilterType: filterType,
 		NodeID:     nodeID,
