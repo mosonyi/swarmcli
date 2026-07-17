@@ -30,6 +30,9 @@ type flags struct {
 	// skipCompatCheck (--skip-compat-check) downgrades a chart's unmet
 	// swarmcliVersion requirement from a refusal to a warning.
 	skipCompatCheck bool
+	// forVersion (--for-version) lints a chart against a chart-engine version
+	// other than this build's.
+	forVersion string
 }
 
 // parseArgs splits raw args into positionals and flags. It understands the
@@ -129,6 +132,12 @@ func parseArgs(args []string) ([]string, flags, error) {
 			f.install = true
 		case "--skip-compat-check":
 			f.skipCompatCheck = true
+		case "--for-version":
+			v, err := next()
+			if err != nil {
+				return nil, f, err
+			}
+			f.forVersion = v
 		default:
 			return nil, f, fmt.Errorf("unknown flag %q", name)
 		}

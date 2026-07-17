@@ -41,17 +41,27 @@ type CompatFinding struct {
 
 // CheckCompat classifies a chart's swarmcliVersion constraint against the chart
 // engine this binary embeds.
+func CheckCompat(cf Chartfile) CompatFinding { return CheckCompatAgainst(cf, engineVersion) }
+
+// CheckCompatAgainst classifies a chart's swarmcliVersion against an arbitrary
+// chart-engine version rather than this build's. It is what lets `charts lint
+// --for-version` ask "does this chart's declared floor admit X?" without an X to
+// hand.
+//
+// Note what that question is NOT: whether the chart actually runs on X. This
+// binary carries one engine's behaviour, so it cannot emulate another's — only a
+// real X can prove that. This checks the claim's shape, not its truth.
 //
 // It never returns an error. A constraint this build cannot make sense of yields
 // CompatUnknown, not a failure: the check is a compatibility aid, not a security
 // boundary — a chart already renders to an arbitrary stack — so failing open on
 // our own inability to parse costs nothing, whereas failing closed would break
 // working charts for a cosmetic reason.
-func CheckCompat(cf Chartfile) CompatFinding {
+func CheckCompatAgainst(cf Chartfile, engine string) CompatFinding {
 	f := CompatFinding{
 		Chart:    strings.TrimSpace(cf.Name + " " + cf.Version),
 		Required: cf.SwarmcliVersion,
-		Engine:   engineVersion,
+		Engine:   engine,
 	}
 	if cf.SwarmcliVersion == "" {
 		return f // nothing declared: the common case, and silently fine
@@ -65,13 +75,13 @@ func CheckCompat(cf Chartfile) CompatFinding {
 		f.Reason = fmt.Sprintf("swarmcliVersion %q is not a valid SemVer constraint", cf.SwarmcliVersion)
 		return f
 	}
-	if strings.TrimSpace(engineVersion) == "" {
+	if strings.TrimSpace(engine) == "" {
 		f.Reason = "this build reports no chart-engine version"
 		return f
 	}
-	core, ok := coreVersion(engineVersion)
+	core, ok := coreVersion(engine)
 	if !ok {
-		f.Reason = fmt.Sprintf("this build's chart-engine version %q is not valid SemVer", engineVersion)
+		f.Reason = fmt.Sprintf("chart-engine version %q is not valid SemVer", engine)
 		return f
 	}
 	if c.Check(core) {

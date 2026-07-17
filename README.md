@@ -83,6 +83,9 @@ swarmcli charts repo remove <name>        # remove a repo
 swarmcli charts search [keyword]          # search charts across repos
 swarmcli charts show chart  <repo/chart>  # chart metadata (also: values, schema)
 
+# Authoring
+swarmcli charts lint <chart>                      # check a chart without deploying it
+
 # Releases
 swarmcli charts template <release> <repo/chart>   # render manifest (no deploy)
 swarmcli charts install  <release> <repo/chart>   # install a chart as a release
