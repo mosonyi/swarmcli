@@ -36,58 +36,155 @@ func MergeValues(defaults map[string]any, files [][]byte, sets []string) (map[st
 }
 
 // applySet applies one or more comma-separated "a.b.c=value" overrides to dst.
-// Values are type-inferred (bool, int, float, else string). List indexing is
-// intentionally not supported in Phase 1.
+// Values are type-inferred (bool, int, float, else string), and Helm's "{a,b}"
+// literal builds a list. Paths may index into lists Helm-style — "a[0]=x",
+// "a.b[1].c=y" — growing the list to fit.
+//
+// Every expression either applies or errors: a --set that silently did nothing
+// (as an unsupported "a[0]=x" once did) is the worst outcome, because the install
+// succeeds and the operator debugs the wrong thing.
 func applySet(dst map[string]any, expr string) error {
 	for _, pair := range splitSet(expr) {
 		eq := strings.IndexByte(pair, '=')
 		if eq < 0 {
 			return fmt.Errorf("--set %q: expected key=value", pair)
 		}
-		path := strings.TrimSpace(pair[:eq])
-		val := inferScalar(strings.TrimSpace(pair[eq+1:]))
+		path := unescapeCommas(strings.TrimSpace(pair[:eq]))
 		if path == "" {
 			return fmt.Errorf("--set %q: empty key", pair)
 		}
-		setPath(dst, strings.Split(path, "."), val)
+		steps, err := parseSetPath(path)
+		if err != nil {
+			return fmt.Errorf("--set %q: %w", pair, err)
+		}
+		// Every path starts with a map key and dst is non-nil, so setPath walks
+		// into dst and mutates it in place.
+		setPath(dst, steps, inferValue(strings.TrimSpace(pair[eq+1:])))
 	}
 	return nil
 }
 
-// splitSet splits on commas that are not escaped with a backslash, so values
-// may contain literal commas via "\,".
-func splitSet(s string) []string {
-	var parts []string
-	var cur strings.Builder
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\\' && i+1 < len(s) && s[i+1] == ',' {
-			cur.WriteByte(',')
-			i++
-			continue
-		}
-		if s[i] == ',' {
-			parts = append(parts, cur.String())
-			cur.Reset()
-			continue
-		}
-		cur.WriteByte(s[i])
-	}
-	parts = append(parts, cur.String())
-	return parts
+// setStep is one hop of a --set path: a map key, or a list index.
+type setStep struct {
+	key     string
+	index   int
+	isIndex bool
 }
 
-// setPath assigns val at the dotted key path, creating intermediate maps. An
-// intermediate scalar is overwritten with a map so the deeper key can be set.
-func setPath(m map[string]any, keys []string, val any) {
-	for i := 0; i < len(keys)-1; i++ {
-		next, ok := m[keys[i]].(map[string]any)
-		if !ok {
-			next = map[string]any{}
-			m[keys[i]] = next
+// parseSetPath splits a dotted path into map-key and list-index hops, so
+// "a.b[0].c" walks map a -> map b -> element 0 -> key c. Anything malformed is an
+// error rather than a key with brackets in its name that no template ever reads.
+func parseSetPath(path string) ([]setStep, error) {
+	var steps []setStep
+	for _, seg := range strings.Split(path, ".") {
+		if seg == "" {
+			return nil, fmt.Errorf("empty path segment")
 		}
-		m = next
+		name, idx, indexed := strings.Cut(seg, "[")
+		if name == "" {
+			return nil, fmt.Errorf("list index %q has no key", seg)
+		}
+		if strings.ContainsRune(name, ']') {
+			return nil, fmt.Errorf("unbalanced ']' in %q", seg)
+		}
+		steps = append(steps, setStep{key: name})
+		for rest := "[" + idx; indexed && rest != ""; {
+			if rest[0] != '[' {
+				return nil, fmt.Errorf("unexpected %q after a list index in %q", rest, seg)
+			}
+			end := strings.IndexByte(rest, ']')
+			if end < 0 {
+				return nil, fmt.Errorf("unbalanced '[' in %q", seg)
+			}
+			n, err := strconv.Atoi(rest[1:end])
+			if err != nil || n < 0 {
+				return nil, fmt.Errorf("invalid list index %q in %q", rest[1:end], seg)
+			}
+			steps = append(steps, setStep{index: n, isIndex: true})
+			rest = rest[end+1:]
+		}
 	}
-	m[keys[len(keys)-1]] = val
+	return steps, nil
+}
+
+// splitSet splits on commas that are neither escaped ("\,") nor inside a "{}"
+// list literal. Escapes are left intact for inferValue to resolve, so a comma
+// inside a list element ("{a\,b}") survives both splits.
+func splitSet(s string) []string { return splitCommas(s, true) }
+
+// splitCommas splits s on unescaped commas, ignoring those nested in "{}" when
+// braces is set. Nested list literals are not supported.
+func splitCommas(s string, braces bool) []string {
+	var parts []string
+	var cur strings.Builder
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '\\' && i+1 < len(s) && s[i+1] == ',':
+			cur.WriteString(`\,`)
+			i++
+		case braces && c == '{':
+			depth++
+			cur.WriteByte(c)
+		case braces && c == '}':
+			if depth > 0 {
+				depth--
+			}
+			cur.WriteByte(c)
+		case c == ',' && depth == 0:
+			parts = append(parts, cur.String())
+			cur.Reset()
+		default:
+			cur.WriteByte(c)
+		}
+	}
+	return append(parts, cur.String())
+}
+
+// unescapeCommas resolves "\," to a literal comma.
+func unescapeCommas(s string) string { return strings.ReplaceAll(s, `\,`, ",") }
+
+// inferValue converts a --set value into a scalar, or into a list when written
+// Helm-style as "{a,b,c}" ("{}" is the empty list).
+func inferValue(s string) any {
+	if len(s) >= 2 && strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}") {
+		inner := s[1 : len(s)-1]
+		if strings.TrimSpace(inner) == "" {
+			return []any{}
+		}
+		parts := splitCommas(inner, false)
+		out := make([]any, 0, len(parts))
+		for _, p := range parts {
+			out = append(out, inferScalar(unescapeCommas(strings.TrimSpace(p))))
+		}
+		return out
+	}
+	return inferScalar(unescapeCommas(s))
+}
+
+// setPath assigns val at the given hops, creating maps and lists along the way and
+// returning the (possibly new) container. A value of the wrong shape for the next
+// hop is replaced — an intermediate scalar becomes a map, as before — and a list
+// grows to fit the index, padding with nil.
+func setPath(cur any, steps []setStep, val any) any {
+	if len(steps) == 0 {
+		return val
+	}
+	if s := steps[0]; s.isIndex {
+		lst, _ := cur.([]any)
+		for len(lst) <= s.index {
+			lst = append(lst, nil)
+		}
+		lst[s.index] = setPath(lst[s.index], steps[1:], val)
+		return lst
+	}
+	m, _ := cur.(map[string]any)
+	if m == nil {
+		m = map[string]any{}
+	}
+	m[steps[0].key] = setPath(m[steps[0].key], steps[1:], val)
+	return m
 }
 
 // inferScalar converts a --set string into bool, int, float64, or string.
