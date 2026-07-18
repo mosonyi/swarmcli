@@ -30,11 +30,7 @@ func (m *Model) View() string {
 		{Key: "?", Desc: "Help"},
 		{Key: "ctrl+q", Desc: "Quit"},
 	}
-	if m.currentView.Name() == view.NameHelp {
-		globalHelp = []helpbar.HelpEntry{}
-	}
-	// Suppress global keys when the view hides them (e.g., shell).
-	if vc, ok := m.currentView.(interface{ HidesGlobalHelp() bool }); ok && vc.HidesGlobalHelp() {
+	if m.hidesGlobalKeys() {
 		globalHelp = []helpbar.HelpEntry{}
 	}
 
@@ -110,6 +106,17 @@ func (m *Model) View() string {
 		m.renderStackBar(),
 	)
 	return m.overlayStartup(m.overlayUnlock(m.overlayAppError(m.overlayUpdate(out))))
+}
+
+// hidesGlobalKeys reports whether the current view suppresses the app-level
+// keybindings: the help view already lists them, and a view may capture every
+// keystroke (implementing HidesGlobalHelp), which makes ":"/"?" unreachable.
+func (m *Model) hidesGlobalKeys() bool {
+	if m.currentView.Name() == view.NameHelp {
+		return true
+	}
+	vc, ok := m.currentView.(interface{ HidesGlobalHelp() bool })
+	return ok && vc.HidesGlobalHelp()
 }
 
 // overlayAppError overlays the app-level error dialog on top of the rendered output.
