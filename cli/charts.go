@@ -29,6 +29,9 @@ Discovery:
   show values <repo/chart>   Show default values.yaml
   show schema <repo/chart>   Show values.schema.json
 
+Authoring:
+  lint <chart>                Check a chart without deploying it
+
 Releases:
   template <release> <chart>  Render manifest to stdout (no deploy)
   install  <release> <chart>  Install a chart as a release
@@ -92,6 +95,17 @@ Common options:
       --purge-volumes   uninstall: also remove the release's volumes
       --diff            apply: show each changed release's manifest diff (implies --dry-run)
       --skip-compat-check  Proceed despite a chart's unmet swarmcliVersion constraint
+      --for-version <ver>  lint: check the chart's swarmcliVersion against <ver>
+                        instead of this build's chart engine
+
+lint renders a chart and reports every problem it finds: a broken template,
+values that fail values.schema.json, a swarmcliVersion this build does not
+satisfy. It renders from the chart defaults, layering any -f/--set on top — a
+chart with a required, undefaulted input needs them supplied, exactly as an
+install would. --for-version asks whether the chart's declared floor admits some
+other version — it cannot tell you the chart RUNS on that version, because this
+binary carries only its own engine's behaviour. Rendering with a real binary of
+that version is the only thing that settles that.
 
 apply honours --wait, --timeout and --history-max. It REJECTS --set, --version,
 --reuse-values, --install, --purge-volumes, --requirements and --revision rather
@@ -117,6 +131,8 @@ func chartsMain(args []string) int {
 		return chartsSearch(rest)
 	case "show":
 		return chartsShow(rest)
+	case "lint":
+		return chartsLint(rest)
 	case "template":
 		return chartsTemplate(rest)
 	case "install":
@@ -327,6 +343,46 @@ func printChartMeta(ch *charts.Chart) {
 }
 
 // --- template / install ---
+
+// chartsLint checks a chart without deploying anything: it is what a chart
+// author runs before publishing, and what a chart repository's CI runs per
+// chart. -f/--set supply the values the render check needs — a chart with a
+// required, undefaulted input cannot render from bare defaults.
+//
+// --for-version lints against a chart-engine version other than this build's,
+// which answers "does this chart's declared floor admit X?". It cannot answer
+// "does this chart run on X" — only a real X can (see charts.CheckCompatAgainst).
+func chartsLint(args []string) int {
+	pos, f, err := parseArgs(args)
+	if err != nil {
+		return usageErr(err.Error())
+	}
+	if len(pos) != 1 {
+		return usageErr("charts lint <chart>")
+	}
+	ch, _, code := loadChart(pos[0], f.version)
+	if code >= 0 {
+		return code
+	}
+	files, err := readValuesFiles(f.values)
+	if err != nil {
+		return fail(err)
+	}
+
+	engine := charts.EngineVersion()
+	if f.forVersion != "" {
+		engine = f.forVersion
+	}
+	findings := charts.Lint(ch, engine, files, f.sets)
+	for _, fd := range findings {
+		errf("%s: %s\n", fd.Severity, fd.Message)
+	}
+	if charts.HasErrors(findings) {
+		return 1
+	}
+	outf("%s %s: ok\n", ch.Metadata.Name, ch.Metadata.Version)
+	return 0
+}
 
 func chartsTemplate(args []string) int {
 	pos, f, err := parseArgs(args)

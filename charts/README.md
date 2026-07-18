@@ -171,6 +171,34 @@ Note that only builds carrying this check can honour it: `Chart.yaml` is parsed
 leniently, so an older swarmcli silently ignores `swarmcliVersion` — the same
 bootstrapping limit Helm's own `apiVersion` gate has.
 
+### Linting a chart
+
+```bash
+swarmcli charts lint ./mychart                       # against this build
+swarmcli charts lint ./mychart -f ./ci/default-values.yaml
+swarmcli charts lint ./mychart --for-version 1.12.0  # against another version
+```
+
+`lint` renders the chart and reports every problem it finds — a broken template,
+values that fail `values.schema.json`, a `swarmcliVersion` this build does not
+satisfy — rather than stopping at the first. It renders from the chart defaults,
+layering any `-f`/`--set` on top: a chart with a required, undefaulted input (a
+`{{ required }}` / `{{ fail }}` guard) cannot render from bare defaults, so lint
+it with the values a real install would supply. A chart that declares no
+`swarmcliVersion` gets a warning, not an error: the field is optional, but a
+chart naming no floor leaves an operator on an old build nothing to act on.
+
+`--for-version` asks **whether the chart's declared floor admits that version**.
+It cannot tell you the chart *runs* on it: this binary carries one engine's
+behaviour and cannot emulate another's, so it checks the claim's shape, not its
+truth. Rendering with a real binary of that version is the only thing that
+settles it — which is what a chart repository's CI should do:
+
+```bash
+SWARMCLI_REF=v1.10.0 scripts/install-swarmcli.sh ./bin  # build the declared floor
+./bin/swarmcli charts template t ./mychart              # prove the chart runs on it
+```
+
 Templates are rendered with Go `text/template` + [Sprig], exposing:
 
 - `.Values` — merged values (defaults < `-f` files < `--set`)
