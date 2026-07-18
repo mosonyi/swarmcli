@@ -67,6 +67,60 @@ releases:
     version: "0.1.0"
 `
 
+// Planning records a chart's engine requirement but must not act on it: apply
+// plans every release before converging any, so the whole plan is gated at once
+// by the caller.
+func TestPlanApplyRecordsCompatFinding(t *testing.T) {
+	withEngineVersion(t, "1.12.0")
+	e, _, src, rf := applyEnv(t, oneRelease)
+
+	ch := demoChart(t, "0.1.0")
+	ch.Metadata.SwarmcliVersion = ">= 1.13.0"
+	src.charts["swarmcli-charts/demo@0.1.0"] = ch
+
+	plan, err := e.PlanApply(context.Background(), rf, src)
+	require.NoError(t, err, "an incompatible chart must still plan; refusing is the caller's call")
+	require.Len(t, plan.Releases, 1)
+	require.Equal(t, ActionInstall, plan.Releases[0].Action)
+	require.Equal(t, CompatIncompatible, plan.Releases[0].Compat.Status)
+	require.Equal(t, ">= 1.13.0", plan.Releases[0].Compat.Required)
+}
+
+// The motivating case: a chart needing a newer engine usually dies inside Render
+// long before the caller's gate sees the finding, so the render error itself has
+// to carry the diagnosis.
+func TestPlanApplyRenderErrorNamesTheEngineRequirement(t *testing.T) {
+	withEngineVersion(t, "1.12.0")
+	e, _, src, rf := applyEnv(t, oneRelease)
+
+	broken := demoChart(t, "0.1.0")
+	broken.Metadata.SwarmcliVersion = ">= 1.13.0"
+	broken.Templates = map[string]string{"templates/stack.yaml": "{{ toYamlPretty .Values }}"}
+	src.charts["swarmcli-charts/demo@0.1.0"] = broken
+
+	_, err := e.PlanApply(context.Background(), rf, src)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "toYamlPretty", "the underlying failure must survive")
+	require.ErrorContains(t, err, "requires swarmcli >= 1.13.0", "and be diagnosed")
+	require.ErrorContains(t, err, "likely a consequence")
+}
+
+// The same failure on a chart that declared nothing must not acquire a spurious
+// compatibility story.
+func TestPlanApplyRenderErrorUnannotatedWhenNothingDeclared(t *testing.T) {
+	withEngineVersion(t, "1.12.0")
+	e, _, src, rf := applyEnv(t, oneRelease)
+
+	broken := demoChart(t, "0.1.0")
+	broken.Templates = map[string]string{"templates/stack.yaml": "{{ toYamlPretty .Values }}"}
+	src.charts["swarmcli-charts/demo@0.1.0"] = broken
+
+	_, err := e.PlanApply(context.Background(), rf, src)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "toYamlPretty")
+	require.NotContains(t, err.Error(), "likely a consequence")
+}
+
 func TestApplyInstallsThenIsIdempotent(t *testing.T) {
 	e, fb, src, rf := applyEnv(t, oneRelease, "0.1.0")
 	ctx := context.Background()

@@ -131,7 +131,7 @@ version is published, with the chart's release notes attached. Merge it, and
 
 ```
 mychart/
-├── Chart.yaml          # name, version, appVersion, description, maintainers
+├── Chart.yaml          # apiVersion, name, version, appVersion, swarmcliVersion, …
 ├── values.yaml         # default values
 ├── values.schema.json  # optional JSON Schema validated before render
 ├── README.md
@@ -141,6 +141,35 @@ mychart/
     ├── secrets.yaml
     └── volumes.yaml
 ```
+
+`apiVersion` is `v1` (the only format this build reads; absent means `v1`).
+
+### Declaring the swarmcli a chart needs
+
+A chart may state the chart engine it requires, as a SemVer constraint:
+
+```yaml
+# Chart.yaml
+swarmcliVersion: ">= 1.13.0"
+```
+
+`install`, `upgrade` and `apply` refuse a chart this build is too old for, so the
+failure names the version to upgrade to rather than surfacing as whatever error
+the missing feature happens to produce (`function "toYamlPretty" not defined`).
+`install` and `upgrade` ask before refusing when run interactively; `apply` never
+does — it is meant to run unattended. `template`, `diff` and `show` only warn:
+they change nothing, and `show` is how you find out what a chart wants. Pass
+`--skip-compat-check` to proceed anyway.
+
+The constraint is checked against the **chart engine's** version, which is not
+necessarily the version the binary reports for itself — a binary embedding this
+package carries whichever engine it pinned. A build that reports no engine
+version (any `go build`) warns rather than refusing: not knowing is not evidence
+of incompatibility. Charts declaring nothing are unaffected.
+
+Note that only builds carrying this check can honour it: `Chart.yaml` is parsed
+leniently, so an older swarmcli silently ignores `swarmcliVersion` — the same
+bootstrapping limit Helm's own `apiVersion` gate has.
 
 Templates are rendered with Go `text/template` + [Sprig], exposing:
 

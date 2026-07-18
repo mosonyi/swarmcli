@@ -27,6 +27,9 @@ type flags struct {
 	revision     int           // --revision (get)
 	timeout      time.Duration // --timeout
 	historyMax   int           // --history-max
+	// skipCompatCheck (--skip-compat-check) downgrades a chart's unmet
+	// swarmcliVersion requirement from a refusal to a warning.
+	skipCompatCheck bool
 }
 
 // parseArgs splits raw args into positionals and flags. It understands the
@@ -124,6 +127,8 @@ func parseArgs(args []string) ([]string, flags, error) {
 			f.purge = true
 		case "--install":
 			f.install = true
+		case "--skip-compat-check":
+			f.skipCompatCheck = true
 		default:
 			return nil, f, fmt.Errorf("unknown flag %q", name)
 		}

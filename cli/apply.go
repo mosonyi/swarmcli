@@ -48,6 +48,27 @@ func chartsApply(args []string) int {
 
 	printPlan(plan, f.diff)
 
+	// Gate the whole plan before converging any of it, matching PlanApply: a
+	// release that cannot run on this build must not leave the swarm half
+	// converged. Unchanged releases are exempt — they are already deployed, and
+	// apply is not going to touch them.
+	//
+	// The preview verbs only report, so they warn; the rest refuse without ever
+	// prompting, because apply is meant to run unattended and must not block on
+	// stdin just because a terminal happens to be attached.
+	pol := compatEnforceNoPrompt
+	if f.dryRun || f.diff {
+		pol = compatWarn
+	}
+	for _, r := range plan.Releases {
+		if r.Action == charts.ActionUnchanged {
+			continue
+		}
+		if code := applyCompat(r.Compat, pol, f.skipCompatCheck); code >= 0 {
+			return code
+		}
+	}
+
 	// --diff is a preview verb; it must never deploy.
 	if f.dryRun || f.diff {
 		outln("\ndry-run: nothing was deployed")

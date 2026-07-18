@@ -36,12 +36,16 @@ const (
 
 // Chartfile is the parsed Chart.yaml metadata.
 type Chartfile struct {
-	APIVersion  string       `yaml:"apiVersion"`
-	Name        string       `yaml:"name"`
-	Version     string       `yaml:"version"`
-	AppVersion  string       `yaml:"appVersion,omitempty"`
-	Description string       `yaml:"description,omitempty"`
-	Maintainers []Maintainer `yaml:"maintainers,omitempty"`
+	APIVersion string `yaml:"apiVersion"`
+	Name       string `yaml:"name"`
+	Version    string `yaml:"version"`
+	AppVersion string `yaml:"appVersion,omitempty"`
+	// SwarmcliVersion is a SemVer constraint on the chart engine this chart
+	// needs, e.g. ">= 1.13.0". Optional; absent means any. It constrains the
+	// engine's version rather than the running binary's — see buildinfo.go.
+	SwarmcliVersion string       `yaml:"swarmcliVersion,omitempty"`
+	Description     string       `yaml:"description,omitempty"`
+	Maintainers     []Maintainer `yaml:"maintainers,omitempty"`
 	// Dependencies are parsed but not resolved in Phase 1 (subcharts are Phase 3).
 	Dependencies []Dependency `yaml:"dependencies,omitempty"`
 }

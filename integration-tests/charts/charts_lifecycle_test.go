@@ -42,7 +42,7 @@ func writeDemoChart(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "Chart.yaml"),
-		[]byte("apiVersion: v2\nname: itest\nversion: 0.1.0\nappVersion: \"1.0\"\n"), 0o644))
+		[]byte("apiVersion: v1\nname: itest\nversion: 0.1.0\nappVersion: \"1.0\"\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "values.yaml"),
 		[]byte("replicas: 1\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "templates"), 0o755))
@@ -250,7 +250,7 @@ func writeExtNetChart(t *testing.T, netName string) string {
 	t.Helper()
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "Chart.yaml"),
-		[]byte("apiVersion: v2\nname: itest\nversion: 0.1.0\nappVersion: \"1.0\"\n"), 0o644))
+		[]byte("apiVersion: v1\nname: itest\nversion: 0.1.0\nappVersion: \"1.0\"\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "values.yaml"),
 		[]byte("replicas: 1\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "requirements.yaml"),

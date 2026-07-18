@@ -43,6 +43,59 @@ func TestLoadChartArchiveMissingChartfile(t *testing.T) {
 	require.ErrorContains(t, err, "name is required")
 }
 
+// Validating apiVersion is what reserves a future value for a format break: an
+// older build must refuse a chart it cannot read rather than load half of it.
+func TestLoadChartAPIVersion(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		line    string
+		wantErr string
+	}{
+		{name: "absent means v1", line: ""},
+		{name: "explicit v1", line: "apiVersion: v1\n"},
+		{name: "a future format is refused", line: "apiVersion: v2\n", wantErr: `unsupported apiVersion "v2"`},
+		{name: "nonsense is refused", line: "apiVersion: v99\n", wantErr: `unsupported apiVersion "v99"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tgz := packEntries(t, map[string]string{
+				"demo/Chart.yaml":           tc.line + "name: demo\nversion: 0.1.0\n",
+				"demo/templates/stack.yaml": "services: {}",
+			})
+			ch, err := LoadChartArchive(strings.NewReader(tgz))
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, "demo", ch.Metadata.Name)
+		})
+	}
+}
+
+func TestLoadChartSwarmcliVersion(t *testing.T) {
+	tgz := packEntries(t, map[string]string{
+		"demo/Chart.yaml":           "name: demo\nversion: 0.1.0\nswarmcliVersion: \">= 1.13.0\"\n",
+		"demo/templates/stack.yaml": "services: {}",
+	})
+	ch, err := LoadChartArchive(strings.NewReader(tgz))
+	require.NoError(t, err)
+	require.Equal(t, ">= 1.13.0", ch.Metadata.SwarmcliVersion)
+}
+
+// The constraint is metadata, not a gate inside the loader: loading must succeed
+// so callers can read the requirement and report it. Refusing here would make
+// `charts show` unable to answer which version the chart wants.
+func TestLoadChartUnsatisfiableSwarmcliVersionStillLoads(t *testing.T) {
+	withEngineVersion(t, "1.0.0")
+	tgz := packEntries(t, map[string]string{
+		"demo/Chart.yaml":           "name: demo\nversion: 0.1.0\nswarmcliVersion: \">= 99.0.0\"\n",
+		"demo/templates/stack.yaml": "services: {}",
+	})
+	ch, err := LoadChartArchive(strings.NewReader(tgz))
+	require.NoError(t, err)
+	require.Equal(t, CompatIncompatible, CheckCompat(ch.Metadata).Status)
+}
+
 func TestLoadChartArchiveTooManyFiles(t *testing.T) {
 	files := map[string]string{}
 	for i := 0; i <= maxChartFiles; i++ {

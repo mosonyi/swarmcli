@@ -65,6 +65,17 @@ A chart may declare its external networks/secrets/configs in requirements.yaml:
 install pre-flights them (auto-creating networks marked autoCreate, validating
 the rest) and uninstall reports any auto-created networks it leaves in place.
 
+A chart may also declare the swarmcli it needs, as a SemVer constraint:
+
+  # Chart.yaml
+  swarmcliVersion: ">= 1.13.0"
+
+install, upgrade and apply refuse a chart this build is too old for, so the
+failure names the version to upgrade to instead of surfacing as whatever error
+the missing feature happens to produce. install and upgrade ask first when run
+interactively; apply never does. template, diff and show only warn. Pass
+--skip-compat-check to try anyway. Charts declaring nothing are unaffected.
+
 Common options:
   -f, --values <file>   Values file (repeatable). For apply: the release file.
       --set k=v         Override a value (repeatable)
@@ -80,6 +91,7 @@ Common options:
       --revision <n>    get: select a specific revision
       --purge-volumes   uninstall: also remove the release's volumes
       --diff            apply: show each changed release's manifest diff (implies --dry-run)
+      --skip-compat-check  Proceed despite a chart's unmet swarmcliVersion constraint
 
 apply honours --wait, --timeout and --history-max. It REJECTS --set, --version,
 --reuse-values, --install, --purge-volumes, --requirements and --revision rather
@@ -264,6 +276,9 @@ func chartsShow(args []string) int {
 	if code >= 0 {
 		return code
 	}
+	if code := applyCompat(charts.CheckCompat(ch.Metadata), compatWarn, f.skipCompatCheck); code >= 0 {
+		return code
+	}
 	switch what {
 	case "chart":
 		printChartMeta(ch)
@@ -322,7 +337,7 @@ func chartsTemplate(args []string) int {
 		return usageErr("charts template <release> <repo/chart>")
 	}
 	release, ref := pos[0], pos[1]
-	manifest, _, _, req, code := prepare(release, ref, f, nil)
+	manifest, _, _, req, code := prepare(release, ref, f, nil, compatWarn)
 	if code >= 0 {
 		return code
 	}
@@ -353,7 +368,7 @@ func chartsInstall(args []string) int {
 		return usageErr("charts install <release> <repo/chart>")
 	}
 	release, ref := pos[0], pos[1]
-	manifest, values, rc, req, code := prepare(release, ref, f, nil)
+	manifest, values, rc, req, code := prepare(release, ref, f, nil, compatEnforce)
 	if code >= 0 {
 		return code
 	}
@@ -393,7 +408,7 @@ func chartsUpgrade(args []string) int {
 			// re-validates the release, so a genuine backend error still surfaces.
 		}
 	}
-	manifest, values, rc, req, code := prepare(release, ref, f, base)
+	manifest, values, rc, req, code := prepare(release, ref, f, base, compatEnforce)
 	if code >= 0 {
 		return code
 	}
@@ -568,7 +583,7 @@ func chartsDiff(args []string) int {
 	if f.reuseValues {
 		base = cur.Values
 	}
-	next, _, _, _, code := prepare(release, ref, f, base)
+	next, _, _, _, code := prepare(release, ref, f, base, compatWarn)
 	if code >= 0 {
 		return code
 	}
@@ -583,9 +598,15 @@ func chartsDiff(args []string) int {
 // prepare loads the chart, merges + validates values, and renders the manifest.
 // base, when non-nil, replaces the chart defaults as the merge base (used by
 // `upgrade --reuse-values` to layer overrides over the previous release).
-func prepare(release, ref string, f flags, base map[string]any) (manifest string, values map[string]any, rc charts.ReleaseChart, req *charts.Requirements, code int) {
+func prepare(release, ref string, f flags, base map[string]any, pol compatPolicy) (manifest string, values map[string]any, rc charts.ReleaseChart, req *charts.Requirements, code int) {
 	ch, _, c := loadChart(ref, f.version)
 	if c >= 0 {
+		return "", nil, rc, nil, c
+	}
+	// Before rendering, not after: a chart that needs a newer engine would
+	// otherwise fail somewhere inside Render, and "function X not defined" is a
+	// far worse answer than naming the version it wants.
+	if c := applyCompat(charts.CheckCompat(ch.Metadata), pol, f.skipCompatCheck); c >= 0 {
 		return "", nil, rc, nil, c
 	}
 	if base == nil {

@@ -25,6 +25,12 @@ const (
 	templatesDir     = "templates"
 )
 
+// chartAPIVersionV1 is the only Chart.yaml schema this build understands. An
+// absent apiVersion means v1: charts predate the field, and none in the wild set
+// it. Validating it is what reserves a future value for a format break — an
+// older swarmcli must refuse a chart it cannot read, not load half of it.
+const chartAPIVersionV1 = "v1"
+
 // maxChartFileSize bounds any single file read from a chart archive to guard
 // against decompression bombs in downloaded tarballs.
 const maxChartFileSize = 10 << 20 // 10 MiB
@@ -219,6 +225,12 @@ func validateChart(ch *Chart) error {
 	}
 	if ch.Metadata.Version == "" {
 		return fmt.Errorf("Chart.yaml: version is required")
+	}
+	switch ch.Metadata.APIVersion {
+	case "", chartAPIVersionV1:
+	default:
+		return fmt.Errorf("Chart.yaml: unsupported apiVersion %q (expected %q)",
+			ch.Metadata.APIVersion, chartAPIVersionV1)
 	}
 	if len(ch.Templates) == 0 {
 		return fmt.Errorf("chart %q has no templates", ch.Metadata.Name)
