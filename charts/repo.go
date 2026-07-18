@@ -412,6 +412,12 @@ func (s *RepoStore) Pull(entry IndexEntry, baseURL string) (*Chart, error) {
 // including hand-written and older ones — that does not publish digests.
 var errNoDigest = errors.New("no digest in index entry")
 
+// staleIndexHint is appended to a digest-mismatch error: the common cause is a
+// chart rebuilt and republished after the local index was cached, so refreshing
+// the index makes the two agree again.
+const staleIndexHint = "\nhint: the cached repository index may be stale (e.g. the chart was " +
+	"rebuilt since you last refreshed); run `swarmcli charts repo update` to update it"
+
 // verifyDigest checks a downloaded chart archive against the digest published in
 // the repository index. The index is fetched over HTTPS from the repository, but
 // the tarball URL may point anywhere (a GitHub Release asset, a CDN) — the digest
@@ -435,7 +441,7 @@ func verifyDigest(entry IndexEntry, body []byte) error {
 	got := hex.EncodeToString(sum[:])
 	if !strings.EqualFold(got, want) {
 		return fmt.Errorf("chart %q version %s: digest mismatch (index says %s, download is %s); "+
-			"the repository index and the chart archive disagree — refusing to install",
+			"the repository index and the chart archive disagree — refusing to install"+staleIndexHint,
 			entry.Name, entry.Version, want, got)
 	}
 	return nil

@@ -330,6 +330,7 @@ func TestPullVerifiesDigest(t *testing.T) {
 		s, e, base := serveChart(t, "sha256:"+strings.Repeat("0", 64), tgz)
 		ch, err := s.Pull(e, base)
 		require.ErrorContains(t, err, "digest mismatch")
+		require.ErrorContains(t, err, "charts repo update")
 		require.Nil(t, ch)
 	})
 
