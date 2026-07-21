@@ -29,12 +29,28 @@ type ConfigMeta struct {
 	Labels map[string]string
 }
 
-// ServiceState is a minimal live status line for a release's services.
+// ServiceState is a live status line for a release's services, plus the facts
+// --wait needs to decide whether the rollout is actually finished.
 type ServiceState struct {
 	Name     string
 	Mode     string
-	Replicas string // "running/desired" for replicated, "" otherwise
+	Replicas string // "running/desired" for replicated, "" otherwise — display only
 	Status   string
+
+	// Running counts tasks that are actually running on an active node.
+	// Deliberately not derived from Replicas: that string counts tasks by
+	// DESIRED state, so it reaches its target the moment Swarm schedules the
+	// tasks rather than when they are up (see issue #480).
+	Running int
+	// Desired is the target task count over active nodes.
+	Desired int
+	// UpdateState is swarm's UpdateStatus.State, empty when the service has
+	// never been updated. Empty means "no rollout has ever run" — NOT "the
+	// rollout finished", which is why a fresh install cannot rely on it.
+	UpdateState string
+	// Monitor is UpdateConfig.Monitor: the window after a task is created in
+	// which its failure still counts against the rollout.
+	Monitor time.Duration
 }
 
 // Backend abstracts the Docker operations the release engine needs, so the
@@ -833,51 +849,99 @@ func (e *Engine) pruneHistory(ctx context.Context, release string, keep int) {
 	}
 }
 
-// waitReady polls service convergence until all replicated services report
-// their desired replica count, or the timeout elapses.
+// waitPollInterval is how often waitReady re-reads service state. A variable so
+// tests can shrink it; a real sleep in a unit test is otherwise unavoidable
+// because the stability window is wall-clock.
+var waitPollInterval = 2 * time.Second
+
+// defaultStabilityWindow mirrors the Docker CLI's own default monitor period.
+// Reaching the target replica count is necessary but not sufficient: a task that
+// starts and then dies inside UpdateConfig.Monitor counts as a rollout failure,
+// so returning at first parity reports success for a service that is about to
+// crash-loop.
+const defaultStabilityWindow = 5 * time.Second
+
+// waitReady polls until every service in the release is running its target task
+// count and has held it for the stability window, or the timeout elapses.
+//
+// It returns early with an error when swarm reports the rollout wedged
+// ("paused" / "rollback_paused"): swarmkit never rolls back a rollback, so
+// those states need a human and waiting out the timeout only delays the report.
 func (e *Engine) waitReady(release string, timeout time.Duration) error {
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
 	}
 	deadline := e.now().Add(timeout)
+	var convergedAt time.Time
 	for {
 		states := e.Backend.StackServices(release)
+		if err := rolloutWedged(states); err != nil {
+			return fmt.Errorf("release %q: %w", release, err)
+		}
 		if len(states) > 0 && allConverged(states) {
-			return nil
+			if convergedAt.IsZero() {
+				convergedAt = e.now()
+			}
+			if !e.now().Before(convergedAt.Add(stabilityWindow(states))) {
+				return nil
+			}
+		} else {
+			// Lost parity — a task died inside the window. Start it again rather
+			// than counting the earlier, now-invalidated stretch.
+			convergedAt = time.Time{}
 		}
 		if !e.now().Before(deadline) {
 			return fmt.Errorf("timed out after %s waiting for release %q to converge", timeout, release)
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(waitPollInterval)
 	}
 }
 
+// stabilityWindow is the longest monitor period across the release's services,
+// so the slowest service governs. Services declaring none use the CLI default.
+func stabilityWindow(states []ServiceState) time.Duration {
+	window := defaultStabilityWindow
+	for _, s := range states {
+		if s.Monitor > window {
+			window = s.Monitor
+		}
+	}
+	return window
+}
+
+// rolloutWedged reports a rollout swarm has given up on.
+func rolloutWedged(states []ServiceState) error {
+	for _, s := range states {
+		switch s.UpdateState {
+		case "paused":
+			return fmt.Errorf("service %q: update paused after a task failure; swarm will not continue without intervention", s.Name)
+		case "rollback_paused":
+			return fmt.Errorf("service %q: rollback paused; swarm never rolls back a rollback, so this needs manual recovery", s.Name)
+		}
+	}
+	return nil
+}
+
+// allConverged reports whether every service is running its target task count.
+//
+// It uses the actual running count rather than the Replicas display string.
+// That string counts tasks by DESIRED state, so it reaches parity the instant
+// swarm schedules the tasks — before any container is up — which made --wait
+// return immediately on a fresh install, where UpdateState is empty and the
+// in-flight guard below cannot fire either (issue #473).
 func allConverged(states []ServiceState) bool {
 	for _, s := range states {
-		// A rolling update in flight is not converged even if the (old)
-		// replica ratio still reads N/N — wait for the update to settle.
-		if inProgressStatus(s.Status) {
+		// A rolling update in flight is not converged even if the task count
+		// already reads N/N: the count may still be the outgoing generation.
+		switch s.UpdateState {
+		case "updating", "rollback_started":
 			return false
 		}
-		if s.Replicas == "" {
-			continue // global services: no replica ratio to check
-		}
-		run, des, ok := strings.Cut(s.Replicas, "/")
-		if !ok || run != des {
+		if s.Running < s.Desired {
 			return false
 		}
 	}
 	return true
-}
-
-// inProgressStatus reports whether a service's status string (as produced by
-// docker.getServiceStatus) indicates an in-flight create/update/rollback.
-func inProgressStatus(status string) bool {
-	switch status {
-	case "updating", "paused", "rolling back", "rollback paused":
-		return true
-	}
-	return false
 }
 
 func releaseConfigName(release string, rev int) string {
