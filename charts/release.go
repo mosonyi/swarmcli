@@ -56,7 +56,7 @@ type ServiceState struct {
 // Backend abstracts the Docker operations the release engine needs, so the
 // lifecycle logic is unit-testable without a live Swarm.
 type Backend interface {
-	DeployStack(name, manifest string) error
+	DeployStack(name, manifest string, resolve string) error
 	RemoveStack(name string) error
 	// RefreshSnapshot invalidates the shared Docker state cache after a mutation
 	// so subsequent reads (status, convergence polling) do not see stale data.
@@ -107,6 +107,10 @@ type InstallOptions struct {
 	Install    bool // upgrade: create the release if it does not exist
 	Timeout    time.Duration
 	HistoryMax int // 0 = keep all
+	// ResolveImage selects how the daemon resolves image tags at deploy time
+	// ("always" | "changed" | "never"); empty leaves Docker's default of
+	// "always". See docker.ResolveImage for why "changed" suits automation.
+	ResolveImage string
 	// Requirements is the chart's parsed requirements.yaml, when present. It
 	// drives the external-resource pre-flight (auto-create vs validate-only, the
 	// network driver/attachability, and remediation descriptions) and, when set,
@@ -252,7 +256,7 @@ func (e *Engine) deployAndRecord(ctx context.Context, rel *Release, opts Install
 		}
 		return rel, err
 	}
-	if err := e.Backend.DeployStack(rel.Name, rel.Manifest); err != nil {
+	if err := e.Backend.DeployStack(rel.Name, rel.Manifest, opts.ResolveImage); err != nil {
 		rel.Status = StatusFailed
 		// Roll back networks we auto-created for this install so a failed deploy
 		// leaves no trace; pre-existing networks are untouched.

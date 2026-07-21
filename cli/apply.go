@@ -83,9 +83,10 @@ func chartsApply(args []string) int {
 	}
 
 	results, err := e.Apply(context.Background(), plan, charts.InstallOptions{
-		Wait:       f.wait,
-		Timeout:    f.timeout,
-		HistoryMax: f.historyMax,
+		Wait:         f.wait,
+		Timeout:      f.timeout,
+		HistoryMax:   f.historyMax,
+		ResolveImage: f.resolveImage,
 	})
 	// Report what did happen before surfacing the failure: a partial apply has
 	// still changed the swarm, and the operator needs to know how far it got.

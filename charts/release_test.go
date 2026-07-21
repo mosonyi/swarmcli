@@ -53,7 +53,7 @@ func newFakeBackend() *fakeBackend {
 	}
 }
 
-func (f *fakeBackend) DeployStack(name, manifest string) error {
+func (f *fakeBackend) DeployStack(name, manifest, resolve string) error {
 	if f.failNext {
 		f.failNext = false
 		return fmt.Errorf("boom")
