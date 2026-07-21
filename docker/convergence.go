@@ -28,6 +28,14 @@ type ServiceConvergence struct {
 	// Monitor is UpdateConfig.Monitor: the window after a task is created during
 	// which its failure still counts against the rollout. Zero when unset.
 	Monitor time.Duration
+	// NewestTaskAge is how long the newest running task has been alive, measured
+	// from task creation — the same instant swarm measures Monitor from.
+	//
+	// A caller waiting out the monitor window needs it: a task only reports
+	// running once its healthcheck passes, so by then start_period and the
+	// checks that followed have already consumed part of the window, and
+	// sometimes all of it. Zero when nothing is running.
+	NewestTaskAge time.Duration
 }
 
 // activeNodeIDs returns the nodes that can currently run tasks. A task pinned to
@@ -71,6 +79,7 @@ func (snap *SwarmSnapshot) StackConvergence(stackName string) []ServiceConvergen
 		}
 
 		running := 0
+		var newest time.Time
 		for _, t := range snap.Tasks {
 			if t.ServiceID != svc.ID {
 				continue
@@ -87,18 +96,38 @@ func (snap *SwarmSnapshot) StackConvergence(stackName string) []ServiceConvergen
 				continue
 			}
 			running++
+			// The window is outstanding until the LAST task created has survived
+			// it, so the newest task governs.
+			if t.CreatedAt.After(newest) {
+				newest = t.CreatedAt
+			}
 		}
 
 		out = append(out, ServiceConvergence{
-			Name:        svc.Spec.Name,
-			Mode:        getServiceMode(svc),
-			Running:     running,
-			Desired:     desiredOverActiveNodes(svc, len(active)),
-			UpdateState: updateState(svc),
-			Monitor:     monitorWindow(svc),
+			Name:          svc.Spec.Name,
+			Mode:          getServiceMode(svc),
+			Running:       running,
+			Desired:       desiredOverActiveNodes(svc, len(active)),
+			UpdateState:   updateState(svc),
+			Monitor:       monitorWindow(svc),
+			NewestTaskAge: ageSince(newest),
 		})
 	}
 	return out
+}
+
+// ageSince is how long ago t was, clamped at zero. CreatedAt comes off the
+// manager's clock and is compared against this host's, so skew can put it in the
+// future; reporting a negative age would credit the caller with time that has
+// not passed. A zero timestamp (nothing running) is likewise zero age.
+func ageSince(t time.Time) time.Duration {
+	if t.IsZero() {
+		return 0
+	}
+	if age := time.Since(t); age > 0 {
+		return age
+	}
+	return 0
 }
 
 // desiredOverActiveNodes is the target task count. For a global service that is

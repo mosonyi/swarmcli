@@ -173,6 +173,7 @@ func (b *dockerBackend) StackServices(name string) []ServiceState {
 			st.Desired = c.Desired
 			st.UpdateState = c.UpdateState
 			st.Monitor = c.Monitor
+			st.NewestTaskAge = c.NewestTaskAge
 		}
 		out = append(out, st)
 	}
