@@ -45,11 +45,21 @@ type ReleasePlan struct {
 
 // Plan is what apply would do to the whole swarm.
 type Plan struct {
+	// Owner is the owner id this plan was classified against, from the release
+	// file's `owner:` key. Empty when the file declares none, in which case
+	// nothing on the swarm is claimable and Orphaned is always empty.
+	Owner string `json:"owner,omitempty"`
 	// Releases, in file order.
 	Releases []ReleasePlan `json:"releases"`
-	// Unmanaged names releases that exist on the swarm but are absent from the
-	// file. Apply never touches them — see Engine.Apply.
+	// Unmanaged names releases that exist on the swarm, are absent from the
+	// file, and carry no stamp saying this file produced them. Apply never
+	// touches them — see Engine.Apply.
 	Unmanaged []string `json:"unmanaged,omitempty"`
+	// Orphaned names releases this file's own owner installed that the file no
+	// longer declares. Unlike Unmanaged they are provably obsolete rather than
+	// merely unrecognised, which is what makes deleting them safe. Apply still
+	// does not delete them.
+	Orphaned []string `json:"orphaned,omitempty"`
 }
 
 // Counts summarises a plan.
@@ -83,7 +93,7 @@ func (e *Engine) PlanApply(ctx context.Context, rf *ReleaseFile, src ChartSource
 		deployed[rel.Name] = rel
 	}
 
-	plan := &Plan{}
+	plan := &Plan{Owner: rf.ownerID()}
 	managed := map[string]bool{}
 
 	for _, spec := range rf.Releases {
@@ -97,11 +107,31 @@ func (e *Engine) PlanApply(ctx context.Context, rf *ReleaseFile, src ChartSource
 	}
 
 	for _, rel := range current {
-		if !managed[rel.Name] {
+		switch {
+		case managed[rel.Name]:
+		case plan.Owner != "" && ownedBy(rel, plan.Owner):
+			plan.Orphaned = append(plan.Orphaned, rel.Name)
+		default:
 			plan.Unmanaged = append(plan.Unmanaged, rel.Name)
 		}
 	}
 	return plan, nil
+}
+
+// ownedBy reports whether a deployed release carries a stamp that this owner
+// wrote for that exact release.
+//
+// Both halves have to match. An id-only comparison would re-introduce the bare
+// owner label this encoding exists to avoid: a stamp copied onto a second
+// release would read as owned, and prune would then delete a release nobody
+// installed under that name. A stamp that does not parse is likewise not
+// evidence of anything, so it counts as unowned.
+func ownedBy(rel Release, id string) bool {
+	own, err := ParseOwner(rel.Owner)
+	if err != nil {
+		return false
+	}
+	return own == OwnerRef{ID: id, Kind: OwnerKindRelease, Name: rel.Name}
 }
 
 func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource, deployed map[string]Release) (ReleasePlan, error) {
@@ -186,9 +216,11 @@ type ApplyResult struct {
 // Apply converges the swarm to a plan, in file order.
 //
 // It never deletes. A release on the swarm that is absent from the file is
-// reported (Plan.Unmanaged) and left alone: a Release carries no marker saying
-// which manifest produced it, so a prune could not distinguish a release owned by
-// a second manifest, or one installed by hand, from a genuinely obsolete one.
+// reported and left alone — either as Plan.Unmanaged, where nothing says which
+// manifest produced it and so it may belong to a second file or to a human, or
+// as Plan.Orphaned, where its owner stamp names this file and it is therefore
+// provably obsolete. Only the second is safe to remove, which is what the stamp
+// exists to establish; acting on it is a separate change.
 //
 // Unchanged releases are skipped entirely. That is not an optimisation but a
 // requirement: history is one Docker Config per revision, so an apply that

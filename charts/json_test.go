@@ -89,3 +89,37 @@ func TestApplyResultJSONKeys(t *testing.T) {
 	// so a consumer cannot mistake it for revision zero.
 	require.NotContains(t, got, "revision")
 }
+
+// The owner stamp is served to API clients under the same key it is stored
+// under, and stays absent — not null, not "" — when nothing claimed the release.
+func TestReleaseOwnerJSONKey(t *testing.T) {
+	var got map[string]any
+	b, err := json.Marshal(Release{Name: "edge", Owner: "apply/prod:release/edge"})
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(b, &got))
+	require.Equal(t, "apply/prod:release/edge", got["owner"])
+
+	var bare map[string]any
+	b, err = json.Marshal(Release{Name: "edge"})
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(b, &bare))
+	require.NotContains(t, bare, "owner")
+}
+
+// A plan distinguishes releases it provably installed from releases of unknown
+// origin, and both keys stay absent when empty.
+func TestPlanOwnerAndOrphanedJSONKeys(t *testing.T) {
+	var got map[string]any
+	b, err := json.Marshal(Plan{Owner: "apply/prod", Orphaned: []string{"gone"}})
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(b, &got))
+	require.Equal(t, "apply/prod", got["owner"])
+	require.Equal(t, []any{"gone"}, got["orphaned"])
+
+	var bare map[string]any
+	b, err = json.Marshal(Plan{})
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(b, &bare))
+	require.NotContains(t, bare, "owner")
+	require.NotContains(t, bare, "orphaned")
+}

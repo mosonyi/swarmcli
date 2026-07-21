@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 // fakeChartSource serves charts from testdata without a repository, a network or
@@ -502,4 +503,133 @@ func TestPlanApplyDetectsChartNameChange(t *testing.T) {
 	plan2, err := e.PlanApply(ctx, rf, src)
 	require.NoError(t, err)
 	require.Equal(t, ActionUpgrade, plan2.Releases[0].Action)
+}
+
+// ownedRelease is a release file that claims what it installs.
+const ownedRelease = `owner: prod-swarm
+repositories:
+  - name: swarmcli-charts
+    url: https://eldara-tech.github.io/swarmcli-charts
+releases:
+  - name: hello
+    chart: swarmcli-charts/demo
+    version: "0.1.0"
+`
+
+// storeRelease writes a release record straight into the backend, so a test can
+// stage history that the engine would not produce itself — in particular a stamp
+// naming a release other than the one carrying it.
+func storeRelease(t *testing.T, fb *fakeBackend, rel Release) {
+	t.Helper()
+	payload, err := yaml.Marshal(rel)
+	require.NoError(t, err)
+	gz, err := gzipBytes(payload)
+	require.NoError(t, err)
+	labels := map[string]string{LabelType: TypeRelease, LabelRelease: rel.Name, LabelStatus: rel.Status}
+	if rel.Owner != "" {
+		labels[LabelOwner] = rel.Owner
+	}
+	require.NoError(t, fb.CreateConfig(context.Background(), releaseConfigName(rel.Name, rel.Revision), gz, labels))
+}
+
+// A release this file installed and no longer declares is provably obsolete: the
+// stamp names this manifest, so nothing else can be claiming it. That is the
+// distinction the stamp exists to draw, and it is the whole prerequisite for a
+// prune — so it must not land in Unmanaged alongside releases of unknown origin.
+func TestPlanApplySeparatesItsOwnOrphansFromUnmanagedReleases(t *testing.T) {
+	e, fb, src, rf := applyEnv(t, ownedRelease, "0.1.0")
+	ctx := context.Background()
+
+	storeRelease(t, fb, Release{Name: "ours", Revision: 1, Status: StatusDeployed, Owner: "apply/prod-swarm:release/ours"})
+	storeRelease(t, fb, Release{Name: "theirs", Revision: 1, Status: StatusDeployed, Owner: "apply/other-swarm:release/theirs"})
+	storeRelease(t, fb, Release{Name: "byhand", Revision: 1, Status: StatusDeployed})
+
+	plan, err := e.PlanApply(ctx, rf, src)
+	require.NoError(t, err)
+	require.Equal(t, "apply/prod-swarm", plan.Owner)
+	require.Equal(t, []string{"ours"}, plan.Orphaned)
+	require.ElementsMatch(t, []string{"byhand", "theirs"}, plan.Unmanaged)
+}
+
+// The stamp names the resource it was written for, which is the point of
+// encoding a tuple rather than a bare owner string: a record copied onto another
+// release still names the original, so it is not evidence that this manifest
+// installed the copy. ArgoCD's original bare instance label could not tell those
+// apart, and this is the case that proves ours can.
+func TestPlanApplyIgnoresAStampNamingAnotherRelease(t *testing.T) {
+	e, fb, src, rf := applyEnv(t, ownedRelease, "0.1.0")
+
+	// Right owner, wrong resource — a copy of "ours" filed under a new name.
+	storeRelease(t, fb, Release{Name: "copy", Revision: 1, Status: StatusDeployed, Owner: "apply/prod-swarm:release/ours"})
+	// Right owner, unparseable stamp.
+	storeRelease(t, fb, Release{Name: "garbled", Revision: 1, Status: StatusDeployed, Owner: "apply/prod-swarm"})
+
+	plan, err := e.PlanApply(context.Background(), rf, src)
+	require.NoError(t, err)
+	require.Empty(t, plan.Orphaned, "an unverifiable stamp is not ownership")
+	require.ElementsMatch(t, []string{"copy", "garbled"}, plan.Unmanaged)
+}
+
+// A file that declares no owner claims nothing, so every release on the swarm
+// stays unmanaged no matter what stamp it carries. That is what keeps the stamp
+// opt-in and today's behaviour the default.
+func TestPlanApplyWithoutAnOwnerClaimsNothing(t *testing.T) {
+	e, fb, src, rf := applyEnv(t, oneRelease, "0.1.0")
+
+	storeRelease(t, fb, Release{Name: "stamped", Revision: 1, Status: StatusDeployed, Owner: "apply/prod-swarm:release/stamped"})
+
+	plan, err := e.PlanApply(context.Background(), rf, src)
+	require.NoError(t, err)
+	require.Empty(t, plan.Owner)
+	require.Empty(t, plan.Orphaned)
+	require.Equal(t, []string{"stamped"}, plan.Unmanaged)
+}
+
+// Applying a plan stamps what it installs with the owner the plan was
+// classified against, so the next run recognises its own work.
+func TestApplyStampsTheOwnerItPlannedWith(t *testing.T) {
+	e, _, src, rf := applyEnv(t, ownedRelease, "0.1.0")
+	ctx := context.Background()
+
+	plan, err := e.PlanApply(ctx, rf, src)
+	require.NoError(t, err)
+	_, err = e.Apply(ctx, plan, InstallOptions{Owner: plan.Owner})
+	require.NoError(t, err)
+
+	rel, err := e.GetRevision(ctx, "hello", 0)
+	require.NoError(t, err)
+	require.Equal(t, "apply/prod-swarm:release/hello", rel.Owner)
+
+	// Drop it from the file — same owner, same swarm — and what apply installed,
+	// apply now recognises as its own orphan rather than as a stranger.
+	_, _, src2, rf2 := applyEnv(t, `owner: prod-swarm
+releases:
+  - name: other
+    chart: swarmcli-charts/demo
+    version: "0.1.0"
+`, "0.1.0")
+	plan2, err := e.PlanApply(ctx, rf2, src2)
+	require.NoError(t, err)
+	require.Equal(t, []string{"hello"}, plan2.Orphaned)
+}
+
+// apply still deletes nothing, orphan or not: the stamp establishes that it
+// could, and acting on it is a separate change.
+func TestApplyDoesNotRemoveItsOwnOrphans(t *testing.T) {
+	e, fb, src, rf := applyEnv(t, ownedRelease, "0.1.0")
+	ctx := context.Background()
+
+	ch := demoChart(t, "0.1.0")
+	_, err := e.Install(ctx, "obsolete", ReleaseChartOf(ch), ch.Values, "services: {}\n",
+		InstallOptions{Owner: "apply/prod-swarm"})
+	require.NoError(t, err)
+
+	plan, err := e.PlanApply(ctx, rf, src)
+	require.NoError(t, err)
+	require.Equal(t, []string{"obsolete"}, plan.Orphaned)
+
+	_, err = e.Apply(ctx, plan, InstallOptions{Owner: plan.Owner})
+	require.NoError(t, err)
+	require.Contains(t, fb.deployed, "obsolete")
+	require.Contains(t, fb.configs, "swarmcli.release.obsolete.v1")
 }

@@ -78,6 +78,7 @@ func chartsApply(args []string) int {
 
 	install, upgrade, _ := plan.Counts()
 	if install+upgrade == 0 {
+		reportOrphaned(plan)
 		reportUnmanaged(plan)
 		return 0
 	}
@@ -87,6 +88,10 @@ func chartsApply(args []string) int {
 		Timeout:      f.timeout,
 		HistoryMax:   f.historyMax,
 		ResolveImage: f.resolveImage,
+		// From the plan, not recomputed from the file: apply must stamp the
+		// same owner it classified against, or a release would be installed
+		// under one id and go looking for orphans under another.
+		Owner: plan.Owner,
 	})
 	// Report what did happen before surfacing the failure: a partial apply has
 	// still changed the swarm, and the operator needs to know how far it got.
@@ -99,6 +104,7 @@ func chartsApply(args []string) int {
 	if err != nil {
 		return fail(err)
 	}
+	reportOrphaned(plan)
 	reportUnmanaged(plan)
 	return 0
 }
@@ -163,10 +169,28 @@ func printPlan(plan *charts.Plan, withDiff bool) {
 	outf("\n%d to install, %d to upgrade, %d unchanged\n", install, upgrade, unchanged)
 }
 
-// reportUnmanaged names releases on the swarm that the file does not describe.
-// apply never removes them: a release records nothing about which manifest
-// produced it, so there is no way to tell one owned by a second file, or one
-// installed by hand, from a genuinely obsolete one.
+// reportOrphaned names releases this file's own owner installed that it no
+// longer declares. Unlike the unmanaged set these are provably obsolete — the
+// stamp says this manifest produced them — but apply still removes nothing.
+func reportOrphaned(plan *charts.Plan) {
+	if len(plan.Orphaned) == 0 {
+		return
+	}
+	outf("\n%d release(s) were installed by this release file but are no longer declared in it:\n", len(plan.Orphaned))
+	for _, n := range plan.Orphaned {
+		outf("  %s\n", n)
+	}
+	out("apply does not remove them; uninstall to reclaim them:\n")
+	for _, n := range plan.Orphaned {
+		outf("  swarmcli charts uninstall %s\n", n)
+	}
+}
+
+// reportUnmanaged names releases on the swarm that the file neither describes
+// nor claims. apply never removes them: nothing says a second file, or a human,
+// did not install them, so a genuinely obsolete one is indistinguishable from
+// somebody else's. Releases this file does claim are reported by reportOrphaned
+// instead.
 func reportUnmanaged(plan *charts.Plan) {
 	if len(plan.Unmanaged) == 0 {
 		return

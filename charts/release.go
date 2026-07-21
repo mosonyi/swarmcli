@@ -117,6 +117,16 @@ type InstallOptions struct {
 	// every external resource the manifest references must be declared in it. Nil
 	// falls back to manifest-driven pre-flight (auto-create attachable overlays).
 	Requirements *Requirements
+	// Owner claims the release for a manifest or controller, e.g.
+	// "apply/prod-swarm" or "cd/edge". It is recorded on every revision this
+	// call writes, as the id half of an OwnerRef naming the release.
+	//
+	// Empty leaves the revision unowned, which is what an imperative install
+	// does and what keeps "never delete anything" the default: only a release
+	// stamped with a caller's own owner can ever be a prune candidate, so a
+	// release installed by hand or by somebody else's manifest is untouchable
+	// no matter what a later prune is asked to do.
+	Owner string
 }
 
 // Install deploys a freshly rendered manifest as revision 1 of a new release and
@@ -238,6 +248,18 @@ func (e *Engine) newRevision(release string, rev int, chart ReleaseChart, values
 // returns the prospective revision without touching Docker. On deploy failure
 // it records nothing, leaving the release retryable (no orphaned revision).
 func (e *Engine) deployAndRecord(ctx context.Context, rel *Release, opts InstallOptions) (*Release, error) {
+	// Stamp before the dry-run return so a plan shows the ownership it would
+	// record, and before any mutation so a malformed owner fails for free.
+	// A revision is stamped with whoever wrote it, not with whoever wrote the
+	// previous one: an upgrade or rollback by a second manifest takes the
+	// release over, and the history shows exactly where the handover happened.
+	if opts.Owner != "" {
+		if err := validateOwnerID(opts.Owner); err != nil {
+			rel.Status = StatusFailed
+			return rel, err
+		}
+		rel.Owner = OwnerRef{ID: opts.Owner, Kind: OwnerKindRelease, Name: rel.Name}.String()
+	}
 	if opts.DryRun {
 		return rel, nil
 	}
@@ -734,6 +756,11 @@ func (e *Engine) storeRevision(ctx context.Context, rel *Release) error {
 		LabelRevision:     strconv.Itoa(rel.Revision),
 		LabelStatus:       rel.Status,
 		LabelCreated:      rel.Created,
+	}
+	// Absent rather than empty when unowned: a prune filtering on the label's
+	// presence must not match a release that merely carries a blank one.
+	if rel.Owner != "" {
+		labels[LabelOwner] = rel.Owner
 	}
 	return e.Backend.CreateConfig(ctx, releaseConfigName(rel.Name, rel.Revision), gz, labels)
 }

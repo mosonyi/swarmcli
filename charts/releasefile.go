@@ -30,9 +30,16 @@ import (
 // syntax fails loudly and names the key, rather than silently doing half of what
 // was meant.
 type ReleaseFile struct {
-	APIVersion   string        `yaml:"apiVersion,omitempty"`
-	Repositories []RepoSpec    `yaml:"repositories,omitempty"`
-	Releases     []ReleaseSpec `yaml:"releases"`
+	APIVersion   string     `yaml:"apiVersion,omitempty"`
+	Repositories []RepoSpec `yaml:"repositories,omitempty"`
+	// Owner names this manifest, claiming every release it installs. It is
+	// optional and there is deliberately no default: a derived one would either
+	// change between a laptop and a CI checkout (a path hash) or be shared by
+	// every repository using the conventional filename (a basename), and either
+	// would let two unrelated manifests claim each other's releases. Absent
+	// means nothing is claimed, which is exactly today's behaviour.
+	Owner    string        `yaml:"owner,omitempty"`
+	Releases []ReleaseSpec `yaml:"releases"`
 
 	// Dir is the directory containing the file. Values files and local chart
 	// paths resolve against it, never the process working directory, so the
@@ -90,6 +97,11 @@ func (rf *ReleaseFile) validate() error {
 	if len(rf.Releases) == 0 {
 		return rf.errf("no releases declared")
 	}
+	if rf.Owner != "" {
+		if err := validateOwnerID(rf.Owner); err != nil {
+			return rf.errf("%v", err)
+		}
+	}
 
 	seenRepo := map[string]bool{}
 	for i, r := range rf.Repositories {
@@ -144,6 +156,17 @@ func (rf *ReleaseFile) validate() error {
 
 func (rf *ReleaseFile) errf(format string, a ...any) error {
 	return fmt.Errorf("%s: %s", rf.Path, fmt.Sprintf(format, a...))
+}
+
+// ownerID is the owner id stamped on releases this file produces: its declared
+// owner namespaced under "apply/", so a manifest applied from the command line
+// and an application reconciled by a controller cannot claim each other's
+// releases by happening to pick the same name. Empty when no owner is declared.
+func (rf *ReleaseFile) ownerID() string {
+	if rf.Owner == "" {
+		return ""
+	}
+	return "apply/" + rf.Owner
 }
 
 // ValuesPaths resolves a release's values files against the manifest's directory.

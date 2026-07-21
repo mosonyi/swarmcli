@@ -157,3 +157,39 @@ func TestChartNameOf(t *testing.T) {
 	require.Equal(t, "whoami", chartNameOf("whoami"))
 	require.Equal(t, "c", chartNameOf("a/b/c"))
 }
+
+// The owner is optional and namespaced under "apply/" when stamped, so a
+// manifest applied from the command line and an application reconciled by a
+// controller cannot claim each other's releases by picking the same name.
+func TestReleaseFileOwner(t *testing.T) {
+	rf, err := ParseReleaseFile([]byte(`owner: prod-swarm
+releases:
+  - name: hello
+    chart: repo/demo
+    version: "1.0.0"
+`), "f.yaml")
+	require.NoError(t, err)
+	require.Equal(t, "prod-swarm", rf.Owner)
+	require.Equal(t, "apply/prod-swarm", rf.ownerID())
+
+	rf, err = ParseReleaseFile([]byte(`releases:
+  - name: hello
+    chart: repo/demo
+    version: "1.0.0"
+`), "f.yaml")
+	require.NoError(t, err)
+	require.Empty(t, rf.ownerID(), "no owner declared means nothing is claimed")
+}
+
+// ':' separates the id from the resource half of a stamp, so an owner carrying
+// one would decode as a different owner than it was written as. Catch it at
+// parse time, where the error can name the file.
+func TestReleaseFileRejectsOwnerWithColon(t *testing.T) {
+	_, err := ParseReleaseFile([]byte(`owner: "prod:swarm"
+releases:
+  - name: hello
+    chart: repo/demo
+    version: "1.0.0"
+`), "f.yaml")
+	require.ErrorContains(t, err, "must not contain ':'")
+}
