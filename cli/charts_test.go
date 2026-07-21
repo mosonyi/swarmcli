@@ -263,3 +263,22 @@ func TestReportOrphaned(t *testing.T) {
 	o, _ = capture(t, func() { reportOrphaned(&charts.Plan{}) })
 	require.Empty(t, o)
 }
+
+// The two lists always travel together. They answer one question — what does the
+// swarm hold that this apply did not deploy — from two directions, and every
+// exit path routes through the pair rather than picking one. Reporting only one
+// of them is what the dry-run path used to do, by reporting neither.
+func TestReportUnclaimedCoversBothLists(t *testing.T) {
+	o, _ := capture(t, func() {
+		reportUnclaimed(&charts.Plan{
+			Owner:     "apply/prod",
+			Orphaned:  []string{"gone"},
+			Unmanaged: []string{"legacy"},
+		})
+	})
+	require.Contains(t, o, "no longer declared in it")
+	require.Contains(t, o, "not in the release file")
+
+	o, _ = capture(t, func() { reportUnclaimed(&charts.Plan{}) })
+	require.Empty(t, o, "a clean apply prints no headers at all")
+}
