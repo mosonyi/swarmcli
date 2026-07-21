@@ -22,34 +22,34 @@ const (
 
 // ReleasePlan is the computed desired state of one release.
 type ReleasePlan struct {
-	Name   string
-	Ref    string
-	Action Action
+	Name   string `json:"name"`
+	Ref    string `json:"ref"`
+	Action Action `json:"action"`
 	// FromVersion is the currently deployed chart version, empty for an install.
-	FromVersion string
-	ToVersion   string
+	FromVersion string `json:"fromVersion,omitempty"`
+	ToVersion   string `json:"toVersion"`
 
-	Chart        ReleaseChart
-	Values       map[string]any
-	Manifest     string
-	Requirements *Requirements
+	Chart        ReleaseChart   `json:"chart"`
+	Values       map[string]any `json:"values,omitempty"`
+	Manifest     string         `json:"manifest"`
+	Requirements *Requirements  `json:"requirements,omitempty"`
 	// CurrentManifest is the deployed manifest, for diffing. Empty for an install.
-	CurrentManifest string
+	CurrentManifest string `json:"currentManifest,omitempty"`
 	// Compat is the chart's engine requirement checked against this build.
 	// Planning records it but never acts on it: apply's contract is to plan
 	// every release before converging any, so the whole plan is gated at once
 	// by the caller — which is also the layer that knows whether blocking is
 	// appropriate for the verb being run.
-	Compat CompatFinding
+	Compat CompatFinding `json:"compat"`
 }
 
 // Plan is what apply would do to the whole swarm.
 type Plan struct {
 	// Releases, in file order.
-	Releases []ReleasePlan
+	Releases []ReleasePlan `json:"releases"`
 	// Unmanaged names releases that exist on the swarm but are absent from the
 	// file. Apply never touches them — see Engine.Apply.
-	Unmanaged []string
+	Unmanaged []string `json:"unmanaged,omitempty"`
 }
 
 // Counts summarises a plan.
@@ -178,9 +178,9 @@ func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource,
 
 // ApplyResult is what Apply actually did to one release.
 type ApplyResult struct {
-	Name     string
-	Action   Action
-	Revision int // 0 when unchanged (nothing was recorded)
+	Name     string `json:"name"`
+	Action   Action `json:"action"`
+	Revision int    `json:"revision,omitempty"` // 0 when unchanged (nothing was recorded)
 }
 
 // Apply converges the swarm to a plan, in file order.

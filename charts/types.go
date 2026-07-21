@@ -37,9 +37,9 @@ const (
 // Chartfile is the parsed Chart.yaml metadata.
 type Chartfile struct {
 	APIVersion string `yaml:"apiVersion"`
-	Name       string `yaml:"name"`
-	Version    string `yaml:"version"`
-	AppVersion string `yaml:"appVersion,omitempty"`
+	Name       string `yaml:"name" json:"name"`
+	Version    string `yaml:"version" json:"version"`
+	AppVersion string `yaml:"appVersion,omitempty" json:"appVersion,omitempty"`
 	// SwarmcliVersion is a SemVer constraint on the chart engine this chart
 	// needs, e.g. ">= 1.13.0". Optional; absent means any. It constrains the
 	// engine's version rather than the running binary's — see buildinfo.go.
@@ -133,24 +133,24 @@ type IndexEntry struct {
 // Release is the payload stored (gzipped) inside a release-history Config. It
 // fully describes one deployed revision so it can be inspected or rolled back.
 type Release struct {
-	Name      string         `yaml:"release"`
-	Revision  int            `yaml:"revision"`
-	Status    string         `yaml:"status"`
-	Chart     ReleaseChart   `yaml:"chart"`
-	Values    map[string]any `yaml:"values"`
-	Manifest  string         `yaml:"manifest"` // rendered Compose document
-	Created   string         `yaml:"created"`  // RFC3339
-	Namespace string         `yaml:"namespace"`
+	Name      string         `yaml:"release" json:"release"`
+	Revision  int            `yaml:"revision" json:"revision"`
+	Status    string         `yaml:"status" json:"status"`
+	Chart     ReleaseChart   `yaml:"chart" json:"chart"`
+	Values    map[string]any `yaml:"values" json:"values"`
+	Manifest  string         `yaml:"manifest" json:"manifest"` // rendered Compose document
+	Created   string         `yaml:"created" json:"created"`   // RFC3339
+	Namespace string         `yaml:"namespace" json:"namespace"`
 	// ManagedNetworks are the external networks swarmcli auto-created for this
 	// revision. Persisted so uninstall can report what it left behind (it does
 	// not remove them — they may be shared). Omitted for revisions that created
 	// none and for records written before this field existed.
-	ManagedNetworks []string `yaml:"managedNetworks,omitempty"`
+	ManagedNetworks []string `yaml:"managedNetworks,omitempty" json:"managedNetworks,omitempty"`
 }
 
 // ReleaseChart is the chart reference recorded in a Release.
 type ReleaseChart struct {
-	Name       string `yaml:"name"`
-	Version    string `yaml:"version"`
-	AppVersion string `yaml:"appVersion,omitempty"`
+	Name       string `yaml:"name" json:"name"`
+	Version    string `yaml:"version" json:"version"`
+	AppVersion string `yaml:"appVersion,omitempty" json:"appVersion,omitempty"`
 }
