@@ -495,26 +495,34 @@ func getServiceStackAndDesired(svc swarm.Service, snap *SwarmSnapshot) (stack st
 		stack = "-"
 	}
 
-	if svc.Spec.Mode.Replicated != nil && svc.Spec.Mode.Replicated.Replicas != nil {
-		desired = int(*svc.Spec.Mode.Replicated.Replicas)
-	} else if svc.Spec.Mode.Global != nil {
-		desired = len(snap.Nodes)
-	} else {
-		// One-off task
-		desired = 1
-	}
-
+	// Shared with the convergence path rather than duplicated: a global service's
+	// target is one task per node that can actually run one, so a drained or
+	// down node lowers the target instead of making the service read
+	// permanently short (issue #480).
+	desired = desiredOverActiveNodes(svc, len(activeNodeIDs(snap)))
 	return
 }
 
-// countTasksForNode counts tasks for a service; if nodeID == "", counts across all nodes
+// countTasksForNode counts the tasks of a service that are actually running; if
+// nodeID == "", counts across all nodes.
+//
+// It counts by Status.State, not DesiredState. Tasks are created with
+// DesiredState=running and only then walk new → pending → assigned → preparing
+// → starting → running, so counting intent reported a task that had never
+// started as if it were up. A service wedged on an unsatisfiable placement
+// constraint displayed as fully converged forever, which is exactly when the
+// operator most needs the truth (issue #480).
+//
+// Superseded tasks from a rolling update are still counted while they run,
+// matching `docker service ls`. Up-to-dateness is a different question from
+// readiness, and LoadStackConvergence is where --wait asks it.
 func countTasksForNode(serviceID, nodeID string, snap *SwarmSnapshot) int {
 	count := 0
 	for _, t := range snap.Tasks {
 		if t.ServiceID != serviceID {
 			continue
 		}
-		if t.DesiredState != swarm.TaskStateRunning {
+		if t.Status.State != swarm.TaskStateRunning {
 			continue
 		}
 		if nodeID == "" || t.NodeID == nodeID {
