@@ -71,15 +71,20 @@ func chartsApply(args []string) int {
 	}
 
 	// --diff is a preview verb; it must never deploy.
+	//
+	// Both lists are reported here rather than after the guard: a preview is the
+	// most useful place to learn that the file has left a release behind or that
+	// the swarm holds one nothing claims, since that is exactly what an operator
+	// is checking before committing to the apply.
 	if f.dryRun || f.diff {
+		reportUnclaimed(plan)
 		outln("\ndry-run: nothing was deployed")
 		return 0
 	}
 
 	install, upgrade, _ := plan.Counts()
 	if install+upgrade == 0 {
-		reportOrphaned(plan)
-		reportUnmanaged(plan)
+		reportUnclaimed(plan)
 		return 0
 	}
 
@@ -104,8 +109,7 @@ func chartsApply(args []string) int {
 	if err != nil {
 		return fail(err)
 	}
-	reportOrphaned(plan)
-	reportUnmanaged(plan)
+	reportUnclaimed(plan)
 	return 0
 }
 
@@ -167,6 +171,16 @@ func printPlan(plan *charts.Plan, withDiff bool) {
 
 	install, upgrade, unchanged := plan.Counts()
 	outf("\n%d to install, %d to upgrade, %d unchanged\n", install, upgrade, unchanged)
+}
+
+// reportUnclaimed names everything the swarm holds that this apply did not just
+// deploy — the file's own abandoned releases first, then releases nothing here
+// claims. The two are always reported together: they answer one question from
+// two directions, and reporting only one of them was the whole defect (a
+// dry-run showed neither, which is where they are most useful).
+func reportUnclaimed(plan *charts.Plan) {
+	reportOrphaned(plan)
+	reportUnmanaged(plan)
 }
 
 // reportOrphaned names releases this file's own owner installed that it no
