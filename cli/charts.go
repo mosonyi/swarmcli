@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/Eldara-Tech/swarmcli/charts"
+	"github.com/Eldara-Tech/swarmcli/utils/textdiff"
 )
 
 const chartsUsage = `Usage: swarmcli charts <command> [options]
@@ -647,7 +648,7 @@ func chartsDiff(args []string) int {
 		outln("No changes.")
 		return 0
 	}
-	out(lineDiff(cur.Manifest, next))
+	out(textdiff.Lines(cur.Manifest, next))
 	return 0
 }
 

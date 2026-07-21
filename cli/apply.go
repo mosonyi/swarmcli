@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Eldara-Tech/swarmcli/charts"
+	"github.com/Eldara-Tech/swarmcli/utils/textdiff"
 )
 
 // chartsApply converges the swarm to a declarative release manifest.
@@ -153,7 +154,7 @@ func printPlan(plan *charts.Plan, withDiff bool) {
 				continue
 			}
 			outf("\n--- %s (%s) ---\n", r.Name, r.Action)
-			out(lineDiff(r.CurrentManifest, r.Manifest))
+			out(textdiff.Lines(r.CurrentManifest, r.Manifest))
 		}
 	}
 
