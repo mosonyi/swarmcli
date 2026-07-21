@@ -61,11 +61,39 @@ func TestGetServiceStackAndDesired_Global(t *testing.T) {
 		},
 	}
 	snap := &SwarmSnapshot{
-		Nodes: []swarm.Node{{}, {}, {}},
+		Nodes: []swarm.Node{activeNode("n1"), activeNode("n2"), activeNode("n3")},
 	}
 	stack, desired := getServiceStackAndDesired(svc, snap)
 	require.Equal(t, "mystack", stack)
 	require.Equal(t, 3, desired)
+}
+
+// A global service targets one task per node that can actually run one. Counting
+// a drained or down node in the denominator made a fully healthy service read
+// permanently short (issue #480).
+func TestGetServiceStackAndDesired_GlobalIgnoresInactiveNodes(t *testing.T) {
+	svc := swarm.Service{
+		Spec: swarm.ServiceSpec{
+			Annotations: swarm.Annotations{Labels: map[string]string{"com.docker.stack.namespace": "mystack"}},
+			Mode:        swarm.ServiceMode{Global: &swarm.GlobalService{}},
+		},
+	}
+	drained := activeNode("n3")
+	drained.Spec.Availability = swarm.NodeAvailabilityDrain
+	down := activeNode("n4")
+	down.Status.State = swarm.NodeStateDown
+
+	snap := &SwarmSnapshot{Nodes: []swarm.Node{activeNode("n1"), activeNode("n2"), drained, down}}
+	_, desired := getServiceStackAndDesired(svc, snap)
+	require.Equal(t, 2, desired)
+}
+
+func activeNode(id string) swarm.Node {
+	return swarm.Node{
+		ID:     id,
+		Status: swarm.NodeStatus{State: swarm.NodeStateReady},
+		Spec:   swarm.NodeSpec{Availability: swarm.NodeAvailabilityActive},
+	}
 }
 
 func TestGetServiceStackAndDesired_NoStack(t *testing.T) {
@@ -80,12 +108,23 @@ func TestGetServiceStackAndDesired_NoStack(t *testing.T) {
 	require.Equal(t, "-", stack)
 }
 
+// runningTask is a task that is actually up: swarm intends to run it AND the
+// container reports running.
+func runningTask(svcID, nodeID string) swarm.Task {
+	return swarm.Task{
+		ServiceID:    svcID,
+		NodeID:       nodeID,
+		DesiredState: swarm.TaskStateRunning,
+		Status:       swarm.TaskStatus{State: swarm.TaskStateRunning},
+	}
+}
+
 func TestCountTasksForNode_All(t *testing.T) {
 	snap := &SwarmSnapshot{
 		Tasks: []swarm.Task{
-			{ServiceID: "svc1", NodeID: "n1", DesiredState: swarm.TaskStateRunning},
-			{ServiceID: "svc1", NodeID: "n2", DesiredState: swarm.TaskStateRunning},
-			{ServiceID: "svc2", NodeID: "n1", DesiredState: swarm.TaskStateRunning},
+			runningTask("svc1", "n1"),
+			runningTask("svc1", "n2"),
+			runningTask("svc2", "n1"),
 		},
 	}
 	require.Equal(t, 2, countTasksForNode("svc1", "", snap))
@@ -93,22 +132,50 @@ func TestCountTasksForNode_All(t *testing.T) {
 
 func TestCountTasksForNode_Specific(t *testing.T) {
 	snap := &SwarmSnapshot{
-		Tasks: []swarm.Task{
-			{ServiceID: "svc1", NodeID: "n1", DesiredState: swarm.TaskStateRunning},
-			{ServiceID: "svc1", NodeID: "n2", DesiredState: swarm.TaskStateRunning},
-		},
+		Tasks: []swarm.Task{runningTask("svc1", "n1"), runningTask("svc1", "n2")},
 	}
 	require.Equal(t, 1, countTasksForNode("svc1", "n1", snap))
 }
 
 func TestCountTasksForNode_SkipsNonRunning(t *testing.T) {
+	shutdown := runningTask("svc1", "n1")
+	shutdown.DesiredState = swarm.TaskStateShutdown
+	shutdown.Status.State = swarm.TaskStateShutdown
+
+	snap := &SwarmSnapshot{Tasks: []swarm.Task{runningTask("svc1", "n1"), shutdown}}
+	require.Equal(t, 1, countTasksForNode("svc1", "", snap))
+}
+
+// The bug this fixes: a task swarm INTENDS to run but which has not started —
+// pending on an unsatisfiable placement constraint, or still pulling an image —
+// was counted as if it were up, so the column read 3/3 where `docker service ls`
+// read 1/3 and the service never converged (issue #480).
+func TestCountTasksForNode_SkipsScheduledButNotYetRunning(t *testing.T) {
+	scheduled := func(state swarm.TaskState) swarm.Task {
+		t := runningTask("svc1", "n1")
+		t.Status.State = state // still intended to run, not there yet
+		return t
+	}
 	snap := &SwarmSnapshot{
 		Tasks: []swarm.Task{
-			{ServiceID: "svc1", NodeID: "n1", DesiredState: swarm.TaskStateRunning},
-			{ServiceID: "svc1", NodeID: "n1", DesiredState: swarm.TaskStateShutdown},
+			runningTask("svc1", "n1"),
+			scheduled(swarm.TaskStatePending),
+			scheduled(swarm.TaskStateStarting),
+			scheduled(swarm.TaskStatePreparing),
 		},
 	}
 	require.Equal(t, 1, countTasksForNode("svc1", "", snap))
+}
+
+// A superseded task is still counted while it runs, matching `docker service
+// ls`. Up-to-dateness is a separate question, and LoadStackConvergence is where
+// --wait asks it.
+func TestCountTasksForNode_CountsSupersededTasksStillRunning(t *testing.T) {
+	outgoing := runningTask("svc1", "n1")
+	outgoing.DesiredState = swarm.TaskStateShutdown // superseded, container still up
+
+	snap := &SwarmSnapshot{Tasks: []swarm.Task{runningTask("svc1", "n2"), outgoing}}
+	require.Equal(t, 2, countTasksForNode("svc1", "", snap))
 }
 
 func TestSortEntries(t *testing.T) {
