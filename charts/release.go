@@ -51,6 +51,9 @@ type ServiceState struct {
 	// Monitor is UpdateConfig.Monitor: the window after a task is created in
 	// which its failure still counts against the rollout.
 	Monitor time.Duration
+	// NewestTaskAge is how much of that window the newest running task has
+	// already lived through, measured from task creation as swarm measures it.
+	NewestTaskAge time.Duration
 }
 
 // Backend abstracts the Docker operations the release engine needs, so the
@@ -903,23 +906,18 @@ func (e *Engine) waitReady(release string, timeout time.Duration) error {
 		timeout = 5 * time.Minute
 	}
 	deadline := e.now().Add(timeout)
-	var convergedAt time.Time
 	for {
 		states := e.Backend.StackServices(release)
 		if err := rolloutWedged(states); err != nil {
 			return fmt.Errorf("release %q: %w", release, err)
 		}
-		if len(states) > 0 && allConverged(states) {
-			if convergedAt.IsZero() {
-				convergedAt = e.now()
-			}
-			if !e.now().Before(convergedAt.Add(stabilityWindow(states))) {
-				return nil
-			}
-		} else {
-			// Lost parity — a task died inside the window. Start it again rather
-			// than counting the earlier, now-invalidated stretch.
-			convergedAt = time.Time{}
+		// Parity is necessary but not sufficient: a task that starts and then
+		// dies inside the monitor window is a rollout failure, so hold until
+		// swarm's own window has closed. Losing parity needs no special case —
+		// the replacement task is newer, so the window it has left grows back on
+		// its own.
+		if len(states) > 0 && allConverged(states) && stabilityRemaining(states) <= 0 {
+			return nil
 		}
 		if !e.now().Before(deadline) {
 			return fmt.Errorf("timed out after %s waiting for release %q to converge", timeout, release)
@@ -928,16 +926,32 @@ func (e *Engine) waitReady(release string, timeout time.Duration) error {
 	}
 }
 
-// stabilityWindow is the longest monitor period across the release's services,
-// so the slowest service governs. Services declaring none use the CLI default.
-func stabilityWindow(states []ServiceState) time.Duration {
-	window := defaultStabilityWindow
+// stabilityRemaining is how much of the monitor window is still outstanding
+// across the release's services — the slowest governs, and <= 0 means every
+// service has held parity for as long as swarm itself would watch.
+//
+// The remainder is measured from TASK CREATION, not from the moment parity was
+// reached. Swarm starts the monitor when it creates the task, and a task only
+// reports running once its healthcheck passes, so start_period and the checks
+// that followed have already burned part of the window — for a service with a
+// long start_period, usually all of it. Restarting a full window at parity
+// instead made --wait sit for the monitor period on top of the time the service
+// took to come up, which is strictly more conservative than swarm and turns an
+// honest `monitor: 8m` into an eight-minute install.
+//
+// Services declaring no monitor use the CLI default, matching swarm's own.
+func stabilityRemaining(states []ServiceState) time.Duration {
+	var worst time.Duration
 	for _, s := range states {
-		if s.Monitor > window {
-			window = s.Monitor
+		window := s.Monitor
+		if window < defaultStabilityWindow {
+			window = defaultStabilityWindow
+		}
+		if remaining := window - s.NewestTaskAge; remaining > worst {
+			worst = remaining
 		}
 	}
-	return window
+	return worst
 }
 
 // rolloutWedged reports a rollout swarm has given up on.

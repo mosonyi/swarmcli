@@ -372,12 +372,32 @@ func TestAllConvergedGlobalTracksActiveNodes(t *testing.T) {
 	require.False(t, allConverged([]ServiceState{{Mode: "global", Running: 1, Desired: 2}}))
 }
 
-func TestStabilityWindowTakesTheLongestMonitor(t *testing.T) {
-	require.Equal(t, defaultStabilityWindow, stabilityWindow(nil))
+func TestStabilityRemainingTakesTheLongestOutstandingWindow(t *testing.T) {
+	require.Equal(t, time.Duration(0), stabilityRemaining(nil))
 	require.Equal(t, defaultStabilityWindow,
-		stabilityWindow([]ServiceState{{Monitor: time.Second}}), "a shorter monitor must not weaken the default")
+		stabilityRemaining([]ServiceState{{Monitor: time.Second}}), "a shorter monitor must not weaken the default")
 	require.Equal(t, 30*time.Second,
-		stabilityWindow([]ServiceState{{Monitor: 10 * time.Second}, {Monitor: 30 * time.Second}}))
+		stabilityRemaining([]ServiceState{{Monitor: 10 * time.Second}, {Monitor: 30 * time.Second}}))
+}
+
+// The window is measured from task creation, the same instant swarm measures it
+// from — so a task that has already lived through it is stable NOW.
+//
+// This is the whole point. A task only reports running once its healthcheck
+// passes, so start_period and the checks that followed are already spent by the
+// time parity is observed. Restarting a full window at parity made --wait sit
+// out the monitor period on top of however long the service took to come up,
+// which is strictly more conservative than swarm and turns an honest
+// `monitor: 8m` into an eight-minute install.
+func TestStabilityRemainingCountsTimeTheTaskHasAlreadyLived(t *testing.T) {
+	monitor := 90 * time.Second
+
+	require.Equal(t, 30*time.Second,
+		stabilityRemaining([]ServiceState{{Monitor: monitor, NewestTaskAge: 60 * time.Second}}))
+	require.LessOrEqual(t, stabilityRemaining([]ServiceState{{Monitor: monitor, NewestTaskAge: monitor}}),
+		time.Duration(0), "a task that has outlived its monitor is already stable")
+	require.LessOrEqual(t, stabilityRemaining([]ServiceState{{Monitor: monitor, NewestTaskAge: 10 * time.Minute}}),
+		time.Duration(0), "an over-aged task must not produce a negative wait either")
 }
 
 // paused and rollback_paused are terminal: swarmkit never rolls back a
@@ -470,34 +490,33 @@ func TestWaitReadyReturnsOnceTheWindowElapses(t *testing.T) {
 	waitPollInterval = time.Millisecond
 	defer func() { waitPollInterval = prev }()
 
-	b := &convergenceBackend{states: []ServiceState{{Name: "api", Running: 1, Desired: 1}}}
-	clock := time.Now()
-	e := &Engine{Backend: b, now: func() time.Time {
-		clock = clock.Add(2 * time.Second) // clears defaultStabilityWindow quickly
-		return clock
-	}}
+	young := []ServiceState{{Name: "api", Running: 1, Desired: 1, NewestTaskAge: time.Second}}
+	aged := []ServiceState{{Name: "api", Running: 1, Desired: 1, NewestTaskAge: time.Minute}}
+
+	b := &scriptedBackend{script: [][]ServiceState{young, young, aged}}
+	e := &Engine{Backend: b, now: time.Now}
+
 	require.NoError(t, e.waitReady("rel", time.Hour))
+	require.Equal(t, 3, b.calls, "must wait for the task to outlive the window, not return at parity")
 }
 
-// Losing parity inside the window restarts it, rather than counting the earlier
-// stretch that a task failure has invalidated.
-func TestWaitReadyRestartsWindowOnLostParity(t *testing.T) {
+// A replacement task after a lost rollout is newer, so the window it has left
+// grows back and waitReady must keep waiting rather than treating regained
+// parity as already-stable.
+func TestWaitReadyWaitsOutAReplacementTasksFreshWindow(t *testing.T) {
 	prev := waitPollInterval
 	waitPollInterval = time.Millisecond
 	defer func() { waitPollInterval = prev }()
 
-	converged := []ServiceState{{Name: "api", Running: 1, Desired: 1}}
+	young := []ServiceState{{Name: "api", Running: 1, Desired: 1, NewestTaskAge: time.Second}}
 	lost := []ServiceState{{Name: "api", Running: 0, Desired: 1}}
+	aged := []ServiceState{{Name: "api", Running: 1, Desired: 1, NewestTaskAge: time.Minute}}
 
-	b := &scriptedBackend{script: [][]ServiceState{converged, lost, converged}}
-	clock := time.Now()
-	e := &Engine{Backend: b, now: func() time.Time {
-		clock = clock.Add(3 * time.Second)
-		return clock
-	}}
+	b := &scriptedBackend{script: [][]ServiceState{young, lost, young, aged}}
+	e := &Engine{Backend: b, now: time.Now}
+
 	require.NoError(t, e.waitReady("rel", time.Hour))
-	// Had the window not restarted, it would have returned on the 2nd poll.
-	require.GreaterOrEqual(t, b.calls, 3, "losing parity must restart the stability window")
+	require.Equal(t, 4, b.calls, "the fresh task's remaining window must still be waited out")
 }
 
 // A wedged rollout is reported immediately rather than after the full timeout.
