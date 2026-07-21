@@ -4,6 +4,7 @@
 package charts
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -30,13 +31,57 @@ const (
 	CompatIncompatible
 )
 
+// String names the status for humans and for JSON. The zero value is
+// deliberately the safe one, so an unset Status reads as "unknown" rather than
+// as a claim about the chart.
+func (s CompatStatus) String() string {
+	switch s {
+	case CompatOK:
+		return "ok"
+	case CompatIncompatible:
+		return "incompatible"
+	default:
+		return "unknown"
+	}
+}
+
+// MarshalJSON writes the name rather than the iota. A bare int in an API
+// payload is a number whose meaning lives only in this file: a client cannot
+// read it without a copy of the constant block, and appending a status later
+// would silently renumber nothing but still leave every existing reader
+// guessing. The names are the contract.
+func (s CompatStatus) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
+}
+
+// UnmarshalJSON reads what MarshalJSON writes, so the type still round-trips.
+// An unrecognised name decodes to CompatUnknown rather than failing: a newer
+// producer naming a status this build does not know is not a reason to reject
+// the whole document, and "unknown" is the status callers already must not
+// block on.
+func (s *CompatStatus) UnmarshalJSON(b []byte) error {
+	var name string
+	if err := json.Unmarshal(b, &name); err != nil {
+		return err
+	}
+	switch name {
+	case "ok":
+		*s = CompatOK
+	case "incompatible":
+		*s = CompatIncompatible
+	default:
+		*s = CompatUnknown
+	}
+	return nil
+}
+
 // CompatFinding is the result of checking one chart against this build.
 type CompatFinding struct {
-	Chart    string // "<name> <version>", for messages
-	Required string // the chart's constraint as declared, e.g. ">= 1.13.0"
-	Engine   string // this build's chart-engine version; "" when unstamped
-	Status   CompatStatus
-	Reason   string // why the check was skipped; set only with CompatUnknown
+	Chart    string       `json:"chart"`              // "<name> <version>", for messages
+	Required string       `json:"required,omitempty"` // the chart's constraint as declared, e.g. ">= 1.13.0"
+	Engine   string       `json:"engine,omitempty"`   // this build's chart-engine version; "" when unstamped
+	Status   CompatStatus `json:"status"`
+	Reason   string       `json:"reason,omitempty"` // why the check was skipped; set only with CompatUnknown
 }
 
 // CheckCompat classifies a chart's swarmcliVersion constraint against the chart
