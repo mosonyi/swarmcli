@@ -21,6 +21,19 @@ type ServiceConvergence struct {
 	Running int
 	// Desired is the target count over active nodes.
 	Desired int
+	// Completed counts tasks that ran to completion on an active node. Only
+	// meaningful together with Job: for a long-running service a completed task
+	// is one swarm is about to replace, not one that finished its work.
+	Completed int
+	// Job reports a service swarm will not restart after a clean exit — a
+	// restart policy of "none" or "on-failure". Such a service is *supposed* to
+	// end with no task running, so Running < Desired is its success state, not
+	// a failure to converge (issue #443).
+	//
+	// A task that exits non-zero and exhausts its restart budget ends Failed,
+	// never Complete, so counting only completed tasks keeps the distinction
+	// that matters: finished versus broken.
+	Job bool
 	// UpdateState is the raw swarm UpdateStatus.State, empty when the service
 	// has never been updated. Note that a nil UpdateStatus means "no rollout has
 	// ever run", NOT "the rollout finished".
@@ -78,13 +91,12 @@ func (snap *SwarmSnapshot) StackConvergence(stackName string) []ServiceConvergen
 			continue
 		}
 
-		running := 0
+		job := isJobService(svc)
+
+		running, completed := 0, 0
 		var newest time.Time
 		for _, t := range snap.Tasks {
 			if t.ServiceID != svc.ID {
-				continue
-			}
-			if t.DesiredState != swarm.TaskStateRunning || t.Status.State != swarm.TaskStateRunning {
 				continue
 			}
 			// A task not yet assigned has no NodeID; it is by definition not
@@ -95,9 +107,20 @@ func (snap *SwarmSnapshot) StackConvergence(stackName string) []ServiceConvergen
 			if _, ok := active[t.NodeID]; !ok {
 				continue
 			}
-			running++
+			switch {
+			case t.DesiredState == swarm.TaskStateRunning && t.Status.State == swarm.TaskStateRunning:
+				running++
+			case job && t.Status.State == swarm.TaskStateComplete:
+				// Swarm sets DesiredState=shutdown once a job's task exits, so
+				// this is not reachable through the running arm above.
+				completed++
+			default:
+				continue
+			}
 			// The window is outstanding until the LAST task created has survived
-			// it, so the newest task governs.
+			// it, so the newest task governs. A completed job task counts here
+			// too, or --wait would measure the window from zero and sit out a
+			// full monitor after the job had already finished.
 			if t.CreatedAt.After(newest) {
 				newest = t.CreatedAt
 			}
@@ -107,6 +130,8 @@ func (snap *SwarmSnapshot) StackConvergence(stackName string) []ServiceConvergen
 			Name:          svc.Spec.Name,
 			Mode:          getServiceMode(svc),
 			Running:       running,
+			Completed:     completed,
+			Job:           job,
 			Desired:       desiredOverActiveNodes(svc, len(active)),
 			UpdateState:   updateState(svc),
 			Monitor:       monitorWindow(svc),
@@ -128,6 +153,28 @@ func ageSince(t time.Time) time.Duration {
 		return age
 	}
 	return 0
+}
+
+// isJobService reports a service swarm will not restart after a clean exit.
+//
+// Swarm's native mode: replicated-job is not the shape to look for — the
+// compose v3 schema `docker stack deploy` accepts cannot express it, so the
+// only way to run a one-shot task in a stack is a normal replicated service
+// with a restart policy that declines to restart it. That is what init and
+// migration steps in charts use, there being no depends_on in swarm.
+//
+// An omitted restart policy means "any", swarm's default, which is not a job.
+func isJobService(svc swarm.Service) bool {
+	rp := svc.Spec.TaskTemplate.RestartPolicy
+	if rp == nil {
+		return false
+	}
+	switch rp.Condition {
+	case swarm.RestartPolicyConditionNone, swarm.RestartPolicyConditionOnFailure:
+		return true
+	default:
+		return false
+	}
 }
 
 // desiredOverActiveNodes is the target task count. For a global service that is

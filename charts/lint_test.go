@@ -236,6 +236,23 @@ services:
 	require.Contains(t, got[0].Message, "at least 30s", "the finding names the value to set")
 }
 
+// The recommended value is a floor, not a budget: swarm starts the monitor when
+// it CREATES the task, so the image pull happens inside the window too. That is
+// unknowable from the manifest, so the finding says so rather than inventing an
+// allowance — a constant would be wrong for every chart differently, and would
+// re-fire the rule on charts whose monitors came from this formula.
+func TestLintHealthcheckMonitorNamesPullTimeAsUncounted(t *testing.T) {
+	got := lintMonitorFindings(t, `
+services:
+  api:
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 10s
+`)
+	require.Len(t, got, 1)
+	require.Contains(t, got[0].Message, "pull runs inside it")
+}
+
 // A monitor that already covers the healthcheck is fine whether it was declared
 // or inherited: a fast healthcheck under swarm's 5s default is not a finding.
 func TestLintHealthcheckMonitorAcceptsAnAdequateInheritedDefault(t *testing.T) {
