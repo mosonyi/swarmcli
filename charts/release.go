@@ -44,6 +44,12 @@ type ServiceState struct {
 	Running int
 	// Desired is the target task count over active nodes.
 	Desired int
+	// Completed counts tasks that ran to completion, and Job marks a service
+	// swarm will not restart after a clean exit. A one-shot init or migration
+	// step is *supposed* to end with nothing running, so without these two a
+	// finished job reads as a service that never came up (issue #443).
+	Completed int
+	Job       bool
 	// UpdateState is swarm's UpdateStatus.State, empty when the service has
 	// never been updated. Empty means "no rollout has ever run" — NOT "the
 	// rollout finished", which is why a fresh install cannot rely on it.
@@ -982,7 +988,11 @@ func allConverged(states []ServiceState) bool {
 		case "updating", "rollback_started":
 			return false
 		}
-		if s.Running < s.Desired {
+		// A job's task ends Complete and is never replaced, so requiring a
+		// running task would hold --wait until the timeout for a step that
+		// succeeded. A completed task fills its slot; a failed one ends in
+		// state Failed and is not counted, so a broken job still blocks.
+		if s.Running+s.Completed < s.Desired {
 			return false
 		}
 	}

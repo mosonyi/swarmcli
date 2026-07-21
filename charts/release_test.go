@@ -365,6 +365,28 @@ func TestAllConvergedRejectsScheduledButNotRunning(t *testing.T) {
 	require.False(t, allConverged(scheduled), "tasks that are merely scheduled must not count as converged")
 }
 
+// The bug in #443: a one-shot init or migration step ends with its task
+// Complete and nothing running, which is its SUCCESS state. Requiring a running
+// task held --wait until the timeout for a job that had already done its work,
+// and showed the release as 0/1 forever.
+func TestAllConvergedAcceptsACompletedJob(t *testing.T) {
+	done := []ServiceState{{
+		Name:      "superset_init",
+		Running:   0, // the task exited; swarm will not replace it
+		Completed: 1,
+		Desired:   1,
+		Job:       true,
+	}}
+	require.True(t, allConverged(done), "a job that ran to completion is converged")
+
+	// A job whose task has not finished yet is still not converged.
+	require.False(t, allConverged([]ServiceState{{Running: 0, Completed: 0, Desired: 1, Job: true}}))
+
+	// The distinction that matters: a task that failed ends in state Failed, so
+	// it is never counted as Completed and a broken job still blocks the wait.
+	require.False(t, allConverged([]ServiceState{{Running: 0, Completed: 0, Desired: 1, Job: true, Status: "active"}}))
+}
+
 // A global service on a drained node lowers the target rather than leaving the
 // release permanently short of a replica that can never be scheduled.
 func TestAllConvergedGlobalTracksActiveNodes(t *testing.T) {
