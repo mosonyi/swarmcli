@@ -144,6 +144,12 @@ const (
 	defaultHealthRetries  = 3
 )
 
+// swarmDefaultMonitor is what UpdateConfig.Monitor is when a compose file sets
+// none. Same fact as defaultStabilityWindow in release.go, which is the window
+// --wait has to sit through; naming it separately here keeps the lint readable
+// without a second copy of the number.
+const swarmDefaultMonitor = defaultStabilityWindow
+
 // lintHealthcheckMonitor warns when a service cannot fail its healthcheck before
 // swarm stops watching.
 //
@@ -154,6 +160,10 @@ const (
 // monitor is shorter than the healthcheck's own worst case, a broken deploy can
 // report success. Kubernetes has no analogue of this, so it reliably surprises
 // people arriving from there.
+//
+// An unset monitor is the common way to hit this, not an exemption from it:
+// swarm's default is 5s, shorter than almost any healthcheck's worst case. The
+// rule originally skipped that case, which meant it fired on nothing at all.
 //
 // Warning, not error: a short monitor is legitimate when the operator wants a
 // fast rollout and is watching by other means.
@@ -176,15 +186,13 @@ func lintHealthcheckMonitor(manifest string, add func(LintSeverity, string, ...a
 		if hc == nil || hc.Disable || isHealthcheckNone(hc.Test) {
 			continue
 		}
-		if svc.Deploy.UpdateConfig == nil || svc.Deploy.UpdateConfig.Monitor == "" {
-			// No explicit monitor: swarm's own 5s default applies. Deliberately
-			// not flagged — it would fire on nearly every chart with a
-			// healthcheck, and the issue scoped this to the explicit case.
-			continue
-		}
-		monitor, err := time.ParseDuration(svc.Deploy.UpdateConfig.Monitor)
-		if err != nil {
-			continue
+		monitor, declared := swarmDefaultMonitor, false
+		if svc.Deploy.UpdateConfig != nil && svc.Deploy.UpdateConfig.Monitor != "" {
+			d, err := time.ParseDuration(svc.Deploy.UpdateConfig.Monitor)
+			if err != nil {
+				continue
+			}
+			monitor, declared = d, true
 		}
 
 		interval := defaultHealthInterval
@@ -211,9 +219,13 @@ func lintHealthcheckMonitor(manifest string, add func(LintSeverity, string, ...a
 		if monitor >= needed {
 			continue
 		}
+		had := fmt.Sprintf("deploy.update_config.monitor (%s)", monitor)
+		if !declared {
+			had = fmt.Sprintf("no deploy.update_config.monitor, so swarm's %s default applies, which", monitor)
+		}
 		add(LintWarning,
-			"service %q: deploy.update_config.monitor (%s) is shorter than the healthcheck needs to fail (%s = start_period %s + interval %s x retries %d); a container that goes unhealthy after the monitor window does not fail the rollout, so a broken deploy reports success",
-			name, monitor, needed, startPeriod, interval, retries)
+			"service %q: %s is shorter than the healthcheck needs to fail (%s = start_period %s + interval %s x retries %d); a container that goes unhealthy after the monitor window does not fail the rollout, so a broken deploy reports success. Set deploy.update_config.monitor to at least %s",
+			name, had, needed, startPeriod, interval, retries, needed)
 	}
 }
 
