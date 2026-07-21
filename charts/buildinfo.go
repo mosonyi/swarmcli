@@ -5,7 +5,7 @@ package charts
 
 // engineVersion is the chart-engine feature level, stamped at build time with
 //
-//	-X swarmcli/charts.engineVersion=<version>
+//	-X github.com/Eldara-Tech/swarmcli/charts.engineVersion=<version>
 //
 // It names the version of THIS module, which is not necessarily the version the
 // surrounding binary reports for itself: the chart engine is this module's code,

@@ -12,7 +12,7 @@ import (
 	"github.com/Eldara-Tech/swarmcli/docker"
 )
 
-// dockerBackend implements Backend against the live swarmcli/docker package.
+// dockerBackend implements Backend against the live github.com/Eldara-Tech/swarmcli/docker package.
 type dockerBackend struct{}
 
 func (dockerBackend) DeployStack(name, manifest string) error {
