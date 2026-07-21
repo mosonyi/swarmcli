@@ -8,8 +8,8 @@ package network
 import (
 	"context"
 	"fmt"
-	"swarmcli/docker"
-	swarmlog "swarmcli/utils/log"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
 	"testing"
 	"time"
 

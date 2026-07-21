@@ -4,7 +4,7 @@
 package app
 
 import (
-	"swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/docker"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

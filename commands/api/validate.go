@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"sort"
 
-	"swarmcli/args"
-	"swarmcli/registry"
+	"github.com/Eldara-Tech/swarmcli/args"
+	"github.com/Eldara-Tech/swarmcli/registry"
 )
 
 // validateFlags rejects any flag in parsed that the command's spec does

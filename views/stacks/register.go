@@ -4,9 +4,9 @@
 package stacksview
 
 import (
-	"swarmcli/core/primitives/hash"
-	"swarmcli/docker"
-	"swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/core/primitives/hash"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

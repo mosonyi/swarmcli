@@ -6,12 +6,12 @@ package configsview
 import (
 	"context"
 	"fmt"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
+	"github.com/Eldara-Tech/swarmcli/views/helpbar"
+	loading "github.com/Eldara-Tech/swarmcli/views/loading"
 	"strings"
-	"swarmcli/docker"
-	filterlist "swarmcli/ui/components/filterable/list"
-	"swarmcli/views/confirmdialog"
-	"swarmcli/views/helpbar"
-	loading "swarmcli/views/loading"
 	"sync/atomic"
 	"time"
 

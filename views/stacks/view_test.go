@@ -6,7 +6,7 @@ package stacksview
 import (
 	"testing"
 
-	"swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/docker"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"

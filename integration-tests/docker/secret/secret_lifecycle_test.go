@@ -6,8 +6,8 @@
 package secret
 
 import (
-	"swarmcli/docker"
-	swarmlog "swarmcli/utils/log"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
 	"testing"
 
 	"github.com/stretchr/testify/require"

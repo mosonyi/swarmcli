@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/docker"
 )
 
 // TestRestartWhoamiSingleService_Idiomatic verifies that RestartServiceIdiomatic

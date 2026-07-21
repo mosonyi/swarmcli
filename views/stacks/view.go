@@ -5,8 +5,8 @@ package stacksview
 
 import (
 	"fmt"
-	"swarmcli/ui"
-	"swarmcli/ui/dialog"
+	"github.com/Eldara-Tech/swarmcli/ui"
+	"github.com/Eldara-Tech/swarmcli/ui/dialog"
 
 	"github.com/charmbracelet/lipgloss"
 )

@@ -4,7 +4,7 @@
 package registry
 
 import (
-	"swarmcli/args"
+	"github.com/Eldara-Tech/swarmcli/args"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"

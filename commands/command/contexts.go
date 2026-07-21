@@ -4,10 +4,10 @@
 package command
 
 import (
-	"swarmcli/args"
-	"swarmcli/registry"
-	contextsview "swarmcli/views/contexts"
-	"swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/args"
+	"github.com/Eldara-Tech/swarmcli/registry"
+	contextsview "github.com/Eldara-Tech/swarmcli/views/contexts"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"swarmcli/charts"
+	"github.com/Eldara-Tech/swarmcli/charts"
 )
 
 // chartsApply converges the swarm to a declarative release manifest.

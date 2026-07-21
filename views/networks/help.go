@@ -3,7 +3,7 @@
 
 package networksview
 
-import helpview "swarmcli/views/help"
+import helpview "github.com/Eldara-Tech/swarmcli/views/help"
 
 // GetNetworksHelpContent returns categorized help for the networks view.
 func GetNetworksHelpContent() []helpview.HelpCategory {

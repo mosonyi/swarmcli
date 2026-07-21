@@ -4,18 +4,18 @@
 package contexts
 
 import (
+	"github.com/Eldara-Tech/swarmcli/docker"
+	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
+	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
+	"github.com/Eldara-Tech/swarmcli/views/helpbar"
 	"strings"
-	"swarmcli/docker"
-	swarmlog "swarmcli/utils/log"
-	"swarmcli/views/confirmdialog"
-	"swarmcli/views/helpbar"
 	"sync"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
-	filterlist "swarmcli/ui/components/filterable/list"
+	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
 )
 
 type SortField int

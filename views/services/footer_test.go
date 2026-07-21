@@ -6,8 +6,8 @@ package servicesview
 import (
 	"testing"
 
-	"swarmcli/features"
-	"swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/features"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 
 	"github.com/stretchr/testify/require"
 )

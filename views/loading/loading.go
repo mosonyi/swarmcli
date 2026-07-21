@@ -5,9 +5,9 @@ package loadingview
 
 import (
 	"fmt"
+	"github.com/Eldara-Tech/swarmcli/ui"
+	"github.com/Eldara-Tech/swarmcli/views/helpbar"
 	"strings"
-	"swarmcli/ui"
-	"swarmcli/views/helpbar"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"

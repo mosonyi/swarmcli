@@ -4,8 +4,8 @@
 package tasksview
 
 import (
-	"swarmcli/docker"
-	"swarmcli/views/helpbar"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/views/helpbar"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"

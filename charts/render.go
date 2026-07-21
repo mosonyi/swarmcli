@@ -13,7 +13,7 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	"gopkg.in/yaml.v3"
 
-	"swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/docker"
 )
 
 // RenderContext is the data exposed to chart templates, mirroring Helm's

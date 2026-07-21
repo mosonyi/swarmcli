@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/docker/docker/api/types/network"

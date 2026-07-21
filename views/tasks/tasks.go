@@ -4,7 +4,7 @@
 package tasksview
 
 import (
-	swarmlog "swarmcli/utils/log"
+	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
 )
 
 const ViewName = "tasks"

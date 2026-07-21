@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"testing"
 
-	"swarmcli/docker"
-	"swarmcli/views/confirmdialog"
-	"swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"

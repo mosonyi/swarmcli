@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"swarmcli/charts"
+	"github.com/Eldara-Tech/swarmcli/charts"
 )
 
 // capture redirects stdout/stderr to separate buffers for the duration of fn

@@ -7,9 +7,9 @@ import (
 	"context"
 	"testing"
 
-	"swarmcli/docker"
-	"swarmcli/views/confirmdialog"
-	"swarmcli/views/scaledialog"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
+	"github.com/Eldara-Tech/swarmcli/views/scaledialog"
 
 	"github.com/stretchr/testify/require"
 )

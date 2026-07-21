@@ -6,12 +6,12 @@ package app
 import (
 	"testing"
 
-	"swarmcli/views/commandinput"
-	"swarmcli/views/confirmdialog"
-	"swarmcli/views/helpbar"
-	"swarmcli/views/searchinput"
-	"swarmcli/views/view"
-	"swarmcli/views/viewstack"
+	"github.com/Eldara-Tech/swarmcli/views/commandinput"
+	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
+	"github.com/Eldara-Tech/swarmcli/views/helpbar"
+	"github.com/Eldara-Tech/swarmcli/views/searchinput"
+	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/views/viewstack"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"

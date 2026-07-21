@@ -3,7 +3,7 @@
 
 package servicesview
 
-import swarmlog "swarmcli/utils/log"
+import swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
 
 func l() *swarmlog.SwarmLogger {
 	return swarmlog.L().With("views", "services")

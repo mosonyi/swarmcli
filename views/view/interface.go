@@ -4,7 +4,7 @@
 package view
 
 import (
-	"swarmcli/views/helpbar"
+	"github.com/Eldara-Tech/swarmcli/views/helpbar"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

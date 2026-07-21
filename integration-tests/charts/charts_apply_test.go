@@ -21,9 +21,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"swarmcli/charts"
-	"swarmcli/cli"
-	swarmlog "swarmcli/utils/log"
+	"github.com/Eldara-Tech/swarmcli/charts"
+	"github.com/Eldara-Tech/swarmcli/cli"
+	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
 )
 
 // TestChartsApplyIsIdempotentAgainstARealSwarm is the one thing the unit tests

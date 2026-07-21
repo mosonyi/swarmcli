@@ -5,18 +5,18 @@ package stacksview
 
 import (
 	"fmt"
+	"github.com/Eldara-Tech/swarmcli/core/primitives/hash"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
+	"github.com/Eldara-Tech/swarmcli/views/helpbar"
 	"strings"
-	"swarmcli/core/primitives/hash"
-	"swarmcli/docker"
-	"swarmcli/views/confirmdialog"
-	"swarmcli/views/helpbar"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
-	filterlist "swarmcli/ui/components/filterable/list"
+	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
 )
 
 const defaultStackTemplate = `version: '3.8'

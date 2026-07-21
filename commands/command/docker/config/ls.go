@@ -4,13 +4,13 @@
 package config
 
 import (
-	"swarmcli/args"
-	"swarmcli/registry"
-	configsview "swarmcli/views/configs"
+	"github.com/Eldara-Tech/swarmcli/args"
+	"github.com/Eldara-Tech/swarmcli/registry"
+	configsview "github.com/Eldara-Tech/swarmcli/views/configs"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
-import "swarmcli/views/view"
+import "github.com/Eldara-Tech/swarmcli/views/view"
 
 type DockerConfigLs struct{}
 

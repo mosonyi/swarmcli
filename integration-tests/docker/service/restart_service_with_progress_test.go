@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/docker"
 )
 
 func TestRestartServiceWithProgress(t *testing.T) {

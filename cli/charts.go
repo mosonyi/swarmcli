@@ -12,7 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"swarmcli/charts"
+	"github.com/Eldara-Tech/swarmcli/charts"
 )
 
 const chartsUsage = `Usage: swarmcli charts <command> [options]

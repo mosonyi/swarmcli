@@ -6,7 +6,7 @@ package nodesview
 import (
 	"testing"
 
-	"swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/docker"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"

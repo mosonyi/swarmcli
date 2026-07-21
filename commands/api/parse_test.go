@@ -6,13 +6,13 @@ package api //nolint:revive // standard short package name
 import (
 	"testing"
 
-	_ "swarmcli/commands/command"
-	_ "swarmcli/commands/command/docker"
-	_ "swarmcli/commands/command/docker/config"
-	_ "swarmcli/commands/command/docker/network"
-	_ "swarmcli/commands/command/docker/node"
-	_ "swarmcli/commands/command/docker/secret"
-	"swarmcli/registry"
+	_ "github.com/Eldara-Tech/swarmcli/commands/command"
+	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker"
+	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker/config"
+	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker/network"
+	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker/node"
+	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker/secret"
+	"github.com/Eldara-Tech/swarmcli/registry"
 
 	"github.com/stretchr/testify/require"
 )

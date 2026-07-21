@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"swarmcli/charts"
-	"swarmcli/docker"
-	"swarmcli/views/confirmdialog"
-	"swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/charts"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/docker/docker/api/types/swarm"

@@ -4,9 +4,9 @@
 package registry
 
 import (
+	"github.com/Eldara-Tech/swarmcli/args"
 	"sort"
 	"strings"
-	"swarmcli/args"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

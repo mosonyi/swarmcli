@@ -6,12 +6,12 @@ package secretsview
 import (
 	"context"
 	"fmt"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/ui"
+	"github.com/Eldara-Tech/swarmcli/ui/components/errordialog"
+	"github.com/Eldara-Tech/swarmcli/ui/dialog"
 	"sort"
 	"strings"
-	"swarmcli/docker"
-	"swarmcli/ui"
-	"swarmcli/ui/components/errordialog"
-	"swarmcli/ui/dialog"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"

@@ -4,12 +4,12 @@
 package commands
 
 import (
-	_ "swarmcli/commands/command"
-	_ "swarmcli/commands/command/docker"
-	_ "swarmcli/commands/command/docker/config"
-	_ "swarmcli/commands/command/docker/network"
-	_ "swarmcli/commands/command/docker/node"
-	_ "swarmcli/commands/command/docker/secret"
-	_ "swarmcli/commands/command/docker/service"
-	_ "swarmcli/commands/command/docker/volume"
+	_ "github.com/Eldara-Tech/swarmcli/commands/command"
+	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker"
+	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker/config"
+	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker/network"
+	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker/node"
+	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker/secret"
+	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker/service"
+	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker/volume"
 )

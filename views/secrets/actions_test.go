@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"testing"
 
-	"swarmcli/docker"
-	"swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/stretchr/testify/require"

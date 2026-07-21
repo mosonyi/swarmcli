@@ -9,7 +9,7 @@ import (
 
 	"github.com/docker/docker/api/types/network"
 
-	"swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/docker"
 )
 
 // dockerBackend implements Backend against the live swarmcli/docker package.

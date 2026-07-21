@@ -1,4 +1,4 @@
-module swarmcli
+module github.com/Eldara-Tech/swarmcli
 
 go 1.26
 

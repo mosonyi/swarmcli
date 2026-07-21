@@ -6,13 +6,13 @@ package contexts
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
+	helpview "github.com/Eldara-Tech/swarmcli/views/help"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"swarmcli/views/confirmdialog"
-	helpview "swarmcli/views/help"
-	"swarmcli/views/view"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"

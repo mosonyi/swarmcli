@@ -6,10 +6,10 @@ package command
 import (
 	"testing"
 
-	"swarmcli/args"
-	"swarmcli/registry"
-	helpview "swarmcli/views/help"
-	"swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/args"
+	"github.com/Eldara-Tech/swarmcli/registry"
+	helpview "github.com/Eldara-Tech/swarmcli/views/help"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"

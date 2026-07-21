@@ -6,10 +6,10 @@ package configsview
 import (
 	"context"
 	"fmt"
+	"github.com/Eldara-Tech/swarmcli/docker"
 	"os"
 	"os/exec"
 	"strings"
-	"swarmcli/docker"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

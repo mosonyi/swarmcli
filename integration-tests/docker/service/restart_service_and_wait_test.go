@@ -7,11 +7,11 @@ package service
 
 import (
 	"context"
-	swarmlog "swarmcli/utils/log"
+	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
 	"testing"
 	"time"
 
-	"swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/docker"
 )
 
 // restartTestCase defines one restart scenario.

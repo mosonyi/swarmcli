@@ -6,10 +6,10 @@ package service
 import (
 	"testing"
 
-	"swarmcli/args"
-	"swarmcli/registry"
-	servicesview "swarmcli/views/services"
-	"swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/args"
+	"github.com/Eldara-Tech/swarmcli/registry"
+	servicesview "github.com/Eldara-Tech/swarmcli/views/services"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 
 	"github.com/stretchr/testify/require"
 )

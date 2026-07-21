@@ -21,9 +21,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"swarmcli/charts"
-	"swarmcli/docker"
-	swarmlog "swarmcli/utils/log"
+	"github.com/Eldara-Tech/swarmcli/charts"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
 )
 
 const chartTemplate = `version: "3.9"

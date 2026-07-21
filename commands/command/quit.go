@@ -4,8 +4,8 @@
 package command
 
 import (
-	"swarmcli/args"
-	"swarmcli/registry"
+	"github.com/Eldara-Tech/swarmcli/args"
+	"github.com/Eldara-Tech/swarmcli/registry"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

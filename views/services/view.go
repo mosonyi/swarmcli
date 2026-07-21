@@ -4,7 +4,7 @@
 package servicesview
 
 import (
-	"swarmcli/ui"
+	"github.com/Eldara-Tech/swarmcli/ui"
 )
 
 func (m *Model) FrameTitle() string {

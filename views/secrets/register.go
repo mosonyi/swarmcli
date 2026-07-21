@@ -4,8 +4,8 @@
 package secretsview
 
 import (
-	"swarmcli/docker"
-	"swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
