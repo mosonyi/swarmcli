@@ -47,8 +47,47 @@ func ValidateStackYAML(content string) error {
 	return nil
 }
 
-// DeployStack deploys a stack with the provided name and YAML content.
+// ResolveImage selects how the daemon resolves image tags to digests at deploy
+// time, mirroring `docker stack deploy --resolve-image`.
+//
+// The empty value passes no flag, leaving Docker's own default of "always": the
+// manager queries the registry for every service on every deploy. That makes a
+// deploy fail when the registry is unreachable even though every node already
+// has the image, and it rewrites the spec to repo:tag@sha256:..., so anything
+// diffing desired against live sees every service as changed.
+//
+// "changed" re-resolves only when the compose file's image string differs from
+// the com.docker.stack.image label the CLI stashes, which is what a reconciler
+// wants. "never" has an open upstream rollout bug (moby#51658).
+type ResolveImage string
+
+const (
+	ResolveImageDefault ResolveImage = ""
+	ResolveImageAlways  ResolveImage = "always"
+	ResolveImageChanged ResolveImage = "changed"
+	ResolveImageNever   ResolveImage = "never"
+)
+
+// Valid reports whether r is a mode the docker CLI accepts.
+func (r ResolveImage) Valid() bool {
+	switch r {
+	case ResolveImageDefault, ResolveImageAlways, ResolveImageChanged, ResolveImageNever:
+		return true
+	}
+	return false
+}
+
+// DeployStack deploys a stack with the provided name and YAML content, leaving
+// image resolution at Docker's default. See DeployStackResolved.
 func DeployStack(stackName string, yamlContent string) error {
+	return DeployStackResolved(stackName, yamlContent, ResolveImageDefault)
+}
+
+// DeployStackResolved deploys a stack with an explicit image-resolution mode.
+func DeployStackResolved(stackName string, yamlContent string, resolve ResolveImage) error {
+	if !resolve.Valid() {
+		return fmt.Errorf("invalid --resolve-image %q: want always, changed or never", string(resolve))
+	}
 	// Validate first
 	if err := ValidateStackYAML(yamlContent); err != nil {
 		return fmt.Errorf("validation failed: %w", err)
@@ -83,7 +122,12 @@ func DeployStack(stackName string, yamlContent string) error {
 	}
 
 	// Execute docker stack deploy command
-	cmd := exec.Command("docker", "--context", ctx, "stack", "deploy", "-c", tmpFile.Name(), stackName)
+	args := []string{"--context", ctx, "stack", "deploy", "-c", tmpFile.Name()}
+	if resolve != ResolveImageDefault {
+		args = append(args, "--resolve-image", string(resolve))
+	}
+	args = append(args, stackName)
+	cmd := exec.Command("docker", args...)
 	cmd.Env = os.Environ()
 
 	// Capture output for error reporting

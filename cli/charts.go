@@ -90,6 +90,8 @@ Common options:
       --wait            Wait for services to converge
       --timeout <dur>   Wait timeout, e.g. 10m (default 5m)
       --history-max <n> Max release revisions to retain
+      --resolve-image <mode>  always | changed | never — how the daemon resolves
+                        image tags to digests at deploy time (default: always)
       --install         upgrade: install the release if absent
       --reuse-values    upgrade/diff: layer overrides on previous values
       --revision <n>    get: select a specific revision
@@ -108,7 +110,7 @@ other version — it cannot tell you the chart RUNS on that version, because thi
 binary carries only its own engine's behaviour. Rendering with a real binary of
 that version is the only thing that settles that.
 
-apply honours --wait, --timeout and --history-max. It REJECTS --set, --version,
+apply honours --wait, --timeout, --history-max and --resolve-image. It REJECTS --set, --version,
 --reuse-values, --install, --purge-volumes, --requirements and --revision rather
 than ignoring them: the release file is the only source of truth, so a value passed
 on the command line would be a lie. outdated refreshes the repository indexes first
@@ -435,6 +437,7 @@ func chartsInstall(args []string) int {
 		Timeout:      f.timeout,
 		HistoryMax:   f.historyMax,
 		Requirements: req,
+		ResolveImage: f.resolveImage,
 	})
 	if err != nil {
 		return fail(err)
@@ -476,6 +479,7 @@ func chartsUpgrade(args []string) int {
 		Timeout:      f.timeout,
 		HistoryMax:   f.historyMax,
 		Requirements: req,
+		ResolveImage: f.resolveImage,
 	})
 	if err != nil {
 		return fail(err)

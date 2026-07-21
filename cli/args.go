@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Eldara-Tech/swarmcli/docker"
 )
 
 // flags holds the parsed flag values shared across charts subcommands. Not
@@ -33,6 +35,9 @@ type flags struct {
 	// forVersion (--for-version) lints a chart against a chart-engine version
 	// other than this build's.
 	forVersion string
+	// resolveImage (--resolve-image) selects the daemon's tag-to-digest
+	// resolution at deploy time: always | changed | never.
+	resolveImage string
 }
 
 // parseArgs splits raw args into positionals and flags. It understands the
@@ -78,6 +83,15 @@ func parseArgs(args []string) ([]string, flags, error) {
 				return nil, f, err
 			}
 			f.sets = append(f.sets, v)
+		case "--resolve-image":
+			v, err := next()
+			if err != nil {
+				return nil, f, err
+			}
+			if !docker.ResolveImage(v).Valid() || v == "" {
+				return nil, f, fmt.Errorf("invalid value for --resolve-image: %q (want always, changed or never)", v)
+			}
+			f.resolveImage = v
 		case "--version":
 			v, err := next()
 			if err != nil {
