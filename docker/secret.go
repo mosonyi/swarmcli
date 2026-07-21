@@ -66,12 +66,16 @@ func (sec *SecretWithDecodedData) PrettyJSON() ([]byte, error) {
 
 // ListSecrets retrieves all Docker Swarm secrets.
 func ListSecrets(ctx context.Context) ([]swarm.Secret, error) {
-	l().Debug("[ListSecrets] Listing all secrets")
-
 	cli, err := GetClient()
 	if err != nil {
 		return nil, err
 	}
+	return ListSecretsWith(ctx, cli)
+}
+
+// ListSecretsWith is ListSecrets against an explicit client.
+func ListSecretsWith(ctx context.Context, cli *client.Client) ([]swarm.Secret, error) {
+	l().Debug("[ListSecrets] Listing all secrets")
 
 	secrets, err := cli.SecretList(ctx, swarm.SecretListOptions{})
 	if err != nil {

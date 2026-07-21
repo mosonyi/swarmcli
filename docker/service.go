@@ -412,13 +412,20 @@ func LoadNodeServices(nodeID string) []ServiceEntry {
 	return entries
 }
 
+// LoadStackServices returns a stack's services from the process-wide snapshot.
 func LoadStackServices(stackName string) []ServiceEntry {
 	snap, err := GetOrRefreshSnapshot()
 	if err != nil {
 		l().Warnf("failed to get snapshot: %v", err)
 		return nil
 	}
+	return snap.StackServices(stackName)
+}
 
+// StackServices returns a stack's services from an already-fetched snapshot, so
+// a caller holding a snapshot of a specific swarm can read it without going
+// through the process-wide cache.
+func (snap *SwarmSnapshot) StackServices(stackName string) []ServiceEntry {
 	var entries []ServiceEntry
 
 	for _, svc := range snap.Services {

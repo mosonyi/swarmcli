@@ -83,8 +83,26 @@ func DeployStack(stackName string, yamlContent string) error {
 	return DeployStackResolved(stackName, yamlContent, ResolveImageDefault)
 }
 
-// DeployStackResolved deploys a stack with an explicit image-resolution mode.
+// DeployStackResolved deploys a stack with an explicit image-resolution mode,
+// on whichever context the process is pointed at.
 func DeployStackResolved(stackName string, yamlContent string, resolve ResolveImage) error {
+	ctxName, err := GetDockerContext()
+	if err != nil {
+		return fmt.Errorf("failed to get docker context: %w", err)
+	}
+	return DeployStackInContext(ctxName, stackName, yamlContent, resolve)
+}
+
+// DeployStackInContext deploys a stack to an explicitly named Docker context.
+//
+// `docker stack deploy` has no SDK equivalent, so this shells out; naming the
+// context is what keeps the target an argument rather than whatever
+// DOCKER_CONTEXT or `docker context show` happens to say at the moment the
+// command runs.
+func DeployStackInContext(ctxName, stackName, yamlContent string, resolve ResolveImage) error {
+	if ctxName == "" {
+		return fmt.Errorf("docker context name is required")
+	}
 	if !resolve.Valid() {
 		return fmt.Errorf("invalid --resolve-image %q: want always, changed or never", string(resolve))
 	}
@@ -115,14 +133,8 @@ func DeployStackResolved(stackName string, yamlContent string, resolve ResolveIm
 		return fmt.Errorf("failed to close temporary file: %w", err)
 	}
 
-	// Get Docker context
-	ctx, err := GetDockerContext()
-	if err != nil {
-		return fmt.Errorf("failed to get docker context: %w", err)
-	}
-
 	// Execute docker stack deploy command
-	args := []string{"--context", ctx, "stack", "deploy", "-c", tmpFile.Name()}
+	args := []string{"--context", ctxName, "stack", "deploy", "-c", tmpFile.Name()}
 	if resolve != ResolveImageDefault {
 		args = append(args, "--resolve-image", string(resolve))
 	}
@@ -151,14 +163,22 @@ func DeployStackResolved(stackName string, yamlContent string, resolve ResolveIm
 // the stack's services, networks, configs and secrets while leaving volumes
 // intact — matching standard Docker stack semantics.
 func RemoveStackCLI(stackName string) error {
-	if stackName == "" {
-		return fmt.Errorf("stack name cannot be empty")
-	}
-	ctx, err := GetDockerContext()
+	ctxName, err := GetDockerContext()
 	if err != nil {
 		return fmt.Errorf("failed to get docker context: %w", err)
 	}
-	cmd := exec.Command("docker", "--context", ctx, "stack", "rm", stackName)
+	return RemoveStackCLIInContext(ctxName, stackName)
+}
+
+// RemoveStackCLIInContext is RemoveStackCLI against an explicitly named context.
+func RemoveStackCLIInContext(ctxName, stackName string) error {
+	if ctxName == "" {
+		return fmt.Errorf("docker context name is required")
+	}
+	if stackName == "" {
+		return fmt.Errorf("stack name cannot be empty")
+	}
+	cmd := exec.Command("docker", "--context", ctxName, "stack", "rm", stackName)
 	cmd.Env = os.Environ()
 	output, err := cmd.CombinedOutput()
 	if err != nil {

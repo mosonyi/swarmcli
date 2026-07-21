@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/volume"
+	"github.com/docker/docker/client"
 )
 
 // VolumeInfo is the edition-agnostic view of a Docker volume consumed by the
@@ -61,7 +62,11 @@ func ListVolumes(ctx context.Context) ([]VolumeInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	return ListVolumesWith(ctx, cli)
+}
 
+// ListVolumesWith is ListVolumes against an explicit client.
+func ListVolumesWith(ctx context.Context, cli *client.Client) ([]VolumeInfo, error) {
 	resp, err := cli.VolumeList(ctx, volume.ListOptions{})
 	if err != nil {
 		return nil, err
@@ -123,7 +128,12 @@ func RemoveVolume(ctx context.Context, name string, force bool) error {
 	if err != nil {
 		return fmt.Errorf("docker client: %w", err)
 	}
-	if err := c.VolumeRemove(ctx, name, force); err != nil {
+	return RemoveVolumeWith(ctx, c, name, force)
+}
+
+// RemoveVolumeWith is RemoveVolume against an explicit client.
+func RemoveVolumeWith(ctx context.Context, cli *client.Client, name string, force bool) error {
+	if err := cli.VolumeRemove(ctx, name, force); err != nil {
 		return fmt.Errorf("removing volume %q: %w", name, err)
 	}
 	return nil
