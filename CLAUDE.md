@@ -35,7 +35,7 @@ tail -f ~/.local/state/swarmcli/app.log          # prod mode (JSON)
 ```
 main.go                    Entry point; version injection via ldflags. With args, dispatches non-interactive CLI subcommands via cli.Dispatch(); bare invocation launches the TUI (tea.NewProgram())
 cli/                       Arg-based CLI dispatch (cli.Dispatch): `charts`, `version`, `help`; cli/apply.go holds the GitOps subcommands (`charts apply`, `charts outdated`)
-charts/                    Helm-like package manager (repos, chart rendering, releases) + declarative releases (releasefile.go, apply.go, outdated.go). charts.ChartSource (source.go) is the seam that resolves a chart ref — repo or local path — so release planning is testable without Docker, a network or a filesystem
+charts/                    Helm-like package manager (repos, chart rendering, releases) + declarative releases (releasefile.go, apply.go, outdated.go). charts.ChartSource (source.go) is the seam that resolves a chart ref — repo or local path — so release planning is testable without Docker, a network or a filesystem. charts.NewDockerBackend(ctxName) + NewEngineWith is the seam that targets a *specific* swarm: the default backend uses the ambient Docker context, the SDK client singleton and the shared snapshot cache, all three of which are process-global
 app/
   app.go                   Init(); triggers command autoload via _ "github.com/Eldara-Tech/swarmcli/commands" and view autoload via _ "github.com/Eldara-Tech/swarmcli/views" (view factory registry lives in views/view/registry.go)
   hooks.go                 PreUpdateHook registration; StartupOverlay; RegisterShutdownHook / RunShutdownHooks (BE port-forward manager registers CloseAll here)

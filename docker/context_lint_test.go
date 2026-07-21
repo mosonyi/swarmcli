@@ -19,6 +19,10 @@ var allowedBareBackground = map[string]string{
 	"views/configs/model.go": "addConfig",
 	"views/secrets/model.go": "addSecret",
 	"commands/api/api.go":    "New",
+	// RefreshSnapshot has no context parameter to inherit from, and the call it
+	// makes is bounded: SnapshotWith applies the 30s deadline itself, so the
+	// timeout lives in one place instead of at every call site.
+	"docker/snapshot.go": "RefreshSnapshot",
 }
 
 func TestNoBareContextBackground(t *testing.T) {
