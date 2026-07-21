@@ -10,7 +10,7 @@
 // non-interactive CLI and, later, a TUI browser view.
 package charts
 
-// Label keys applied to every release-history Docker Config. They mirror the
+// Label keys applied to release-history Docker Configs. They mirror the
 // scheme documented in issue #413 and let list/status/history queries filter
 // Configs by release without an external database.
 const (
@@ -21,6 +21,9 @@ const (
 	LabelRevision     = "com.swarmcli.revision"      // revision number
 	LabelStatus       = "com.swarmcli.status"        // see Status* constants
 	LabelCreated      = "com.swarmcli.created"       // RFC3339 timestamp
+	// LabelOwner is the only optional one: "<id>:<kind>/<name>" (see OwnerRef),
+	// absent entirely when nothing claimed the release.
+	LabelOwner = "com.swarmcli.owner"
 
 	TypeRelease = "release"
 )
@@ -146,6 +149,11 @@ type Release struct {
 	// not remove them — they may be shared). Omitted for revisions that created
 	// none and for records written before this field existed.
 	ManagedNetworks []string `yaml:"managedNetworks,omitempty" json:"managedNetworks,omitempty"`
+	// Owner is the stamp naming whichever manifest or controller produced this
+	// revision, encoded as "<id>:<kind>/<name>" (see OwnerRef). Empty for a
+	// release nothing claimed — an imperative install, or an apply from a file
+	// declaring no owner — and an unowned release is never a prune candidate.
+	Owner string `yaml:"owner,omitempty" json:"owner,omitempty"`
 }
 
 // ReleaseChart is the chart reference recorded in a Release.

@@ -249,3 +249,17 @@ func TestReportUnmanaged(t *testing.T) {
 	o, _ = capture(t, func() { reportUnmanaged(&charts.Plan{}) })
 	require.Empty(t, o)
 }
+
+// An orphan is reported separately from an unmanaged release, and in its own
+// words: the stamp says this file installed it, so "not in the release file"
+// would understate what is actually known about it.
+func TestReportOrphaned(t *testing.T) {
+	o, _ := capture(t, func() {
+		reportOrphaned(&charts.Plan{Owner: "apply/prod", Orphaned: []string{"gone"}})
+	})
+	require.Contains(t, o, "1 release(s) were installed by this release file but are no longer declared in it")
+	require.Contains(t, o, "swarmcli charts uninstall gone")
+
+	o, _ = capture(t, func() { reportOrphaned(&charts.Plan{}) })
+	require.Empty(t, o)
+}

@@ -53,6 +53,7 @@ converges the swarm to a file you commit.
 ```yaml
 # swarmcli-release.yaml
 apiVersion: v1
+owner: prod-swarm              # optional; see Ownership below
 repositories:
   - name: swarmcli-charts
     url: https://eldara-tech.github.io/swarmcli-charts
@@ -79,14 +80,44 @@ swarmcli charts outdated                                   # what has a newer ch
 | Changed chart version, values, or rendered manifest | upgraded |
 | Identical | **skipped — no new revision** |
 | On the swarm but not in the file | **reported, never removed** |
+| Installed by this file, no longer in it | **reported as an orphan, still never removed** |
 
-Two of those deserve the emphasis. Releases are **never deleted**: a release
-records nothing about which file produced it, so a prune could not tell one owned
-by another manifest, or installed by hand, from a genuinely obsolete one — it
-prints the `uninstall` command instead and leaves the decision to you. And an
-unchanged release is skipped **entirely**: history is one Docker Config per
-revision, so re-applying on every CI push would otherwise grow the swarm's config
-store without bound.
+Two of those deserve the emphasis. Releases are **never deleted** — apply prints
+the `uninstall` command and leaves the decision to you. And an unchanged release
+is skipped **entirely**: history is one Docker Config per revision, so re-applying
+on every CI push would otherwise grow the swarm's config store without bound.
+
+### Ownership
+
+`owner:` names the manifest, and every release it installs is stamped with that
+name — in the release-history Config's `com.swarmcli.owner` label and in the
+stored record — so a later apply can tell a release *this file* installed from
+one it has simply never seen. Dropping a release from the file then reports it as
+an **orphan**: provably obsolete, because the stamp says this manifest produced
+it and nothing else claims it. A release with no stamp, or another manifest's
+stamp, stays merely *unmanaged*.
+
+Nothing is deleted either way. The distinction is the prerequisite for a prune
+that could be: it is what separates "this is obsolete" from "I do not recognise
+this", and only the first is ever safe to act on.
+
+```
+com.swarmcli.owner: apply/prod-swarm:release/hello
+                    └──── id ─────┘ └── resource ──┘
+```
+
+The stamp names the **resource** as well as the owner, and both halves must match
+for it to count. A bare owner string cannot tell a release this file installed
+from a copy of one — ArgoCD shipped exactly that as `app.kubernetes.io/instance`
+and replaced it in 3.0 for the same reason. The `apply/` prefix keeps a manifest
+applied from the command line from colliding with a controller that happened to
+pick the same name.
+
+`owner:` is optional and has **no default**. A derived one would either change
+between a laptop and a CI checkout (a path hash) or be shared by every repository
+using the conventional filename (a basename) — and either would let two unrelated
+manifests claim each other's releases. Omit it and nothing is claimed, which is
+exactly the behaviour of every version before this one.
 
 For a `repo/chart`, **`version` is required** — a floating pin would silently
 upgrade production on the next `apply`. For a **local** chart path (`chart:
