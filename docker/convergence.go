@@ -55,6 +55,13 @@ func LoadStackConvergence(stackName string) []ServiceConvergence {
 		l().Warnf("failed to get snapshot: %v", err)
 		return nil
 	}
+	return snap.StackConvergence(stackName)
+}
+
+// StackConvergence is LoadStackConvergence against an already-fetched snapshot,
+// so a caller polling one specific swarm for convergence does not read another
+// swarm's tasks out of the process-wide cache.
+func (snap *SwarmSnapshot) StackConvergence(stackName string) []ServiceConvergence {
 	active := activeNodeIDs(snap)
 
 	var out []ServiceConvergence

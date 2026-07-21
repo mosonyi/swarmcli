@@ -13,6 +13,7 @@ import (
 
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/api/types/system"
+	"github.com/docker/docker/client"
 )
 
 type NodeEntry struct {
@@ -87,7 +88,24 @@ func RefreshSnapshot() (*SwarmSnapshot, error) {
 	if err != nil {
 		return nil, fmt.Errorf("docker client: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	snap, err := SnapshotWith(context.Background(), c)
+	if err != nil {
+		return nil, err
+	}
+	SetSnapshot(snap)
+	return snap, nil
+}
+
+// SnapshotWith fetches a snapshot from an explicit client and returns it
+// WITHOUT touching the process-wide cache.
+//
+// That omission is the point. The cache is a single global with a 3s TTL and a
+// background refresh goroutine, sized for a TUI redrawing one swarm; two
+// reconciles against different swarms sharing it would not merely read each
+// other's data, they would evict each other's. A caller holding an explicit
+// client owns its own freshness.
+func SnapshotWith(parent context.Context, c *client.Client) (*SwarmSnapshot, error) {
+	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 
 	nodes, err := c.NodeList(ctx, swarm.NodeListOptions{})
@@ -96,9 +114,7 @@ func RefreshSnapshot() (*SwarmSnapshot, error) {
 		// empty snapshot instead of a fatal error so the context switch is not
 		// reverted; the app prompts the user to unlock.
 		if IsSwarmLockedErr(err) {
-			snap := &SwarmSnapshot{Locked: true, Fetched: time.Now()}
-			SetSnapshot(snap)
-			return snap, nil
+			return &SwarmSnapshot{Locked: true, Fetched: time.Now()}, nil
 		}
 		return nil, fmt.Errorf("listing nodes: %w", err)
 	}
@@ -120,16 +136,13 @@ func RefreshSnapshot() (*SwarmSnapshot, error) {
 		clusterID = clusterIDFromInfo(info)
 	}
 
-	snap := &SwarmSnapshot{
+	return &SwarmSnapshot{
 		Nodes:     nodes,
 		Services:  services,
 		Tasks:     tasks,
 		Fetched:   time.Now(),
 		ClusterID: clusterID,
-	}
-
-	SetSnapshot(snap)
-	return snap, nil
+	}, nil
 }
 
 // clusterIDFromInfo extracts the swarm cluster ID from a Docker Info result.
