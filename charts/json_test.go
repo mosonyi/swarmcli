@@ -123,3 +123,43 @@ func TestPlanOwnerAndOrphanedJSONKeys(t *testing.T) {
 	require.NotContains(t, bare, "owner")
 	require.NotContains(t, bare, "orphaned")
 }
+
+// A compatibility finding is served alongside the plan, so it has to speak the
+// same JSON as everything around it: lowercase keys, and a status a client can
+// read without a copy of this package's constant block.
+func TestCompatFindingJSONShape(t *testing.T) {
+	var got map[string]any
+	b, err := json.Marshal(CompatFinding{
+		Chart: "traefik 0.1.1", Required: ">= 1.13.0", Engine: "1.13.0", Status: CompatOK,
+	})
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(b, &got))
+	require.Equal(t, map[string]any{
+		"chart": "traefik 0.1.1", "required": ">= 1.13.0", "engine": "1.13.0", "status": "ok",
+	}, got)
+}
+
+// The zero value must read as "unknown", not as a claim about the chart: an
+// unset status is the one callers are explicitly told not to block on.
+func TestCompatStatusNames(t *testing.T) {
+	require.Equal(t, "unknown", CompatUnknown.String())
+	require.Equal(t, "ok", CompatOK.String())
+	require.Equal(t, "incompatible", CompatIncompatible.String())
+}
+
+// Marshalling to a name would be a regression if it could not be read back, so
+// the type still round-trips. An unrecognised name from a newer producer
+// degrades to unknown rather than failing the whole document.
+func TestCompatStatusRoundTrips(t *testing.T) {
+	for _, s := range []CompatStatus{CompatUnknown, CompatOK, CompatIncompatible} {
+		b, err := json.Marshal(s)
+		require.NoError(t, err)
+		var back CompatStatus
+		require.NoError(t, json.Unmarshal(b, &back))
+		require.Equal(t, s, back)
+	}
+
+	var back CompatStatus
+	require.NoError(t, json.Unmarshal([]byte(`"from-the-future"`), &back))
+	require.Equal(t, CompatUnknown, back)
+}
