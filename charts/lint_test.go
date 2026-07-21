@@ -218,15 +218,35 @@ services:
 	require.Contains(t, got[0].Message, "1m30s") // 3 x 30s
 }
 
-// No explicit monitor is deliberately not flagged: swarm's 5s default would make
-// this fire on nearly every chart that defines a healthcheck.
-func TestLintHealthcheckMonitorSkipsImplicitDefault(t *testing.T) {
-	require.Empty(t, lintMonitorFindings(t, `
+// An unset monitor is the common way to hit this, not an exemption from it:
+// swarm silently applies a 5s default, and a healthcheck needing 30s to fail
+// therefore cannot fail the rollout. The rule originally skipped this case,
+// which is why it fired on nothing at all.
+func TestLintHealthcheckMonitorFlagsTheInheritedDefault(t *testing.T) {
+	got := lintMonitorFindings(t, `
 services:
   api:
     healthcheck:
       test: ["CMD", "true"]
       interval: 10s
+`)
+	require.Len(t, got, 1)
+	require.Contains(t, got[0].Message, "no deploy.update_config.monitor")
+	require.Contains(t, got[0].Message, "5s default")
+	require.Contains(t, got[0].Message, "at least 30s", "the finding names the value to set")
+}
+
+// A monitor that already covers the healthcheck is fine whether it was declared
+// or inherited: a fast healthcheck under swarm's 5s default is not a finding.
+func TestLintHealthcheckMonitorAcceptsAnAdequateInheritedDefault(t *testing.T) {
+	require.Empty(t, lintMonitorFindings(t, `
+services:
+  api:
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 1s
+      retries: 3
+      start_period: 1s
 `))
 }
 
