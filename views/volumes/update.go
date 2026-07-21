@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"swarmcli/core/primitives/hash"
-	"swarmcli/ui"
-	filterlist "swarmcli/ui/components/filterable/list"
-	helpview "swarmcli/views/help"
-	view "swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/core/primitives/hash"
+	"github.com/Eldara-Tech/swarmcli/ui"
+	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
+	helpview "github.com/Eldara-Tech/swarmcli/views/help"
+	view "github.com/Eldara-Tech/swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

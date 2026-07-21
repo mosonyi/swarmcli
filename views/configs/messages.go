@@ -4,7 +4,7 @@
 package configsview
 
 import (
-	"swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/docker"
 	"time"
 
 	"github.com/docker/docker/api/types/swarm"

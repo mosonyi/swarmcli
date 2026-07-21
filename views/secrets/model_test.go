@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/docker"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/docker/docker/api/types/swarm"

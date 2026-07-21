@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"testing"
 
-	"swarmcli/docker"
-	filterlist "swarmcli/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/docker/docker/api/types/swarm"

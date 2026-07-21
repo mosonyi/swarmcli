@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"swarmcli/charts"
+	"github.com/Eldara-Tech/swarmcli/charts"
 )
 
 // withInteractive forces the "is there a human to ask" answer for one test, so

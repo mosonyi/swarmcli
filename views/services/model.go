@@ -4,13 +4,13 @@
 package servicesview
 
 import (
+	"github.com/Eldara-Tech/swarmcli/docker"
+	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
+	"github.com/Eldara-Tech/swarmcli/views/helpbar"
+	"github.com/Eldara-Tech/swarmcli/views/scaledialog"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 	"strings"
-	"swarmcli/docker"
-	filterlist "swarmcli/ui/components/filterable/list"
-	"swarmcli/views/confirmdialog"
-	"swarmcli/views/helpbar"
-	"swarmcli/views/scaledialog"
-	"swarmcli/views/view"
 	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"

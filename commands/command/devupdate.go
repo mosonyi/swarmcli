@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"swarmcli/args"
-	"swarmcli/registry"
-	"swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/args"
+	"github.com/Eldara-Tech/swarmcli/registry"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

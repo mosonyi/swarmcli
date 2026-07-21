@@ -8,7 +8,7 @@ package docker
 import (
 	"testing"
 
-	"swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/docker"
 )
 
 func TestStacksViewListsStacks(t *testing.T) {

@@ -4,12 +4,12 @@
 package nodesview
 
 import (
+	"github.com/Eldara-Tech/swarmcli/core/primitives/hash"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
+	"github.com/Eldara-Tech/swarmcli/views/helpbar"
 	"strings"
-	"swarmcli/core/primitives/hash"
-	"swarmcli/docker"
-	filterlist "swarmcli/ui/components/filterable/list"
-	"swarmcli/views/confirmdialog"
-	"swarmcli/views/helpbar"
 	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"

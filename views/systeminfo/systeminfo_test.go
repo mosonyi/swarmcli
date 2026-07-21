@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/docker"
 
 	"github.com/stretchr/testify/require"
 )

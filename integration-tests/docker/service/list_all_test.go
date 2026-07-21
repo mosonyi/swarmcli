@@ -8,7 +8,7 @@ package service
 import (
 	"testing"
 
-	"swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/docker"
 )
 
 // TestLoadAllServicesListsEveryService verifies that LoadAllServices returns

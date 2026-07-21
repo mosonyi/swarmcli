@@ -5,9 +5,9 @@ package filterlist
 
 import (
 	"fmt"
+	"github.com/Eldara-Tech/swarmcli/ui"
+	"github.com/Eldara-Tech/swarmcli/ui/components/sorting"
 	"strings"
-	"swarmcli/ui"
-	"swarmcli/ui/components/sorting"
 
 	"github.com/charmbracelet/lipgloss"
 )

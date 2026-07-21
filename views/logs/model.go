@@ -5,10 +5,10 @@ package logsview
 
 import (
 	"context"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/views/helpbar"
 	"sort"
 	"strings"
-	"swarmcli/docker"
-	"swarmcli/views/helpbar"
 	"sync"
 
 	"github.com/charmbracelet/bubbles/viewport"

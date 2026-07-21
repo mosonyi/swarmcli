@@ -6,7 +6,7 @@ package app
 import (
 	"testing"
 
-	"swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 
 	"github.com/stretchr/testify/require"
 )

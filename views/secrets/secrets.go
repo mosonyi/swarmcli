@@ -3,7 +3,7 @@
 
 package secretsview
 
-import swarmlog "swarmcli/utils/log"
+import swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
 
 const ViewName = "secrets"
 

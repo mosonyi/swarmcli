@@ -4,8 +4,8 @@
 package filterlist
 
 import (
+	"github.com/Eldara-Tech/swarmcli/ui"
 	"strings"
-	"swarmcli/ui"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/viewport"

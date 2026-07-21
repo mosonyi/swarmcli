@@ -5,7 +5,7 @@ package viewstack
 
 import (
 	"fmt"
-	"swarmcli/views/helpbar"
+	"github.com/Eldara-Tech/swarmcli/views/helpbar"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"

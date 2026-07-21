@@ -3,7 +3,7 @@
 
 package systeminfoview
 
-import "swarmcli/ui"
+import "github.com/Eldara-Tech/swarmcli/ui"
 
 const Height = 6
 const Width = 40

@@ -5,7 +5,7 @@ package errordialog
 
 import (
 	"fmt"
-	"swarmcli/ui"
+	"github.com/Eldara-Tech/swarmcli/ui"
 
 	"github.com/charmbracelet/lipgloss"
 )

@@ -4,7 +4,7 @@
 package commands
 
 import (
-	"swarmcli/registry"
+	"github.com/Eldara-Tech/swarmcli/registry"
 )
 
 // Public passthroughs so app code can just use `commands.Get()`

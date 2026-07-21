@@ -4,8 +4,8 @@
 package volumesview
 
 import (
-	helpview "swarmcli/views/help"
-	"swarmcli/views/view"
+	helpview "github.com/Eldara-Tech/swarmcli/views/help"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 )
 
 // GetVolumesHelpContent returns categorized help for the volumes view.

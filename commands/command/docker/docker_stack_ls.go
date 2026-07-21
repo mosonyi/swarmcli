@@ -4,13 +4,13 @@
 package docker
 
 import (
-	"swarmcli/args"
-	"swarmcli/registry"
-	stacksview "swarmcli/views/stacks"
+	"github.com/Eldara-Tech/swarmcli/args"
+	"github.com/Eldara-Tech/swarmcli/registry"
+	stacksview "github.com/Eldara-Tech/swarmcli/views/stacks"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
-import "swarmcli/views/view"
+import "github.com/Eldara-Tech/swarmcli/views/view"
 
 type DockerStackLs struct{}
 

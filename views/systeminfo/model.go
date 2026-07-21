@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/docker"
 
 	"github.com/briandowns/spinner"
 	tea "github.com/charmbracelet/bubbletea"

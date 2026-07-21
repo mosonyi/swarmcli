@@ -6,9 +6,9 @@
 package config
 
 import (
+	"github.com/Eldara-Tech/swarmcli/docker"
+	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
 	"strings"
-	"swarmcli/docker"
-	swarmlog "swarmcli/utils/log"
 	"testing"
 
 	"github.com/docker/docker/api/types/swarm"

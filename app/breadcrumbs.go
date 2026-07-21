@@ -5,8 +5,8 @@ package app
 
 import (
 	"fmt"
-	"swarmcli/ui"
-	"swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/ui"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 
 	"github.com/charmbracelet/lipgloss"
 )

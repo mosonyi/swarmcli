@@ -6,12 +6,12 @@ package app
 import (
 	"strings"
 
-	swarmlog "swarmcli/utils/log"
+	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
 
-	_ "swarmcli/commands" // triggers command autoload
-	"swarmcli/registry"
-	_ "swarmcli/views" // triggers view autoload
-	"swarmcli/views/helpbar"
+	_ "github.com/Eldara-Tech/swarmcli/commands" // triggers command autoload
+	"github.com/Eldara-Tech/swarmcli/registry"
+	_ "github.com/Eldara-Tech/swarmcli/views" // triggers view autoload
+	"github.com/Eldara-Tech/swarmcli/views/helpbar"
 )
 
 const (

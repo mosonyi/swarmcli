@@ -5,12 +5,12 @@ package contexts
 
 import (
 	"fmt"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/ui"
+	"github.com/Eldara-Tech/swarmcli/ui/components/errordialog"
+	"github.com/Eldara-Tech/swarmcli/ui/dialog"
 	"path/filepath"
 	"strings"
-	"swarmcli/docker"
-	"swarmcli/ui"
-	"swarmcli/ui/components/errordialog"
-	"swarmcli/ui/dialog"
 
 	"github.com/charmbracelet/lipgloss"
 )

@@ -3,7 +3,7 @@
 
 package viewstack
 
-import "swarmcli/views/view"
+import "github.com/Eldara-Tech/swarmcli/views/view"
 
 type Stack struct {
 	stack []view.View

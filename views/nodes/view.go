@@ -5,9 +5,9 @@ package nodesview
 
 import (
 	"fmt"
+	"github.com/Eldara-Tech/swarmcli/ui"
 	"sort"
 	"strings"
-	"swarmcli/ui"
 
 	"github.com/charmbracelet/lipgloss"
 )

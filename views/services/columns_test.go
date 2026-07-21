@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"swarmcli/docker"
-	"swarmcli/features"
-	filterlist "swarmcli/ui/components/filterable/list"
-	"swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/features"
+	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"

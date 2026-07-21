@@ -9,10 +9,10 @@ package docker_test
 import (
 	"bytes"
 	"fmt"
+	"github.com/Eldara-Tech/swarmcli/docker"
 	"os"
 	"os/exec"
 	"strings"
-	"swarmcli/docker"
 	"testing"
 	"time"
 

@@ -8,7 +8,7 @@ package config
 import (
 	"context"
 	"fmt"
-	"swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/docker"
 	"testing"
 	"time"
 

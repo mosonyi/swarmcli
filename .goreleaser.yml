@@ -34,7 +34,7 @@ builds:
       - -X main.version={{.Version}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
-      - -X swarmcli/charts.engineVersion={{.Version}}
+      - -X github.com/Eldara-Tech/swarmcli/charts.engineVersion={{.Version}}
     main: .
 
   - id: osx
@@ -50,7 +50,7 @@ builds:
       - -X main.version={{.Version}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
-      - -X swarmcli/charts.engineVersion={{.Version}}
+      - -X github.com/Eldara-Tech/swarmcli/charts.engineVersion={{.Version}}
     main: .
 
   - id: windows
@@ -67,7 +67,7 @@ builds:
       - -X main.version={{.Version}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
-      - -X swarmcli/charts.engineVersion={{.Version}}
+      - -X github.com/Eldara-Tech/swarmcli/charts.engineVersion={{.Version}}
     main: .
 
   - id: freebsd
@@ -83,7 +83,7 @@ builds:
       - -X main.version={{.Version}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
-      - -X swarmcli/charts.engineVersion={{.Version}}
+      - -X github.com/Eldara-Tech/swarmcli/charts.engineVersion={{.Version}}
     main: .
 
 archives:

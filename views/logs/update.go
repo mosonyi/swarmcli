@@ -5,9 +5,9 @@ package logsview
 
 import (
 	"fmt"
+	"github.com/Eldara-Tech/swarmcli/ui"
+	"github.com/Eldara-Tech/swarmcli/utils"
 	"strings"
-	"swarmcli/ui"
-	"swarmcli/utils"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"

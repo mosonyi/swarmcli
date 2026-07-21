@@ -4,7 +4,7 @@ This document gives focused, actionable knowledge to help an AI coding agent be 
 
 High-level architecture
 - **CLI app entry:** [main.go](main.go) creates a Bubble Tea `Program` and calls `app.Init()`.
-- **App bootstrap:** [app/app.go](app/app.go) initializes logging and triggers autoload via blank imports — commands (`_ "swarmcli/commands"`) and views (`_ "swarmcli/views"`). Views self-register with the `view.Factory` pattern; the registry lives in [views/view/registry.go](views/view/registry.go).
+- **App bootstrap:** [app/app.go](app/app.go) initializes logging and triggers autoload via blank imports — commands (`_ "github.com/Eldara-Tech/swarmcli/commands"`) and views (`_ "github.com/Eldara-Tech/swarmcli/views"`). Views self-register with the `view.Factory` pattern; the registry lives in [views/view/registry.go](views/view/registry.go).
 - **Views & UI:** UI components live under `views/` and `ui/`. Each view is a Bubble Tea model; common patterns: `Init()` returns a `tea.Cmd`, views expose `SetSize`, `View()`, and handle messages in `update.go`.
 - **Docker integration:** The `docker/` package wraps Docker CLI + SDK. `docker.GetClient()` respects `DOCKER_CONTEXT` (or `docker context show`) and TLS cert layout. See [docker/client.go](docker/client.go) and [docker/context.go](docker/context.go).
 - **Commands registry:** The `commands` package uses autoloading to register CLI commands with `registry`. See [app/app.go](app/app.go) and `commands/` for patterns.

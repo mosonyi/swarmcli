@@ -5,10 +5,10 @@ package api //nolint:revive // standard short package name
 
 import (
 	"fmt"
+	"github.com/Eldara-Tech/swarmcli/args"
+	"github.com/Eldara-Tech/swarmcli/commands"
+	"github.com/Eldara-Tech/swarmcli/registry"
 	"strings"
-	"swarmcli/args"
-	"swarmcli/commands"
-	"swarmcli/registry"
 )
 
 // ParseInput takes a full input string like:

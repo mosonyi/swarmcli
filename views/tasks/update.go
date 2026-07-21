@@ -5,11 +5,11 @@ package tasksview
 
 import (
 	"fmt"
+	hash "github.com/Eldara-Tech/swarmcli/core/primitives/hash"
+	"github.com/Eldara-Tech/swarmcli/ui"
+	helpview "github.com/Eldara-Tech/swarmcli/views/help"
+	view "github.com/Eldara-Tech/swarmcli/views/view"
 	"sort"
-	hash "swarmcli/core/primitives/hash"
-	"swarmcli/ui"
-	helpview "swarmcli/views/help"
-	view "swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

@@ -4,11 +4,11 @@
 package main
 
 import (
+	"github.com/Eldara-Tech/swarmcli/app"
+	"github.com/Eldara-Tech/swarmcli/cli"
+	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
 	"os"
 	"runtime/debug"
-	"swarmcli/app"
-	"swarmcli/cli"
-	swarmlog "swarmcli/utils/log"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

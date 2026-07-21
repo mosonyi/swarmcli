@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"testing"
 
-	"swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/docker"
 )
 
 func TestGetContextFromEnv_EnvOverride(t *testing.T) {

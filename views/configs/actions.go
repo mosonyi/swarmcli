@@ -6,14 +6,14 @@ package configsview
 import (
 	"context"
 	"fmt"
+	"github.com/Eldara-Tech/swarmcli/core/primitives/hash"
+	"github.com/Eldara-Tech/swarmcli/docker"
+	inspectview "github.com/Eldara-Tech/swarmcli/views/inspect"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"swarmcli/core/primitives/hash"
-	"swarmcli/docker"
-	inspectview "swarmcli/views/inspect"
-	"swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/docker/docker/api/types/swarm"

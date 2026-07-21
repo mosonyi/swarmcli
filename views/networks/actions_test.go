@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	inspectview "swarmcli/views/inspect"
-	"swarmcli/views/view"
+	inspectview "github.com/Eldara-Tech/swarmcli/views/inspect"
+	"github.com/Eldara-Tech/swarmcli/views/view"
 
 	"github.com/docker/docker/api/types/network"
 	"github.com/stretchr/testify/require"

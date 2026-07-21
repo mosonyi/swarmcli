@@ -4,7 +4,7 @@
 package stacksview
 
 import (
-	"swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/docker"
 	"time"
 )
 

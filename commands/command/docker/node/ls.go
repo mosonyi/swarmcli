@@ -4,13 +4,13 @@
 package node
 
 import (
-	"swarmcli/args"
-	"swarmcli/registry"
-	nodesview "swarmcli/views/nodes"
+	"github.com/Eldara-Tech/swarmcli/args"
+	"github.com/Eldara-Tech/swarmcli/registry"
+	nodesview "github.com/Eldara-Tech/swarmcli/views/nodes"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
-import "swarmcli/views/view"
+import "github.com/Eldara-Tech/swarmcli/views/view"
 
 type DockerNodeLs struct{}
 
