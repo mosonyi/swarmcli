@@ -171,9 +171,19 @@ func (b *dockerBackend) StackServices(name string) []ServiceState {
 		if c, ok := conv[e.ServiceName]; ok {
 			st.Running = c.Running
 			st.Desired = c.Desired
+			st.Completed = c.Completed
+			st.Job = c.Job
 			st.UpdateState = c.UpdateState
 			st.Monitor = c.Monitor
 			st.NewestTaskAge = c.NewestTaskAge
+			// A finished job has no running task, so the replica ratio built
+			// from ServiceEntry reads 0/N and the release looks degraded when
+			// it is complete. Count the completed tasks toward the target and
+			// say so in the status column (issue #443).
+			if c.Job && c.Completed > 0 {
+				st.Replicas = fmt.Sprintf("%d/%d", c.Running+c.Completed, c.Desired)
+				st.Status = "completed"
+			}
 		}
 		out = append(out, st)
 	}
