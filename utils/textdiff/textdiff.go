@@ -1,15 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright © 2026 Eldara Tech
 
-package cli
+// Package textdiff renders compact, human-readable line diffs.
+//
+// It lives outside the cli package so that everything presenting a manifest
+// change — the CLI, a TUI view, an API response — renders it identically. The
+// alternative is each caller reimplementing an LCS and drifting from what
+// `swarmcli charts apply --diff` actually prints.
+package textdiff
 
 import "strings"
 
-// lineDiff returns a compact line-oriented diff of a vs b using a longest
+// Lines returns a compact line-oriented diff of a vs b using a longest
 // common subsequence. Removed lines are prefixed "-", added lines "+", and
 // unchanged lines " ". It is intended for human-readable upgrade previews, not
 // machine patching, so it omits hunk headers.
-func lineDiff(a, b string) string {
+func Lines(a, b string) string {
 	al := splitLines(a)
 	bl := splitLines(b)
 
