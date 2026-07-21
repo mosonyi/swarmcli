@@ -15,8 +15,8 @@ import (
 // dockerBackend implements Backend against the live github.com/Eldara-Tech/swarmcli/docker package.
 type dockerBackend struct{}
 
-func (dockerBackend) DeployStack(name, manifest string) error {
-	return docker.DeployStack(name, manifest)
+func (dockerBackend) DeployStack(name, manifest, resolve string) error {
+	return docker.DeployStackResolved(name, manifest, docker.ResolveImage(resolve))
 }
 
 func (dockerBackend) RemoveStack(name string) error {
