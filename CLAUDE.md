@@ -37,7 +37,7 @@ main.go                    Entry point; version injection via ldflags. With args
 cli/                       Arg-based CLI dispatch (cli.Dispatch): `charts`, `version`, `help`; cli/apply.go holds the GitOps subcommands (`charts apply`, `charts outdated`)
 charts/                    Helm-like package manager (repos, chart rendering, releases) + declarative releases (releasefile.go, apply.go, outdated.go). charts.ChartSource (source.go) is the seam that resolves a chart ref — repo or local path — so release planning is testable without Docker, a network or a filesystem
 app/
-  app.go                   Init(); triggers command autoload via _ "swarmcli/commands" and view autoload via _ "swarmcli/views" (view factory registry lives in views/view/registry.go)
+  app.go                   Init(); triggers command autoload via _ "github.com/Eldara-Tech/swarmcli/commands" and view autoload via _ "github.com/Eldara-Tech/swarmcli/views" (view factory registry lives in views/view/registry.go)
   hooks.go                 PreUpdateHook registration; StartupOverlay; RegisterShutdownHook / RunShutdownHooks (BE port-forward manager registers CloseAll here)
   model.go                 Central state: Model struct (viewport, currentView, viewStack, commandInput, searchInput, systemInfo)
   update.go                Main message router: navigation, resize, events, key dispatch
@@ -84,7 +84,7 @@ utils/log/
 
 - **Bubble Tea MVC**: Input → Update() → tea.Cmd → View(). All state changes via `tea.Msg` types.
 - **View Stack**: `viewStack.Push(old)` / `Pop()` for breadcrumb navigation.
-- **View Factory**: Views auto-register via `init()` + `view.RegisterView(name, factory)` in each view's `register.go` (registry in `views/view/registry.go`, looked up with `GetFactory`). `app/app.go`'s blank import `_ "swarmcli/views"` pulls `views/autoload.go`, which blank-imports every view — exactly mirroring the command autoload pattern.
+- **View Factory**: Views auto-register via `init()` + `view.RegisterView(name, factory)` in each view's `register.go` (registry in `views/view/registry.go`, looked up with `GetFactory`). `app/app.go`'s blank import `_ "github.com/Eldara-Tech/swarmcli/views"` pulls `views/autoload.go`, which blank-imports every view — exactly mirroring the command autoload pattern.
 - **Command Registry**: Commands in `commands/command/` auto-register via `init()` + `registry.Register()`. Accessed via `:` input.
 - **Command Spec**: Commands optionally implement `registry.CommandWithSpec` (`Spec() registry.CommandSpec`, discovered by type assertion like `Aliaser`). The spec declares `Usage`, `Flags` (the allow-list), and `Examples`. `api.ParseInput` is the single chokepoint that, in order: short-circuits `Passthrough` specs, intercepts `--help`/`-h`/`-help` (and `:help <cmd>`) into a per-command help screen reusing the detailed help view, then rejects any undeclared flag (**global strict**, with a `did you mean --x?` suggestion). Unknown-flag rejection means every registered command MUST declare a spec — a missing/empty spec rejects all flags. `Passthrough:true` is the narrow escape-hatch for delegating/unavailable stubs (e.g. the OSS `bootstrap` stub): it skips both help interception and validation so every arg reaches `Execute` unchanged and the command keeps its own messaging (and no Pro flag internals leak into OSS — see Pro Feature Boundary).
 - **Snapshot Cache**: `docker.GetSnapshot()` / `docker.RefreshSnapshot()` — 3s TTL, background event-driven invalidation.
