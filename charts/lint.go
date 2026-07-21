@@ -3,7 +3,13 @@
 
 package charts
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+	"time"
+
+	"gopkg.in/yaml.v3"
+)
 
 // LintSeverity ranks a lint finding. Only LintError fails a lint.
 type LintSeverity int
@@ -91,10 +97,12 @@ func Lint(ch *Chart, engine string, files [][]byte, sets []string) []LintFinding
 		Release: ReleaseMeta{Name: lintRelease, Namespace: lintRelease, Revision: 1},
 		Chart:   ChartMeta{Name: ch.Metadata.Name, Version: ch.Metadata.Version, AppVersion: ch.Metadata.AppVersion},
 	}
-	if _, err := Render(ch, ctx); err != nil {
+	manifest, err := Render(ch, ctx)
+	if err != nil {
 		add(LintError, "render with default values failed: %v", err)
 		return out
 	}
+	lintHealthcheckMonitor(manifest, add)
 	if _, err := RenderRequirements(ch, ctx); err != nil {
 		add(LintError, "requirements.yaml: %v", err)
 	}
@@ -107,6 +115,116 @@ func HasErrors(findings []LintFinding) bool {
 		if f.Severity == LintError {
 			return true
 		}
+	}
+	return false
+}
+
+// composeHealthLint is the sliver of the rendered stack that lintHealthcheckMonitor
+// reads. Durations stay strings because compose writes them as "30s"/"1m30s".
+type composeHealthLint struct {
+	Services map[string]struct {
+		Healthcheck *struct {
+			Test        any    `yaml:"test"`
+			Interval    string `yaml:"interval"`
+			Retries     *int   `yaml:"retries"`
+			StartPeriod string `yaml:"start_period"`
+			Disable     bool   `yaml:"disable"`
+		} `yaml:"healthcheck"`
+		Deploy struct {
+			UpdateConfig *struct {
+				Monitor string `yaml:"monitor"`
+			} `yaml:"update_config"`
+		} `yaml:"deploy"`
+	} `yaml:"services"`
+}
+
+// Docker's own defaults for an unspecified healthcheck field.
+const (
+	defaultHealthInterval = 30 * time.Second
+	defaultHealthRetries  = 3
+)
+
+// lintHealthcheckMonitor warns when a service cannot fail its healthcheck before
+// swarm stops watching.
+//
+// Swarm counts a task failure against a rollout only if it happens within
+// UpdateConfig.Monitor of the task being created. A container that goes
+// unhealthy after that window does NOT trigger update_config.failure_action —
+// the rollout is reported completed and the task quietly restart-loops. So if
+// monitor is shorter than the healthcheck's own worst case, a broken deploy can
+// report success. Kubernetes has no analogue of this, so it reliably surprises
+// people arriving from there.
+//
+// Warning, not error: a short monitor is legitimate when the operator wants a
+// fast rollout and is watching by other means.
+func lintHealthcheckMonitor(manifest string, add func(LintSeverity, string, ...any)) {
+	var doc composeHealthLint
+	if err := yaml.Unmarshal([]byte(manifest), &doc); err != nil {
+		return // the manifest already rendered; shape problems are not lint's business here
+	}
+
+	// Map iteration is random; sort so findings do not shuffle between runs.
+	names := make([]string, 0, len(doc.Services))
+	for name := range doc.Services {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		svc := doc.Services[name]
+		hc := svc.Healthcheck
+		if hc == nil || hc.Disable || isHealthcheckNone(hc.Test) {
+			continue
+		}
+		if svc.Deploy.UpdateConfig == nil || svc.Deploy.UpdateConfig.Monitor == "" {
+			// No explicit monitor: swarm's own 5s default applies. Deliberately
+			// not flagged — it would fire on nearly every chart with a
+			// healthcheck, and the issue scoped this to the explicit case.
+			continue
+		}
+		monitor, err := time.ParseDuration(svc.Deploy.UpdateConfig.Monitor)
+		if err != nil {
+			continue
+		}
+
+		interval := defaultHealthInterval
+		if hc.Interval != "" {
+			if d, err := time.ParseDuration(hc.Interval); err == nil {
+				interval = d
+			}
+		}
+		retries := defaultHealthRetries
+		if hc.Retries != nil {
+			retries = *hc.Retries
+		}
+		var startPeriod time.Duration
+		if hc.StartPeriod != "" {
+			if d, err := time.ParseDuration(hc.StartPeriod); err == nil {
+				startPeriod = d
+			}
+		}
+		if retries < 0 {
+			continue
+		}
+
+		needed := startPeriod + time.Duration(retries)*interval
+		if monitor >= needed {
+			continue
+		}
+		add(LintWarning,
+			"service %q: deploy.update_config.monitor (%s) is shorter than the healthcheck needs to fail (%s = start_period %s + interval %s x retries %d); a container that goes unhealthy after the monitor window does not fail the rollout, so a broken deploy reports success",
+			name, monitor, needed, startPeriod, interval, retries)
+	}
+}
+
+// isHealthcheckNone reports the compose "disable the image healthcheck" spelling,
+// test: ["NONE"] or test: NONE.
+func isHealthcheckNone(test any) bool {
+	switch v := test.(type) {
+	case string:
+		return v == "NONE"
+	case []any:
+		return len(v) > 0 && v[0] == "NONE"
 	}
 	return false
 }

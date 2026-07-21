@@ -4,6 +4,7 @@
 package charts
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -152,4 +153,122 @@ func TestHasErrors(t *testing.T) {
 	require.False(t, HasErrors(nil))
 	require.False(t, HasErrors([]LintFinding{{Severity: LintWarning}}))
 	require.True(t, HasErrors([]LintFinding{{Severity: LintWarning}, {Severity: LintError}}))
+}
+
+func lintMonitorFindings(t *testing.T, manifest string) []LintFinding {
+	t.Helper()
+	var out []LintFinding
+	lintHealthcheckMonitor(manifest, func(s LintSeverity, format string, a ...any) {
+		out = append(out, LintFinding{Severity: s, Message: fmt.Sprintf(format, a...)})
+	})
+	return out
+}
+
+// The footgun: monitor elapses before the healthcheck can fail even once, so a
+// container that goes unhealthy afterwards leaves the rollout reported as
+// completed.
+func TestLintHealthcheckMonitorTooShort(t *testing.T) {
+	got := lintMonitorFindings(t, `
+services:
+  api:
+    image: nginx
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      update_config:
+        monitor: 15s
+`)
+	require.Len(t, got, 1)
+	require.Equal(t, LintWarning, got[0].Severity)
+	require.Contains(t, got[0].Message, `service "api"`)
+	require.Contains(t, got[0].Message, "1m0s") // 30s + 3x10s
+}
+
+func TestLintHealthcheckMonitorSufficient(t *testing.T) {
+	require.Empty(t, lintMonitorFindings(t, `
+services:
+  api:
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      update_config:
+        monitor: 90s
+`))
+}
+
+// Docker's defaults (interval 30s, retries 3) apply when the chart omits them,
+// so the implied window is 90s and a 30s monitor is still too short.
+func TestLintHealthcheckMonitorUsesDockerDefaults(t *testing.T) {
+	got := lintMonitorFindings(t, `
+services:
+  api:
+    healthcheck:
+      test: ["CMD", "true"]
+    deploy:
+      update_config:
+        monitor: 30s
+`)
+	require.Len(t, got, 1)
+	require.Contains(t, got[0].Message, "1m30s") // 3 x 30s
+}
+
+// No explicit monitor is deliberately not flagged: swarm's 5s default would make
+// this fire on nearly every chart that defines a healthcheck.
+func TestLintHealthcheckMonitorSkipsImplicitDefault(t *testing.T) {
+	require.Empty(t, lintMonitorFindings(t, `
+services:
+  api:
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 10s
+`))
+}
+
+func TestLintHealthcheckMonitorSkipsDisabled(t *testing.T) {
+	require.Empty(t, lintMonitorFindings(t, `
+services:
+  a:
+    healthcheck:
+      test: ["NONE"]
+    deploy:
+      update_config:
+        monitor: 1s
+  b:
+    healthcheck:
+      test: ["CMD", "true"]
+      disable: true
+    deploy:
+      update_config:
+        monitor: 1s
+  c:
+    image: nginx
+    deploy:
+      update_config:
+        monitor: 1s
+`))
+}
+
+// Findings must not shuffle between runs — service names come out of a map.
+func TestLintHealthcheckMonitorIsOrdered(t *testing.T) {
+	manifest := `
+services:
+  zebra:
+    healthcheck: {test: ["CMD", "true"], interval: 10s, retries: 3}
+    deploy: {update_config: {monitor: 1s}}
+  alpha:
+    healthcheck: {test: ["CMD", "true"], interval: 10s, retries: 3}
+    deploy: {update_config: {monitor: 1s}}
+`
+	for i := 0; i < 20; i++ {
+		got := lintMonitorFindings(t, manifest)
+		require.Len(t, got, 2)
+		require.Contains(t, got[0].Message, `"alpha"`)
+		require.Contains(t, got[1].Message, `"zebra"`)
+	}
 }
