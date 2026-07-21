@@ -10,15 +10,21 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/api/types/swarm"
+	"github.com/docker/docker/client"
 )
 
-// ListNetworks returns all networks in the swarm
+// ListNetworks returns all networks in the swarm, on the ambient context.
 func ListNetworks(ctx context.Context) ([]network.Summary, error) {
-	client, err := GetClient()
+	cli, err := GetClient()
 	if err != nil {
 		return nil, err
 	}
-	return client.NetworkList(ctx, network.ListOptions{})
+	return ListNetworksWith(ctx, cli)
+}
+
+// ListNetworksWith is ListNetworks against an explicit client.
+func ListNetworksWith(ctx context.Context, cli *client.Client) ([]network.Summary, error) {
+	return cli.NetworkList(ctx, network.ListOptions{})
 }
 
 // InspectNetwork returns detailed information about a network
@@ -30,24 +36,33 @@ func InspectNetwork(ctx context.Context, networkID string) (network.Inspect, err
 	return client.NetworkInspect(ctx, networkID, network.InspectOptions{})
 }
 
-// RemoveNetwork removes a network
+// RemoveNetwork removes a network on the ambient context.
 func RemoveNetwork(ctx context.Context, networkID string) error {
-	client, err := GetClient()
+	cli, err := GetClient()
 	if err != nil {
 		return err
 	}
-	return client.NetworkRemove(ctx, networkID)
+	return RemoveNetworkWith(ctx, cli, networkID)
+}
+
+// RemoveNetworkWith is RemoveNetwork against an explicit client.
+func RemoveNetworkWith(ctx context.Context, cli *client.Client, networkID string) error {
+	return cli.NetworkRemove(ctx, networkID)
 }
 
 // CreateNetwork creates a new Docker network.
 // Returns the created network ID and any daemon warnings.
 func CreateNetwork(ctx context.Context, name string, opts network.CreateOptions) (string, []string, error) {
-	client, err := GetClient()
+	cli, err := GetClient()
 	if err != nil {
 		return "", nil, err
 	}
+	return CreateNetworkWith(ctx, cli, name, opts)
+}
 
-	resp, err := client.NetworkCreate(ctx, name, opts)
+// CreateNetworkWith is CreateNetwork against an explicit client.
+func CreateNetworkWith(ctx context.Context, cli *client.Client, name string, opts network.CreateOptions) (string, []string, error) {
+	resp, err := cli.NetworkCreate(ctx, name, opts)
 	if err != nil {
 		return "", nil, err
 	}

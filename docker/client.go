@@ -19,7 +19,11 @@ import (
 
 var (
 	cachedClient *client.Client
-	clientMu     sync.Mutex
+	// contextClients caches one client per explicitly named context, kept apart
+	// from cachedClient so the ambient fast path stays exactly as it was: a warm
+	// GetClient must not start resolving a context name on every call.
+	contextClients map[string]*client.Client
+	clientMu       sync.Mutex
 )
 
 func l() *swarmlog.SwarmLogger {
@@ -58,9 +62,40 @@ func GetClient() (*client.Client, error) {
 	return cachedClient, nil
 }
 
-// ResetClient closes the cached client (if any) and clears the cache so the
-// next GetClient call creates a fresh connection. Safe to call when no client
-// has been cached yet.
+// ClientFor returns a client for an explicitly named Docker context, cached per
+// name.
+//
+// It is the seam that lets a caller address a specific swarm. GetClient resolves
+// DOCKER_CONTEXT or `docker context show` and caches one client for the whole
+// process — correct for a single-swarm CLI, and unusable for anything that has
+// to reconcile two swarms at once, because there is no argument by which to ask
+// for the other one.
+func ClientFor(ctxName string) (*client.Client, error) {
+	if ctxName == "" {
+		return nil, fmt.Errorf("docker context name is required")
+	}
+	clientMu.Lock()
+	defer clientMu.Unlock()
+
+	if cli, ok := contextClients[ctxName]; ok {
+		return cli, nil
+	}
+	cli, err := buildClientFor(ctxName)
+	if err != nil {
+		return nil, err
+	}
+	if contextClients == nil {
+		contextClients = make(map[string]*client.Client, 1)
+	}
+	contextClients[ctxName] = cli
+	return cli, nil
+}
+
+// ResetClient closes every cached client and clears the caches so the next
+// GetClient or ClientFor call creates a fresh connection. Safe to call when
+// nothing has been cached yet. Named clients are dropped too: a context switch
+// is not the only reason to reset, and a `docker context update` invalidates a
+// pinned client just as surely as the ambient one.
 func ResetClient() {
 	clientMu.Lock()
 	defer clientMu.Unlock()
@@ -68,6 +103,10 @@ func ResetClient() {
 	if cachedClient != nil {
 		_ = cachedClient.Close()
 		cachedClient = nil
+	}
+	for name, cli := range contextClients {
+		_ = cli.Close()
+		delete(contextClients, name)
 	}
 }
 
@@ -78,7 +117,11 @@ func buildClient() (*client.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	return buildClientFor(ctxName)
+}
 
+// buildClientFor creates and pings a client for one named context.
+func buildClientFor(ctxName string) (*client.Client, error) {
 	inspectOut, err := exec.Command("docker", "context", "inspect", ctxName).Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to inspect context: %w", err)

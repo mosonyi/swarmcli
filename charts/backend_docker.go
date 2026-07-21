@@ -8,33 +8,109 @@ import (
 	"fmt"
 
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/client"
 
 	"github.com/Eldara-Tech/swarmcli/docker"
 )
 
 // dockerBackend implements Backend against the live github.com/Eldara-Tech/swarmcli/docker package.
-type dockerBackend struct{}
-
-func (dockerBackend) DeployStack(name, manifest, resolve string) error {
-	return docker.DeployStackResolved(name, manifest, docker.ResolveImage(resolve))
+//
+// Every operation is addressed to one Docker context. When ctxName is empty that
+// is the ambient one — whatever DOCKER_CONTEXT or `docker context show` resolves
+// to — which is what the CLI has always used and what NewEngine still builds.
+// When it is set, the backend resolves its own client and its own snapshots and
+// touches no process-wide state, so two backends can target two swarms at once.
+type dockerBackend struct {
+	ctxName string
 }
 
-func (dockerBackend) RemoveStack(name string) error {
-	return docker.RemoveStackCLI(name)
+// NewDockerBackend returns a Backend bound to an explicitly named Docker
+// context, for callers that must address a specific swarm rather than the one
+// the process happens to be pointed at.
+//
+// Pair it with NewEngineWith. The three pieces of process-global state this
+// avoids are the SDK client singleton, the `docker context show` lookup the
+// exec-based stack commands do, and the shared snapshot cache — all three, not
+// just the last: a backend that deployed to one swarm and read its history,
+// networks and convergence from another would be worse than an honestly
+// single-swarm one, because nothing would report the mismatch.
+func NewDockerBackend(ctxName string) Backend { return &dockerBackend{ctxName: ctxName} }
+
+// client resolves the SDK client this backend's API calls go through.
+func (b *dockerBackend) client() (*client.Client, error) {
+	if b.ctxName == "" {
+		return docker.GetClient()
+	}
+	return docker.ClientFor(b.ctxName)
 }
 
-func (dockerBackend) RefreshSnapshot() error {
+// contextName resolves the context the exec-based stack commands are aimed at.
+func (b *dockerBackend) contextName() (string, error) {
+	if b.ctxName != "" {
+		return b.ctxName, nil
+	}
+	return docker.GetDockerContext()
+}
+
+// snapshot reads the cluster state this backend's stack queries derive from.
+//
+// The ambient backend keeps using the shared cache, so the CLI's behaviour is
+// unchanged. An explicitly targeted one fetches its own every time: the shared
+// cache holds exactly one swarm, and a convergence poll that read another
+// swarm's tasks out of it would report a rollout finished that never started.
+func (b *dockerBackend) snapshot() (*docker.SwarmSnapshot, error) {
+	if b.ctxName == "" {
+		return docker.GetOrRefreshSnapshot()
+	}
+	cli, err := b.client()
+	if err != nil {
+		return nil, err
+	}
+	return docker.SnapshotWith(context.Background(), cli)
+}
+
+func (b *dockerBackend) DeployStack(name, manifest, resolve string) error {
+	ctxName, err := b.contextName()
+	if err != nil {
+		return err
+	}
+	return docker.DeployStackInContext(ctxName, name, manifest, docker.ResolveImage(resolve))
+}
+
+func (b *dockerBackend) RemoveStack(name string) error {
+	ctxName, err := b.contextName()
+	if err != nil {
+		return err
+	}
+	return docker.RemoveStackCLIInContext(ctxName, name)
+}
+
+// RefreshSnapshot invalidates the shared cache after a mutation. An explicitly
+// targeted backend has no shared cache to invalidate — snapshot() always
+// fetches — so there is nothing to do and nothing to get stale.
+func (b *dockerBackend) RefreshSnapshot() error {
+	if b.ctxName != "" {
+		return nil
+	}
 	_, err := docker.RefreshSnapshot()
 	return err
 }
 
-func (dockerBackend) CreateConfig(ctx context.Context, name string, data []byte, labels map[string]string) error {
-	_, err := docker.CreateConfig(ctx, name, data, labels)
+func (b *dockerBackend) CreateConfig(ctx context.Context, name string, data []byte, labels map[string]string) error {
+	cli, err := b.client()
+	if err != nil {
+		return err
+	}
+	_, err = docker.CreateConfigWith(ctx, cli, name, data, labels)
 	return err
 }
 
-func (dockerBackend) ListConfigs(ctx context.Context) ([]ConfigMeta, error) {
-	configs, err := docker.ListConfigs(ctx)
+func (b *dockerBackend) ListConfigs(ctx context.Context) ([]ConfigMeta, error) {
+	cli, err := b.client()
+	if err != nil {
+		return nil, err
+	}
+	configs, err := docker.ListConfigsWith(ctx, cli)
 	if err != nil {
 		return nil, err
 	}
@@ -45,25 +121,38 @@ func (dockerBackend) ListConfigs(ctx context.Context) ([]ConfigMeta, error) {
 	return out, nil
 }
 
-func (dockerBackend) InspectConfig(ctx context.Context, name string) ([]byte, error) {
-	cfg, err := docker.InspectConfig(ctx, name)
+func (b *dockerBackend) InspectConfig(ctx context.Context, name string) ([]byte, error) {
+	cli, err := b.client()
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := docker.InspectConfigWith(ctx, cli, name)
 	if err != nil {
 		return nil, err
 	}
 	return cfg.Data, nil
 }
 
-func (dockerBackend) DeleteConfig(ctx context.Context, name string) error {
-	return docker.DeleteConfig(ctx, name)
+func (b *dockerBackend) DeleteConfig(ctx context.Context, name string) error {
+	cli, err := b.client()
+	if err != nil {
+		return err
+	}
+	return docker.DeleteConfigWith(ctx, cli, name)
 }
 
-func (dockerBackend) StackServices(name string) []ServiceState {
-	entries := docker.LoadStackServices(name)
+func (b *dockerBackend) StackServices(name string) []ServiceState {
+	snap, err := b.snapshot()
+	if err != nil {
+		return nil
+	}
+	entries := snap.StackServices(name)
 	// Convergence facts come from a separate loader because ServiceEntry counts
 	// replicas by desired state, which is right for the services view but wrong
-	// for deciding a rollout finished (issues #473, #480).
+	// for deciding a rollout finished (issues #473, #480). Both now read the
+	// same snapshot, so the display and the decision cannot disagree.
 	conv := make(map[string]docker.ServiceConvergence, len(entries))
-	for _, c := range docker.LoadStackConvergence(name) {
+	for _, c := range snap.StackConvergence(name) {
 		conv[c.Name] = c
 	}
 
@@ -90,8 +179,12 @@ func (dockerBackend) StackServices(name string) []ServiceState {
 	return out
 }
 
-func (dockerBackend) StackVolumes(ctx context.Context, name string) ([]string, error) {
-	vols, err := docker.ListVolumes(ctx)
+func (b *dockerBackend) StackVolumes(ctx context.Context, name string) ([]string, error) {
+	cli, err := b.client()
+	if err != nil {
+		return nil, err
+	}
+	vols, err := docker.ListVolumesWith(ctx, cli)
 	if err != nil {
 		return nil, err
 	}
@@ -104,12 +197,20 @@ func (dockerBackend) StackVolumes(ctx context.Context, name string) ([]string, e
 	return out, nil
 }
 
-func (dockerBackend) RemoveVolume(ctx context.Context, name string) error {
-	return docker.RemoveVolume(ctx, name, false)
+func (b *dockerBackend) RemoveVolume(ctx context.Context, name string) error {
+	cli, err := b.client()
+	if err != nil {
+		return err
+	}
+	return docker.RemoveVolumeWith(ctx, cli, name, false)
 }
 
-func (dockerBackend) NetworkScopes(ctx context.Context) (map[string]string, error) {
-	nets, err := docker.ListNetworks(ctx)
+func (b *dockerBackend) NetworkScopes(ctx context.Context) (map[string]string, error) {
+	cli, err := b.client()
+	if err != nil {
+		return nil, err
+	}
+	nets, err := docker.ListNetworksWith(ctx, cli)
 	if err != nil {
 		return nil, err
 	}
@@ -120,26 +221,38 @@ func (dockerBackend) NetworkScopes(ctx context.Context) (map[string]string, erro
 	return scopes, nil
 }
 
-func (dockerBackend) CreateOverlayNetwork(ctx context.Context, name, driver string, attachable bool) error {
-	_, _, err := docker.CreateNetwork(ctx, name, network.CreateOptions{Driver: driver, Attachable: attachable})
+func (b *dockerBackend) CreateOverlayNetwork(ctx context.Context, name, driver string, attachable bool) error {
+	cli, err := b.client()
+	if err != nil {
+		return err
+	}
+	_, _, err = docker.CreateNetworkWith(ctx, cli, name, network.CreateOptions{Driver: driver, Attachable: attachable})
 	return err
 }
 
-func (dockerBackend) RemoveOverlayNetwork(ctx context.Context, name string) error {
-	nets, err := docker.ListNetworks(ctx)
+func (b *dockerBackend) RemoveOverlayNetwork(ctx context.Context, name string) error {
+	cli, err := b.client()
+	if err != nil {
+		return err
+	}
+	nets, err := docker.ListNetworksWith(ctx, cli)
 	if err != nil {
 		return err
 	}
 	for _, n := range nets {
 		if n.Name == name {
-			return docker.RemoveNetwork(ctx, n.ID)
+			return docker.RemoveNetworkWith(ctx, cli, n.ID)
 		}
 	}
 	return nil // already gone
 }
 
-func (dockerBackend) SecretNames(ctx context.Context) (map[string]struct{}, error) {
-	secs, err := docker.ListSecrets(ctx)
+func (b *dockerBackend) SecretNames(ctx context.Context) (map[string]struct{}, error) {
+	cli, err := b.client()
+	if err != nil {
+		return nil, err
+	}
+	secs, err := docker.ListSecretsWith(ctx, cli)
 	if err != nil {
 		return nil, err
 	}

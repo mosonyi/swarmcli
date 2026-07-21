@@ -113,12 +113,16 @@ func (cfg *ConfigWithDecodedData) PrettyJSON() ([]byte, error) {
 
 // ListConfigs retrieves all Docker Swarm configs.
 func ListConfigs(ctx context.Context) ([]swarm.Config, error) {
-	l().Debug("[ListConfigs] Listing all configs")
-
 	cli, err := GetClient()
 	if err != nil {
 		return nil, err
 	}
+	return ListConfigsWith(ctx, cli)
+}
+
+// ListConfigsWith is ListConfigs against an explicit client.
+func ListConfigsWith(ctx context.Context, cli *client.Client) ([]swarm.Config, error) {
+	l().Debug("[ListConfigs] Listing all configs")
 
 	configs, err := cli.ConfigList(ctx, swarm.ConfigListOptions{})
 	if err != nil {
@@ -149,12 +153,16 @@ func ListConfigs(ctx context.Context) ([]swarm.Config, error) {
 
 // InspectConfig fetches and returns the config data.
 func InspectConfig(ctx context.Context, nameOrID string) (*ConfigWithDecodedData, error) {
-	l().Debugf("[InspectConfig] Inspecting config: %s", nameOrID)
-
 	cli, err := GetClient()
 	if err != nil {
 		return nil, err
 	}
+	return InspectConfigWith(ctx, cli, nameOrID)
+}
+
+// InspectConfigWith is InspectConfig against an explicit client.
+func InspectConfigWith(ctx context.Context, cli *client.Client, nameOrID string) (*ConfigWithDecodedData, error) {
+	l().Debugf("[InspectConfig] Inspecting config: %s", nameOrID)
 
 	cfg, _, err := cli.ConfigInspectWithRaw(ctx, nameOrID)
 	if err != nil {
@@ -181,11 +189,24 @@ func CreateConfigVersion(ctx context.Context, baseConfig swarm.Config, newData [
 		Data: newData,
 	}
 
-	return createConfigWithSpec(ctx, spec, "[CreateConfigVersion]")
+	cli, err := GetClient()
+	if err != nil {
+		return swarm.Config{}, err
+	}
+	return createConfigWithSpec(ctx, cli, spec, "[CreateConfigVersion]")
 }
 
 // CreateConfig creates a new config with the given name and data
 func CreateConfig(ctx context.Context, name string, data []byte, labels map[string]string) (swarm.Config, error) {
+	cli, err := GetClient()
+	if err != nil {
+		return swarm.Config{}, err
+	}
+	return CreateConfigWith(ctx, cli, name, data, labels)
+}
+
+// CreateConfigWith is CreateConfig against an explicit client.
+func CreateConfigWith(ctx context.Context, cli *client.Client, name string, data []byte, labels map[string]string) (swarm.Config, error) {
 	l().Infof("[CreateConfig] Creating new config %q (size=%d bytes)", name, len(data))
 
 	// Merge user labels with swarmcli metadata
@@ -203,19 +224,14 @@ func CreateConfig(ctx context.Context, name string, data []byte, labels map[stri
 		Data: data,
 	}
 
-	return createConfigWithSpec(ctx, spec, "[CreateConfig]")
+	return createConfigWithSpec(ctx, cli, spec, "[CreateConfig]")
 }
 
 // createConfigWithSpec centralizes config creation: it calls the Docker API
 // to create a config from the provided spec, re-inspects the created config,
 // and returns the populated swarm.Config or an error. The caller may pass a
 // prefix for logging context (e.g. "[CreateConfigVersion]").
-func createConfigWithSpec(ctx context.Context, spec swarm.ConfigSpec, logPrefix string) (swarm.Config, error) {
-	cli, err := GetClient()
-	if err != nil {
-		return swarm.Config{}, err
-	}
-
+func createConfigWithSpec(ctx context.Context, cli *client.Client, spec swarm.ConfigSpec, logPrefix string) (swarm.Config, error) {
 	cfgName := spec.Name
 
 	id, err := cli.ConfigCreate(ctx, spec)
@@ -289,12 +305,16 @@ func RotateConfigInServices(ctx context.Context, oldCfg *swarm.Config, newCfg sw
 
 // DeleteConfig deletes a config only if it's not referenced by any service.
 func DeleteConfig(ctx context.Context, nameOrID string) error {
-	cfg, err := InspectConfig(ctx, nameOrID)
+	cli, err := GetClient()
 	if err != nil {
 		return err
 	}
+	return DeleteConfigWith(ctx, cli, nameOrID)
+}
 
-	cli, err := GetClient()
+// DeleteConfigWith is DeleteConfig against an explicit client.
+func DeleteConfigWith(ctx context.Context, cli *client.Client, nameOrID string) error {
+	cfg, err := InspectConfigWith(ctx, cli, nameOrID)
 	if err != nil {
 		return err
 	}
