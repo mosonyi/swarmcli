@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/docker/cli/cli/connhelper"
 	"github.com/docker/docker/client"
 )
 
@@ -154,16 +155,9 @@ func buildClientFor(ctxName string) (*client.Client, error) {
 	l().Infof("[GetClient] certs present: ca=%t cert=%t key=%t",
 		fileExists(ca), fileExists(cert), fileExists(key))
 
-	opts := []client.Opt{
-		client.WithHost(host),
-		client.WithAPIVersionNegotiation(),
-	}
-
-	// Configure TLS if certs exist
-	if fileExists(ca) && fileExists(cert) && fileExists(key) {
-		opts = append(opts, client.WithTLSClientConfig(ca, cert, key))
-	} else if skipVerify {
-		l().Infof("[GetClient] skipVerify=true but no certs found")
+	opts, err := clientOptsFor(host, ca, cert, key, skipVerify)
+	if err != nil {
+		return nil, err
 	}
 
 	cli, err := client.NewClientWithOpts(opts...)
@@ -180,6 +174,39 @@ func buildClientFor(ctxName string) (*client.Client, error) {
 	}
 
 	return cli, nil
+}
+
+// clientOptsFor builds the SDK options for one resolved endpoint.
+//
+// A scheme the SDK cannot dial itself — ssh:// today — is tunnelled through a
+// connection helper. client.WithHost alone would hand the URL to
+// go-connections, which special-cases only unix and npipe and TCP-dials
+// everything else, so an ssh context failed at the ping.
+func clientOptsFor(host, ca, cert, key string, skipVerify bool) ([]client.Opt, error) {
+	helper, err := connhelper.GetConnectionHelper(host)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve a connection helper for %q: %w", host, err)
+	}
+
+	opts := []client.Opt{client.WithAPIVersionNegotiation()}
+	if helper != nil {
+		// The helper owns the transport: helper.Host is a dummy URL the HTTP
+		// requests are addressed to, and helper.Dialer runs
+		// `ssh … docker system dial-stdio`. TLS is deliberately not applied —
+		// the connection is secured by ssh, and any certs in the context's
+		// storage describe a tcp:// endpoint this context is not using.
+		l().Infof("[GetClient] using a connection helper for %q", host)
+		return append(opts, client.WithHost(helper.Host), client.WithDialContext(helper.Dialer)), nil
+	}
+
+	opts = append(opts, client.WithHost(host))
+	// Configure TLS if certs exist
+	if fileExists(ca) && fileExists(cert) && fileExists(key) {
+		opts = append(opts, client.WithTLSClientConfig(ca, cert, key))
+	} else if skipVerify {
+		l().Infof("[GetClient] skipVerify=true but no certs found")
+	}
+	return opts, nil
 }
 
 func fileExists(path string) bool {
