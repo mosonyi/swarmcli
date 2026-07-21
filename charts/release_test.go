@@ -53,7 +53,7 @@ func newFakeBackend() *fakeBackend {
 	}
 }
 
-func (f *fakeBackend) DeployStack(name, manifest string) error {
+func (f *fakeBackend) DeployStack(name, manifest, resolve string) error {
 	if f.failNext {
 		f.failNext = false
 		return fmt.Errorf("boom")
@@ -342,11 +342,57 @@ func mustGzipRelease(t *testing.T, rel *Release) []byte {
 
 // A converged service whose update is still in flight must not count as ready.
 func TestAllConvergedRejectsInProgress(t *testing.T) {
-	require.True(t, allConverged([]ServiceState{{Replicas: "2/2", Status: "active"}}))
-	require.True(t, allConverged([]ServiceState{{Replicas: "1/1", Status: "updated"}}))
-	require.False(t, allConverged([]ServiceState{{Replicas: "2/2", Status: "updating"}}))
-	require.False(t, allConverged([]ServiceState{{Replicas: "1/1", Status: "rolling back"}}))
-	require.False(t, allConverged([]ServiceState{{Replicas: "1/2", Status: "active"}}))
+	require.True(t, allConverged([]ServiceState{{Running: 2, Desired: 2}}))
+	require.True(t, allConverged([]ServiceState{{Running: 1, Desired: 1, UpdateState: "completed"}}))
+	require.False(t, allConverged([]ServiceState{{Running: 2, Desired: 2, UpdateState: "updating"}}))
+	require.False(t, allConverged([]ServiceState{{Running: 1, Desired: 1, UpdateState: "rollback_started"}}))
+	require.False(t, allConverged([]ServiceState{{Running: 1, Desired: 2}}))
+}
+
+// The bug in #473: a fresh install has no UpdateStatus, so the in-flight guard
+// cannot fire, and the old check compared a Replicas string counting tasks by
+// DESIRED state — which reaches parity the moment swarm schedules them. A
+// release whose tasks are all still pending must not read as converged.
+func TestAllConvergedRejectsScheduledButNotRunning(t *testing.T) {
+	scheduled := []ServiceState{{
+		Name:        "api",
+		Replicas:    "3/3", // what the old check saw: 3 tasks DESIRED running
+		Status:      "active",
+		Running:     0, // ...none of which had actually started
+		Desired:     3,
+		UpdateState: "", // fresh install: never updated
+	}}
+	require.False(t, allConverged(scheduled), "tasks that are merely scheduled must not count as converged")
+}
+
+// A global service on a drained node lowers the target rather than leaving the
+// release permanently short of a replica that can never be scheduled.
+func TestAllConvergedGlobalTracksActiveNodes(t *testing.T) {
+	require.True(t, allConverged([]ServiceState{{Mode: "global", Running: 2, Desired: 2}}))
+	require.False(t, allConverged([]ServiceState{{Mode: "global", Running: 1, Desired: 2}}))
+}
+
+func TestStabilityWindowTakesTheLongestMonitor(t *testing.T) {
+	require.Equal(t, defaultStabilityWindow, stabilityWindow(nil))
+	require.Equal(t, defaultStabilityWindow,
+		stabilityWindow([]ServiceState{{Monitor: time.Second}}), "a shorter monitor must not weaken the default")
+	require.Equal(t, 30*time.Second,
+		stabilityWindow([]ServiceState{{Monitor: 10 * time.Second}, {Monitor: 30 * time.Second}}))
+}
+
+// paused and rollback_paused are terminal: swarmkit never rolls back a
+// rollback, so waiting out the timeout only delays the report.
+func TestRolloutWedged(t *testing.T) {
+	require.NoError(t, rolloutWedged([]ServiceState{{Name: "api", UpdateState: "updating"}}))
+	require.NoError(t, rolloutWedged([]ServiceState{{Name: "api", UpdateState: ""}}))
+
+	err := rolloutWedged([]ServiceState{{Name: "api", UpdateState: "paused"}})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "api")
+
+	err = rolloutWedged([]ServiceState{{Name: "api", UpdateState: "rollback_paused"}})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "manual recovery")
 }
 
 // When a concurrent actor claims the next revision number between read and
@@ -391,4 +437,109 @@ func TestUninstallContinuesOnPartialFailure(t *testing.T) {
 	_, err = e.Uninstall(ctx, "demo", false)
 	require.ErrorContains(t, err, "removing stack")
 	require.Empty(t, fb.configs) // history cleaned up despite the stack-removal failure
+}
+
+// waitReady must hold parity for the stability window before reporting success:
+// a task that starts and then dies inside UpdateConfig.Monitor is a rollout
+// failure, so returning at first parity reports success for a service that is
+// about to crash-loop.
+func TestWaitReadyHoldsTheStabilityWindow(t *testing.T) {
+	prev := waitPollInterval
+	waitPollInterval = time.Millisecond
+	defer func() { waitPollInterval = prev }()
+
+	b := &convergenceBackend{states: []ServiceState{{Name: "api", Running: 1, Desired: 1}}}
+
+	// The clock advances far too slowly to clear the 5s stability window, but
+	// fast enough to reach a 50ms deadline. Parity is immediate, so a waitReady
+	// that returned at first parity would report success here.
+	clock := time.Now()
+	e := &Engine{Backend: b, now: func() time.Time {
+		clock = clock.Add(time.Millisecond)
+		return clock
+	}}
+
+	err := e.waitReady("rel", 50*time.Millisecond)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "timed out")
+	require.Greater(t, b.calls, 1, "should keep polling rather than returning at first parity")
+}
+
+func TestWaitReadyReturnsOnceTheWindowElapses(t *testing.T) {
+	prev := waitPollInterval
+	waitPollInterval = time.Millisecond
+	defer func() { waitPollInterval = prev }()
+
+	b := &convergenceBackend{states: []ServiceState{{Name: "api", Running: 1, Desired: 1}}}
+	clock := time.Now()
+	e := &Engine{Backend: b, now: func() time.Time {
+		clock = clock.Add(2 * time.Second) // clears defaultStabilityWindow quickly
+		return clock
+	}}
+	require.NoError(t, e.waitReady("rel", time.Hour))
+}
+
+// Losing parity inside the window restarts it, rather than counting the earlier
+// stretch that a task failure has invalidated.
+func TestWaitReadyRestartsWindowOnLostParity(t *testing.T) {
+	prev := waitPollInterval
+	waitPollInterval = time.Millisecond
+	defer func() { waitPollInterval = prev }()
+
+	converged := []ServiceState{{Name: "api", Running: 1, Desired: 1}}
+	lost := []ServiceState{{Name: "api", Running: 0, Desired: 1}}
+
+	b := &scriptedBackend{script: [][]ServiceState{converged, lost, converged}}
+	clock := time.Now()
+	e := &Engine{Backend: b, now: func() time.Time {
+		clock = clock.Add(3 * time.Second)
+		return clock
+	}}
+	require.NoError(t, e.waitReady("rel", time.Hour))
+	// Had the window not restarted, it would have returned on the 2nd poll.
+	require.GreaterOrEqual(t, b.calls, 3, "losing parity must restart the stability window")
+}
+
+// A wedged rollout is reported immediately rather than after the full timeout.
+func TestWaitReadyFailsFastOnWedgedRollout(t *testing.T) {
+	prev := waitPollInterval
+	waitPollInterval = time.Millisecond
+	defer func() { waitPollInterval = prev }()
+
+	b := &convergenceBackend{states: []ServiceState{{Name: "api", Running: 0, Desired: 1, UpdateState: "paused"}}}
+	e := &Engine{Backend: b, now: time.Now}
+
+	err := e.waitReady("rel", time.Hour)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "update paused")
+	require.Equal(t, 1, b.calls, "should fail on the first observation, not wait out the timeout")
+}
+
+// convergenceBackend is a Backend that only answers StackServices; waitReady
+// touches nothing else.
+type convergenceBackend struct {
+	Backend
+	states []ServiceState
+	calls  int
+}
+
+func (b *convergenceBackend) StackServices(string) []ServiceState {
+	b.calls++
+	return b.states
+}
+
+// scriptedBackend returns a different state per poll, then repeats the last.
+type scriptedBackend struct {
+	Backend
+	script [][]ServiceState
+	calls  int
+}
+
+func (b *scriptedBackend) StackServices(string) []ServiceState {
+	i := b.calls
+	b.calls++
+	if i >= len(b.script) {
+		i = len(b.script) - 1
+	}
+	return b.script[i]
 }

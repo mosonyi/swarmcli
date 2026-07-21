@@ -15,8 +15,8 @@ import (
 // dockerBackend implements Backend against the live github.com/Eldara-Tech/swarmcli/docker package.
 type dockerBackend struct{}
 
-func (dockerBackend) DeployStack(name, manifest string) error {
-	return docker.DeployStack(name, manifest)
+func (dockerBackend) DeployStack(name, manifest, resolve string) error {
+	return docker.DeployStackResolved(name, manifest, docker.ResolveImage(resolve))
 }
 
 func (dockerBackend) RemoveStack(name string) error {
@@ -59,18 +59,33 @@ func (dockerBackend) DeleteConfig(ctx context.Context, name string) error {
 
 func (dockerBackend) StackServices(name string) []ServiceState {
 	entries := docker.LoadStackServices(name)
+	// Convergence facts come from a separate loader because ServiceEntry counts
+	// replicas by desired state, which is right for the services view but wrong
+	// for deciding a rollout finished (issues #473, #480).
+	conv := make(map[string]docker.ServiceConvergence, len(entries))
+	for _, c := range docker.LoadStackConvergence(name) {
+		conv[c.Name] = c
+	}
+
 	out := make([]ServiceState, 0, len(entries))
 	for _, e := range entries {
 		replicas := ""
 		if e.Mode == "replicated" {
 			replicas = fmt.Sprintf("%d/%d", e.ReplicasOnNode, e.ReplicasTotal)
 		}
-		out = append(out, ServiceState{
+		st := ServiceState{
 			Name:     e.ServiceName,
 			Mode:     e.Mode,
 			Replicas: replicas,
 			Status:   e.Status,
-		})
+		}
+		if c, ok := conv[e.ServiceName]; ok {
+			st.Running = c.Running
+			st.Desired = c.Desired
+			st.UpdateState = c.UpdateState
+			st.Monitor = c.Monitor
+		}
+		out = append(out, st)
 	}
 	return out
 }
