@@ -165,6 +165,15 @@ const swarmDefaultMonitor = defaultStabilityWindow
 // swarm's default is 5s, shorter than almost any healthcheck's worst case. The
 // rule originally skipped that case, which meant it fired on nothing at all.
 //
+// The figure is a floor, not a budget. Swarm starts the window when it CREATES
+// the task, so pulling the image happens inside it too — a large first pull on
+// a cold node can consume the whole window before the container even starts.
+// Pull time cannot be known from the manifest (it depends on image size,
+// registry and how warm the node is), so it is named in the finding rather than
+// guessed at with a constant: a fabricated allowance would be wrong for every
+// chart in a different direction, and would re-fire the rule on charts whose
+// monitors were set from this very formula.
+//
 // Warning, not error: a short monitor is legitimate when the operator wants a
 // fast rollout and is watching by other means.
 func lintHealthcheckMonitor(manifest string, add func(LintSeverity, string, ...any)) {
@@ -224,8 +233,8 @@ func lintHealthcheckMonitor(manifest string, add func(LintSeverity, string, ...a
 			had = fmt.Sprintf("no deploy.update_config.monitor, so swarm's %s default applies, which", monitor)
 		}
 		add(LintWarning,
-			"service %q: %s is shorter than the healthcheck needs to fail (%s = start_period %s + interval %s x retries %d); a container that goes unhealthy after the monitor window does not fail the rollout, so a broken deploy reports success. Set deploy.update_config.monitor to at least %s",
-			name, had, needed, startPeriod, interval, retries, needed)
+			"service %q: %s is shorter than the healthcheck needs to fail (%s = start_period %s + interval %s x retries %d); a container that goes unhealthy after the monitor window does not fail the rollout, so a broken deploy reports success. Set deploy.update_config.monitor to at least %s — and higher if the image is large, since swarm starts the window when it creates the task, so the pull runs inside it and %s does not account for it",
+			name, had, needed, startPeriod, interval, retries, needed, needed)
 	}
 }
 
