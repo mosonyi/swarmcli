@@ -9,6 +9,11 @@ updates:
       go-minor-patch:
         patterns: ["*"]
         update-types: [minor, patch]
+    ignore:
+      # Pinned to v28.5.1 — see the comment in go.mod and issue #504. At v29 its
+      # cli/compose/convert moved to github.com/moby/moby's API types, which are
+      # distinct Go types from the github.com/docker/docker ones used here.
+      - dependency-name: "github.com/docker/cli"
     labels:
       - B0-low-priority
       - C0-breaks-nothing

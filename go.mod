@@ -12,7 +12,13 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.11.7
-	github.com/docker/cli v29.6.2+incompatible
+	// Pinned, do not bump without reading Eldara-Tech/swarmcli#504. We import
+	// exactly one package from this module (cli/connhelper), but at v29 its
+	// cli/compose/convert moved to github.com/moby/moby's API types, which are
+	// distinct Go types from the github.com/docker/docker ones this module uses
+	// everywhere. swarmcli-cd builds its applier on that convert package, so the
+	// bump would silently make its output untypeable against ours.
+	github.com/docker/cli v28.5.1+incompatible
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/muesli/reflow v0.3.0
