@@ -146,6 +146,21 @@ func (b *dockerBackend) StackServices(name string) []ServiceState {
 	if err != nil {
 		return nil
 	}
+	return ServiceStatesFrom(snap, name)
+}
+
+// ServiceStatesFrom reads one stack's service states out of a swarm snapshot.
+//
+// It is exported for the sake of a caller implementing Backend itself, which
+// NewEngineWith exists to allow: producing []ServiceState is the one part of
+// that job with rules rather than plumbing, and a second copy of them would
+// diverge silently in both directions — reporting a release converged when this
+// package would still be waiting, or degraded when it is fine.
+//
+// The snapshot is the caller's: docker.SnapshotWith builds one against any
+// client without touching the process-wide cache, so a consumer serving several
+// swarms is not forced through the ambient one.
+func ServiceStatesFrom(snap *docker.SwarmSnapshot, name string) []ServiceState {
 	entries := snap.StackServices(name)
 	// Convergence facts come from a separate loader because ServiceEntry counts
 	// replicas by desired state, which is right for the services view but wrong
