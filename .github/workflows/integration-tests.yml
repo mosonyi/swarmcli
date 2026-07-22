@@ -119,3 +119,37 @@ jobs:
 
       - name: Run locked-swarm integration test
         run: go test -tags=integration_locked -count=1 -v -timeout=15m ./integration-tests/...
+
+  # The ssh-context test stands up its own dind running an sshd and redirects
+  # HOME so the ssh client config and the Docker context store are both under
+  # test control. Like locked-swarm it must stay away from the shared swarm, so
+  # it gets the dedicated `integration_ssh` tag and its own job.
+  #
+  # It cannot ride along with the regular integration job: that job's tests share
+  # one HOME, and rewriting it mid-run would move the Docker context store out
+  # from under them.
+  ssh-context:
+    needs: [changes]
+    if: needs.changes.outputs.integration == 'true'
+    name: Run ssh-context integration test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify Docker, Go & ssh
+        run: |
+          docker version
+          go version
+          ssh -V
+
+      - name: Run ssh-context integration test
+        run: go test -tags=integration_ssh -count=1 -v -timeout=15m ./integration-tests/...
