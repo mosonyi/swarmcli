@@ -104,7 +104,12 @@ func RefreshSnapshot() (*SwarmSnapshot, error) {
 // reconciles against different swarms sharing it would not merely read each
 // other's data, they would evict each other's. A caller holding an explicit
 // client owns its own freshness.
-func SnapshotWith(parent context.Context, c *client.Client) (*SwarmSnapshot, error) {
+//
+// It takes the interface rather than *client.Client because it only ever calls
+// NodeList, ServiceList, TaskList and Info, and a consumer that holds an
+// APIClient — normally for testability — should not have to write a second
+// snapshot builder that misses the locked-swarm handling below.
+func SnapshotWith(parent context.Context, c client.APIClient) (*SwarmSnapshot, error) {
 	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 

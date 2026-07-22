@@ -5,6 +5,7 @@ package charts
 
 import (
 	"testing"
+	"time"
 
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/stretchr/testify/require"
@@ -51,4 +52,98 @@ func TestNamedBackendRefreshDoesNotTouchTheSharedCache(t *testing.T) {
 	require.NotNil(t, got)
 	require.Len(t, got.Services, 1)
 	require.Equal(t, "sentinel", got.Services[0].ID, "the shared cache must be untouched")
+}
+
+// --- ServiceStatesFrom ---
+
+func readyNode(id string) swarm.Node {
+	return swarm.Node{
+		ID:     id,
+		Status: swarm.NodeStatus{State: swarm.NodeStateReady},
+		Spec:   swarm.NodeSpec{Availability: swarm.NodeAvailabilityActive},
+	}
+}
+
+func stackService(id, stack string, replicas uint64) swarm.Service {
+	return swarm.Service{
+		ID: id,
+		Spec: swarm.ServiceSpec{
+			Annotations: swarm.Annotations{
+				Name:   id,
+				Labels: map[string]string{"com.docker.stack.namespace": stack},
+			},
+			Mode: swarm.ServiceMode{Replicated: &swarm.ReplicatedService{Replicas: &replicas}},
+		},
+	}
+}
+
+func runningTask(svcID, nodeID string) swarm.Task {
+	return swarm.Task{
+		ServiceID:    svcID,
+		NodeID:       nodeID,
+		DesiredState: swarm.TaskStateRunning,
+		Status:       swarm.TaskStatus{State: swarm.TaskStateRunning},
+	}
+}
+
+// The states a caller gets carry both halves: the display line from the service
+// entry, and the convergence facts --wait and a health rollup decide on.
+func TestServiceStatesFromCarriesBothHalves(t *testing.T) {
+	snap := &docker.SwarmSnapshot{
+		Nodes:    []swarm.Node{readyNode("n1")},
+		Services: []swarm.Service{stackService("api", "mystack", 2)},
+		Tasks:    []swarm.Task{runningTask("api", "n1"), runningTask("api", "n1")},
+	}
+
+	states := ServiceStatesFrom(snap, "mystack")
+	require.Len(t, states, 1)
+	require.Equal(t, "api", states[0].Name)
+	require.Equal(t, "replicated", states[0].Mode)
+	require.Equal(t, "2/2", states[0].Replicas)
+	require.Equal(t, 2, states[0].Running, "the running count is by ACTUAL state, not desired (#480)")
+	require.Equal(t, 2, states[0].Desired)
+}
+
+// The rule this function exists to keep one copy of. A one-shot step ends with
+// its task Complete and nothing running, which is its success state — without
+// this the release reads 0/1 forever and looks degraded when it is done (#443).
+func TestServiceStatesFromReportsAFinishedJobAsCompleted(t *testing.T) {
+	svc := stackService("init", "mystack", 1)
+	svc.Spec.TaskTemplate.RestartPolicy = &swarm.RestartPolicy{Condition: swarm.RestartPolicyConditionNone}
+
+	snap := &docker.SwarmSnapshot{
+		Nodes:    []swarm.Node{readyNode("n1")},
+		Services: []swarm.Service{svc},
+		Tasks: []swarm.Task{{
+			ServiceID: "init",
+			NodeID:    "n1",
+			// Old enough to have served out the stability window, which applies
+			// to a job's task as much as to a long-running one.
+			Meta:         swarm.Meta{CreatedAt: time.Now().Add(-time.Hour)},
+			DesiredState: swarm.TaskStateShutdown,
+			Status:       swarm.TaskStatus{State: swarm.TaskStateComplete},
+		}},
+	}
+
+	states := ServiceStatesFrom(snap, "mystack")
+	require.Len(t, states, 1)
+	require.True(t, states[0].Job)
+	require.Zero(t, states[0].Running, "a finished job has nothing running")
+	require.Equal(t, 1, states[0].Completed)
+	require.Equal(t, "1/1", states[0].Replicas, "a completed task counts toward the target")
+	require.Equal(t, "completed", states[0].Status)
+	require.Equal(t, PhaseConverged, Rollup(states).Phase, "and the release is converged, not degraded")
+}
+
+// A snapshot holding several stacks answers about one of them.
+func TestServiceStatesFromIsScopedToTheStack(t *testing.T) {
+	snap := &docker.SwarmSnapshot{
+		Nodes:    []swarm.Node{readyNode("n1")},
+		Services: []swarm.Service{stackService("mine", "a", 1), stackService("theirs", "b", 1)},
+		Tasks:    []swarm.Task{runningTask("mine", "n1"), runningTask("theirs", "n1")},
+	}
+
+	states := ServiceStatesFrom(snap, "a")
+	require.Len(t, states, 1)
+	require.Equal(t, "mine", states[0].Name)
 }
