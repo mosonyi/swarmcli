@@ -45,9 +45,14 @@ type ReleasePlan struct {
 
 // Plan is what apply would do to the whole swarm.
 type Plan struct {
-	// Owner is the owner id this plan was classified against, from the release
-	// file's `owner:` key. Empty when the file declares none, in which case
-	// nothing on the swarm is claimable and Orphaned is always empty.
+	// Owner is the owner id this plan was classified against: PlanOptions.Owner
+	// when the caller supplied one, otherwise "apply/" and the release file's
+	// `owner:` key. Empty when neither names an owner, in which case nothing on
+	// the swarm is claimable and Orphaned is always empty.
+	//
+	// It is also the id Apply should stamp on what it writes — pass it as
+	// InstallOptions.Owner — so that the next plan recognises these releases as
+	// its own rather than as somebody else's.
 	Owner string `json:"owner,omitempty"`
 	// Releases, in file order.
 	Releases []ReleasePlan `json:"releases"`
@@ -77,13 +82,49 @@ func (p *Plan) Counts() (install, upgrade, unchanged int) {
 	return install, upgrade, unchanged
 }
 
+// PlanOptions tune planning. The zero value is what `swarmcli charts apply`
+// uses, and reproduces the behaviour of every release before these existed.
+type PlanOptions struct {
+	// Owner is the owner id the plan classifies deployed releases against,
+	// overriding the "apply/<owner>" the release file would imply. A controller
+	// installs under an id of its own — InstallOptions.Owner documents "cd/edge"
+	// — and without this its own releases fail the ownership check and report as
+	// Unmanaged from the first reconcile.
+	//
+	// Empty derives the id from the release file, which is what keeps a manifest
+	// applied from the command line and a controller that happened to pick the
+	// same name from claiming each other's releases. Set, it replaces that
+	// derivation entirely: the file's `owner:` key is not consulted.
+	Owner string
+	// ReadFile reads one values file named by the release file, by the resolved
+	// path ReleaseFile.ValuesPaths produced. Nil is os.ReadFile.
+	//
+	// It exists so that a caller can see and transform the bytes between "this
+	// path was named" and "these values were merged" — decrypting a values file
+	// committed encrypted, or serving it from a git object rather than a local
+	// path at all — without the material having to reach a filesystem first.
+	ReadFile func(path string) ([]byte, error)
+}
+
 // PlanApply computes what Apply would do, without writing anything.
 //
 // Every release is resolved, merged, schema-validated and rendered BEFORE any of
 // them is deployed. A bad value in the third release therefore aborts the whole
 // apply instead of leaving the swarm half-converged — and `--dry-run` is just
 // "stop after planning".
-func (e *Engine) PlanApply(ctx context.Context, rf *ReleaseFile, src ChartSource) (*Plan, error) {
+func (e *Engine) PlanApply(ctx context.Context, rf *ReleaseFile, src ChartSource, opts PlanOptions) (*Plan, error) {
+	owner := rf.ownerID()
+	if opts.Owner != "" {
+		if err := validateOwnerID(opts.Owner); err != nil {
+			return nil, err
+		}
+		owner = opts.Owner
+	}
+	read := opts.ReadFile
+	if read == nil {
+		read = os.ReadFile
+	}
+
 	current, err := e.List(ctx)
 	if err != nil {
 		return nil, err
@@ -93,13 +134,13 @@ func (e *Engine) PlanApply(ctx context.Context, rf *ReleaseFile, src ChartSource
 		deployed[rel.Name] = rel
 	}
 
-	plan := &Plan{Owner: rf.ownerID()}
+	plan := &Plan{Owner: owner}
 	managed := map[string]bool{}
 
 	for _, spec := range rf.Releases {
 		managed[spec.Name] = true
 
-		rp, err := e.planRelease(rf, spec, src, deployed)
+		rp, err := e.planRelease(rf, spec, src, deployed, read)
 		if err != nil {
 			return nil, err
 		}
@@ -134,7 +175,7 @@ func ownedBy(rel Release, id string) bool {
 	return own == OwnerRef{ID: id, Kind: OwnerKindRelease, Name: rel.Name}
 }
 
-func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource, deployed map[string]Release) (ReleasePlan, error) {
+func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource, deployed map[string]Release, read func(string) ([]byte, error)) (ReleasePlan, error) {
 	ref := rf.ChartRef(spec)
 
 	ch, err := src.Load(ref, spec.Version)
@@ -143,7 +184,7 @@ func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource,
 	}
 	compat := CheckCompat(ch.Metadata)
 
-	files, err := readFiles(rf.ValuesPaths(spec))
+	files, err := readFiles(rf.ValuesPaths(spec), read)
 	if err != nil {
 		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
 	}
@@ -306,10 +347,10 @@ func canonicalValues(v map[string]any) (string, error) {
 	return string(second), nil
 }
 
-func readFiles(paths []string) ([][]byte, error) {
+func readFiles(paths []string, read func(string) ([]byte, error)) ([][]byte, error) {
 	var out [][]byte
 	for _, p := range paths {
-		b, err := os.ReadFile(p)
+		b, err := read(p)
 		if err != nil {
 			return nil, fmt.Errorf("read values file %q: %w", p, err)
 		}
