@@ -130,6 +130,12 @@ func startSSHDind(t *testing.T, pubKey string) {
 		"chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys",
 		// Explicit rather than relying on Alpine's commented-out default.
 		"echo 'PermitRootLogin prohibit-password' >> /etc/ssh/sshd_config",
+		// The docker CLI lives in /usr/local/bin, which is NOT on sshd's default
+		// PATH for a non-interactive session — and `ssh host -- command` is
+		// exactly that. connhelper runs `ssh … -- docker system dial-stdio`, so
+		// without this the feature under test cannot work, not just the probe.
+		// /etc/profile would not help: it is only read by login shells.
+		"[ -x /usr/bin/docker ] || ln -s \"$(command -v docker)\" /usr/bin/docker",
 		"/usr/sbin/sshd",
 	}, " && ")
 	out, err = inner(t, "sh", "-c", setup)
@@ -141,13 +147,20 @@ func startSSHDind(t *testing.T, pubKey string) {
 
 	// Poll the actual transport: ssh in and run the very command the connection
 	// helper runs. sshd takes a moment to bind after being started.
+	// Keep the last failure so a timeout reports WHY ssh never worked rather
+	// than just that it did not.
+	var lastOut string
+	var lastErr error
 	deadline = time.Now().Add(60 * time.Second)
 	for {
 		probe := exec.Command("ssh", "-o", "BatchMode=yes", "localhost", "docker", "version", "--format", "{{.Server.Version}}")
-		if out, err := probe.CombinedOutput(); err == nil && len(strings.TrimSpace(string(out))) > 0 {
+		out, err := probe.CombinedOutput()
+		if err == nil && len(strings.TrimSpace(string(out))) > 0 {
 			return
 		}
-		require.Truef(t, time.Now().Before(deadline), "ssh to the dind never became usable")
+		lastOut, lastErr = string(out), err
+		require.Truef(t, time.Now().Before(deadline),
+			"ssh to the dind never became usable: %v\n%s", lastErr, lastOut)
 		time.Sleep(time.Second)
 	}
 }
