@@ -53,7 +53,7 @@ func TestChartsApplyIsIdempotentAgainstARealSwarm(t *testing.T) {
 	opts := charts.InstallOptions{Wait: true, Timeout: 90 * time.Second}
 
 	// First apply installs.
-	plan, err := eng.PlanApply(ctx, rf, src)
+	plan, err := eng.PlanApply(ctx, rf, src, charts.PlanOptions{})
 	require.NoError(t, err)
 	require.Len(t, plan.Releases, 1)
 	require.Equal(t, charts.ActionInstall, plan.Releases[0].Action)
@@ -68,7 +68,7 @@ func TestChartsApplyIsIdempotentAgainstARealSwarm(t *testing.T) {
 
 	// Second apply, nothing changed: it must plan `unchanged`, deploy nothing, and
 	// record NO new revision.
-	plan2, err := eng.PlanApply(ctx, rf, src)
+	plan2, err := eng.PlanApply(ctx, rf, src, charts.PlanOptions{})
 	require.NoError(t, err)
 	require.Equal(t, charts.ActionUnchanged, plan2.Releases[0].Action)
 
@@ -88,7 +88,7 @@ func TestChartsApplyIsIdempotentAgainstARealSwarm(t *testing.T) {
 
 	rf2, err := charts.LoadReleaseFile(relFile)
 	require.NoError(t, err)
-	plan3, err := eng.PlanApply(ctx, rf2, src)
+	plan3, err := eng.PlanApply(ctx, rf2, src, charts.PlanOptions{})
 	require.NoError(t, err)
 	require.Equal(t, charts.ActionUpgrade, plan3.Releases[0].Action)
 
@@ -140,7 +140,7 @@ func TestChartsApplyLeavesUnmanagedReleasesRunning(t *testing.T) {
 	rf, err := charts.LoadReleaseFile(relFile)
 	require.NoError(t, err)
 
-	plan, err := eng.PlanApply(ctx, rf, src)
+	plan, err := eng.PlanApply(ctx, rf, src, charts.PlanOptions{})
 	require.NoError(t, err)
 	require.Contains(t, plan.Unmanaged, byHand, "the hand-installed release must be reported")
 
@@ -192,7 +192,7 @@ func TestChartsApplyDiffDoesNotDeploy(t *testing.T) {
 	// simply testing a broken path.
 	rf, err := charts.LoadReleaseFile(relFile)
 	require.NoError(t, err)
-	plan, err := eng.PlanApply(ctx, rf, charts.NewChartSource(nil))
+	plan, err := eng.PlanApply(ctx, rf, charts.NewChartSource(nil), charts.PlanOptions{})
 	require.NoError(t, err)
 	_, err = eng.Apply(ctx, plan, charts.InstallOptions{Wait: true, Timeout: 90 * time.Second})
 	require.NoError(t, err)
