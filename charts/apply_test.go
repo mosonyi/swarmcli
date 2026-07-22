@@ -5,6 +5,7 @@ package charts
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -79,7 +80,7 @@ func TestPlanApplyRecordsCompatFinding(t *testing.T) {
 	ch.Metadata.SwarmcliVersion = ">= 1.13.0"
 	src.charts["swarmcli-charts/demo@0.1.0"] = ch
 
-	plan, err := e.PlanApply(context.Background(), rf, src)
+	plan, err := e.PlanApply(context.Background(), rf, src, PlanOptions{})
 	require.NoError(t, err, "an incompatible chart must still plan; refusing is the caller's call")
 	require.Len(t, plan.Releases, 1)
 	require.Equal(t, ActionInstall, plan.Releases[0].Action)
@@ -99,7 +100,7 @@ func TestPlanApplyRenderErrorNamesTheEngineRequirement(t *testing.T) {
 	broken.Templates = map[string]string{"templates/stack.yaml": "{{ toYamlPretty .Values }}"}
 	src.charts["swarmcli-charts/demo@0.1.0"] = broken
 
-	_, err := e.PlanApply(context.Background(), rf, src)
+	_, err := e.PlanApply(context.Background(), rf, src, PlanOptions{})
 	require.Error(t, err)
 	require.ErrorContains(t, err, "toYamlPretty", "the underlying failure must survive")
 	require.ErrorContains(t, err, "requires swarmcli >= 1.13.0", "and be diagnosed")
@@ -116,7 +117,7 @@ func TestPlanApplyRenderErrorUnannotatedWhenNothingDeclared(t *testing.T) {
 	broken.Templates = map[string]string{"templates/stack.yaml": "{{ toYamlPretty .Values }}"}
 	src.charts["swarmcli-charts/demo@0.1.0"] = broken
 
-	_, err := e.PlanApply(context.Background(), rf, src)
+	_, err := e.PlanApply(context.Background(), rf, src, PlanOptions{})
 	require.Error(t, err)
 	require.ErrorContains(t, err, "toYamlPretty")
 	require.NotContains(t, err.Error(), "likely a consequence")
@@ -126,7 +127,7 @@ func TestApplyInstallsThenIsIdempotent(t *testing.T) {
 	e, fb, src, rf := applyEnv(t, oneRelease, "0.1.0")
 	ctx := context.Background()
 
-	plan, err := e.PlanApply(ctx, rf, src)
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{})
 	require.NoError(t, err)
 	require.Len(t, plan.Releases, 1)
 	require.Equal(t, ActionInstall, plan.Releases[0].Action)
@@ -142,7 +143,7 @@ func TestApplyInstallsThenIsIdempotent(t *testing.T) {
 	// write nothing at all. Do not delete this test.
 	before := len(fb.configs)
 
-	plan2, err := e.PlanApply(ctx, rf, src)
+	plan2, err := e.PlanApply(ctx, rf, src, PlanOptions{})
 	require.NoError(t, err)
 	require.Equal(t, ActionUnchanged, plan2.Releases[0].Action)
 
@@ -157,7 +158,7 @@ func TestApplyUpgradesOnVersionBump(t *testing.T) {
 	e, _, src, rf := applyEnv(t, oneRelease, "0.1.0")
 	ctx := context.Background()
 
-	plan, err := e.PlanApply(ctx, rf, src)
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{})
 	require.NoError(t, err)
 	_, err = e.Apply(ctx, plan, InstallOptions{})
 	require.NoError(t, err)
@@ -169,7 +170,7 @@ func TestApplyUpgradesOnVersionBump(t *testing.T) {
 	}
 	src.charts["swarmcli-charts/demo@0.2.0"] = demoChart(t, "0.2.0")
 
-	plan2, err := e.PlanApply(ctx, bumped, src)
+	plan2, err := e.PlanApply(ctx, bumped, src, PlanOptions{})
 	require.NoError(t, err)
 	require.Equal(t, ActionUpgrade, plan2.Releases[0].Action)
 	require.Equal(t, "0.1.0", plan2.Releases[0].FromVersion)
@@ -191,7 +192,7 @@ func TestApplyDetectsValuesOnlyChange(t *testing.T) {
 	e, _, src, rf := applyEnv(t, oneRelease, "0.1.0")
 	ctx := context.Background()
 
-	plan, err := e.PlanApply(ctx, rf, src)
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{})
 	require.NoError(t, err)
 	_, err = e.Apply(ctx, plan, InstallOptions{})
 	require.NoError(t, err)
@@ -206,7 +207,7 @@ func TestApplyDetectsValuesOnlyChange(t *testing.T) {
 		}},
 	}
 
-	plan2, err := e.PlanApply(ctx, withValues, src)
+	plan2, err := e.PlanApply(ctx, withValues, src, PlanOptions{})
 	require.NoError(t, err)
 	require.Equal(t, ActionUpgrade, plan2.Releases[0].Action)
 }
@@ -249,7 +250,7 @@ func TestApplyNeverRemovesUnmanagedReleases(t *testing.T) {
 	_, err := e.Install(ctx, "legacy", ReleaseChartOf(ch), ch.Values, "services: {}\n", InstallOptions{})
 	require.NoError(t, err)
 
-	plan, err := e.PlanApply(ctx, rf, src)
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{})
 	require.NoError(t, err)
 	require.Equal(t, []string{"legacy"}, plan.Unmanaged)
 
@@ -272,7 +273,7 @@ func TestPlanApplyValidatesEverythingBeforeDeployingAnything(t *testing.T) {
 `
 	e, fb, src, rf := applyEnv(t, body, "0.1.0")
 
-	_, err := e.PlanApply(context.Background(), rf, src)
+	_, err := e.PlanApply(context.Background(), rf, src, PlanOptions{})
 	require.ErrorContains(t, err, "bad")
 	require.Empty(t, fb.deployed, "the first release must not deploy when a later one fails to plan")
 }
@@ -290,7 +291,7 @@ func TestApplyFailsFastAndReportsPartialProgress(t *testing.T) {
 	e, fb, src, rf := applyEnv(t, body, "0.1.0")
 	ctx := context.Background()
 
-	plan, err := e.PlanApply(ctx, rf, src)
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{})
 	require.NoError(t, err)
 
 	fb.failNext = true // first DeployStack fails
@@ -307,7 +308,7 @@ func TestApplyToleratesReleaseAppearingAfterPlan(t *testing.T) {
 	e, fb, src, rf := applyEnv(t, oneRelease, "0.1.0")
 	ctx := context.Background()
 
-	plan, err := e.PlanApply(ctx, rf, src)
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{})
 	require.NoError(t, err)
 	require.Equal(t, ActionInstall, plan.Releases[0].Action)
 
@@ -376,7 +377,7 @@ func TestPlanApplyAgainstARealRepository(t *testing.T) {
 	require.NoError(t, fresh.EnsureRepos(rf.Repositories))
 
 	e := NewEngineWith(newFakeBackend())
-	plan, err := e.PlanApply(context.Background(), rf, NewChartSource(fresh))
+	plan, err := e.PlanApply(context.Background(), rf, NewChartSource(fresh), PlanOptions{})
 	require.NoError(t, err)
 	require.Len(t, plan.Releases, 1)
 	require.Equal(t, ActionInstall, plan.Releases[0].Action)
@@ -394,7 +395,7 @@ func TestPlanApplyReinstallsAnUninstalledRelease(t *testing.T) {
 	e, fb, src, rf := applyEnv(t, oneRelease, "0.1.0")
 	ctx := context.Background()
 
-	plan, err := e.PlanApply(ctx, rf, src)
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{})
 	require.NoError(t, err)
 	_, err = e.Apply(ctx, plan, InstallOptions{})
 	require.NoError(t, err)
@@ -403,7 +404,7 @@ func TestPlanApplyReinstallsAnUninstalledRelease(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, fb.deployed, "hello")
 
-	plan2, err := e.PlanApply(ctx, rf, src)
+	plan2, err := e.PlanApply(ctx, rf, src, PlanOptions{})
 	require.NoError(t, err)
 	require.Equal(t, ActionInstall, plan2.Releases[0].Action,
 		"an uninstalled release must be reinstalled, not reported unchanged")
@@ -420,7 +421,7 @@ func TestPlanApplyDetectsManifestOnlyChange(t *testing.T) {
 	e, _, src, rf := applyEnv(t, oneRelease, "0.1.0")
 	ctx := context.Background()
 
-	plan, err := e.PlanApply(ctx, rf, src)
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{})
 	require.NoError(t, err)
 	_, err = e.Apply(ctx, plan, InstallOptions{})
 	require.NoError(t, err)
@@ -433,7 +434,7 @@ func TestPlanApplyDetectsManifestOnlyChange(t *testing.T) {
 	edited.Templates["stack.yaml"] += "    stop_grace_period: 42s\n"
 	src.charts["swarmcli-charts/demo@0.1.0"] = edited
 
-	plan2, err := e.PlanApply(ctx, rf, src)
+	plan2, err := e.PlanApply(ctx, rf, src, PlanOptions{})
 	require.NoError(t, err)
 	require.Equal(t, ActionUpgrade, plan2.Releases[0].Action)
 }
@@ -449,7 +450,7 @@ func TestPlanApplyMissingValuesFileFailsBeforeDeploying(t *testing.T) {
 `
 	e, fb, src, rf := applyEnv(t, body, "0.1.0")
 
-	_, err := e.PlanApply(context.Background(), rf, src)
+	_, err := e.PlanApply(context.Background(), rf, src, PlanOptions{})
 	require.ErrorContains(t, err, "absent.yaml")
 	require.ErrorContains(t, err, "hello")
 	require.Empty(t, fb.deployed)
@@ -462,7 +463,7 @@ func TestPlanApplyErrorsNameTheFileAndRelease(t *testing.T) {
 
 	// A chart version the source cannot serve.
 	rf.Releases[0].Version = "9.9.9"
-	_, err := e.PlanApply(context.Background(), rf, src)
+	_, err := e.PlanApply(context.Background(), rf, src, PlanOptions{})
 	require.ErrorContains(t, err, rf.Path)
 	require.ErrorContains(t, err, `release "hello"`)
 }
@@ -477,7 +478,7 @@ func TestPlanApplyRejectsSchemaViolationBeforeDeploying(t *testing.T) {
 	require.NoError(t, os.WriteFile(bad, []byte("replicas: 0\n"), 0o600)) // schema: minimum 1
 	rf.Releases[0].Values = []string{"./bad.yaml"}
 
-	_, err := e.PlanApply(context.Background(), rf, src)
+	_, err := e.PlanApply(context.Background(), rf, src, PlanOptions{})
 	require.Error(t, err)
 	require.ErrorContains(t, err, rf.Path)
 	require.ErrorContains(t, err, `release "hello"`)
@@ -490,7 +491,7 @@ func TestPlanApplyDetectsChartNameChange(t *testing.T) {
 	e, _, src, rf := applyEnv(t, oneRelease, "0.1.0")
 	ctx := context.Background()
 
-	plan, err := e.PlanApply(ctx, rf, src)
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{})
 	require.NoError(t, err)
 	_, err = e.Apply(ctx, plan, InstallOptions{})
 	require.NoError(t, err)
@@ -500,7 +501,7 @@ func TestPlanApplyDetectsChartNameChange(t *testing.T) {
 	src.charts["swarmcli-charts/other@0.1.0"] = other
 	rf.Releases[0].Chart = "swarmcli-charts/other"
 
-	plan2, err := e.PlanApply(ctx, rf, src)
+	plan2, err := e.PlanApply(ctx, rf, src, PlanOptions{})
 	require.NoError(t, err)
 	require.Equal(t, ActionUpgrade, plan2.Releases[0].Action)
 }
@@ -544,7 +545,7 @@ func TestPlanApplySeparatesItsOwnOrphansFromUnmanagedReleases(t *testing.T) {
 	storeRelease(t, fb, Release{Name: "theirs", Revision: 1, Status: StatusDeployed, Owner: "apply/other-swarm:release/theirs"})
 	storeRelease(t, fb, Release{Name: "byhand", Revision: 1, Status: StatusDeployed})
 
-	plan, err := e.PlanApply(ctx, rf, src)
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{})
 	require.NoError(t, err)
 	require.Equal(t, "apply/prod-swarm", plan.Owner)
 	require.Equal(t, []string{"ours"}, plan.Orphaned)
@@ -564,7 +565,7 @@ func TestPlanApplyIgnoresAStampNamingAnotherRelease(t *testing.T) {
 	// Right owner, unparseable stamp.
 	storeRelease(t, fb, Release{Name: "garbled", Revision: 1, Status: StatusDeployed, Owner: "apply/prod-swarm"})
 
-	plan, err := e.PlanApply(context.Background(), rf, src)
+	plan, err := e.PlanApply(context.Background(), rf, src, PlanOptions{})
 	require.NoError(t, err)
 	require.Empty(t, plan.Orphaned, "an unverifiable stamp is not ownership")
 	require.ElementsMatch(t, []string{"copy", "garbled"}, plan.Unmanaged)
@@ -578,7 +579,7 @@ func TestPlanApplyWithoutAnOwnerClaimsNothing(t *testing.T) {
 
 	storeRelease(t, fb, Release{Name: "stamped", Revision: 1, Status: StatusDeployed, Owner: "apply/prod-swarm:release/stamped"})
 
-	plan, err := e.PlanApply(context.Background(), rf, src)
+	plan, err := e.PlanApply(context.Background(), rf, src, PlanOptions{})
 	require.NoError(t, err)
 	require.Empty(t, plan.Owner)
 	require.Empty(t, plan.Orphaned)
@@ -591,7 +592,7 @@ func TestApplyStampsTheOwnerItPlannedWith(t *testing.T) {
 	e, _, src, rf := applyEnv(t, ownedRelease, "0.1.0")
 	ctx := context.Background()
 
-	plan, err := e.PlanApply(ctx, rf, src)
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{})
 	require.NoError(t, err)
 	_, err = e.Apply(ctx, plan, InstallOptions{Owner: plan.Owner})
 	require.NoError(t, err)
@@ -608,7 +609,7 @@ releases:
     chart: swarmcli-charts/demo
     version: "0.1.0"
 `, "0.1.0")
-	plan2, err := e.PlanApply(ctx, rf2, src2)
+	plan2, err := e.PlanApply(ctx, rf2, src2, PlanOptions{})
 	require.NoError(t, err)
 	require.Equal(t, []string{"hello"}, plan2.Orphaned)
 }
@@ -624,7 +625,7 @@ func TestApplyDoesNotRemoveItsOwnOrphans(t *testing.T) {
 		InstallOptions{Owner: "apply/prod-swarm"})
 	require.NoError(t, err)
 
-	plan, err := e.PlanApply(ctx, rf, src)
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{})
 	require.NoError(t, err)
 	require.Equal(t, []string{"obsolete"}, plan.Orphaned)
 
@@ -632,4 +633,102 @@ func TestApplyDoesNotRemoveItsOwnOrphans(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, fb.deployed, "obsolete")
 	require.Contains(t, fb.configs, "swarmcli.release.obsolete.v1")
+}
+
+// A controller installs under an id of its own — "cd/<app>" — and must be able to
+// plan against that same id. Deriving "apply/<owner>" from the file regardless
+// classified the controller's own releases as Unmanaged from the first reconcile:
+// "I do not recognise this", about releases this exact caller installed.
+func TestPlanApplyClassifiesAgainstTheOwnerTheCallerSupplied(t *testing.T) {
+	e, fb, src, rf := applyEnv(t, ownedRelease, "0.1.0")
+	ctx := context.Background()
+
+	storeRelease(t, fb, Release{Name: "ours", Revision: 1, Status: StatusDeployed, Owner: "cd/edge:release/ours"})
+	// What the file would have claimed, had the caller not overridden it.
+	storeRelease(t, fb, Release{Name: "theirs", Revision: 1, Status: StatusDeployed, Owner: "apply/prod-swarm:release/theirs"})
+
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{Owner: "cd/edge"})
+	require.NoError(t, err)
+	require.Equal(t, "cd/edge", plan.Owner)
+	require.Equal(t, []string{"ours"}, plan.Orphaned)
+	require.Equal(t, []string{"theirs"}, plan.Unmanaged,
+		"the file's own owner must not keep claiming once a caller has supplied one")
+}
+
+// The supplied id goes on to be stamped through Plan.Owner, so a plan and the
+// apply that follows it agree — the whole point of classifying against it.
+func TestPlanApplyRoundTripsTheSuppliedOwnerThroughApply(t *testing.T) {
+	e, _, src, rf := applyEnv(t, oneRelease, "0.1.0")
+	ctx := context.Background()
+
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{Owner: "cd/edge"})
+	require.NoError(t, err)
+	_, err = e.Apply(ctx, plan, InstallOptions{Owner: plan.Owner})
+	require.NoError(t, err)
+
+	// Drop it from the file; the next plan recognises its own work as an orphan
+	// rather than as a stranger, which is what makes a later prune safe.
+	_, _, src2, rf2 := applyEnv(t, `releases:
+  - name: other
+    chart: swarmcli-charts/demo
+    version: "0.1.0"
+`, "0.1.0")
+	plan2, err := e.PlanApply(ctx, rf2, src2, PlanOptions{Owner: "cd/edge"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"hello"}, plan2.Orphaned)
+}
+
+// ":" separates the id from the resource half, so an id containing one would
+// decode as a different owner than it was written as. Install rejects it; so must
+// planning, and before reading anything off the swarm.
+func TestPlanApplyRejectsAnOwnerThatWouldNotSurviveTheEncoding(t *testing.T) {
+	e, _, src, rf := applyEnv(t, oneRelease, "0.1.0")
+
+	_, err := e.PlanApply(context.Background(), rf, src, PlanOptions{Owner: "cd:edge"})
+	require.ErrorContains(t, err, "must not contain ':'")
+}
+
+// The reader sees the bytes between "this path was named" and "these values were
+// merged", which is where a values file committed encrypted becomes plaintext
+// without ever reaching the controller's filesystem.
+func TestPlanApplyMergesValuesThroughTheSuppliedReader(t *testing.T) {
+	body := `releases:
+  - name: hello
+    chart: swarmcli-charts/demo
+    version: "0.1.0"
+    values: [./secret.yaml]
+`
+	e, _, src, rf := applyEnv(t, body, "0.1.0")
+	require.NoError(t, os.WriteFile(filepath.Join(rf.Dir, "secret.yaml"), []byte("ciphertext\n"), 0o600))
+
+	var seen []string
+	plan, err := e.PlanApply(context.Background(), rf, src, PlanOptions{
+		ReadFile: func(path string) ([]byte, error) {
+			seen = append(seen, path)
+			return []byte("injected: 1\n"), nil
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{filepath.Join(rf.Dir, "secret.yaml")}, seen,
+		"the reader is given the resolved path, so it can decide by name")
+	require.Equal(t, 1, plan.Releases[0].Values["injected"])
+}
+
+// A reader that fails aborts the whole plan, exactly as an unreadable file does:
+// nothing is deployed on the strength of values that could not be resolved.
+func TestPlanApplyReaderErrorFailsBeforeDeploying(t *testing.T) {
+	body := `releases:
+  - name: hello
+    chart: swarmcli-charts/demo
+    version: "0.1.0"
+    values: [./secret.yaml]
+`
+	e, fb, src, rf := applyEnv(t, body, "0.1.0")
+
+	_, err := e.PlanApply(context.Background(), rf, src, PlanOptions{
+		ReadFile: func(string) ([]byte, error) { return nil, errors.New("no decryption key") },
+	})
+	require.ErrorContains(t, err, "no decryption key")
+	require.ErrorContains(t, err, "hello")
+	require.Empty(t, fb.deployed)
 }

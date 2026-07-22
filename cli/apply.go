@@ -42,7 +42,7 @@ func chartsApply(args []string) int {
 	}
 
 	e := charts.NewEngine()
-	plan, err := e.PlanApply(context.Background(), rf, charts.NewChartSource(store))
+	plan, err := e.PlanApply(context.Background(), rf, charts.NewChartSource(store), charts.PlanOptions{})
 	if err != nil {
 		return fail(err)
 	}
