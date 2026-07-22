@@ -913,16 +913,10 @@ func (e *Engine) waitReady(release string, timeout time.Duration) error {
 	}
 	deadline := e.now().Add(timeout)
 	for {
-		states := e.Backend.StackServices(release)
-		if err := rolloutWedged(states); err != nil {
-			return fmt.Errorf("release %q: %w", release, err)
-		}
-		// Parity is necessary but not sufficient: a task that starts and then
-		// dies inside the monitor window is a rollout failure, so hold until
-		// swarm's own window has closed. Losing parity needs no special case —
-		// the replacement task is newer, so the window it has left grows back on
-		// its own.
-		if len(states) > 0 && allConverged(states) && stabilityRemaining(states) <= 0 {
+		switch c := Rollup(e.Backend.StackServices(release)); c.Phase {
+		case PhaseWedged:
+			return fmt.Errorf("release %q: %s", release, c.Reason)
+		case PhaseConverged:
 			return nil
 		}
 		if !e.now().Before(deadline) {
@@ -932,9 +926,74 @@ func (e *Engine) waitReady(release string, timeout time.Duration) error {
 	}
 }
 
-// stabilityRemaining is how much of the monitor window is still outstanding
-// across the release's services — the slowest governs, and <= 0 means every
-// service has held parity for as long as swarm itself would watch.
+// Phase is how far a rollout has got.
+type Phase string
+
+const (
+	// PhaseConverged means every task is up and has outlived the window in
+	// which swarm would still hold its failure against the rollout.
+	PhaseConverged Phase = "converged"
+	// PhaseProgressing means not yet — and, so far, not a failure either.
+	PhaseProgressing Phase = "progressing"
+	// PhaseWedged means swarm has given up and will not continue on its own.
+	PhaseWedged Phase = "wedged"
+)
+
+// Convergence is a phase and, when it is not converged, why.
+//
+// The reason is written for display: it is the sentence a status view or an API
+// response puts next to the phase, so it says what is outstanding rather than
+// naming an internal state.
+type Convergence struct {
+	Phase  Phase  `json:"phase"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// Convergence classifies one service.
+//
+// Every rule here has been wrong once, which is why interpreting a ServiceState
+// belongs to this package rather than to each caller that holds one.
+func (s ServiceState) Convergence() Convergence {
+	switch s.UpdateState {
+	// Swarm never rolls back a rollback, so a paused rollout needs a human;
+	// waiting it out only delays the report.
+	case "paused":
+		return Convergence{PhaseWedged, "update paused after a task failure; swarm will not continue without intervention"}
+	case "rollback_paused":
+		return Convergence{PhaseWedged, "rollback paused; swarm never rolls back a rollback, so this needs manual recovery"}
+	// A rolling update in flight is not converged even if the task count
+	// already reads N/N: the count may still be the outgoing generation.
+	case "updating":
+		return Convergence{PhaseProgressing, "rolling update in progress"}
+	case "rollback_started":
+		return Convergence{PhaseProgressing, "rolling back"}
+	}
+	// Parity is measured from the actual running count, not the Replicas display
+	// string. That string counts tasks by DESIRED state, so it reaches parity
+	// the instant swarm schedules the tasks — before any container is up — which
+	// made --wait return immediately on a fresh install, where UpdateState is
+	// empty and the in-flight arm above cannot fire either (issue #473).
+	//
+	// A job's task ends Complete and is never replaced, so requiring a running
+	// task would report a step that succeeded as one that never came up. A
+	// completed task fills its slot; a failed one ends in state Failed and is
+	// not counted, so a broken job still blocks (issue #443).
+	if up := s.Running + s.Completed; up < s.Desired {
+		return Convergence{PhaseProgressing, fmt.Sprintf("%d/%d tasks running", up, s.Desired)}
+	}
+	// Parity is necessary but not sufficient: a task that starts and then dies
+	// inside the monitor window is a rollout failure, so hold until swarm's own
+	// window has closed. Losing parity needs no special case — the replacement
+	// task is newer, so the window it has left grows back on its own.
+	if left := s.stabilityRemaining(); left > 0 {
+		return Convergence{PhaseProgressing, fmt.Sprintf("%s of the stability window remains", left.Round(time.Millisecond))}
+	}
+	return Convergence{Phase: PhaseConverged}
+}
+
+// stabilityRemaining is how much of the monitor window this service still has
+// outstanding; <= 0 means it has held parity for as long as swarm itself would
+// watch.
 //
 // The remainder is measured from TASK CREATION, not from the moment parity was
 // reached. Swarm starts the monitor when it creates the task, and a task only
@@ -945,58 +1004,46 @@ func (e *Engine) waitReady(release string, timeout time.Duration) error {
 // took to come up, which is strictly more conservative than swarm and turns an
 // honest `monitor: 8m` into an eight-minute install.
 //
-// Services declaring no monitor use the CLI default, matching swarm's own.
-func stabilityRemaining(states []ServiceState) time.Duration {
-	var worst time.Duration
+// A service declaring no monitor uses the CLI default, matching swarm's own.
+func (s ServiceState) stabilityRemaining() time.Duration {
+	window := s.Monitor
+	if window < defaultStabilityWindow {
+		window = defaultStabilityWindow
+	}
+	return window - s.NewestTaskAge
+}
+
+// Rollup reduces a release's services to one answer: the worst phase wins, and
+// the reason names the service that produced it.
+//
+// No services is progressing rather than converged. A release whose stack
+// reports nothing has not finished coming up — and reporting it converged would
+// let --wait return the instant a deploy was accepted.
+func Rollup(states []ServiceState) Convergence {
+	if len(states) == 0 {
+		return Convergence{PhaseProgressing, "no services are running yet"}
+	}
+	worst := Convergence{Phase: PhaseConverged}
 	for _, s := range states {
-		window := s.Monitor
-		if window < defaultStabilityWindow {
-			window = defaultStabilityWindow
-		}
-		if remaining := window - s.NewestTaskAge; remaining > worst {
-			worst = remaining
+		c := s.Convergence()
+		if phaseRank(c.Phase) > phaseRank(worst.Phase) {
+			worst = Convergence{c.Phase, fmt.Sprintf("service %q: %s", s.Name, c.Reason)}
 		}
 	}
 	return worst
 }
 
-// rolloutWedged reports a rollout swarm has given up on.
-func rolloutWedged(states []ServiceState) error {
-	for _, s := range states {
-		switch s.UpdateState {
-		case "paused":
-			return fmt.Errorf("service %q: update paused after a task failure; swarm will not continue without intervention", s.Name)
-		case "rollback_paused":
-			return fmt.Errorf("service %q: rollback paused; swarm never rolls back a rollback, so this needs manual recovery", s.Name)
-		}
+// phaseRank orders phases by how much they should worry the reader, so that one
+// wedged service is not masked by another that is merely slow.
+func phaseRank(p Phase) int {
+	switch p {
+	case PhaseWedged:
+		return 2
+	case PhaseProgressing:
+		return 1
+	default:
+		return 0
 	}
-	return nil
-}
-
-// allConverged reports whether every service is running its target task count.
-//
-// It uses the actual running count rather than the Replicas display string.
-// That string counts tasks by DESIRED state, so it reaches parity the instant
-// swarm schedules the tasks — before any container is up — which made --wait
-// return immediately on a fresh install, where UpdateState is empty and the
-// in-flight guard below cannot fire either (issue #473).
-func allConverged(states []ServiceState) bool {
-	for _, s := range states {
-		// A rolling update in flight is not converged even if the task count
-		// already reads N/N: the count may still be the outgoing generation.
-		switch s.UpdateState {
-		case "updating", "rollback_started":
-			return false
-		}
-		// A job's task ends Complete and is never replaced, so requiring a
-		// running task would hold --wait until the timeout for a step that
-		// succeeded. A completed task fills its slot; a failed one ends in
-		// state Failed and is not counted, so a broken job still blocks.
-		if s.Running+s.Completed < s.Desired {
-			return false
-		}
-	}
-	return true
 }
 
 func releaseConfigName(release string, rev int) string {

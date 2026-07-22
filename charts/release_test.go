@@ -340,66 +340,81 @@ func mustGzipRelease(t *testing.T, rel *Release) []byte {
 	return gz
 }
 
-// A converged service whose update is still in flight must not count as ready.
-func TestAllConvergedRejectsInProgress(t *testing.T) {
-	require.True(t, allConverged([]ServiceState{{Running: 2, Desired: 2}}))
-	require.True(t, allConverged([]ServiceState{{Running: 1, Desired: 1, UpdateState: "completed"}}))
-	require.False(t, allConverged([]ServiceState{{Running: 2, Desired: 2, UpdateState: "updating"}}))
-	require.False(t, allConverged([]ServiceState{{Running: 1, Desired: 1, UpdateState: "rollback_started"}}))
-	require.False(t, allConverged([]ServiceState{{Running: 1, Desired: 2}}))
+// stableAge outlives any monitor window these tests declare, so a service
+// carrying it has already served out its stability window and parity is the only
+// thing left to decide.
+const stableAge = time.Hour
+
+func phaseOf(s ServiceState) Phase { return s.Convergence().Phase }
+
+// A service at parity whose update is still in flight must not count as ready.
+func TestConvergenceRejectsInProgress(t *testing.T) {
+	require.Equal(t, PhaseConverged, phaseOf(ServiceState{Running: 2, Desired: 2, NewestTaskAge: stableAge}))
+	require.Equal(t, PhaseConverged, phaseOf(ServiceState{Running: 1, Desired: 1, UpdateState: "completed", NewestTaskAge: stableAge}))
+	require.Equal(t, PhaseProgressing, phaseOf(ServiceState{Running: 2, Desired: 2, UpdateState: "updating", NewestTaskAge: stableAge}))
+	require.Equal(t, PhaseProgressing, phaseOf(ServiceState{Running: 1, Desired: 1, UpdateState: "rollback_started", NewestTaskAge: stableAge}))
+	require.Equal(t, PhaseProgressing, phaseOf(ServiceState{Running: 1, Desired: 2, NewestTaskAge: stableAge}))
 }
 
 // The bug in #473: a fresh install has no UpdateStatus, so the in-flight guard
 // cannot fire, and the old check compared a Replicas string counting tasks by
 // DESIRED state — which reaches parity the moment swarm schedules them. A
 // release whose tasks are all still pending must not read as converged.
-func TestAllConvergedRejectsScheduledButNotRunning(t *testing.T) {
-	scheduled := []ServiceState{{
-		Name:        "api",
-		Replicas:    "3/3", // what the old check saw: 3 tasks DESIRED running
-		Status:      "active",
-		Running:     0, // ...none of which had actually started
-		Desired:     3,
-		UpdateState: "", // fresh install: never updated
-	}}
-	require.False(t, allConverged(scheduled), "tasks that are merely scheduled must not count as converged")
+func TestConvergenceRejectsScheduledButNotRunning(t *testing.T) {
+	scheduled := ServiceState{
+		Name:          "api",
+		Replicas:      "3/3", // what the old check saw: 3 tasks DESIRED running
+		Status:        "active",
+		Running:       0, // ...none of which had actually started
+		Desired:       3,
+		UpdateState:   "", // fresh install: never updated
+		NewestTaskAge: stableAge,
+	}
+	c := scheduled.Convergence()
+	require.Equal(t, PhaseProgressing, c.Phase, "tasks that are merely scheduled must not count as converged")
+	require.Equal(t, "0/3 tasks running", c.Reason)
 }
 
 // The bug in #443: a one-shot init or migration step ends with its task
 // Complete and nothing running, which is its SUCCESS state. Requiring a running
 // task held --wait until the timeout for a job that had already done its work,
 // and showed the release as 0/1 forever.
-func TestAllConvergedAcceptsACompletedJob(t *testing.T) {
-	done := []ServiceState{{
-		Name:      "superset_init",
-		Running:   0, // the task exited; swarm will not replace it
-		Completed: 1,
-		Desired:   1,
-		Job:       true,
-	}}
-	require.True(t, allConverged(done), "a job that ran to completion is converged")
+func TestConvergenceAcceptsACompletedJob(t *testing.T) {
+	done := ServiceState{
+		Name:          "superset_init",
+		Running:       0, // the task exited; swarm will not replace it
+		Completed:     1,
+		Desired:       1,
+		Job:           true,
+		NewestTaskAge: stableAge,
+	}
+	require.Equal(t, PhaseConverged, phaseOf(done), "a job that ran to completion is converged")
 
 	// A job whose task has not finished yet is still not converged.
-	require.False(t, allConverged([]ServiceState{{Running: 0, Completed: 0, Desired: 1, Job: true}}))
+	require.Equal(t, PhaseProgressing, phaseOf(ServiceState{Running: 0, Completed: 0, Desired: 1, Job: true, NewestTaskAge: stableAge}))
 
 	// The distinction that matters: a task that failed ends in state Failed, so
 	// it is never counted as Completed and a broken job still blocks the wait.
-	require.False(t, allConverged([]ServiceState{{Running: 0, Completed: 0, Desired: 1, Job: true, Status: "active"}}))
+	require.Equal(t, PhaseProgressing, phaseOf(ServiceState{Running: 0, Completed: 0, Desired: 1, Job: true, Status: "active", NewestTaskAge: stableAge}))
 }
 
 // A global service on a drained node lowers the target rather than leaving the
 // release permanently short of a replica that can never be scheduled.
-func TestAllConvergedGlobalTracksActiveNodes(t *testing.T) {
-	require.True(t, allConverged([]ServiceState{{Mode: "global", Running: 2, Desired: 2}}))
-	require.False(t, allConverged([]ServiceState{{Mode: "global", Running: 1, Desired: 2}}))
+func TestConvergenceGlobalTracksActiveNodes(t *testing.T) {
+	require.Equal(t, PhaseConverged, phaseOf(ServiceState{Mode: "global", Running: 2, Desired: 2, NewestTaskAge: stableAge}))
+	require.Equal(t, PhaseProgressing, phaseOf(ServiceState{Mode: "global", Running: 1, Desired: 2, NewestTaskAge: stableAge}))
 }
 
-func TestStabilityRemainingTakesTheLongestOutstandingWindow(t *testing.T) {
-	require.Equal(t, time.Duration(0), stabilityRemaining(nil))
-	require.Equal(t, defaultStabilityWindow,
-		stabilityRemaining([]ServiceState{{Monitor: time.Second}}), "a shorter monitor must not weaken the default")
-	require.Equal(t, 30*time.Second,
-		stabilityRemaining([]ServiceState{{Monitor: 10 * time.Second}, {Monitor: 30 * time.Second}}))
+// Parity is necessary but not sufficient: a task that starts and then dies
+// inside the monitor window is a rollout failure, so a service that has reached
+// its target but not yet served out the window is still progressing.
+func TestConvergenceHoldsUntilTheStabilityWindowCloses(t *testing.T) {
+	c := ServiceState{Running: 1, Desired: 1, Monitor: 90 * time.Second, NewestTaskAge: 60 * time.Second}.Convergence()
+	require.Equal(t, PhaseProgressing, c.Phase)
+	require.Equal(t, "30s of the stability window remains", c.Reason)
+
+	require.Equal(t, defaultStabilityWindow, ServiceState{Monitor: time.Second}.stabilityRemaining(),
+		"a shorter monitor must not weaken the default")
 }
 
 // The window is measured from task creation, the same instant swarm measures it
@@ -415,26 +430,53 @@ func TestStabilityRemainingCountsTimeTheTaskHasAlreadyLived(t *testing.T) {
 	monitor := 90 * time.Second
 
 	require.Equal(t, 30*time.Second,
-		stabilityRemaining([]ServiceState{{Monitor: monitor, NewestTaskAge: 60 * time.Second}}))
-	require.LessOrEqual(t, stabilityRemaining([]ServiceState{{Monitor: monitor, NewestTaskAge: monitor}}),
+		ServiceState{Monitor: monitor, NewestTaskAge: 60 * time.Second}.stabilityRemaining())
+	require.LessOrEqual(t, ServiceState{Monitor: monitor, NewestTaskAge: monitor}.stabilityRemaining(),
 		time.Duration(0), "a task that has outlived its monitor is already stable")
-	require.LessOrEqual(t, stabilityRemaining([]ServiceState{{Monitor: monitor, NewestTaskAge: 10 * time.Minute}}),
+	require.LessOrEqual(t, ServiceState{Monitor: monitor, NewestTaskAge: 10 * time.Minute}.stabilityRemaining(),
 		time.Duration(0), "an over-aged task must not produce a negative wait either")
 }
 
 // paused and rollback_paused are terminal: swarmkit never rolls back a
 // rollback, so waiting out the timeout only delays the report.
-func TestRolloutWedged(t *testing.T) {
-	require.NoError(t, rolloutWedged([]ServiceState{{Name: "api", UpdateState: "updating"}}))
-	require.NoError(t, rolloutWedged([]ServiceState{{Name: "api", UpdateState: ""}}))
+func TestConvergenceWedged(t *testing.T) {
+	require.Equal(t, PhaseProgressing, phaseOf(ServiceState{Name: "api", UpdateState: "updating"}))
+	require.Equal(t, PhaseProgressing, phaseOf(ServiceState{Name: "api", UpdateState: ""}))
 
-	err := rolloutWedged([]ServiceState{{Name: "api", UpdateState: "paused"}})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "api")
+	c := Rollup([]ServiceState{{Name: "api", UpdateState: "paused"}})
+	require.Equal(t, PhaseWedged, c.Phase)
+	require.Contains(t, c.Reason, "api")
 
-	err = rolloutWedged([]ServiceState{{Name: "api", UpdateState: "rollback_paused"}})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "manual recovery")
+	c = Rollup([]ServiceState{{Name: "api", UpdateState: "rollback_paused"}})
+	require.Equal(t, PhaseWedged, c.Phase)
+	require.Contains(t, c.Reason, "manual recovery")
+}
+
+// The rollup is what a caller reads, so the phase that should worry it most has
+// to win regardless of where in the list it appears — one wedged service must
+// not be masked by another that is merely slow.
+func TestRollupTakesTheWorstPhase(t *testing.T) {
+	states := []ServiceState{
+		{Name: "web", Running: 1, Desired: 1, NewestTaskAge: stableAge},
+		{Name: "api", Running: 0, Desired: 1, NewestTaskAge: stableAge},
+		{Name: "db", UpdateState: "paused"},
+	}
+	c := Rollup(states)
+	require.Equal(t, PhaseWedged, c.Phase)
+	require.Contains(t, c.Reason, `service "db"`)
+
+	// Progressing wins over converged the same way, and names the service.
+	c = Rollup(states[:2])
+	require.Equal(t, PhaseProgressing, c.Phase)
+	require.Equal(t, `service "api": 0/1 tasks running`, c.Reason)
+
+	require.Equal(t, PhaseConverged, Rollup(states[:1]).Phase)
+}
+
+// A release whose stack reports nothing has not finished coming up. Reporting it
+// converged would let --wait return the instant a deploy was accepted.
+func TestRollupOfNoServicesIsProgressing(t *testing.T) {
+	require.Equal(t, PhaseProgressing, Rollup(nil).Phase)
 }
 
 // When a concurrent actor claims the next revision number between read and
