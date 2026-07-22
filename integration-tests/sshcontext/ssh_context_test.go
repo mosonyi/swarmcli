@@ -17,11 +17,14 @@
 // npipe, so an ssh:// host was TCP-dialled and the ping failed. The fix resolves
 // a connection helper and dials `ssh … docker system dial-stdio` instead.
 //
-// HOME is redirected to a temp dir on purpose. It puts both the ssh client
-// config and the Docker context store under test control, and it means the run
-// genuinely exercises ~/.ssh/config handling — the parity with `docker
-// --context` that justified depending on docker/cli's connhelper rather than
-// hand-rolling the dialer.
+// HOME is redirected to a temp dir so the Docker context store is under test
+// control. That is NOT enough to redirect the ssh client config: OpenSSH
+// resolves ~/.ssh/config through getpwuid(), not $HOME. An `ssh` shim on PATH
+// supplies -F instead — see shimSSH.
+//
+// Either way the run exercises ssh_config handling, which is the parity with
+// `docker --context` that justified depending on docker/cli's connhelper rather
+// than hand-rolling the dialer.
 package sshcontext
 
 import (
@@ -66,13 +69,40 @@ func isolateHome(t *testing.T) string {
 	return home
 }
 
-// writeSSHConfig generates a keypair and an ssh config for the throwaway host.
+// shimSSH puts an `ssh` wrapper at the front of PATH that adds -F <config>.
+//
+// This is necessary, not decorative: OpenSSH resolves the default config path
+// through getpwuid(), NOT $HOME, so redirecting HOME does not redirect
+// ~/.ssh/config. Without the shim the run ignores our config entirely — no
+// port, no identity, no host-key policy — and fails with "Host key verification
+// failed" against whatever is listening on port 22.
+//
+// The alternative was appending to the developer's real ~/.ssh/config, which
+// this test declines to do. The fidelity cost is small and worth naming: the
+// options reach ssh via -F rather than by being found at the default path, so
+// this proves connhelper honours ssh_config, not that it finds the user's file.
+func shimSSH(t *testing.T, home, cfg string) {
+	t.Helper()
+	realSSH, err := exec.LookPath("ssh")
+	require.NoError(t, err)
+
+	bin := filepath.Join(home, "bin")
+	require.NoError(t, os.MkdirAll(bin, 0o755))
+	// Absolute path to the real ssh, so the shim cannot recurse into itself.
+	script := "#!/bin/sh\nexec " + realSSH + " -F " + cfg + " \"$@\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "ssh"), []byte(script), 0o755))
+
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// writeSSHConfig generates a keypair and an ssh config for the throwaway host,
+// returning the public key and the config path.
 //
 // The config is what makes this a real test of connhelper: GetConnectionHelper
 // shells out to the system ssh with no options of its own, so the identity file,
-// port and host-key policy can only come from ~/.ssh/config. A hand-rolled
-// dialer would have ignored all of it.
-func writeSSHConfig(t *testing.T, home string) string {
+// port and host-key policy can only come from ssh_config. A hand-rolled dialer
+// would have ignored all of it.
+func writeSSHConfig(t *testing.T, home string) (string, string) {
 	t.Helper()
 	key := filepath.Join(home, ".ssh", "id_ed25519")
 	out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", "", "-f", key).CombinedOutput()
@@ -89,11 +119,12 @@ func writeSSHConfig(t *testing.T, home string) string {
 		"  LogLevel ERROR",
 		"",
 	}, "\n")
-	require.NoError(t, os.WriteFile(filepath.Join(home, ".ssh", "config"), []byte(cfg), 0o600))
+	cfgPath := filepath.Join(home, ".ssh", "config")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), 0o600))
 
 	pub, err := os.ReadFile(key + ".pub")
 	require.NoError(t, err)
-	return strings.TrimSpace(string(pub))
+	return strings.TrimSpace(string(pub)), cfgPath
 }
 
 // startSSHDind brings up a dind daemon with an sshd in front of it and waits
@@ -173,7 +204,8 @@ func TestSSHContextReachesTheDaemon(t *testing.T) {
 	}
 
 	home := isolateHome(t)
-	pub := writeSSHConfig(t, home)
+	pub, cfg := writeSSHConfig(t, home)
+	shimSSH(t, home, cfg)
 	startSSHDind(t, pub)
 
 	out, err := hostDocker(t, "context", "create", sshContext,
@@ -207,7 +239,8 @@ func TestUnreachableSSHHostFailsCleanly(t *testing.T) {
 	}
 
 	home := isolateHome(t)
-	_ = writeSSHConfig(t, home)
+	_, cfg := writeSSHConfig(t, home)
+	shimSSH(t, home, cfg)
 
 	const badContext = "swarmcli-ssh-unreachable"
 	out, err := hostDocker(t, "context", "create", badContext,
