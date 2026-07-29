@@ -78,6 +78,7 @@ registry/
   registry.go              Global command map: Register(), Get(), All(), Suggest()
 utils/log/
   logger.go                zap wrapper: Init(), L(), Sync(), SetLevel(), lumberjack rotation
+  slogcore.go              InitSlog(slog.Handler): forwards this package's output into a host program's log/slog handler instead of a file. For consumers importing swarmcli as a library (swarmcli-cd), where Init's lumberjack file is wrong and not initialising at all silently discards everything L()'s callers write
 ```
 
 ## Key Patterns
