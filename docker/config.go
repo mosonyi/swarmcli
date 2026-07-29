@@ -129,26 +129,18 @@ func ListConfigsWith(ctx context.Context, cli *client.Client) ([]swarm.Config, e
 		return nil, fmt.Errorf("failed to list configs: %w", err)
 	}
 
-	// ConfigList doesn't populate all metadata like CreatedAt, so we need to inspect each config
-	fullConfigs := make([]swarm.Config, len(configs))
-	for i, cfg := range configs {
-		fullCfg, _, err := cli.ConfigInspectWithRaw(ctx, cfg.ID)
-		if err != nil {
-			l().Warnf("[ListConfigs] Failed to inspect config %s: %v", cfg.Spec.Name, err)
-			// Use the list result as fallback
-			fullConfigs[i] = cfg
-			continue
-		}
-		fullConfigs[i] = fullCfg
-	}
+	// No inspect per config. GET /configs and GET /configs/{id} are converted by
+	// the same daemon-side function, so the list already carries CreatedAt,
+	// UpdatedAt, Version and Spec.Data. Unlike secrets — where the list response
+	// deliberately omits Spec.Data — nothing about a config is withheld.
 
 	// 🔠 Sort configs alphabetically by name
-	sort.Slice(fullConfigs, func(i, j int) bool {
-		return fullConfigs[i].Spec.Name < fullConfigs[j].Spec.Name
+	sort.Slice(configs, func(i, j int) bool {
+		return configs[i].Spec.Name < configs[j].Spec.Name
 	})
 
-	l().Infof("[ListConfigs] Found %d configs", len(fullConfigs))
-	return fullConfigs, nil
+	l().Infof("[ListConfigs] Found %d configs", len(configs))
+	return configs, nil
 }
 
 // InspectConfig fetches and returns the config data.

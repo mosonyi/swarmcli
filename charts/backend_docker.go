@@ -116,7 +116,7 @@ func (b *dockerBackend) ListConfigs(ctx context.Context) ([]ConfigMeta, error) {
 	}
 	out := make([]ConfigMeta, 0, len(configs))
 	for _, c := range configs {
-		out = append(out, ConfigMeta{Name: c.Spec.Name, Labels: c.Spec.Labels})
+		out = append(out, ConfigMeta{Name: c.Spec.Name, Labels: c.Spec.Labels, Data: c.Spec.Data})
 	}
 	return out, nil
 }

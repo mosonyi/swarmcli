@@ -27,6 +27,12 @@ const maxConfigPayload = 500 << 10 // 500 KiB
 type ConfigMeta struct {
 	Name   string
 	Labels map[string]string
+	// Data is the config payload, set when the Backend's listing already
+	// carried it. Docker returns a config's payload in the list response, not
+	// only on inspect, so a Backend that passes it through spares allRevisions
+	// one inspect per stored revision — which is the entire cost of reading
+	// release history. Leaving it nil is valid and costs exactly that inspect.
+	Data []byte
 }
 
 // ServiceState is a live status line for a release's services, plus the facts
@@ -665,9 +671,13 @@ func (e *Engine) allRevisions(ctx context.Context) (map[string][]Release, error)
 		if m.Labels[LabelType] != TypeRelease {
 			continue
 		}
-		data, err := e.Backend.InspectConfig(ctx, m.Name)
-		if err != nil {
-			return nil, fmt.Errorf("read release config %q: %w", m.Name, err)
+		data := m.Data
+		if data == nil {
+			d, err := e.Backend.InspectConfig(ctx, m.Name)
+			if err != nil {
+				return nil, fmt.Errorf("read release config %q: %w", m.Name, err)
+			}
+			data = d
 		}
 		rel, err := decodeRelease(data)
 		if err != nil {
