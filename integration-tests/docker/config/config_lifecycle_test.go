@@ -25,6 +25,31 @@ func TestConfigLifecycle(t *testing.T) {
 		require.NoError(t, err, "ListConfigs should not fail")
 	})
 
+	// ListConfigs does not inspect each config, because a real daemon returns
+	// every field in the list response already. That is a claim about the
+	// daemon, so only a real one can hold it: if it ever stopped being true the
+	// configs view would lose its CREATED AT column and the chart engine would
+	// decode empty release payloads (issue #510).
+	t.Run("ListConfigsCarriesMetadataAndPayload", func(t *testing.T) {
+		name := uniqueName("demo_config-listed")
+		created := e.createConfig(t, name, "listed payload")
+
+		cfgs, err := docker.ListConfigs(e.ctx)
+		require.NoError(t, err)
+
+		var found *swarm.Config
+		for i, c := range cfgs {
+			if c.ID == created.ID {
+				found = &cfgs[i]
+				break
+			}
+		}
+		require.NotNil(t, found, "the config just created should be listed")
+		require.False(t, found.CreatedAt.IsZero(), "the list response should carry CreatedAt")
+		require.NotZero(t, found.Version.Index, "the list response should carry Version")
+		require.Equal(t, []byte("listed payload"), found.Spec.Data, "the list response should carry the payload")
+	})
+
 	t.Run("CreateConfigVersion", func(t *testing.T) {
 		orig := e.createConfig(t, uniqueName("demo_config-v1"), "hello world")
 

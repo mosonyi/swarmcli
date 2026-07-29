@@ -29,6 +29,11 @@ type fakeBackend struct {
 	secretsErr    error                   // error to return from SecretNames
 	onCreate      func(name string) error // hook to simulate concurrent config creation
 	deleteCfgErr  map[string]error        // config name -> error to return on delete
+	// listData makes ListConfigs carry each payload, as the Docker backend
+	// does. Off by default so the rest of the suite keeps exercising the
+	// inspect fallback a Backend that omits it relies on.
+	listData bool
+	inspects int // InspectConfig calls, to prove the payload came from the list
 }
 
 type fakeConfig struct {
@@ -84,11 +89,16 @@ func (f *fakeBackend) CreateConfig(_ context.Context, name string, data []byte, 
 func (f *fakeBackend) ListConfigs(context.Context) ([]ConfigMeta, error) {
 	var out []ConfigMeta
 	for name, c := range f.configs {
-		out = append(out, ConfigMeta{Name: name, Labels: c.labels})
+		m := ConfigMeta{Name: name, Labels: c.labels}
+		if f.listData {
+			m.Data = c.data
+		}
+		out = append(out, m)
 	}
 	return out, nil
 }
 func (f *fakeBackend) InspectConfig(_ context.Context, name string) ([]byte, error) {
+	f.inspects++
 	c, ok := f.configs[name]
 	if !ok {
 		return nil, fmt.Errorf("not found")
@@ -287,6 +297,46 @@ func TestListReturnsCurrentRevisions(t *testing.T) {
 	require.Len(t, list, 2)
 	require.Equal(t, "a", list[0].Name)
 	require.Equal(t, "b", list[1].Name)
+}
+
+// Reading release history is the engine's hottest path — every List, Status,
+// Install, Upgrade, Rollback and GetRevision walks it, and a GitOps controller
+// walks it on a timer. When the Backend's listing carries the payload, that walk
+// is one API call rather than one per stored revision (issue #510).
+func TestAllRevisionsReadsThePayloadFromTheListing(t *testing.T) {
+	fb := newFakeBackend()
+	fb.listData = true
+	e := testEngine(fb)
+	ctx := context.Background()
+	_, err := e.Install(ctx, "a", ReleaseChart{Name: "ca", Version: "1"}, nil, "services:\n  s:\n    image: x\n", InstallOptions{})
+	require.NoError(t, err)
+	_, err = e.Upgrade(ctx, "a", ReleaseChart{Name: "ca", Version: "2"}, nil, "services:\n  s:\n    image: y\n", InstallOptions{})
+	require.NoError(t, err)
+
+	fb.inspects = 0
+	list, err := e.List(ctx)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	require.Equal(t, 2, list[0].Revision, "the payload from the listing must decode to the same release")
+	require.Zero(t, fb.inspects, "the payload was in the listing; inspecting again is a wasted round trip per revision")
+}
+
+// A Backend that lists names and labels but not payloads stays correct: the
+// field is additive, so an implementation written before it existed keeps
+// working through the inspect it always did.
+func TestAllRevisionsInspectsWhenTheListingOmitsThePayload(t *testing.T) {
+	fb := newFakeBackend() // listData off
+	e := testEngine(fb)
+	ctx := context.Background()
+	_, err := e.Install(ctx, "a", ReleaseChart{Name: "ca", Version: "1"}, nil, "services:\n  s:\n    image: x\n", InstallOptions{})
+	require.NoError(t, err)
+
+	fb.inspects = 0
+	list, err := e.List(ctx)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	require.Equal(t, 1, list[0].Revision)
+	require.Equal(t, 1, fb.inspects, "the payload was not in the listing, so it had to be inspected")
 }
 
 func TestUninstallRemovesStackAndConfigsKeepsVolumes(t *testing.T) {
