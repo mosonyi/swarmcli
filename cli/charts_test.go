@@ -136,6 +136,15 @@ func TestParseArgsRequirements(t *testing.T) {
 	require.True(t, f.requirements)
 }
 
+// --debug was parsed into a field nothing ever read, so it was accepted and did
+// nothing — the exact "reads as if it worked" shape #451 is about. It is gone,
+// which means it now falls through to the unknown-flag error like any other
+// name the CLI does not know.
+func TestParseArgsRejectsDebug(t *testing.T) {
+	_, _, err := parseArgs([]string{"--debug"})
+	require.EqualError(t, err, `unknown flag "--debug"`)
+}
+
 func TestParseIntRejectsGarbage(t *testing.T) {
 	n, err := parseInt("3")
 	require.NoError(t, err)
