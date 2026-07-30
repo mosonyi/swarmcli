@@ -161,3 +161,108 @@ func TestRollbackStampsTheCurrentOwnerNotTheTargets(t *testing.T) {
 	require.Equal(t, "apply/b:release/hello", rel.Owner)
 	require.Equal(t, "services: {}\n", rel.Manifest, "rollback still restores the target's content")
 }
+
+// The owner is part of the desired state an apply establishes, so a plan
+// classified against one owner must not report "unchanged" for a release
+// stamped by another — that was #511, and it let a departed owner's stamp
+// survive for ever behind a byte-identical file.
+//
+// The table is the whole contract, including the two cases that must NOT force
+// a revision: an absent stamp (else every release predating owner stamping
+// re-deploys once on upgrade) and an absent plan owner (else an apply claiming
+// nothing strips a stamp somebody else wrote).
+func TestUnchangedComparesTheOwner(t *testing.T) {
+	const manifest = "services: {}\n"
+	chart := ReleaseChart{Name: "demo", Version: "0.1.0"}
+	rel := func(owner string) *Release {
+		return &Release{Name: "hello", Status: StatusDeployed, Chart: chart, Manifest: manifest, Owner: owner}
+	}
+
+	for _, tc := range []struct {
+		name  string
+		stamp string
+		owner string
+		want  bool
+	}{
+		{"same owner is unchanged", "apply/a:release/hello", "apply/a", true},
+		{"a different owner is a handover", "apply/a:release/hello", "apply/b", false},
+		{"an unstamped release is not a mismatch", "", "apply/a", true},
+		{"an empty plan owner never forces", "apply/a:release/hello", "", true},
+		{"neither stamped nor claimed", "", "", true},
+		// A stamp naming another release is not evidence this one is owned;
+		// same for one that does not parse. Both get corrected.
+		{"a stamp naming another release is a mismatch", "apply/a:release/elsewhere", "apply/a", false},
+		{"an unparseable stamp is healed", "not-a-stamp", "apply/a", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := unchanged(rel(tc.stamp), chart, nil, manifest, tc.owner)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// End to end: taking a release over with an otherwise identical file writes one
+// revision and the stamp is corrected. Renaming the owner of an unchanged
+// release used to have no effect at all.
+func TestApplyTakesOverAnUnchangedReleaseUnderANewOwner(t *testing.T) {
+	e, fb, src, rf := applyEnv(t, oneRelease, "0.1.0")
+	ctx := context.Background()
+
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{Owner: "cd/ctrl/old-app"})
+	require.NoError(t, err)
+	require.Equal(t, ActionInstall, plan.Releases[0].Action)
+	_, err = e.Apply(ctx, plan, InstallOptions{Owner: plan.Owner})
+	require.NoError(t, err)
+
+	// Same file, same chart, same values — only the owner differs.
+	plan2, err := e.PlanApply(ctx, rf, src, PlanOptions{Owner: "cd/ctrl/new-app"})
+	require.NoError(t, err)
+	require.Equal(t, ActionUpgrade, plan2.Releases[0].Action)
+
+	res, err := e.Apply(ctx, plan2, InstallOptions{Owner: plan2.Owner})
+	require.NoError(t, err)
+	require.Equal(t, 2, res[0].Revision, "the handover is one revision, like any other real change")
+
+	cur, err := e.GetRevision(ctx, "hello", 2)
+	require.NoError(t, err)
+	require.Equal(t, "cd/ctrl/new-app:release/hello", cur.Owner)
+
+	// And it settles: the new owner's next apply is a no-op again.
+	before := len(fb.configs)
+	plan3, err := e.PlanApply(ctx, rf, src, PlanOptions{Owner: "cd/ctrl/new-app"})
+	require.NoError(t, err)
+	require.Equal(t, ActionUnchanged, plan3.Releases[0].Action)
+	_, err = e.Apply(ctx, plan3, InstallOptions{Owner: plan3.Owner})
+	require.NoError(t, err)
+	require.Len(t, fb.configs, before, "a settled handover must not keep writing revisions")
+}
+
+// THE NO-MIGRATION GUARANTEE. A release installed before owner stamping existed
+// carries no stamp. Planning it against an owner must stay ActionUnchanged, or
+// the first apply after upgrading re-deploys every release on the swarm — every
+// spec re-pushed, and with --resolve-image always, every digest re-resolved —
+// to buy safety it already had, since an unstamped release is classified
+// Unmanaged rather than Orphaned. Do not delete this test.
+func TestApplyDoesNotChurnAnUnstampedRelease(t *testing.T) {
+	e, fb, src, rf := applyEnv(t, oneRelease, "0.1.0")
+	ctx := context.Background()
+
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{})
+	require.NoError(t, err)
+	_, err = e.Apply(ctx, plan, InstallOptions{})
+	require.NoError(t, err)
+
+	cur, err := e.GetRevision(ctx, "hello", 1)
+	require.NoError(t, err)
+	require.Empty(t, cur.Owner, "the fixture has to be unstamped for this to test anything")
+
+	before := len(fb.configs)
+	plan2, err := e.PlanApply(ctx, rf, src, PlanOptions{Owner: "apply/prod"})
+	require.NoError(t, err)
+	require.Equal(t, ActionUnchanged, plan2.Releases[0].Action)
+
+	_, err = e.Apply(ctx, plan2, InstallOptions{Owner: plan2.Owner})
+	require.NoError(t, err)
+	require.Len(t, fb.configs, before, "an unstamped release must not be re-deployed to acquire a stamp")
+}
