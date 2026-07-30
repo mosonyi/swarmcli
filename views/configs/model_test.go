@@ -18,14 +18,16 @@ import (
 // --- mocks ---
 
 type mockConfigOps struct {
-	listConfigsFn                 func(ctx context.Context) ([]swarm.Config, error)
-	inspectConfigFn               func(ctx context.Context, nameOrID string) (*docker.ConfigWithDecodedData, error)
-	createConfigFn                func(ctx context.Context, name string, data []byte, labels map[string]string) (swarm.Config, error)
-	createConfigVersionFn         func(ctx context.Context, baseConfig swarm.Config, newData []byte) (swarm.Config, error)
-	rotateConfigInServicesFn      func(ctx context.Context, oldCfg *swarm.Config, newCfg swarm.Config) error
-	deleteConfigFn                func(ctx context.Context, nameOrID string) error
-	listServicesUsingConfigIDFn   func(ctx context.Context, configID string) ([]swarm.Service, error)
-	listServicesUsingConfigNameFn func(ctx context.Context, name string) ([]swarm.Service, error)
+	listConfigsFn            func(ctx context.Context) ([]swarm.Config, error)
+	inspectConfigFn          func(ctx context.Context, nameOrID string) (*docker.ConfigWithDecodedData, error)
+	createConfigFn           func(ctx context.Context, name string, data []byte, labels map[string]string) (swarm.Config, error)
+	createConfigVersionFn    func(ctx context.Context, baseConfig swarm.Config, newData []byte) (swarm.Config, error)
+	rotateConfigInServicesFn func(ctx context.Context, oldCfg *swarm.Config, newCfg swarm.Config) error
+	deleteConfigFn           func(ctx context.Context, nameOrID string) error
+	servicesUsingConfigsFn   func(ctx context.Context) (map[string][]swarm.Service, error)
+	// servicesUsingConfigsCalls counts the indexed lookups, so a test can assert
+	// the view asks once rather than once per config.
+	servicesUsingConfigsCalls int
 }
 
 func (m *mockConfigOps) ListConfigs(ctx context.Context) ([]swarm.Config, error) {
@@ -52,11 +54,12 @@ func (m *mockConfigOps) RotateConfigInServices(ctx context.Context, oldCfg *swar
 func (m *mockConfigOps) DeleteConfig(ctx context.Context, nameOrID string) error {
 	return m.deleteConfigFn(ctx, nameOrID)
 }
-func (m *mockConfigOps) ListServicesUsingConfigID(ctx context.Context, configID string) ([]swarm.Service, error) {
-	return m.listServicesUsingConfigIDFn(ctx, configID)
-}
-func (m *mockConfigOps) ListServicesUsingConfigName(ctx context.Context, name string) ([]swarm.Service, error) {
-	return m.listServicesUsingConfigNameFn(ctx, name)
+func (m *mockConfigOps) ServicesUsingConfigs(ctx context.Context) (map[string][]swarm.Service, error) {
+	m.servicesUsingConfigsCalls++
+	if m.servicesUsingConfigsFn != nil {
+		return m.servicesUsingConfigsFn(ctx)
+	}
+	return nil, nil
 }
 
 // --- helpers ---
@@ -106,12 +109,6 @@ func noopConfigOps() *mockConfigOps {
 		},
 		deleteConfigFn: func(_ context.Context, _ string) error {
 			return nil
-		},
-		listServicesUsingConfigIDFn: func(_ context.Context, _ string) ([]swarm.Service, error) {
-			return nil, nil
-		},
-		listServicesUsingConfigNameFn: func(_ context.Context, _ string) ([]swarm.Service, error) {
-			return nil, nil
 		},
 	}
 }

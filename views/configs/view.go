@@ -4,9 +4,7 @@
 package configsview
 
 import (
-	"context"
 	"fmt"
-	"github.com/Eldara-Tech/swarmcli/docker"
 	"github.com/Eldara-Tech/swarmcli/ui"
 	"github.com/Eldara-Tech/swarmcli/ui/components/errordialog"
 	"github.com/Eldara-Tech/swarmcli/ui/dialog"
@@ -51,19 +49,19 @@ func (i usedByItem) FilterValue() string { return i.StackName + " " + i.ServiceN
 func (i usedByItem) Title() string       { return fmt.Sprintf("%-24s %-24s", i.StackName, i.ServiceName) }
 func (i usedByItem) Description() string { return "Service: " + i.ServiceName }
 
-func configItemFromSwarm(ctx context.Context, c swarm.Config) configItem {
-	used := false
-	services, err := docker.ListServicesUsingConfigID(ctx, c.ID)
-	if err == nil && len(services) > 0 {
-		used = true
-	}
+// configItemFromSwarm builds a list row for one config. usedBy is the
+// config-to-services index from docker.ServicesUsingConfigs, looked up by both
+// ID and name because a service reference may carry either. A nil index means
+// nothing references this config — which is the case for one just created, and
+// is why this no longer reaches for the daemon itself.
+func configItemFromSwarm(c swarm.Config, usedBy map[string][]swarm.Service) configItem {
 	return configItem{
 		Name:      c.Spec.Name,
 		ID:        c.ID,
 		CreatedAt: c.CreatedAt,
 		UpdatedAt: c.UpdatedAt,
 		Labels:    c.Spec.Labels,
-		Used:      used,
+		Used:      len(usedBy[c.ID]) > 0 || len(usedBy[c.Spec.Name]) > 0,
 		UsedKnown: true,
 	}
 }

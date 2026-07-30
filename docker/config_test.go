@@ -75,3 +75,53 @@ func TestListConfigsDoesNotInspectEachOne(t *testing.T) {
 	require.Equal(t, map[string]string{"k": "v"}, beta.Spec.Labels)
 	require.Equal(t, []byte("hi"), beta.Spec.Data)
 }
+
+// The reference question answered for every config in one service listing.
+//
+// ListServicesUsingConfigID/Name each list every service and filter, so asking
+// about N configs costs N listings — which is what the configs view did on every
+// load and every poll.
+func TestServicesUsingConfigsIndexesInOneListing(t *testing.T) {
+	var lists int
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1.44/services", r.URL.Path)
+		lists++
+		w.Header().Set("Content-Type", "application/json")
+		// web mounts the same config at two paths; db mounts another; noop has no
+		// ContainerSpec at all, which a real swarm does produce.
+		_, _ = w.Write([]byte(`[
+			{"ID":"web","Spec":{"Name":"web","TaskTemplate":{"ContainerSpec":{"Configs":[
+				{"ConfigID":"c1","ConfigName":"alpha"},
+				{"ConfigID":"c1","ConfigName":"alpha"}
+			]}}}},
+			{"ID":"db","Spec":{"Name":"db","TaskTemplate":{"ContainerSpec":{"Configs":[
+				{"ConfigID":"c2","ConfigName":"beta"}
+			]}}}},
+			{"ID":"noop","Spec":{"Name":"noop","TaskTemplate":{}}}
+		]`))
+	}))
+	defer ts.Close()
+
+	cli, err := client.NewClientWithOpts(client.WithHost(ts.URL), client.WithVersion("1.44"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cli.Close() })
+
+	idx, err := ServicesUsingConfigsWith(context.Background(), cli)
+	require.NoError(t, err)
+	require.Equal(t, 1, lists, "one listing answers every config")
+
+	// Reachable by ID and by name, because a caller may hold either.
+	require.Len(t, idx["c1"], 1)
+	require.Equal(t, "web", idx["c1"][0].ID)
+	require.Len(t, idx["alpha"], 1, "mounting one config twice must not list the service twice")
+	require.Equal(t, "web", idx["alpha"][0].ID)
+
+	require.Len(t, idx["c2"], 1)
+	require.Equal(t, "db", idx["c2"][0].ID)
+	require.Len(t, idx["beta"], 1)
+
+	// A config nothing references is simply absent, so len() on the miss is 0.
+	require.Empty(t, idx["c3"])
+	// The service with no ContainerSpec contributed no keys and did not panic.
+	require.Len(t, idx, 4)
+}

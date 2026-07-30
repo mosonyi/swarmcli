@@ -17,8 +17,14 @@ type ConfigOps interface {
 	CreateConfigVersion(ctx context.Context, baseConfig swarm.Config, newData []byte) (swarm.Config, error)
 	RotateConfigInServices(ctx context.Context, oldCfg *swarm.Config, newCfg swarm.Config) error
 	DeleteConfig(ctx context.Context, nameOrID string) error
-	ListServicesUsingConfigID(ctx context.Context, configID string) ([]swarm.Service, error)
-	ListServicesUsingConfigName(ctx context.Context, name string) ([]swarm.Service, error)
+	// ServicesUsingConfigs answers "which services reference this config" for
+	// every config at once, keyed by config ID and name.
+	//
+	// It replaces per-config lookups in this seam. ListServicesUsingConfigID and
+	// ListServicesUsingConfigName still exist on the package for a caller with a
+	// single config, but each lists every service and filters, so a loop over
+	// them scales the whole service listing by the number of configs.
+	ServicesUsingConfigs(ctx context.Context) (map[string][]swarm.Service, error)
 }
 
 type defaultConfigOps struct{}
@@ -41,9 +47,6 @@ func (defaultConfigOps) RotateConfigInServices(ctx context.Context, oldCfg *swar
 func (defaultConfigOps) DeleteConfig(ctx context.Context, nameOrID string) error {
 	return DeleteConfig(ctx, nameOrID)
 }
-func (defaultConfigOps) ListServicesUsingConfigID(ctx context.Context, configID string) ([]swarm.Service, error) {
-	return ListServicesUsingConfigID(ctx, configID)
-}
-func (defaultConfigOps) ListServicesUsingConfigName(ctx context.Context, name string) ([]swarm.Service, error) {
-	return ListServicesUsingConfigName(ctx, name)
+func (defaultConfigOps) ServicesUsingConfigs(ctx context.Context) (map[string][]swarm.Service, error) {
+	return ServicesUsingConfigs(ctx)
 }

@@ -115,11 +115,8 @@ func TestInspectRawConfigCmd_NavigatesToInspect(t *testing.T) {
 
 func TestComputeConfigUsedCmd_SetsUsedMap(t *testing.T) {
 	mock := noopConfigOps()
-	mock.listServicesUsingConfigIDFn = func(_ context.Context, configID string) ([]swarm.Service, error) {
-		if configID == "id-used" {
-			return []swarm.Service{{ID: "svc1"}}, nil
-		}
-		return nil, nil
+	mock.servicesUsingConfigsFn = func(_ context.Context) (map[string][]swarm.Service, error) {
+		return map[string][]swarm.Service{"id-used": {{ID: "svc1"}}}, nil
 	}
 	m := testModel(func(m *Model) { m.deps.Configs = mock })
 
@@ -133,6 +130,27 @@ func TestComputeConfigUsedCmd_SetsUsedMap(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, usedMap["id-used"])
 	require.False(t, usedMap["id-unused"])
+	// The point of the index: one lookup regardless of how many configs the
+	// swarm holds. Per-config lookups each list every service.
+	require.Equal(t, 1, mock.servicesUsingConfigsCalls)
+}
+
+// A config the view has just created cannot be referenced yet, so building its
+// row asks the daemon nothing at all.
+func TestAddConfigDoesNotQueryServices(t *testing.T) {
+	mock := noopConfigOps()
+	m := testModel(func(m *Model) { m.deps.Configs = mock })
+
+	m.addConfig(docker.ConfigWithDecodedData{
+		Config: swarm.Config{ID: "fresh", Spec: swarm.ConfigSpec{Annotations: swarm.Annotations{Name: "c-v2"}}},
+	})
+
+	require.Zero(t, mock.servicesUsingConfigsCalls)
+	require.NotEmpty(t, m.configsList.Items)
+	item := m.configsList.Items[len(m.configsList.Items)-1]
+	require.Equal(t, "c-v2", item.Name)
+	require.False(t, item.Used)
+	require.True(t, item.UsedKnown)
 }
 
 func TestGetUsedByStacksCmd_ReturnsUsedByMsg(t *testing.T) {
@@ -142,13 +160,17 @@ func TestGetUsedByStacksCmd_ReturnsUsedByMsg(t *testing.T) {
 			Config: swarm.Config{ID: "cfg-id", Spec: swarm.ConfigSpec{Annotations: swarm.Annotations{Name: "c1"}}},
 		}, nil
 	}
-	mock.listServicesUsingConfigNameFn = func(_ context.Context, _ string) ([]swarm.Service, error) {
-		return []swarm.Service{
-			{ID: "svc1", Spec: swarm.ServiceSpec{Annotations: swarm.Annotations{Name: "web", Labels: map[string]string{"com.docker.stack.namespace": "mystack"}}}},
+	// One service reachable by name, another by ID: the index carries both keys,
+	// which is what lets a single listing replace the two this used to merge.
+	mock.servicesUsingConfigsFn = func(_ context.Context) (map[string][]swarm.Service, error) {
+		return map[string][]swarm.Service{
+			"c1": {
+				{ID: "svc1", Spec: swarm.ServiceSpec{Annotations: swarm.Annotations{Name: "web", Labels: map[string]string{"com.docker.stack.namespace": "mystack"}}}},
+			},
+			"cfg-id": {
+				{ID: "svc2", Spec: swarm.ServiceSpec{Annotations: swarm.Annotations{Name: "api", Labels: map[string]string{"com.docker.stack.namespace": "mystack"}}}},
+			},
 		}, nil
-	}
-	mock.listServicesUsingConfigIDFn = func(_ context.Context, _ string) ([]swarm.Service, error) {
-		return nil, nil
 	}
 
 	m := testModel(func(m *Model) { m.deps.Configs = mock })
@@ -157,8 +179,11 @@ func TestGetUsedByStacksCmd_ReturnsUsedByMsg(t *testing.T) {
 	used, ok := msg.(usedByMsg)
 	require.True(t, ok)
 	require.Equal(t, "c1", used.ConfigName)
-	require.Len(t, used.UsedBy, 1)
+	require.Len(t, used.UsedBy, 2)
 	require.Equal(t, "mystack", used.UsedBy[0].StackName)
+	require.Equal(t, "api", used.UsedBy[0].ServiceName, "sorted by stack then service")
+	require.Equal(t, "web", used.UsedBy[1].ServiceName)
+	require.Equal(t, 1, mock.servicesUsingConfigsCalls)
 }
 
 func TestCreateConfigFromContentCmd_Success(t *testing.T) {
