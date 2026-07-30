@@ -4,7 +4,6 @@
 package secretsview
 
 import (
-	"context"
 	"fmt"
 	"github.com/Eldara-Tech/swarmcli/docker"
 	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
@@ -254,8 +253,9 @@ func (m *Model) findSecretByName(name string) (*docker.SecretWithDecodedData, er
 
 func (m *Model) addSecret(sec docker.SecretWithDecodedData) {
 	m.secrets = append(m.secrets, sec)
-	ctx := context.Background()
-	m.secretsList.Items = append(m.secretsList.Items, secretItemFromSwarm(ctx, sec.Secret))
+	// No index: this is a secret this view has just created, so no service can
+	// reference it yet.
+	m.secretsList.Items = append(m.secretsList.Items, secretItemFromSwarm(sec.Secret, nil))
 	m.secretsList.ApplyFilter()
 }
 

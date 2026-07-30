@@ -4,9 +4,7 @@
 package secretsview
 
 import (
-	"context"
 	"fmt"
-	"github.com/Eldara-Tech/swarmcli/docker"
 	"github.com/Eldara-Tech/swarmcli/ui"
 	"github.com/Eldara-Tech/swarmcli/ui/components/errordialog"
 	"github.com/Eldara-Tech/swarmcli/ui/dialog"
@@ -51,19 +49,19 @@ func (i usedByItem) FilterValue() string { return i.StackName + " " + i.ServiceN
 func (i usedByItem) Title() string       { return fmt.Sprintf("%-24s %-24s", i.StackName, i.ServiceName) }
 func (i usedByItem) Description() string { return "Service: " + i.ServiceName }
 
-func secretItemFromSwarm(ctx context.Context, s swarm.Secret) secretItem {
-	used := false
-	services, err := docker.ListServicesUsingSecretID(ctx, s.ID)
-	if err == nil && len(services) > 0 {
-		used = true
-	}
+// secretItemFromSwarm builds a list row for one secret. usedBy is the
+// secret-to-services index from docker.ServicesUsingSecrets, looked up by both
+// ID and name because a service reference may carry either. A nil index means
+// nothing references this secret — which is the case for one just created, and
+// is why this no longer reaches for the daemon itself.
+func secretItemFromSwarm(s swarm.Secret, usedBy map[string][]swarm.Service) secretItem {
 	return secretItem{
 		Name:      s.Spec.Name,
 		ID:        s.ID,
 		CreatedAt: s.CreatedAt,
 		UpdatedAt: s.UpdatedAt,
 		Labels:    s.Spec.Labels,
-		Used:      used,
+		Used:      len(usedBy[s.ID]) > 0 || len(usedBy[s.Spec.Name]) > 0,
 		UsedKnown: true,
 	}
 }
