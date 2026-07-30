@@ -45,6 +45,11 @@ func TestExternalNetworks(t *testing.T) {
 			manifest: "networks:\n  b-net:\n    external: true\n  a-net:\n    external: true\n",
 			want:     []string{"a-net", "b-net"},
 		},
+		{
+			name:     "sibling name wins over the map key",
+			manifest: "networks:\n  alias:\n    external: true\n    name: traefik-public\n",
+			want:     []string{"traefik-public"},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -53,4 +58,9 @@ func TestExternalNetworks(t *testing.T) {
 			require.Equal(t, tc.want, got)
 		})
 	}
+}
+
+func TestExternalNetworksRejectsBothForms(t *testing.T) {
+	_, err := externalNetworks("networks:\n  alias:\n    external:\n      name: deprecated\n    name: current\n")
+	require.EqualError(t, err, `network "alias": external.name and name conflict; use only name`)
 }

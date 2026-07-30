@@ -42,6 +42,7 @@ func TestExternalResourceNames(t *testing.T) {
 		manifest string
 		key      string
 		want     []string
+		wantErr  string
 	}{
 		{
 			name:     "external true uses the map key",
@@ -54,6 +55,40 @@ func TestExternalResourceNames(t *testing.T) {
 			manifest: "configs:\n  alias:\n    external:\n      name: real-config\n",
 			key:      "configs",
 			want:     []string{"real-config"},
+		},
+		// The current compose spec: external: true with a sibling name:. All
+		// three kinds share this function, so all three are covered — only
+		// secrets and configs reach an existence check, but a network resolved
+		// to its map key would be auto-created under the wrong name.
+		{
+			name:     "sibling name wins over the map key for a secret",
+			manifest: "secrets:\n  alias:\n    external: true\n    name: real-secret\n",
+			key:      "secrets",
+			want:     []string{"real-secret"},
+		},
+		{
+			name:     "sibling name wins over the map key for a config",
+			manifest: "configs:\n  stolen:\n    external: true\n    name: swarmcli.release.my-app.v1\n",
+			key:      "configs",
+			want:     []string{"swarmcli.release.my-app.v1"},
+		},
+		{
+			name:     "sibling name wins over the map key for a network",
+			manifest: "networks:\n  alias:\n    external: true\n    name: real-net\n",
+			key:      "networks",
+			want:     []string{"real-net"},
+		},
+		{
+			name:     "a name on a non-external resource is not a reference",
+			manifest: "networks:\n  internal:\n    driver: overlay\n    name: renamed\n",
+			key:      "networks",
+			want:     nil,
+		},
+		{
+			name:     "declaring both forms is refused",
+			manifest: "configs:\n  alias:\n    external:\n      name: deprecated\n    name: current\n",
+			key:      "configs",
+			wantErr:  `config "alias": external.name and name conflict; use only name`,
 		},
 		{
 			name:     "non-external and external:false are ignored",
@@ -82,7 +117,13 @@ func TestExternalResourceNames(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, externalResourceNames(tc.manifest, tc.key))
+			got, err := externalResourceNames(tc.manifest, tc.key)
+			if tc.wantErr != "" {
+				require.EqualError(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
 		})
 	}
 }
@@ -127,6 +168,50 @@ func TestEnsureExternalSecretsConfigs(t *testing.T) {
 		// alias maps to real-secret, which exists -> passes
 		require.NoError(t, e.ensureExternalSecretsConfigs(ctx,
 			"secrets:\n  alias:\n    external:\n      name: real-secret\n", nil))
+	})
+
+	// The reproduction from #513: the config exists under the name the chart
+	// declares, and the pre-flight has to look for that name rather than the
+	// compose key. Before the fix this failed, naming something the chart never
+	// asked for and suggesting the user create a second, unrelated config.
+	t.Run("sibling name is resolved and its absence is reported by that name", func(t *testing.T) {
+		fb := newFakeBackend()
+		fb.configs["swarmcli.release.my-app.v1"] = fakeConfig{}
+		e := testEngine(fb)
+		m := "configs:\n  stolen:\n    external: true\n    name: swarmcli.release.my-app.v1\n"
+		require.NoError(t, e.ensureExternalSecretsConfigs(ctx, m, nil))
+
+		err := e.ensureExternalSecretsConfigs(ctx,
+			"configs:\n  stolen:\n    external: true\n    name: absent-config\n", nil)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), `config "absent-config" does not exist`)
+		require.Contains(t, err.Error(), "docker config create absent-config <file>")
+		require.NotContains(t, err.Error(), "stolen")
+	})
+
+	// requirements.yaml is authoritative over the *resolved* name: a requirement
+	// is about a resource on the swarm, not about a template-local alias.
+	t.Run("a requirement must declare the resolved name, not the compose key", func(t *testing.T) {
+		fb := newFakeBackend()
+		fb.secrets["real-secret"] = struct{}{}
+		e := testEngine(fb)
+		m := "secrets:\n  alias:\n    external: true\n    name: real-secret\n"
+
+		req := &Requirements{Secrets: []ResourceRequirement{{Name: "alias"}}}
+		err := e.ensureExternalSecretsConfigs(ctx, m, req)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "not declared in requirements.yaml")
+		require.Contains(t, err.Error(), "real-secret")
+
+		req = &Requirements{Secrets: []ResourceRequirement{{Name: "real-secret"}}}
+		require.NoError(t, e.ensureExternalSecretsConfigs(ctx, m, req))
+	})
+
+	t.Run("declaring both external forms is refused", func(t *testing.T) {
+		e := testEngine(newFakeBackend())
+		err := e.ensureExternalSecretsConfigs(ctx,
+			"configs:\n  alias:\n    external:\n      name: deprecated\n    name: current\n", nil)
+		require.EqualError(t, err, `config "alias": external.name and name conflict; use only name`)
 	})
 
 	t.Run("backend error is surfaced", func(t *testing.T) {
