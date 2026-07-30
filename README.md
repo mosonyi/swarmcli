@@ -94,6 +94,8 @@ swarmcli charts diff upgrade <release> <repo/chart>  # preview upgrade changes
 swarmcli charts rollback <release> <revision>     # re-deploy a past revision
 swarmcli charts uninstall <release>               # remove a release
 swarmcli charts history <release>                 # revision history
+swarmcli charts get values|manifest <release>     # stored values or rendered manifest
+swarmcli charts prune [release]                   # delete old revisions beyond --history-max
 swarmcli charts list                              # list releases
 swarmcli charts status <release>                  # release status and services
 
