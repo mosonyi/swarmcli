@@ -95,11 +95,8 @@ func TestInspectSecretCmd_NavigatesToInspect(t *testing.T) {
 
 func TestComputeSecretUsedCmd_SetsUsedMap(t *testing.T) {
 	mock := noopSecretOps()
-	mock.listServicesUsingSecretIDFn = func(_ context.Context, secretID string) ([]swarm.Service, error) {
-		if secretID == "id-used" {
-			return []swarm.Service{{ID: "svc1"}}, nil
-		}
-		return nil, nil
+	mock.servicesUsingSecretsFn = func(_ context.Context) (map[string][]swarm.Service, error) {
+		return map[string][]swarm.Service{"id-used": {{ID: "svc1"}}}, nil
 	}
 	m := testModel(func(m *Model) { m.deps.Secrets = mock })
 
@@ -113,6 +110,27 @@ func TestComputeSecretUsedCmd_SetsUsedMap(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, usedMap["id-used"])
 	require.False(t, usedMap["id-unused"])
+	// The point of the index: one lookup regardless of how many secrets the
+	// swarm holds. Per-secret lookups each list every service.
+	require.Equal(t, 1, mock.servicesUsingSecretsCalls)
+}
+
+// A secret the view has just created cannot be referenced yet, so building its
+// row asks the daemon nothing at all.
+func TestAddSecretDoesNotQueryServices(t *testing.T) {
+	mock := noopSecretOps()
+	m := testModel(func(m *Model) { m.deps.Secrets = mock })
+
+	m.addSecret(docker.SecretWithDecodedData{
+		Secret: swarm.Secret{ID: "fresh", Spec: swarm.SecretSpec{Annotations: swarm.Annotations{Name: "s-new"}}},
+	})
+
+	require.Zero(t, mock.servicesUsingSecretsCalls)
+	require.NotEmpty(t, m.secretsList.Items)
+	item := m.secretsList.Items[len(m.secretsList.Items)-1]
+	require.Equal(t, "s-new", item.Name)
+	require.False(t, item.Used)
+	require.True(t, item.UsedKnown)
 }
 
 func TestGetUsedByStacksCmd_ReturnsUsedByMsg(t *testing.T) {
@@ -122,13 +140,17 @@ func TestGetUsedByStacksCmd_ReturnsUsedByMsg(t *testing.T) {
 			Secret: swarm.Secret{ID: "sec-id", Spec: swarm.SecretSpec{Annotations: swarm.Annotations{Name: "s1"}}},
 		}, nil
 	}
-	mock.listServicesUsingSecretNameFn = func(_ context.Context, _ string) ([]swarm.Service, error) {
-		return []swarm.Service{
-			{ID: "svc1", Spec: swarm.ServiceSpec{Annotations: swarm.Annotations{Name: "web", Labels: map[string]string{"com.docker.stack.namespace": "mystack"}}}},
+	// One service reachable by name, another by ID: the index carries both keys,
+	// which is what lets a single listing replace the two this used to merge.
+	mock.servicesUsingSecretsFn = func(_ context.Context) (map[string][]swarm.Service, error) {
+		return map[string][]swarm.Service{
+			"s1": {
+				{ID: "svc1", Spec: swarm.ServiceSpec{Annotations: swarm.Annotations{Name: "web", Labels: map[string]string{"com.docker.stack.namespace": "mystack"}}}},
+			},
+			"sec-id": {
+				{ID: "svc2", Spec: swarm.ServiceSpec{Annotations: swarm.Annotations{Name: "api", Labels: map[string]string{"com.docker.stack.namespace": "mystack"}}}},
+			},
 		}, nil
-	}
-	mock.listServicesUsingSecretIDFn = func(_ context.Context, _ string) ([]swarm.Service, error) {
-		return nil, nil
 	}
 
 	m := testModel(func(m *Model) { m.deps.Secrets = mock })
@@ -137,8 +159,11 @@ func TestGetUsedByStacksCmd_ReturnsUsedByMsg(t *testing.T) {
 	used, ok := msg.(usedByMsg)
 	require.True(t, ok)
 	require.Equal(t, "s1", used.SecretName)
-	require.Len(t, used.UsedBy, 1)
+	require.Len(t, used.UsedBy, 2)
 	require.Equal(t, "mystack", used.UsedBy[0].StackName)
+	require.Equal(t, "api", used.UsedBy[0].ServiceName, "sorted by stack then service")
+	require.Equal(t, "web", used.UsedBy[1].ServiceName)
+	require.Equal(t, 1, mock.servicesUsingSecretsCalls)
 }
 
 func TestCheckSecretsCmd_NoChange_ReturnsPollRetry(t *testing.T) {

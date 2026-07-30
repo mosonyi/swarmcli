@@ -43,18 +43,24 @@ func (m *Model) loadSecretsCmd() tea.Cmd {
 
 // computeSecretUsedCmd checks which secrets are used by services in background
 // and returns a usedStatusUpdatedMsg containing a map[id]bool.
+//
+// One indexed lookup, not one service listing per secret. This runs after every
+// load and after every poll that sees a change, so the per-secret version cost a
+// full ServiceList times the number of secrets on the swarm each time.
 func (m *Model) computeSecretUsedCmd(secs []docker.SecretWithDecodedData) tea.Cmd {
 	secretOps := m.deps.Secrets
 	return func() tea.Msg {
-		usedMap := make(map[string]bool, len(secs))
 		ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
 		defer cancel()
+
+		usedBy, err := secretOps.ServicesUsingSecrets(ctx)
+		if err != nil {
+			l().Errorf("computeSecretUsedCmd: ServicesUsingSecrets failed: %v", err)
+		}
+
+		usedMap := make(map[string]bool, len(secs))
 		for _, s := range secs {
-			usedMap[s.Secret.ID] = false
-			svcs, err := secretOps.ListServicesUsingSecretID(ctx, s.Secret.ID)
-			if err == nil && len(svcs) > 0 {
-				usedMap[s.Secret.ID] = true
-			}
+			usedMap[s.Secret.ID] = len(usedBy[s.Secret.ID]) > 0
 		}
 		return usedStatusUpdatedMsg(usedMap)
 	}
@@ -304,24 +310,19 @@ func (m *Model) getUsedByStacksCmd(secretName string) tea.Cmd {
 			return errorMsg(err)
 		}
 
-		// Get services by secret name and ID
-		servicesByName, err := secretOps.ListServicesUsingSecretName(ctx, secretName)
+		// Services referencing this secret by either name or ID. The index holds
+		// both keys, so one listing replaces the two this used to merge by hand.
+		svcsBySecret, err := secretOps.ServicesUsingSecrets(ctx)
 		if err != nil {
-			l().Errorf("Failed to list services using secret name %s: %v", secretName, err)
-			return errorMsg(err)
-		}
-		servicesByID, err := secretOps.ListServicesUsingSecretID(ctx, sec.Secret.ID)
-		if err != nil {
-			l().Errorf("Failed to list services using secret ID %s: %v", sec.Secret.ID, err)
+			l().Errorf("Failed to index services by secret: %v", err)
 			return errorMsg(err)
 		}
 
-		// Merge services, avoid duplicates
 		svcMap := make(map[string]swarm.Service)
-		for _, svc := range servicesByName {
+		for _, svc := range svcsBySecret[secretName] {
 			svcMap[svc.ID] = svc
 		}
-		for _, svc := range servicesByID {
+		for _, svc := range svcsBySecret[sec.Secret.ID] {
 			svcMap[svc.ID] = svc
 		}
 

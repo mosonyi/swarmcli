@@ -334,3 +334,50 @@ func listServicesUsingSecretName(ctx context.Context, client *client.Client, nam
 	}
 	return filtered, nil
 }
+
+// ServicesUsingSecrets indexes services by the secrets they reference.
+//
+// The single-secret lookups above each list every service and filter, which is
+// right for one question and wrong for many: asking about N secrets costs N full
+// service listings. This asks once and answers all of them.
+//
+// Keyed by both SecretID and SecretName, because a reference carries both and
+// callers hold one or the other. A service appears once per key it references,
+// even if it mounts the same secret at several paths.
+func ServicesUsingSecrets(ctx context.Context) (map[string][]swarm.Service, error) {
+	cli, err := GetClient()
+	if err != nil {
+		return nil, err
+	}
+	return ServicesUsingSecretsWith(ctx, cli)
+}
+
+// ServicesUsingSecretsWith is ServicesUsingSecrets against an explicit client.
+func ServicesUsingSecretsWith(ctx context.Context, cli *client.Client) (map[string][]swarm.Service, error) {
+	services, err := cli.ServiceList(ctx, swarm.ServiceListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list services: %w", err)
+	}
+
+	idx := make(map[string][]swarm.Service)
+	for _, s := range services {
+		if s.Spec.TaskTemplate.ContainerSpec == nil {
+			continue
+		}
+		keys := make(map[string]struct{})
+		for _, sec := range s.Spec.TaskTemplate.ContainerSpec.Secrets {
+			if sec.SecretID != "" {
+				keys[sec.SecretID] = struct{}{}
+			}
+			if sec.SecretName != "" {
+				keys[sec.SecretName] = struct{}{}
+			}
+		}
+		for k := range keys {
+			idx[k] = append(idx[k], s)
+		}
+	}
+
+	l().Debugf("[ServicesUsingSecrets] Indexed %d services under %d secret keys", len(services), len(idx))
+	return idx, nil
+}

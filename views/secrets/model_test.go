@@ -18,14 +18,16 @@ import (
 // --- mocks ---
 
 type mockSecretOps struct {
-	listSecretsFn                 func(ctx context.Context) ([]swarm.Secret, error)
-	inspectSecretFn               func(ctx context.Context, nameOrID string) (*docker.SecretWithDecodedData, error)
-	createSecretFn                func(ctx context.Context, name string, data []byte, labels map[string]string) (swarm.Secret, error)
-	createSecretVersionFn         func(ctx context.Context, baseSecret swarm.Secret, newData []byte) (swarm.Secret, error)
-	rotateSecretInServicesFn      func(ctx context.Context, oldSec *swarm.Secret, newSec swarm.Secret) error
-	deleteSecretFn                func(ctx context.Context, nameOrID string) error
-	listServicesUsingSecretIDFn   func(ctx context.Context, secretID string) ([]swarm.Service, error)
-	listServicesUsingSecretNameFn func(ctx context.Context, name string) ([]swarm.Service, error)
+	listSecretsFn            func(ctx context.Context) ([]swarm.Secret, error)
+	inspectSecretFn          func(ctx context.Context, nameOrID string) (*docker.SecretWithDecodedData, error)
+	createSecretFn           func(ctx context.Context, name string, data []byte, labels map[string]string) (swarm.Secret, error)
+	createSecretVersionFn    func(ctx context.Context, baseSecret swarm.Secret, newData []byte) (swarm.Secret, error)
+	rotateSecretInServicesFn func(ctx context.Context, oldSec *swarm.Secret, newSec swarm.Secret) error
+	deleteSecretFn           func(ctx context.Context, nameOrID string) error
+	servicesUsingSecretsFn   func(ctx context.Context) (map[string][]swarm.Service, error)
+	// servicesUsingSecretsCalls counts the indexed lookups, so a test can assert
+	// the view asks once rather than once per secret.
+	servicesUsingSecretsCalls int
 }
 
 func (m *mockSecretOps) ListSecrets(ctx context.Context) ([]swarm.Secret, error) {
@@ -52,11 +54,12 @@ func (m *mockSecretOps) RotateSecretInServices(ctx context.Context, oldSec *swar
 func (m *mockSecretOps) DeleteSecret(ctx context.Context, nameOrID string) error {
 	return m.deleteSecretFn(ctx, nameOrID)
 }
-func (m *mockSecretOps) ListServicesUsingSecretID(ctx context.Context, secretID string) ([]swarm.Service, error) {
-	return m.listServicesUsingSecretIDFn(ctx, secretID)
-}
-func (m *mockSecretOps) ListServicesUsingSecretName(ctx context.Context, name string) ([]swarm.Service, error) {
-	return m.listServicesUsingSecretNameFn(ctx, name)
+func (m *mockSecretOps) ServicesUsingSecrets(ctx context.Context) (map[string][]swarm.Service, error) {
+	m.servicesUsingSecretsCalls++
+	if m.servicesUsingSecretsFn != nil {
+		return m.servicesUsingSecretsFn(ctx)
+	}
+	return nil, nil
 }
 
 // --- helpers ---
@@ -106,12 +109,6 @@ func noopSecretOps() *mockSecretOps {
 		},
 		deleteSecretFn: func(_ context.Context, _ string) error {
 			return nil
-		},
-		listServicesUsingSecretIDFn: func(_ context.Context, _ string) ([]swarm.Service, error) {
-			return nil, nil
-		},
-		listServicesUsingSecretNameFn: func(_ context.Context, _ string) ([]swarm.Service, error) {
-			return nil, nil
 		},
 	}
 }
