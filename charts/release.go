@@ -464,8 +464,14 @@ func describe(desc string) string {
 // every external secret/config the manifest references must be declared there
 // (else a hard error), and a declared description enriches the remediation.
 func (e *Engine) ensureExternalSecretsConfigs(ctx context.Context, manifest string, req *Requirements) error {
-	secrets := externalResourceNames(manifest, "secrets")
-	configs := externalResourceNames(manifest, "configs")
+	secrets, err := externalResourceNames(manifest, "secrets")
+	if err != nil {
+		return err
+	}
+	configs, err := externalResourceNames(manifest, "configs")
+	if err != nil {
+		return err
+	}
 	if len(secrets) == 0 && len(configs) == 0 {
 		return nil
 	}

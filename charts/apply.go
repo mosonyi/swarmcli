@@ -140,7 +140,7 @@ func (e *Engine) PlanApply(ctx context.Context, rf *ReleaseFile, src ChartSource
 	for _, spec := range rf.Releases {
 		managed[spec.Name] = true
 
-		rp, err := e.planRelease(rf, spec, src, deployed, read)
+		rp, err := e.planRelease(rf, spec, src, deployed, read, owner)
 		if err != nil {
 			return nil, err
 		}
@@ -175,7 +175,9 @@ func ownedBy(rel Release, id string) bool {
 	return own == OwnerRef{ID: id, Kind: OwnerKindRelease, Name: rel.Name}
 }
 
-func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource, deployed map[string]Release, read func(string) ([]byte, error)) (ReleasePlan, error) {
+// owner is the id PlanApply resolved for the whole plan (opts.Owner over the
+// file's own), not rf.ownerID() — planRelease cannot re-derive it.
+func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource, deployed map[string]Release, read func(string) ([]byte, error), owner string) (ReleasePlan, error) {
 	ref := rf.ChartRef(spec)
 
 	ch, err := src.Load(ref, spec.Version)
@@ -234,7 +236,7 @@ func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource,
 	default:
 		rp.FromVersion = cur.Chart.Version
 		rp.CurrentManifest = cur.Manifest
-		same, err := unchanged(&cur, rc, values, manifest)
+		same, err := unchanged(&cur, rc, values, manifest, owner)
 		if err != nil {
 			return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
 		}
@@ -294,8 +296,26 @@ func (e *Engine) Apply(ctx context.Context, plan *Plan, opts InstallOptions) ([]
 }
 
 // unchanged reports whether the current revision already encodes the desired
-// state: same chart, same rendered manifest, same values.
-func unchanged(cur *Release, chart ReleaseChart, values map[string]any, manifest string) (bool, error) {
+// state: same chart, same rendered manifest, same values — and the ownership
+// this plan is being asked to establish.
+//
+// Ownership is part of the desired state because the stamp is the only evidence
+// prune has. deployAndRecord is the sole writer of rel.Owner, and Apply skips
+// ActionUnchanged without calling it, so leaving the owner out of this
+// comparison meant a handover between two manifests with byte-identical content
+// silently never happened: the plan reported "unchanged", which was true of the
+// deployed resources and false of the ownership, and every later plan kept
+// classifying the release under the departed owner (#511).
+//
+// A stamp is only *contradicted* when it names someone else. An absent stamp is
+// not a mismatch: an unowned release is already classified conservatively — it
+// falls to Plan.Unmanaged rather than Plan.Orphaned — so forcing a revision to
+// stamp it would buy no safety, and would re-deploy every release installed
+// before owner stamping existed on the first apply after upgrading. An
+// unparseable stamp is no evidence of anything, so it is a mismatch and gets
+// healed. An empty plan owner never forces: an apply that claims nothing must
+// not strip a stamp somebody else wrote.
+func unchanged(cur *Release, chart ReleaseChart, values map[string]any, manifest, owner string) (bool, error) {
 	if cur == nil || cur.Status == StatusUninstalled {
 		return false, nil
 	}
@@ -303,6 +323,9 @@ func unchanged(cur *Release, chart ReleaseChart, values map[string]any, manifest
 		return false, nil
 	}
 	if cur.Manifest != manifest {
+		return false, nil
+	}
+	if owner != "" && cur.Owner != "" && !ownedBy(*cur, owner) {
 		return false, nil
 	}
 	return sameValues(cur.Values, values)
