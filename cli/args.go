@@ -20,7 +20,6 @@ type flags struct {
 	version      string   // --version, chart version selector
 	dryRun       bool
 	wait         bool
-	debug        bool
 	requirements bool          // --requirements (template): emit rendered requirements.yaml
 	purge        bool          // --purge-volumes
 	install      bool          // --install (upgrade)
@@ -138,8 +137,6 @@ func parseArgs(args []string) ([]string, flags, error) {
 			f.wait = true
 		case "--requirements":
 			f.requirements = true
-		case "--debug":
-			f.debug = true
 		case "--purge-volumes":
 			f.purge = true
 		case "--install":

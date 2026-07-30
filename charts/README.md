@@ -33,6 +33,7 @@ swarmcli charts status   my-traefik
 swarmcli charts diff upgrade my-traefik eldara/traefik --set replicas=3
 swarmcli charts upgrade  my-traefik eldara/traefik --set replicas=3
 swarmcli charts history  my-traefik
+swarmcli charts get manifest my-traefik      # also: get values
 swarmcli charts rollback my-traefik 1
 swarmcli charts list
 swarmcli charts uninstall my-traefik
@@ -324,10 +325,14 @@ window are the protections.
   but does not deploy. For fully offline rendering use `charts template`.
 - **`--purge-volumes`** removes volumes on the connected node only (the CE
   single-node volume scope); cross-node purge is a future extension.
-- **Secrets:** the rendered manifest is stored in a Docker Config, which is
-  readable by anyone with Docker access. Do **not** inline secret material in
-  templates — reference Docker secrets as separate objects instead. A redaction
-  pass is planned before charts ship broadly.
+- **Secrets:** the rendered manifest is stored **unredacted** in a Docker Config,
+  which is readable by anyone with Docker access — as are `charts get manifest`
+  and the TUI config viewer, which read it back. Do **not** inline secret
+  material in templates: reference Docker secrets as separate objects instead.
+  Nothing currently enforces that. A redaction pass is
+  [issue #465](https://github.com/Eldara-Tech/swarmcli/issues/465); treat this
+  as a limitation to design around rather than something the engine will catch
+  for you.
 - **Chart integrity** is only as good as the index: a repository that publishes
   no `digest` gets a warning, not a refusal (see [Integrity](#integrity)). Chart
   archives are capped at 20 MiB on the wire.
