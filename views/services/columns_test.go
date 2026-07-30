@@ -100,6 +100,43 @@ func TestColumns_HealthColumnAndFootnote(t *testing.T) {
 		"HEALTH should sit immediately after STATUS")
 }
 
+// statusCell returns the rendered STATUS cell for e.
+func statusCell(m *Model, e docker.ServiceEntry) string {
+	for _, c := range m.serviceColumns() {
+		if c.col.Label == "STATUS" {
+			return c.col.Cell(e)
+		}
+	}
+	return ""
+}
+
+// REPLICAS counts every running replica, superseded ones included, so a
+// start-first rollout that has not moved a single replica onto the new
+// generation still reads 2/2. STATUS is where that gets said (issue #480).
+func TestColumns_StatusShowsRolloutProgress(t *testing.T) {
+	m := testModel()
+	loadWithFilter(m, AllFilter, fakeEntries("web"))
+
+	rollingOut := docker.ServiceEntry{
+		Status: "updating", RollingOut: true, ReplicasOnNode: 2, ReplicasTotal: 2, UpToDate: 1,
+	}
+	require.Equal(t, "updating · 1/2 new", statusCell(m, rollingOut))
+
+	landed := rollingOut
+	landed.UpToDate = 2
+	require.Equal(t, "updating", statusCell(m, landed), "no counter once every replica is current")
+
+	settled := docker.ServiceEntry{Status: "active", ReplicasOnNode: 1, ReplicasTotal: 2, UpToDate: 1}
+	require.Equal(t, "active", statusCell(m, settled), "a restart outside a rollout is not a stale version")
+
+	pulling := rollingOut
+	pulling.PullProgress = "pulling · 3/12 layers"
+	require.Equal(t, "pulling · 3/12 layers", statusCell(m, pulling), "a pull in flight still owns the cell")
+
+	unknown := docker.ServiceEntry{Status: "updating", RollingOut: true, ReplicasTotal: 0}
+	require.Equal(t, "updating", statusCell(m, unknown), "no target to count against")
+}
+
 func TestExpandedRow_ContainerStateFallback(t *testing.T) {
 	m := testModel()
 	loadWithFilter(m, AllFilter, fakeEntries("web"))

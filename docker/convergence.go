@@ -11,9 +11,10 @@ import (
 
 // ServiceConvergence is what a caller needs to decide whether one service has
 // finished rolling out. It is deliberately separate from ServiceEntry: that
-// struct backs the services view, and its ReplicasOnNode counts tasks by
-// DESIRED state, which answers "what does the orchestrator intend" rather than
-// "what is actually up" (see issue #480).
+// struct backs the services view, where ReplicasOnNode mirrors `docker service
+// ls` and so keeps counting a superseded task while its container runs. Running
+// here drops the outgoing generation, which is the question --wait asks and the
+// services view answers with UpToDate instead (see issue #480).
 type ServiceConvergence struct {
 	Name string
 	Mode string
@@ -175,6 +176,14 @@ func isJobService(svc swarm.Service) bool {
 	default:
 		return false
 	}
+}
+
+// DesiredReplicas is the service's target task count against this snapshot: the
+// declared replicas, or for a global service one per node that can currently run
+// one. Exported for callers outside this package that would otherwise duplicate
+// the mode switch and get the global case wrong (issue #480).
+func (snap *SwarmSnapshot) DesiredReplicas(svc swarm.Service) int {
+	return desiredOverActiveNodes(svc, len(activeNodeIDs(snap)))
 }
 
 // desiredOverActiveNodes is the target task count. For a global service that is

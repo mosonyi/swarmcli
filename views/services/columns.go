@@ -56,6 +56,14 @@ func (m *Model) serviceColumns() []serviceColumn {
 				if e.PullProgress != "" {
 					return e.PullProgress
 				}
+				// REPLICAS counts every running replica, superseded ones included,
+				// so a rollout that has not moved a single replica onto the new
+				// generation still reads as fully converged. Say how far it got
+				// while it is in flight — that is the question "updating" raises
+				// and the ratio beside it cannot answer.
+				if e.RollingOut && e.ReplicasTotal > 0 && e.UpToDate < e.ReplicasTotal {
+					return fmt.Sprintf("%s · %d/%d new", e.Status, e.UpToDate, e.ReplicasTotal)
+				}
 				return e.Status
 			}}},
 		{isHealth: true, col: filterlist.Column[docker.ServiceEntry]{

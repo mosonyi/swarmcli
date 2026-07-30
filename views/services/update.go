@@ -648,13 +648,10 @@ func (m *Model) refreshServiceErrorsFromSnapshot() {
 	svcDesired := make(map[string]int)
 	svcRunning := make(map[string]int)
 	for _, svc := range snap.Services {
-		desired := 1
-		if svc.Spec.Mode.Replicated != nil && svc.Spec.Mode.Replicated.Replicas != nil {
-			desired = int(*svc.Spec.Mode.Replicated.Replicas)
-		} else if svc.Spec.Mode.Global != nil {
-			desired = len(snap.Nodes)
-		}
-		svcDesired[svc.ID] = desired
+		// Shared with the loaders rather than duplicated: counting every node as
+		// a global service's target flagged a fully healthy service as erroring
+		// for as long as one node stayed drained or down (issue #480).
+		svcDesired[svc.ID] = snap.DesiredReplicas(svc)
 		// Initialize svcRunning with 0 for all services
 		svcRunning[svc.ID] = 0
 	}

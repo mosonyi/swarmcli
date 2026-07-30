@@ -178,6 +178,125 @@ func TestCountTasksForNode_CountsSupersededTasksStillRunning(t *testing.T) {
 	require.Equal(t, 2, countTasksForNode("svc1", "", snap))
 }
 
+// A node runs a service's task, or is meant to. Counting only running tasks made
+// the node-scoped view drop a service whose task there had not started — the one
+// an operator opens that node to find (issue #480).
+func TestHasIntendedTaskOnNode(t *testing.T) {
+	preparing := runningTask("svc1", "n1")
+	preparing.Status.State = swarm.TaskStatePreparing
+
+	terminal := runningTask("svc1", "n2")
+	terminal.DesiredState = swarm.TaskStateShutdown
+	terminal.Status.State = swarm.TaskStateShutdown
+
+	snap := &SwarmSnapshot{Tasks: []swarm.Task{preparing, terminal, runningTask("svc2", "n3")}}
+
+	require.True(t, hasIntendedTaskOnNode("svc1", "n1", snap), "task preparing on the node")
+	require.False(t, hasIntendedTaskOnNode("svc1", "n2", snap), "only a terminal task on the node")
+	require.False(t, hasIntendedTaskOnNode("svc1", "n3", snap), "another service's node")
+}
+
+// slotTask builds a task carrying the three facts generation counting turns on:
+// which replica it is, whether it is up, and when it was created.
+func slotTask(svcID, nodeID string, slot int, state swarm.TaskState, ageSeconds int) swarm.Task {
+	return swarm.Task{
+		ServiceID:    svcID,
+		NodeID:       nodeID,
+		Slot:         slot,
+		DesiredState: swarm.TaskStateRunning,
+		Status:       swarm.TaskStatus{State: state},
+		Meta:         swarm.Meta{CreatedAt: time.Now().Add(-time.Duration(ageSeconds) * time.Second)},
+	}
+}
+
+func TestCountUpToDateTasks_SteadyState(t *testing.T) {
+	snap := &SwarmSnapshot{Tasks: []swarm.Task{
+		slotTask("svc1", "n1", 1, swarm.TaskStateRunning, 3600),
+		slotTask("svc1", "n2", 2, swarm.TaskStateRunning, 3600),
+	}}
+	require.Equal(t, 2, countUpToDateTasks("svc1", snap))
+}
+
+// The reported case: a start-first rollout where every running replica is still
+// the outgoing generation. REPLICAS reads 2/2 — matching `docker service ls` —
+// so the count that shows the rollout has not landed has to come from elsewhere.
+func TestCountUpToDateTasks_StartFirstRolloutExcludesOutgoing(t *testing.T) {
+	outgoing := slotTask("svc1", "n3", 1, swarm.TaskStateRunning, 1209600) // up 2 weeks
+	incoming := slotTask("svc1", "n29", 1, swarm.TaskStatePreparing, 26)   // replacing it
+
+	replaced := slotTask("svc1", "n2", 2, swarm.TaskStateShutdown, 1209600)
+	replaced.DesiredState = swarm.TaskStateShutdown
+	landed := slotTask("svc1", "n2", 2, swarm.TaskStateRunning, 36)
+
+	snap := &SwarmSnapshot{Tasks: []swarm.Task{outgoing, incoming, replaced, landed}}
+
+	require.Equal(t, 2, countTasksForNode("svc1", "", snap), "two containers are up")
+	require.Equal(t, 1, countUpToDateTasks("svc1", snap), "only one replica is on the new generation")
+}
+
+// The window start-first opens: the incoming task is up before the outgoing one
+// is torn down, so a 2-replica service has three containers running. REPLICAS
+// reads 3/2 — as `docker service ls` does — while the generation count stays
+// bounded by the slots.
+func TestCountUpToDateTasks_BoundedBySlotsDuringOverlap(t *testing.T) {
+	snap := &SwarmSnapshot{Tasks: []swarm.Task{
+		slotTask("svc1", "n3", 1, swarm.TaskStateRunning, 1209600),
+		slotTask("svc1", "n29", 1, swarm.TaskStateRunning, 26),
+		slotTask("svc1", "n2", 2, swarm.TaskStateRunning, 36),
+	}}
+
+	require.Equal(t, 3, countTasksForNode("svc1", "", snap))
+	require.Equal(t, 2, countUpToDateTasks("svc1", snap))
+}
+
+// A global service's tasks carry no slot, so the node is what identifies the
+// replica.
+func TestCountUpToDateTasks_GlobalKeysByNode(t *testing.T) {
+	snap := &SwarmSnapshot{Tasks: []swarm.Task{
+		slotTask("svc1", "n1", 0, swarm.TaskStateRunning, 3600),
+		slotTask("svc1", "n2", 0, swarm.TaskStateShutdown, 3600),
+		slotTask("svc1", "n2", 0, swarm.TaskStatePreparing, 10),
+	}}
+	require.Equal(t, 1, countUpToDateTasks("svc1", snap))
+}
+
+// A task with neither slot nor node has not been assigned yet. It identifies no
+// replica, so it must not collide with the others under a shared empty key.
+func TestCountUpToDateTasks_SkipsUnassignedTasks(t *testing.T) {
+	snap := &SwarmSnapshot{Tasks: []swarm.Task{
+		slotTask("svc1", "", 0, swarm.TaskStatePending, 5),
+		slotTask("svc1", "n1", 0, swarm.TaskStateRunning, 3600),
+	}}
+	require.Equal(t, 1, countUpToDateTasks("svc1", snap))
+}
+
+func TestCountUpToDateTasks_IgnoresOtherServices(t *testing.T) {
+	snap := &SwarmSnapshot{Tasks: []swarm.Task{
+		slotTask("svc1", "n1", 1, swarm.TaskStateRunning, 3600),
+		slotTask("svc2", "n1", 1, swarm.TaskStateRunning, 3600),
+	}}
+	require.Equal(t, 1, countUpToDateTasks("svc1", snap))
+}
+
+func TestIsRollingOut(t *testing.T) {
+	require.False(t, isRollingOut(swarm.Service{}), "never updated")
+
+	cases := map[swarm.UpdateState]bool{
+		swarm.UpdateStateUpdating:          true,
+		swarm.UpdateStatePaused:            true,
+		swarm.UpdateStateRollbackStarted:   true,
+		swarm.UpdateStateRollbackPaused:    true,
+		swarm.UpdateStateCompleted:         false,
+		swarm.UpdateStateRollbackCompleted: false,
+	}
+	for state, want := range cases {
+		t.Run(string(state), func(t *testing.T) {
+			svc := swarm.Service{UpdateStatus: &swarm.UpdateStatus{State: state}}
+			require.Equal(t, want, isRollingOut(svc))
+		})
+	}
+}
+
 func TestSortEntries(t *testing.T) {
 	entries := []ServiceEntry{
 		{StackName: "beta", ServiceName: "web"},
