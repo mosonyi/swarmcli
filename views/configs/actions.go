@@ -41,18 +41,24 @@ func (m *Model) loadConfigsCmd() tea.Cmd {
 
 // computeConfigUsedCmd checks which configs are used by services in background
 // and returns a usedStatusUpdatedMsg containing a map[id]bool.
+//
+// One indexed lookup, not one service listing per config. This runs after every
+// load and after every poll that sees a change, so the per-config version cost a
+// full ServiceList times the number of configs on the swarm each time.
 func (m *Model) computeConfigUsedCmd(cfgs []docker.ConfigWithDecodedData) tea.Cmd {
 	configOps := m.deps.Configs
 	return func() tea.Msg {
-		usedMap := make(map[string]bool, len(cfgs))
 		ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
 		defer cancel()
+
+		usedBy, err := configOps.ServicesUsingConfigs(ctx)
+		if err != nil {
+			l().Errorf("computeConfigUsedCmd: ServicesUsingConfigs failed: %v", err)
+		}
+
+		usedMap := make(map[string]bool, len(cfgs))
 		for _, c := range cfgs {
-			usedMap[c.Config.ID] = false
-			svcs, err := configOps.ListServicesUsingConfigID(ctx, c.Config.ID)
-			if err == nil && len(svcs) > 0 {
-				usedMap[c.Config.ID] = true
-			}
+			usedMap[c.Config.ID] = len(usedBy[c.Config.ID]) > 0
 		}
 		return usedStatusUpdatedMsg(usedMap)
 	}
@@ -333,24 +339,19 @@ func (m *Model) getUsedByStacksCmd(configName string) tea.Cmd {
 			return usedByMsg{ConfigName: configName, UsedBy: nil, Error: err}
 		}
 
-		// Get services by config name and ID
-		servicesByName, err := configOps.ListServicesUsingConfigName(ctx, configName)
+		// Services referencing this config by either name or ID. The index holds
+		// both keys, so one listing replaces the two this used to merge by hand.
+		svcsByConfig, err := configOps.ServicesUsingConfigs(ctx)
 		if err != nil {
-			l().Errorf("Failed to list services using config name %s: %v", configName, err)
-			return usedByMsg{ConfigName: configName, UsedBy: nil, Error: err}
-		}
-		servicesByID, err := configOps.ListServicesUsingConfigID(ctx, cfg.Config.ID)
-		if err != nil {
-			l().Errorf("Failed to list services using config ID %s: %v", cfg.Config.ID, err)
+			l().Errorf("Failed to index services by config: %v", err)
 			return usedByMsg{ConfigName: configName, UsedBy: nil, Error: err}
 		}
 
-		// Merge services, avoid duplicates
 		svcMap := make(map[string]swarm.Service)
-		for _, svc := range servicesByName {
+		for _, svc := range svcsByConfig[configName] {
 			svcMap[svc.ID] = svc
 		}
-		for _, svc := range servicesByID {
+		for _, svc := range svcsByConfig[cfg.Config.ID] {
 			svcMap[svc.ID] = svc
 		}
 

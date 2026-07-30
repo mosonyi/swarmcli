@@ -4,7 +4,6 @@
 package configsview
 
 import (
-	"context"
 	"fmt"
 	"github.com/Eldara-Tech/swarmcli/docker"
 	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
@@ -241,8 +240,10 @@ func (m *Model) findConfigByName(name string) (*docker.ConfigWithDecodedData, er
 
 func (m *Model) addConfig(cfg docker.ConfigWithDecodedData) {
 	m.configs = append(m.configs, cfg)
-	ctx := context.Background()
-	m.configsList.Items = append(m.configsList.Items, configItemFromSwarm(ctx, cfg.Config))
+	// No index: this is a config this view has just created, so no service can
+	// reference it yet. The rotation that will point services at it is still
+	// behind a confirmation dialog.
+	m.configsList.Items = append(m.configsList.Items, configItemFromSwarm(cfg.Config, nil))
 	m.configsList.ApplyFilter()
 }
 

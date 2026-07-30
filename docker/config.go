@@ -387,3 +387,50 @@ func listServicesUsingConfigName(ctx context.Context, client *client.Client, nam
 	}
 	return filtered, nil
 }
+
+// ServicesUsingConfigs indexes services by the configs they reference.
+//
+// The single-config lookups above each list every service and filter, which is
+// right for one question and wrong for many: asking about N configs costs N full
+// service listings. This asks once and answers all of them.
+//
+// Keyed by both ConfigID and ConfigName, because a reference carries both and
+// callers hold one or the other. A service appears once per key it references,
+// even if it mounts the same config at several paths.
+func ServicesUsingConfigs(ctx context.Context) (map[string][]swarm.Service, error) {
+	cli, err := GetClient()
+	if err != nil {
+		return nil, err
+	}
+	return ServicesUsingConfigsWith(ctx, cli)
+}
+
+// ServicesUsingConfigsWith is ServicesUsingConfigs against an explicit client.
+func ServicesUsingConfigsWith(ctx context.Context, cli *client.Client) (map[string][]swarm.Service, error) {
+	services, err := cli.ServiceList(ctx, swarm.ServiceListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list services: %w", err)
+	}
+
+	idx := make(map[string][]swarm.Service)
+	for _, s := range services {
+		if s.Spec.TaskTemplate.ContainerSpec == nil {
+			continue
+		}
+		keys := make(map[string]struct{})
+		for _, c := range s.Spec.TaskTemplate.ContainerSpec.Configs {
+			if c.ConfigID != "" {
+				keys[c.ConfigID] = struct{}{}
+			}
+			if c.ConfigName != "" {
+				keys[c.ConfigName] = struct{}{}
+			}
+		}
+		for k := range keys {
+			idx[k] = append(idx[k], s)
+		}
+	}
+
+	l().Debugf("[ServicesUsingConfigs] Indexed %d services under %d config keys", len(services), len(idx))
+	return idx, nil
+}
