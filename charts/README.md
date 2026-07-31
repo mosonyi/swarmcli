@@ -246,10 +246,33 @@ manifest is validated as a Docker stack before use.
 
 ## Repositories
 
-A repository is an HTTP(S)-served `index.yaml` listing chart versions, each with
+A repository is an HTTPS-served `index.yaml` listing chart versions, each with
 a tarball URL (Helm repository format) — hostable on GitHub Pages/Releases, S3,
 or any static host. Configured repos and cached indexes live under
-`$XDG_STATE_HOME/swarmcli/charts` (default `~/.local/state/swarmcli/charts`).
+`$XDG_STATE_HOME/swarmcli/charts` (default `~/.local/state/swarmcli/charts`); a
+repository's name is a component of its cache filename, so it is limited to
+letters, digits, `-`, `_` and `.`.
+
+### Transport
+
+Repositories must be served over **HTTPS**. A repository serves the tarball that
+*becomes* the deployed workload, so anything on the path to it decides what runs
+on your swarm — and the digest below does not close that, because it is published
+in the same `index.yaml`, fetched over the same connection.
+
+Plain `http://` is therefore refused: when adding a repository, when refreshing
+its index, and for a tarball URL an index points at. If your registry is internal
+and you already trust the network between you and it, opt that machine out:
+
+```bash
+export SWARMCLI_CHARTS_ALLOW_PLAINTEXT=1
+```
+
+It is read once, where the CLI builds its repository store, so it covers every
+command that touches a repository — `repo add`, `repo update`, `search`,
+`install`, `upgrade`, `apply`. Programs embedding this package get the
+https-only default and decide for themselves; the `charts` package never reads
+the environment.
 
 ### Integrity
 

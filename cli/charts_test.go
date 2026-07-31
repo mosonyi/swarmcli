@@ -291,3 +291,25 @@ func TestReportUnclaimedCoversBothLists(t *testing.T) {
 	o, _ = capture(t, func() { reportUnclaimed(&charts.Plan{}) })
 	require.Empty(t, o, "a clean apply prints no headers at all")
 }
+
+// The store is https-only by default, and this env var is the whole of the
+// compatibility story for anyone already pointing swarmcli at an internal
+// plaintext registry — so assert the wiring, not just the parsing.
+func TestNewStoreWiresThePlaintextOptOut(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	s, code := newStore()
+	require.Equal(t, -1, code)
+	require.False(t, s.AllowPlaintext, "https-only unless the operator says otherwise")
+
+	t.Setenv(charts.AllowPlaintextEnv, "1")
+	s, code = newStore()
+	require.Equal(t, -1, code)
+	require.True(t, s.AllowPlaintext)
+
+	// Anything that is not a truthy boolean leaves the default in place, rather
+	// than any non-empty value opting out by accident.
+	t.Setenv(charts.AllowPlaintextEnv, "maybe")
+	s, _ = newStore()
+	require.False(t, s.AllowPlaintext)
+}

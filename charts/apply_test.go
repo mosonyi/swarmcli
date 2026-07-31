@@ -373,7 +373,7 @@ func TestPlanApplyAgainstARealRepository(t *testing.T) {
 
 	// A fresh store, so EnsureRepos genuinely has to add the repository — exactly
 	// what `charts apply -f` does on a CI runner that has never seen it.
-	fresh := NewRepoStoreAt(t.TempDir())
+	fresh := newTestStore(t)
 	require.NoError(t, fresh.EnsureRepos(rf.Repositories))
 
 	e := NewEngineWith(newFakeBackend())

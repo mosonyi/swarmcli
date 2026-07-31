@@ -107,6 +107,7 @@ utils/log/
 | `LOG_LEVEL` | `debug`/`info`/`warn`/`error` | `debug` (dev), `info` (prod) |
 | `DOCKER_CONTEXT` | Override Docker context | `docker context show` |
 | `TEST_LOG` | Enable logging in tests | unset |
+| `SWARMCLI_CHARTS_ALLOW_PLAINTEXT` | Allow chart repositories served over plain `http://`; read only by `cli`, which wires it to `charts.RepoStore.AllowPlaintext` (the `charts` package never reads the environment, so embedders keep the https-only default) | unset (https only) |
 
 ## Pro Feature Boundary
 

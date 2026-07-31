@@ -33,6 +33,13 @@ const maxIndexSize = 16 << 20 // 16 MiB
 // can be buffered and hashed before any of it reaches the archive parser.
 const maxChartArchiveSize = 20 << 20 // 20 MiB
 
+// AllowPlaintextEnv is the environment variable a host program may honour to set
+// AllowPlaintext. The name lives here so the refusal message and whatever reads
+// it cannot drift, but this package never reads the environment itself: whether
+// an operator is allowed to opt out is the embedder's call, and cli's answer
+// (yes, for an interactive user's own machine) is not automatically a daemon's.
+const AllowPlaintextEnv = "SWARMCLI_CHARTS_ALLOW_PLAINTEXT"
+
 // RepoStore persists configured repositories and caches their indexes under a
 // base directory (default: the XDG state dir, ~/.local/state/swarmcli/charts).
 type RepoStore struct {
@@ -45,6 +52,20 @@ type RepoStore struct {
 	// charts is a library with no output of its own; nil is silent, and cli wires
 	// this to stderr.
 	Warnf func(format string, a ...any)
+
+	// AllowPlaintext permits repositories reached over plain http. It defaults to
+	// false because a chart repository serves the tarball that *becomes* the
+	// deployed workload, so whoever sits on the path to it chooses what runs on
+	// the swarm. The published digest does not close that hole: it travels in the
+	// same index.yaml over the same channel, so an on-path attacker rewrites both
+	// — and an entry that publishes no digest only warns. swarmcli-cd refuses
+	// plaintext git remotes for exactly this reason; the same argument applies one
+	// layer down, to where the chart itself comes from.
+	//
+	// Set it only for an internal registry on a network you already trust. cli
+	// wires it to AllowPlaintextEnv so an existing plaintext setup keeps working
+	// with one deliberate, greppable opt-out rather than none.
+	AllowPlaintext bool
 }
 
 // NewRepoStore returns a store rooted at the standard charts state directory.
@@ -75,8 +96,63 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 }
 
 func (s *RepoStore) reposFile() string { return filepath.Join(s.dir, "repos.json") }
-func (s *RepoStore) indexFile(name string) string {
-	return filepath.Join(s.dir, "cache", "index-"+name+".yaml")
+
+// indexFile is where a repository's cached index lives. It validates rather than
+// trusting its caller because names arrive here from repos.json as well as from
+// the command line, and this process is not that file's only possible author.
+//
+// The concatenation is the sharp edge: the name is glued on *after* "index-", so
+// "index-.." is an ordinary path segment and filepath.Join's Clean has nothing to
+// collapse. A traversing name is not neutralised, it merely costs one extra "../"
+// — and what then lands outside the cache directory is whatever the repository
+// served for index.yaml.
+func (s *RepoStore) indexFile(name string) (string, error) {
+	if err := validateRepoName(name); err != nil {
+		return "", err
+	}
+	return filepath.Join(s.dir, "cache", "index-"+name+".yaml"), nil
+}
+
+// validateRepoName constrains a repository name to the charset a release name
+// uses. The name is not just a label: it is a path component of the cached index
+// file (see indexFile) and the part before the "/" in a "<repo>/<chart>"
+// reference, so anything exotic in it is a bug at best.
+func validateRepoName(name string) error {
+	switch {
+	case name == "":
+		return fmt.Errorf("repository name is required")
+	case !isPlainName(name):
+		return fmt.Errorf("invalid repository name %q: use letters, digits, '-', '_', '.'", name)
+	case name == "." || name == "..":
+		// Harmless today only because indexFile prefixes the name, which leaves
+		// "index-.." rather than "..". Refusing them keeps that accident from
+		// quietly becoming load-bearing.
+		return fmt.Errorf("invalid repository name %q", name)
+	}
+	return nil
+}
+
+// checkRepoURL rejects a URL this store must not fetch an index from: anything
+// that is not an absolute http(s) URL, and plain http unless AllowPlaintext.
+func (s *RepoStore) checkRepoURL(repoURL string) error {
+	u, err := url.ParseRequestURI(repoURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return fmt.Errorf("repository URL must be an absolute http(s) URL")
+	}
+	return s.checkPlaintext(u)
+}
+
+// checkPlaintext refuses a plain-http URL unless the caller opted in; see
+// AllowPlaintext for why the default is a refusal. It echoes the URL redacted,
+// as checkRedirect does: a repository URL may carry credentials, and this error
+// goes to a terminal or a CI log.
+func (s *RepoStore) checkPlaintext(u *url.URL) error {
+	if u.Scheme != "http" || s.AllowPlaintext {
+		return nil
+	}
+	return fmt.Errorf("refusing the plaintext URL %q: anything on the path to it decides what gets "+
+		"deployed on your swarm, and the index digest travels the same path; set %s=1 if this is an "+
+		"internal registry on a network you already trust", u.Redacted(), AllowPlaintextEnv)
 }
 
 // List returns the configured repositories sorted by name.
@@ -97,13 +173,14 @@ func (s *RepoStore) List() ([]RepoEntry, error) {
 }
 
 // Add registers a repository and downloads its index. It rejects duplicate
-// names and invalid URLs.
+// names, names it will not build a cache path from, and URLs it will not fetch
+// from — all before the download, so a bad request is reported as one.
 func (s *RepoStore) Add(name, repoURL string) error {
-	if name == "" {
-		return fmt.Errorf("repository name is required")
+	if err := validateRepoName(name); err != nil {
+		return err
 	}
-	if u, err := url.ParseRequestURI(repoURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return fmt.Errorf("repository URL must be an absolute http(s) URL")
+	if err := s.checkRepoURL(repoURL); err != nil {
+		return err
 	}
 	repos, err := s.List()
 	if err != nil {
@@ -121,10 +198,14 @@ func (s *RepoStore) Add(name, repoURL string) error {
 	if err != nil {
 		return fmt.Errorf("index download failed, repository not added: %w%s", err, githubPagesHint(repoURL))
 	}
-	if err := os.MkdirAll(filepath.Dir(s.indexFile(name)), 0o755); err != nil {
+	path, err := s.indexFile(name)
+	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(s.indexFile(name), idx, 0o644); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, idx, 0o644); err != nil {
 		return err
 	}
 	repos = append(repos, RepoEntry{Name: name, URL: repoURL})
@@ -152,7 +233,12 @@ func (s *RepoStore) Remove(name string) error {
 	if err := s.save(out); err != nil {
 		return err
 	}
-	_ = os.Remove(s.indexFile(name))
+	// Best-effort, and deliberately skipped for a name indexFile will not vouch
+	// for: the entry is gone from repos.json either way, and a path we refused to
+	// build is not one to hand to os.Remove.
+	if path, perr := s.indexFile(name); perr == nil {
+		_ = os.Remove(path)
+	}
 	return nil
 }
 
@@ -167,21 +253,27 @@ func (s *RepoStore) Update(name string) (changed, unchanged []string, err error)
 		if name != "" && r.Name != name {
 			continue
 		}
+		// Before the network round trip: a name repos.json should never have held
+		// is not one to fetch an index for, let alone write one under.
+		path, err := s.indexFile(r.Name)
+		if err != nil {
+			return changed, unchanged, fmt.Errorf("update %q: %w", r.Name, err)
+		}
 		idx, err := s.fetchIndex(r.URL)
 		if err != nil {
 			return changed, unchanged, fmt.Errorf("update %q: %w", r.Name, err)
 		}
 		// The served index is byte-stable between releases, so an identical
 		// payload means nothing new — report it as already up-to-date.
-		existing, _ := os.ReadFile(s.indexFile(r.Name))
+		existing, _ := os.ReadFile(path)
 		if existing != nil && bytes.Equal(existing, idx) {
 			unchanged = append(unchanged, r.Name)
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(s.indexFile(r.Name)), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return changed, unchanged, err
 		}
-		if err := os.WriteFile(s.indexFile(r.Name), idx, 0o644); err != nil {
+		if err := os.WriteFile(path, idx, 0o644); err != nil {
 			return changed, unchanged, err
 		}
 		changed = append(changed, r.Name)
@@ -194,7 +286,11 @@ func (s *RepoStore) Update(name string) (changed, unchanged []string, err error)
 
 // LoadIndex returns the cached, parsed index for a repository.
 func (s *RepoStore) LoadIndex(name string) (*Index, error) {
-	data, err := os.ReadFile(s.indexFile(name))
+	path, err := s.indexFile(name)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil, fmt.Errorf("no cached index for %q; run `charts repo update`", name)
 	}
@@ -377,6 +473,11 @@ func (s *RepoStore) Pull(entry IndexEntry, baseURL string) (*Chart, error) {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return nil, fmt.Errorf("chart download URL must be http(s), got %q", tarURL)
 	}
+	// The index may point the tarball anywhere — a CDN, a release asset — so the
+	// scheme has to be checked here too, not only where the repository was added.
+	if err := s.checkPlaintext(u); err != nil {
+		return nil, err
+	}
 	resp, err := s.client.Get(tarURL)
 	if err != nil {
 		return nil, fmt.Errorf("download chart: %w", err)
@@ -470,6 +571,12 @@ func githubPagesHint(repoURL string) string {
 }
 
 func (s *RepoStore) fetchIndex(repoURL string) ([]byte, error) {
+	// Add checks this before anything else, to fail without a round trip; the
+	// re-check is for Update, whose URLs come out of repos.json — including ones
+	// added before this store had an opinion about plain http.
+	if err := s.checkRepoURL(repoURL); err != nil {
+		return nil, err
+	}
 	indexURL := strings.TrimRight(repoURL, "/") + "/index.yaml"
 	resp, err := s.client.Get(indexURL)
 	if err != nil {
