@@ -177,12 +177,18 @@ cmd_test() {
   # Always include integration build tag
   local go_test_cmd=("-tags=integration" "-v")
 
+  # views/stacks carries an integration-tagged test alongside its unit tests:
+  # the view's internals are unexported, so covering the deploy seam against a
+  # real swarm has to happen in-package. Naming the package also re-runs its
+  # (fast) unit tests, which is cheaper than widening this to ./... .
+  local packages=("./integration-tests/..." "./views/stacks/...")
+
   if [[ -n "$test_name" ]]; then
     info "🎯 Running single test: $test_name"
-    go_test_cmd+=("-run" "$test_name" "./integration-tests/...")
+    go_test_cmd+=("-run" "$test_name" "${packages[@]}")
   else
     info "🧩 Running all integration tests"
-    go_test_cmd+=("./integration-tests/...")
+    go_test_cmd+=("${packages[@]}")
   fi
 
   # Combine into gotestsum command

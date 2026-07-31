@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright © 2026 Eldara Tech
+
+//go:build integration
+
+package stacksview
+
+import (
+	"context"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/Eldara-Tech/swarmcli/docker"
+	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
+
+	"github.com/charmbracelet/x/ansi"
+	"github.com/stretchr/testify/require"
+)
+
+const itestCompose = `version: "3.9"
+
+services:
+  whoami:
+    image: traefik/whoami:v1.10
+    deploy:
+      replicas: 1
+`
+
+// TestDeployProgressAgainstRealSwarm covers the one seam the unit tests have to
+// mock: that a real `docker stack deploy` produces the terminal message the view
+// expects, and that the list the view rebuilds from a real post-deploy snapshot
+// actually contains the new stack.
+//
+// The view's own state machine is unit-tested against mocks — every transition
+// is message-driven, so a real daemon adds nothing there — and the shell-out in
+// docker.DeployStackInContext is already exercised by the charts integration
+// tests. This fills the gap between the two.
+func TestDeployProgressAgainstRealSwarm(t *testing.T) {
+	swarmlog.InitTestIfTestLogEnv()
+	fastSpinner(t)
+
+	stackName := fmt.Sprintf("itest-deploy-%d", time.Now().UnixNano())
+	t.Cleanup(func() {
+		if err := docker.RemoveStackCLI(context.Background(), stackName); err != nil {
+			t.Logf("cleanup: removing stack %s: %v", stackName, err)
+		}
+	})
+
+	m := New(80, 24)
+	m.deps = docker.DefaultDeps()
+	m.List.Viewport.Width = 80
+	m.List.Viewport.Height = 20
+	m.setRenderItem()
+
+	m.createDialogActive = true
+	m.createDialogStep = "details-inline"
+	m.createNameInput.SetValue(stackName)
+	m.createDialogContent = itestCompose
+
+	cmd := m.Update(key("enter"))
+	require.NotNil(t, cmd)
+
+	// The indicator is set synchronously, before the deploy goroutine runs —
+	// that is the whole point, since the deploy itself blocks for seconds.
+	require.True(t, m.deploying)
+	require.Equal(t, stackName, m.deployingStack)
+	require.Contains(t, ansi.Strip(m.View()), "Deploying stack")
+
+	deployed, ok := firstOfType[stackDeployedMsg](runBatch(cmd))
+	require.True(t, ok, "a real deploy must report success with stackDeployedMsg")
+	require.Equal(t, stackName, deployed.StackName)
+
+	reload := m.Update(deployed)
+	require.False(t, m.deploying, "the indicator must clear once the deploy returns")
+	require.Contains(t, m.toastMessage, stackName)
+
+	// The blank-list guard, against a real snapshot rather than a canned one:
+	// both create paths used to return a Msg with no Stacks, which emptied the
+	// list until the next poll.
+	loaded, ok := firstOfType[Msg](runBatch(reload))
+	require.True(t, ok, "deploy success must reload the stack list")
+	require.NotEmpty(t, loaded.Stacks, "the list must not be blanked after a deploy")
+
+	names := make([]string, 0, len(loaded.Stacks))
+	for _, s := range loaded.Stacks {
+		names = append(names, s.Name)
+	}
+	require.Contains(t, names, stackName)
+}
