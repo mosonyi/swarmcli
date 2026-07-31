@@ -49,6 +49,9 @@ func TestDeployProgressAgainstRealSwarm(t *testing.T) {
 
 	m := New(80, 24)
 	m.deps = docker.DefaultDeps()
+	// New() leaves the view hidden and View() short-circuits to "" — the factory
+	// is what flips this in production.
+	m.Visible = true
 	m.List.Viewport.Width = 80
 	m.List.Viewport.Height = 20
 	m.setRenderItem()
