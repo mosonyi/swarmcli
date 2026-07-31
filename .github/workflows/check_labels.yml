@@ -30,10 +30,24 @@ jobs:
           - test: C Label (breaking changes)
             enforced_labels: "C0-breaks-nothing,C1-breaking-change"
     steps:
+      # The label names are pull_request payload data, so they must not reach
+      # the runner as script text. A `${{ }}` inside a `run:` block is expanded
+      # by the Actions engine *before* bash is started — the expansion becomes
+      # part of the script source, so no amount of quoting inside the script can
+      # contain it, and toJSON does not help because `'` is not a JSON
+      # metacharacter: it passes through, closes the jq program's single-quoted
+      # string, and the rest of the label name is parsed as shell. Passing the
+      # payload through `env:` instead hands bash a value it never parses, and
+      # jq reads it as data via --argjson (the labels are a JSON array) and
+      # --arg (the enforced set is one comma-separated string). Same program,
+      # same exit semantics — only the delivery changes.
       - name: Label check (At least one of each type)
+        env:
+          USER_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          ENFORCED_LABELS: ${{ matrix.enforced_labels }}
         run: |
-          MATCH=$(jq -cn '${{ toJSON(github.event.pull_request.labels.*.name) }} as $USER_LABELS |
-          ${{ toJSON(matrix.enforced_labels)  }} | split(",") as $LABELS |
+          MATCH=$(jq -cn --argjson USER_LABELS "$USER_LABELS" --arg ENFORCED_LABELS "$ENFORCED_LABELS" \
+          '($ENFORCED_LABELS | split(",")) as $LABELS |
           $USER_LABELS - ($USER_LABELS - $LABELS)')
           if [[  "$MATCH" == '[]' ]]; then
               exit 1
