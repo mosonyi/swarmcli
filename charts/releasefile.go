@@ -105,9 +105,14 @@ func (rf *ReleaseFile) validate() error {
 
 	seenRepo := map[string]bool{}
 	for i, r := range rf.Repositories {
+		// A repository name reaches the store as a path component of its cached
+		// index, so it gets the same charset check a release name gets. Checking
+		// here as well as in the store is the point: this file may have been
+		// written by whoever raised the pull request.
+		if err := validateRepoName(r.Name); err != nil {
+			return rf.errf("repositories[%d]: %v", i, err)
+		}
 		switch {
-		case r.Name == "":
-			return rf.errf("repositories[%d]: name is required", i)
 		case r.URL == "":
 			return rf.errf("repositories[%d] (%s): url is required", i, r.Name)
 		case seenRepo[r.Name]:

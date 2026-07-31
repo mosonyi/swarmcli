@@ -238,6 +238,10 @@ func TestChartsApplyFromARepositoryAndOutdated(t *testing.T) {
 
 	// Keep the repo store out of the developer's real XDG state dir.
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	// This test drives the CLI, which builds its own store, so the field is out
+	// of reach — the env var is the documented way in. The httptest server
+	// above serves plain http.
+	t.Setenv("SWARMCLI_CHARTS_ALLOW_PLAINTEXT", "1")
 
 	dir := t.TempDir()
 	relFile := filepath.Join(dir, "swarmcli-release.yaml")

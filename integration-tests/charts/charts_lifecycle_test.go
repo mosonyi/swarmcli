@@ -200,6 +200,7 @@ func TestChartsRepoInstallLifecycle(t *testing.T) {
 	// Add the repo (downloads + validates the index), then find and fetch the
 	// chart through the public store API.
 	store := charts.NewRepoStoreAt(t.TempDir())
+	store.AllowPlaintext = true // the httptest server above serves plain http
 	require.NoError(t, store.Add("itest-repo", srv.URL))
 
 	hits, err := store.Search("itest")

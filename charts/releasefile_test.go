@@ -94,13 +94,16 @@ func TestParseRejectsVersionOnLocalChart(t *testing.T) {
 
 func TestParseValidationErrors(t *testing.T) {
 	for name, tc := range map[string]struct{ body, want string }{
-		"no releases":    {"releases: []\n", "no releases"},
-		"missing name":   {"releases:\n  - chart: r/c\n    version: \"1\"\n", "name is required"},
-		"missing chart":  {"releases:\n  - name: a\n", "chart is required"},
-		"dup release":    {"releases:\n  - {name: a, chart: r/c, version: \"1\"}\n  - {name: a, chart: r/d, version: \"1\"}\n", "duplicate release"},
-		"dup repo":       {"repositories:\n  - {name: r, url: http://x}\n  - {name: r, url: http://y}\nreleases:\n  - {name: a, chart: r/c, version: \"1\"}\n", "duplicate repository"},
-		"repo no url":    {"repositories:\n  - {name: r}\nreleases:\n  - {name: a, chart: r/c, version: \"1\"}\n", "url is required"},
-		"repo no name":   {"repositories:\n  - {url: http://x}\nreleases:\n  - {name: a, chart: r/c, version: \"1\"}\n", "name is required"},
+		"no releases":   {"releases: []\n", "no releases"},
+		"missing name":  {"releases:\n  - chart: r/c\n    version: \"1\"\n", "name is required"},
+		"missing chart": {"releases:\n  - name: a\n", "chart is required"},
+		"dup release":   {"releases:\n  - {name: a, chart: r/c, version: \"1\"}\n  - {name: a, chart: r/d, version: \"1\"}\n", "duplicate release"},
+		"dup repo":      {"repositories:\n  - {name: r, url: http://x}\n  - {name: r, url: http://y}\nreleases:\n  - {name: a, chart: r/c, version: \"1\"}\n", "duplicate repository"},
+		"repo no url":   {"repositories:\n  - {name: r}\nreleases:\n  - {name: a, chart: r/c, version: \"1\"}\n", "url is required"},
+		"repo no name":  {"repositories:\n  - {url: http://x}\nreleases:\n  - {name: a, chart: r/c, version: \"1\"}\n", "name is required"},
+		// The name becomes a path component of the cached index, so a manifest
+		// out of a git repository must not be able to steer where that is written.
+		"repo bad name":  {"repositories:\n  - {name: \"../../../../pwned\", url: https://x}\nreleases:\n  - {name: a, chart: r/c, version: \"1\"}\n", "invalid repository name"},
 		"bad apiVersion": {"apiVersion: v2\nreleases:\n  - {name: a, chart: r/c, version: \"1\"}\n", "unsupported apiVersion"},
 		"bad rel name":   {"releases:\n  - {name: \"Bad Name\", chart: r/c, version: \"1\"}\n", "Bad Name"},
 	} {

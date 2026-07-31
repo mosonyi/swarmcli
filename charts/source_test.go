@@ -39,7 +39,7 @@ func serveRepo(t *testing.T, versions ...string) *RepoStore {
 	}))
 	t.Cleanup(srv.Close)
 
-	s := NewRepoStoreAt(t.TempDir())
+	s := newTestStore(t)
 	require.NoError(t, s.Add("eldara", srv.URL))
 	return s
 }

@@ -173,7 +173,20 @@ func newStore() (*charts.RepoStore, int) {
 		return nil, fail(err)
 	}
 	s.Warnf = errf
+	s.AllowPlaintext = plaintextAllowed()
 	return s, -1
+}
+
+// plaintextAllowed reports whether the operator opted this machine out of the
+// store's https-only default. It is an environment variable rather than a flag
+// because a plaintext repository is not only reachable through `repo add`: once
+// it is in repos.json, `repo update`, `search`, `install`, `upgrade` and `apply`
+// all fetch from it, and a flag would have to be threaded — honestly — through
+// every one of them. Someone running an internal registry sets this once, in a
+// shell profile or a CI job, and everything keeps working.
+func plaintextAllowed() bool {
+	allowed, err := strconv.ParseBool(strings.TrimSpace(os.Getenv(charts.AllowPlaintextEnv)))
+	return err == nil && allowed
 }
 
 // --- repo ---

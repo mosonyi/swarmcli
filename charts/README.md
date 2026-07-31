@@ -246,10 +246,37 @@ manifest is validated as a Docker stack before use.
 
 ## Repositories
 
-A repository is an HTTP(S)-served `index.yaml` listing chart versions, each with
+A repository is an HTTPS-served `index.yaml` listing chart versions, each with
 a tarball URL (Helm repository format) — hostable on GitHub Pages/Releases, S3,
 or any static host. Configured repos and cached indexes live under
-`$XDG_STATE_HOME/swarmcli/charts` (default `~/.local/state/swarmcli/charts`).
+`$XDG_STATE_HOME/swarmcli/charts` (default `~/.local/state/swarmcli/charts`); a
+repository's name is a component of its cache filename, so it is limited to
+letters, digits, `-`, `_` and `.`.
+
+### Transport
+
+Repositories are **HTTPS by default**. A repository serves the tarball that
+*becomes* the deployed workload, so anything on the network path to it decides
+what runs on your swarm — and the digest below does not close that, because it is
+published in the same `index.yaml` and fetched over the same connection.
+
+Plain `http://` is therefore refused wherever bytes would cross the network:
+adding a repository, refreshing its index, and downloading a tarball an index
+points at — a repository already configured over `http://` included.
+
+An internal registry on a network you already trust is a legitimate setup, so
+this is a default rather than a rule. Opt that machine out:
+
+```bash
+export SWARMCLI_CHARTS_ALLOW_PLAINTEXT=1
+```
+
+It is read once, where the CLI builds its repository store, so it covers every
+command that touches a repository — `repo add`, `repo update`, `search`,
+`install`, `upgrade`, `apply`. One line in a shell profile or a CI job's
+environment restores a plaintext setup in full; nothing about it is one-way.
+Programs embedding this package get the https-only default and decide for
+themselves — the `charts` package never reads the environment.
 
 ### Integrity
 

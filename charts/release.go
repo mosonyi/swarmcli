@@ -1113,11 +1113,22 @@ func validateReleaseName(name string) error {
 	if name == "" {
 		return fmt.Errorf("release name is required")
 	}
+	if !isPlainName(name) {
+		return fmt.Errorf("invalid release name %q: use letters, digits, '-', '_', '.'", name)
+	}
+	return nil
+}
+
+// isPlainName reports whether name is made only of letters, digits, '-', '_' and
+// '.'. A release name and a repository name are constrained for unrelated reasons
+// — Docker stack naming for one, a path component and a chart reference for the
+// other — but to the same charset, and one spelling of it is enough.
+func isPlainName(name string) bool {
 	for _, r := range name {
 		if !(r == '-' || r == '_' || r == '.' ||
 			(r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
-			return fmt.Errorf("invalid release name %q: use letters, digits, '-', '_', '.'", name)
+			return false
 		}
 	}
-	return nil
+	return true
 }
