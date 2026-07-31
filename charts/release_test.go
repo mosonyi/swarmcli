@@ -502,6 +502,29 @@ func TestConvergenceWedged(t *testing.T) {
 	require.Contains(t, c.Reason, "manual recovery")
 }
 
+// The bug in #526: swarmkit restores the previous spec BEFORE it marks the
+// rollback complete, so at "rollback_completed" the tasks that reach parity are
+// running exactly what the deploy set out to replace. Falling through to the
+// parity check let a failed rollout serve out the stability window and report
+// converged — --wait returned nil and a pipeline gating on it went green.
+func TestConvergenceRejectsACompletedRollback(t *testing.T) {
+	rolledBack := ServiceState{Name: "api", Running: 1, Desired: 1, UpdateState: "rollback_completed", NewestTaskAge: stableAge}
+
+	c := rolledBack.Convergence()
+	require.Equal(t, PhaseWedged, c.Phase, "a deploy that was rolled back is a failed deploy, not a converged one")
+	require.Contains(t, c.Reason, "rolled back")
+
+	// And --wait says so instead of returning nil.
+	prev := waitPollInterval
+	waitPollInterval = time.Millisecond
+	defer func() { waitPollInterval = prev }()
+
+	b := &convergenceBackend{states: []ServiceState{rolledBack}}
+	e := &Engine{Backend: b, now: time.Now}
+	require.ErrorContains(t, e.waitReady("rel", time.Hour), "rolled back")
+	require.Equal(t, 1, b.calls, "should fail on the first observation, not wait out the timeout")
+}
+
 // The rollup is what a caller reads, so the phase that should worry it most has
 // to win regardless of where in the list it appears — one wedged service must
 // not be masked by another that is merely slow.
