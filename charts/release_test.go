@@ -58,7 +58,7 @@ func newFakeBackend() *fakeBackend {
 	}
 }
 
-func (f *fakeBackend) DeployStack(name, manifest, resolve string) error {
+func (f *fakeBackend) DeployStack(_ context.Context, name, manifest, resolve string) error {
 	if f.failNext {
 		f.failNext = false
 		return fmt.Errorf("boom")
@@ -66,14 +66,14 @@ func (f *fakeBackend) DeployStack(name, manifest, resolve string) error {
 	f.deployed[name] = manifest
 	return nil
 }
-func (f *fakeBackend) RemoveStack(name string) error {
+func (f *fakeBackend) RemoveStack(_ context.Context, name string) error {
 	if f.rmStackErr != nil {
 		return f.rmStackErr
 	}
 	delete(f.deployed, name)
 	return nil
 }
-func (f *fakeBackend) RefreshSnapshot() error { return f.refreshErr }
+func (f *fakeBackend) RefreshSnapshot(context.Context) error { return f.refreshErr }
 func (f *fakeBackend) CreateConfig(_ context.Context, name string, data []byte, labels map[string]string) error {
 	if f.onCreate != nil {
 		if err := f.onCreate(name); err != nil {
@@ -112,7 +112,9 @@ func (f *fakeBackend) DeleteConfig(_ context.Context, name string) error {
 	delete(f.configs, name)
 	return nil
 }
-func (f *fakeBackend) StackServices(name string) []ServiceState { return f.services[name] }
+func (f *fakeBackend) StackServices(_ context.Context, name string) []ServiceState {
+	return f.services[name]
+}
 func (f *fakeBackend) StackVolumes(_ context.Context, name string) ([]string, error) {
 	return f.volumes[name], nil
 }
@@ -521,7 +523,7 @@ func TestConvergenceRejectsACompletedRollback(t *testing.T) {
 
 	b := &convergenceBackend{states: []ServiceState{rolledBack}}
 	e := &Engine{Backend: b, now: time.Now}
-	require.ErrorContains(t, e.waitReady("rel", time.Hour), "rolled back")
+	require.ErrorContains(t, e.waitReady(context.Background(), "rel", time.Hour), "rolled back")
 	require.Equal(t, 1, b.calls, "should fail on the first observation, not wait out the timeout")
 }
 
@@ -616,7 +618,7 @@ func TestWaitReadyHoldsTheStabilityWindow(t *testing.T) {
 		return clock
 	}}
 
-	err := e.waitReady("rel", 50*time.Millisecond)
+	err := e.waitReady(context.Background(), "rel", 50*time.Millisecond)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "timed out")
 	require.Greater(t, b.calls, 1, "should keep polling rather than returning at first parity")
@@ -633,7 +635,7 @@ func TestWaitReadyReturnsOnceTheWindowElapses(t *testing.T) {
 	b := &scriptedBackend{script: [][]ServiceState{young, young, aged}}
 	e := &Engine{Backend: b, now: time.Now}
 
-	require.NoError(t, e.waitReady("rel", time.Hour))
+	require.NoError(t, e.waitReady(context.Background(), "rel", time.Hour))
 	require.Equal(t, 3, b.calls, "must wait for the task to outlive the window, not return at parity")
 }
 
@@ -652,7 +654,7 @@ func TestWaitReadyWaitsOutAReplacementTasksFreshWindow(t *testing.T) {
 	b := &scriptedBackend{script: [][]ServiceState{young, lost, young, aged}}
 	e := &Engine{Backend: b, now: time.Now}
 
-	require.NoError(t, e.waitReady("rel", time.Hour))
+	require.NoError(t, e.waitReady(context.Background(), "rel", time.Hour))
 	require.Equal(t, 4, b.calls, "the fresh task's remaining window must still be waited out")
 }
 
@@ -665,10 +667,38 @@ func TestWaitReadyFailsFastOnWedgedRollout(t *testing.T) {
 	b := &convergenceBackend{states: []ServiceState{{Name: "api", Running: 0, Desired: 1, UpdateState: "paused"}}}
 	e := &Engine{Backend: b, now: time.Now}
 
-	err := e.waitReady("rel", time.Hour)
+	err := e.waitReady(context.Background(), "rel", time.Hour)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "update paused")
 	require.Equal(t, 1, b.calls, "should fail on the first observation, not wait out the timeout")
+}
+
+// A cancelled wait ends at once, with the context's own error. The timeout it
+// would otherwise serve out defaults to five minutes and is legitimately set
+// higher, so a caller with a shutdown grace period measured in seconds cannot
+// wait for it — and the release may be one that never converges at all.
+func TestWaitReadyReturnsOnACancelledContext(t *testing.T) {
+	// Long enough that nothing but the cancellation can end the sleep, and a
+	// timeout to match, so the wait has exactly one way out.
+	prev := waitPollInterval
+	waitPollInterval = time.Hour
+	defer func() { waitPollInterval = prev }()
+
+	b := &convergenceBackend{states: []ServiceState{{Name: "api", Running: 0, Desired: 1}}}
+	e := &Engine{Backend: b, now: time.Now}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	done := make(chan error, 1)
+	go func() { done <- e.waitReady(ctx, "rel", time.Hour) }()
+
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, context.Canceled, "the wait must report the cancellation, not a timeout")
+	case <-time.After(5 * time.Second):
+		t.Fatal("waitReady ignored the cancelled context and sat on its poll interval")
+	}
 }
 
 // convergenceBackend is a Backend that only answers StackServices; waitReady
@@ -679,7 +709,7 @@ type convergenceBackend struct {
 	calls  int
 }
 
-func (b *convergenceBackend) StackServices(string) []ServiceState {
+func (b *convergenceBackend) StackServices(context.Context, string) []ServiceState {
 	b.calls++
 	return b.states
 }
@@ -691,7 +721,7 @@ type scriptedBackend struct {
 	calls  int
 }
 
-func (b *scriptedBackend) StackServices(string) []ServiceState {
+func (b *scriptedBackend) StackServices(context.Context, string) []ServiceState {
 	i := b.calls
 	b.calls++
 	if i >= len(b.script) {

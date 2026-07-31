@@ -84,11 +84,22 @@ func InvalidateSnapshot() {
 // RefreshSnapshot fetches all swarm data (nodes, services, tasks) at once
 // and updates the global cache.
 func RefreshSnapshot() (*SwarmSnapshot, error) {
+	return RefreshSnapshotCtx(context.Background())
+}
+
+// RefreshSnapshotCtx is RefreshSnapshot under a context the caller can cancel.
+//
+// It exists beside RefreshSnapshot rather than replacing it because the TUI is
+// the overwhelming majority of the callers and has no context to give: a Bubble
+// Tea command refreshing the cache after a scale or a restart would have to
+// invent one. The release engine does have one — a reconcile it must be able to
+// abort — and this is how it reaches the four API calls the refresh makes.
+func RefreshSnapshotCtx(ctx context.Context) (*SwarmSnapshot, error) {
 	c, err := GetClient()
 	if err != nil {
 		return nil, fmt.Errorf("docker client: %w", err)
 	}
-	snap, err := SnapshotWith(context.Background(), c)
+	snap, err := SnapshotWith(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -192,14 +203,32 @@ func TriggerRefreshIfNeeded() {
 // GetOrRefreshSnapshot returns the current snapshot, refreshing it
 // if the cache is empty or too old.
 func GetOrRefreshSnapshot() (*SwarmSnapshot, error) {
-	snapshotMu.RLock()
-	s := snapshot
-	snapshotMu.RUnlock()
-
-	if s == nil || time.Since(s.Fetched) > cacheTTL {
-		return RefreshSnapshot()
+	if s := freshSnapshot(); s != nil {
+		return s, nil
 	}
-	return s, nil
+	return RefreshSnapshot()
+}
+
+// GetOrRefreshSnapshotCtx is GetOrRefreshSnapshot under a context the caller can
+// cancel; see RefreshSnapshotCtx for why both spellings exist. A cache hit never
+// consults the context, because it never talks to the daemon.
+func GetOrRefreshSnapshotCtx(ctx context.Context) (*SwarmSnapshot, error) {
+	if s := freshSnapshot(); s != nil {
+		return s, nil
+	}
+	return RefreshSnapshotCtx(ctx)
+}
+
+// freshSnapshot returns the cached snapshot while it is still inside the TTL,
+// and nil when it is absent or stale — i.e. when a caller has to go and fetch.
+func freshSnapshot() *SwarmSnapshot {
+	snapshotMu.RLock()
+	defer snapshotMu.RUnlock()
+
+	if snapshot == nil || time.Since(snapshot.Fetched) > cacheTTL {
+		return nil
+	}
+	return snapshot
 }
 
 // ToNodeEntries converts the full nodes into display-friendly entries.

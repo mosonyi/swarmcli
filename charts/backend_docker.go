@@ -58,41 +58,41 @@ func (b *dockerBackend) contextName() (string, error) {
 // unchanged. An explicitly targeted one fetches its own every time: the shared
 // cache holds exactly one swarm, and a convergence poll that read another
 // swarm's tasks out of it would report a rollout finished that never started.
-func (b *dockerBackend) snapshot() (*docker.SwarmSnapshot, error) {
+func (b *dockerBackend) snapshot(ctx context.Context) (*docker.SwarmSnapshot, error) {
 	if b.ctxName == "" {
-		return docker.GetOrRefreshSnapshot()
+		return docker.GetOrRefreshSnapshotCtx(ctx)
 	}
 	cli, err := b.client()
 	if err != nil {
 		return nil, err
 	}
-	return docker.SnapshotWith(context.Background(), cli)
+	return docker.SnapshotWith(ctx, cli)
 }
 
-func (b *dockerBackend) DeployStack(name, manifest, resolve string) error {
+func (b *dockerBackend) DeployStack(ctx context.Context, name, manifest, resolve string) error {
 	ctxName, err := b.contextName()
 	if err != nil {
 		return err
 	}
-	return docker.DeployStackInContext(ctxName, name, manifest, docker.ResolveImage(resolve))
+	return docker.DeployStackInContext(ctx, ctxName, name, manifest, docker.ResolveImage(resolve))
 }
 
-func (b *dockerBackend) RemoveStack(name string) error {
+func (b *dockerBackend) RemoveStack(ctx context.Context, name string) error {
 	ctxName, err := b.contextName()
 	if err != nil {
 		return err
 	}
-	return docker.RemoveStackCLIInContext(ctxName, name)
+	return docker.RemoveStackCLIInContext(ctx, ctxName, name)
 }
 
 // RefreshSnapshot invalidates the shared cache after a mutation. An explicitly
 // targeted backend has no shared cache to invalidate — snapshot() always
 // fetches — so there is nothing to do and nothing to get stale.
-func (b *dockerBackend) RefreshSnapshot() error {
+func (b *dockerBackend) RefreshSnapshot(ctx context.Context) error {
 	if b.ctxName != "" {
 		return nil
 	}
-	_, err := docker.RefreshSnapshot()
+	_, err := docker.RefreshSnapshotCtx(ctx)
 	return err
 }
 
@@ -141,8 +141,8 @@ func (b *dockerBackend) DeleteConfig(ctx context.Context, name string) error {
 	return docker.DeleteConfigWith(ctx, cli, name)
 }
 
-func (b *dockerBackend) StackServices(name string) []ServiceState {
-	snap, err := b.snapshot()
+func (b *dockerBackend) StackServices(ctx context.Context, name string) []ServiceState {
+	snap, err := b.snapshot(ctx)
 	if err != nil {
 		return nil
 	}
