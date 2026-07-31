@@ -921,8 +921,10 @@ const defaultStabilityWindow = 5 * time.Second
 // count and has held it for the stability window, or the timeout elapses.
 //
 // It returns early with an error when swarm reports the rollout wedged
-// ("paused" / "rollback_paused"): swarmkit never rolls back a rollback, so
-// those states need a human and waiting out the timeout only delays the report.
+// ("paused" / "rollback_paused" / "rollback_completed"): swarm will not
+// continue from any of them on its own — the paused pair needs a human, and a
+// completed rollback is a deploy that already failed and was undone — so
+// waiting out the timeout only delays the same answer.
 func (e *Engine) waitReady(release string, timeout time.Duration) error {
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
@@ -977,6 +979,14 @@ func (s ServiceState) Convergence() Convergence {
 		return Convergence{PhaseWedged, "update paused after a task failure; swarm will not continue without intervention"}
 	case "rollback_paused":
 		return Convergence{PhaseWedged, "rollback paused; swarm never rolls back a rollback, so this needs manual recovery"}
+	// A finished rollback is terminal too, and it is a FAILED deploy: swarmkit
+	// restores the previous spec before it marks the rollback complete, so the
+	// tasks that reach parity here are running exactly what the deploy set out
+	// to replace. Falling through to the parity check reported that as success,
+	// which is how a rolled-back release passed --wait and let a pipeline gating
+	// on it go green (issue #526).
+	case "rollback_completed":
+		return Convergence{PhaseWedged, "update failed and was rolled back; the previous spec is running"}
 	// A rolling update in flight is not converged even if the task count
 	// already reads N/N: the count may still be the outgoing generation.
 	case "updating":
