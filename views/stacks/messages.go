@@ -26,6 +26,13 @@ type PollRetryMsg struct{}
 
 const PollInterval = 5 * time.Second
 
+// SpinnerTickMsg drives the deploy spinner and the toast expiry.
+type SpinnerTickMsg time.Time
+
+// spinnerTickInterval is a var, not a const, so tests can shrink it: a tea.Tick
+// cmd invoked synchronously blocks for the full interval.
+var spinnerTickInterval = 80 * time.Millisecond
+
 // StackTasksLoadedMsg is sent when tasks for a stack are loaded
 type StackTasksLoadedMsg struct {
 	StackName string
@@ -51,6 +58,14 @@ type StackDeleteIntentMsg struct {
 type editorContentMsg struct {
 	Content         string
 	OriginalContent string // populated in edit mode to detect no-change
+}
+
+// stackDeployedMsg is sent when a deploy — create or redeploy — returns
+// successfully. It is the only signal that clears the deploying state: a plain
+// Msg also arrives from the Docker events the deploy itself raises, so clearing
+// on that would drop the indicator at the first service creation.
+type stackDeployedMsg struct {
+	StackName string
 }
 
 // stackCreateErrorMsg is sent when stack creation has an error

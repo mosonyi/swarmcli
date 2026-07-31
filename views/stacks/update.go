@@ -88,6 +88,20 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case PollRetryMsg:
 		return tickCmd()
 
+	case SpinnerTickMsg:
+		m.spinner++
+		if m.animating() {
+			return m.spinnerTickCmd()
+		}
+		return nil
+
+	case stackDeployedMsg:
+		m.endDeploy()
+		m.showToast(fmt.Sprintf("✓ Stack %q deployed — services updating", msg.StackName))
+		// Keep ticking through the toast window so it clears on time rather than
+		// lingering until the next 5s poll.
+		return tea.Batch(m.LoadStacksCmd(m.nodeID), m.spinnerTickCmd())
+
 	case RefreshErrorMsg:
 		m.Visible = true
 		m.List.Viewport.SetContent(fmt.Sprintf("Error refreshing stacks: %v", msg.Err))
@@ -239,8 +253,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 			stackOps := m.deps.Stacks
 			snapOps := m.deps.Snapshot
-			checkCmd := m.checkStacksCmd(m.lastSnapshot, m.nodeID)
-			return func() tea.Msg {
+			return tea.Batch(m.beginDeploy(stackName), func() tea.Msg {
 				l().Infof("Redeploying edited stack: %s", stackName)
 				err := stackOps.DeployStack(stackName, msg.Content)
 				if err != nil {
@@ -252,8 +265,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				if _, err := snapOps.RefreshSnapshot(); err != nil {
 					l().Warnf("Failed to refresh snapshot: %v", err)
 				}
-				return checkCmd()
-			}
+				return stackDeployedMsg{StackName: stackName}
+			})
 		}
 
 		// Create mode: show create dialog with content
@@ -269,6 +282,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case stackUpdateErrorMsg:
 		l().Errorf("Error updating stack %s: %v", msg.StackName, msg.Err)
+		m.endDeploy()
 		m.confirmDialog.Visible = true
 		m.confirmDialog.ErrorMode = true
 		m.confirmDialog.Message = fmt.Sprintf("Failed to update stack %q:\n%v", msg.StackName, msg.Err)
@@ -276,6 +290,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case stackCreateErrorMsg:
 		l().Errorf("Error deploying stack: %v", msg.Err)
+		m.endDeploy()
 		// Return to create dialog with error message
 		// Determine which step to return to based on available data
 		if m.createFileInput.Value() != "" {
@@ -789,7 +804,7 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 			m.createFileInput.Blur()
 			stackOps := m.deps.Stacks
 			snapOps := m.deps.Snapshot
-			return func() tea.Msg {
+			return tea.Batch(m.beginDeploy(stackName), func() tea.Msg {
 				l().Infof("Deploying stack %s from file %s", stackName, filePath)
 				err := stackOps.DeployStack(stackName, string(fileContent))
 				if err != nil {
@@ -801,8 +816,8 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 				if _, err := snapOps.RefreshSnapshot(); err != nil {
 					l().Warnf("Failed to refresh snapshot: %v", err)
 				}
-				return Msg{NodeID: m.nodeID}
-			}
+				return stackDeployedMsg{StackName: stackName}
+			})
 		default:
 			// Pass keys to the focused textinput
 			var cmd tea.Cmd
@@ -885,7 +900,7 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 			m.createNameInput.Blur()
 			stackOps := m.deps.Stacks
 			snapOps := m.deps.Snapshot
-			return func() tea.Msg {
+			return tea.Batch(m.beginDeploy(stackName), func() tea.Msg {
 				l().Infof("Deploying stack %s from inline editor (%d bytes)", stackName, len(contentToDeploy))
 				err := stackOps.DeployStack(stackName, contentToDeploy)
 				if err != nil {
@@ -897,8 +912,8 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 				if _, err := snapOps.RefreshSnapshot(); err != nil {
 					l().Warnf("Failed to refresh snapshot: %v", err)
 				}
-				return Msg{NodeID: m.nodeID}
-			}
+				return stackDeployedMsg{StackName: stackName}
+			})
 		case "e", "E":
 			// Open editor for content when focused on content
 			if m.createInputFocus == 1 {

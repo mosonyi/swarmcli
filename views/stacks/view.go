@@ -5,6 +5,8 @@ package stacksview
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/Eldara-Tech/swarmcli/ui"
 	"github.com/Eldara-Tech/swarmcli/ui/dialog"
 
@@ -16,7 +18,31 @@ func (m *Model) FrameTitle() string {
 }
 
 func (m *Model) FrameHeader() string { return m.List.RenderHeader() }
-func (m *Model) FrameFooter() string { return m.List.RenderFooter() }
+
+// FrameFooter shows an in-flight deploy in place of the row counter: `docker
+// stack deploy` blocks with no output of its own, so without this a slow deploy
+// and a hung one look identical.
+func (m *Model) FrameFooter() string {
+	if m.deploying {
+		return ui.StatusBarStyle.Render(fmt.Sprintf("%s Deploying stack %q… %s",
+			ui.SpinnerCharAt(m.spinner), m.deployingStack, formatElapsed(time.Since(m.deployStartedAt))))
+	}
+	if m.toastMessage != "" {
+		if time.Now().Before(m.toastUntil) {
+			return ui.StatusBarStyle.Render(m.toastMessage)
+		}
+		m.toastMessage = ""
+	}
+	return m.List.RenderFooter()
+}
+
+// formatElapsed renders a deploy's age compactly: "12s", "1m30s".
+func formatElapsed(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	return fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
+}
 
 func (m *Model) FrameContent() string {
 	m.setRenderItem()

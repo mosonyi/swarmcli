@@ -7,11 +7,13 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/Eldara-Tech/swarmcli/docker"
 	"github.com/Eldara-Tech/swarmcli/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/docker/docker/api/types/swarm"
 	"github.com/stretchr/testify/require"
 )
 
@@ -133,6 +135,47 @@ func runCmd(cmd tea.Cmd) tea.Msg {
 	return cmd()
 }
 
+// fastSpinner shrinks the animation interval for the duration of a test: a
+// tea.Tick cmd invoked synchronously blocks for its whole interval, so a batch
+// containing one cannot otherwise be drained.
+func fastSpinner(t *testing.T) {
+	t.Helper()
+	prev := spinnerTickInterval
+	spinnerTickInterval = time.Millisecond
+	t.Cleanup(func() { spinnerTickInterval = prev })
+}
+
+// runBatch runs every child of a batched cmd and returns their messages. Call
+// fastSpinner first when the batch carries an animation tick.
+func runBatch(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	batch, ok := cmd().(tea.BatchMsg)
+	if !ok {
+		return nil
+	}
+	var msgs []tea.Msg
+	for _, c := range batch {
+		if c == nil {
+			continue
+		}
+		msgs = append(msgs, c())
+	}
+	return msgs
+}
+
+// firstOfType returns the first message of type T produced by a batch.
+func firstOfType[T tea.Msg](msgs []tea.Msg) (T, bool) {
+	for _, msg := range msgs {
+		if typed, ok := msg.(T); ok {
+			return typed, true
+		}
+	}
+	var zero T
+	return zero, false
+}
+
 func noopStackOps() *mockStackOps {
 	return &mockStackOps{
 		removeStackFn:             func(_ context.Context, _ string) error { return nil },
@@ -198,6 +241,21 @@ func fakeStacks(names ...string) []docker.StackEntry {
 
 func loadStacks(m *Model, stacks []docker.StackEntry) {
 	m.Update(Msg{NodeID: "node1", Stacks: stacks})
+}
+
+// snapshotWithStacks builds a snapshot whose ToStackEntries yields one entry per
+// name, so a reload path can be told apart from an empty terminal message.
+func snapshotWithStacks(names ...string) *docker.SwarmSnapshot {
+	snap := &docker.SwarmSnapshot{}
+	for i, name := range names {
+		snap.Services = append(snap.Services, swarm.Service{
+			ID: fmt.Sprintf("svc%d", i),
+			Spec: swarm.ServiceSpec{Annotations: swarm.Annotations{
+				Labels: map[string]string{"com.docker.stack.namespace": name},
+			}},
+		})
+	}
+	return snap
 }
 
 // --- Tests ---

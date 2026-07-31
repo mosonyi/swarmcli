@@ -93,6 +93,14 @@ type Model struct {
 	// Edit stack tracking
 	editStackName string // non-empty when editing a stack (vs creating new)
 
+	// Deploy progress
+	deploying       bool
+	deployingStack  string
+	deployStartedAt time.Time
+	spinner         int
+	toastMessage    string
+	toastUntil      time.Time
+
 	// Save stack dialog
 	saveDialogActive   bool
 	saveDialogError    string          // error message to display in save dialog
@@ -195,6 +203,47 @@ func tickCmd() tea.Cmd {
 	})
 }
 
+// spinnerTickCmd schedules the next animation frame. Unlike the poll tick it is
+// self-terminating: Update only re-arms it while something is animating, so the
+// view redraws at rest only on the 5s poll.
+func (m *Model) spinnerTickCmd() tea.Cmd {
+	return tea.Tick(spinnerTickInterval, func(t time.Time) tea.Msg {
+		return SpinnerTickMsg(t)
+	})
+}
+
+// beginDeploy marks a deploy in flight and returns the animation tick that
+// drives the footer indicator.
+func (m *Model) beginDeploy(stackName string) tea.Cmd {
+	m.deploying = true
+	m.deployingStack = stackName
+	m.deployStartedAt = time.Now()
+	return m.spinnerTickCmd()
+}
+
+func (m *Model) endDeploy() {
+	m.deploying = false
+	m.deployingStack = ""
+}
+
+func (m *Model) showToast(msg string) {
+	if msg == "" {
+		return
+	}
+	m.toastMessage = msg
+	// Give multi-line toasts a bit more time so users can read them.
+	d := 2 * time.Second
+	if strings.Contains(msg, "\n") {
+		d = 5 * time.Second
+	}
+	m.toastUntil = time.Now().Add(d)
+}
+
+// animating reports whether the footer still has something to redraw.
+func (m *Model) animating() bool {
+	return m.deploying || (m.toastMessage != "" && time.Now().Before(m.toastUntil))
+}
+
 func (m *Model) Name() string { return ViewName }
 
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
@@ -280,8 +329,15 @@ func (m *Model) checkStacksCmd(lastHash uint64, nodeID string) tea.Cmd {
 	}
 }
 
-func (m *Model) OnEnter() tea.Cmd { return m.LoadStacksCmd(m.nodeID) }
-func (m *Model) OnExit() tea.Cmd  { return nil }
+// OnEnter re-arms the animation tick when a deploy is still running, so
+// navigating away and back does not leave a frozen spinner in the footer.
+func (m *Model) OnEnter() tea.Cmd {
+	if m.deploying {
+		return tea.Batch(m.LoadStacksCmd(m.nodeID), m.spinnerTickCmd())
+	}
+	return m.LoadStacksCmd(m.nodeID)
+}
+func (m *Model) OnExit() tea.Cmd { return nil }
 
 func (m *Model) HasActiveFilter() bool {
 	return m.List.Query != ""

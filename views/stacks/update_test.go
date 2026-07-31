@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -163,10 +164,11 @@ func TestUpdate_EditorContentMsg_EditMode(t *testing.T) {
 	}
 	m := testModel(func(m *Model) { m.deps.Stacks = stackMock })
 	m.editStackName = "mystack"
+	fastSpinner(t)
 	cmd := m.Update(editorContentMsg{Content: "version: '3'", OriginalContent: "version: '2'"})
 	require.Equal(t, "", m.editStackName) // cleared
 	require.NotNil(t, cmd)
-	runCmd(cmd)
+	runBatch(cmd)
 	require.Equal(t, "mystack", deployed)
 }
 
@@ -629,9 +631,10 @@ func TestCreateDialog_DetailsInline_EnterDeploys(t *testing.T) {
 	m.createDialogStep = "details-inline"
 	m.createNameInput.SetValue("mystack")
 	m.createDialogContent = "version: '3'\nservices:\n  web:\n    image: nginx"
+	fastSpinner(t)
 	cmd := m.Update(key("enter"))
 	require.False(t, m.createDialogActive)
-	runCmd(cmd)
+	runBatch(cmd)
 	require.Equal(t, "mystack", deployed)
 }
 
@@ -1010,4 +1013,135 @@ func TestFileBrowser_Enter_File_SaveContext(t *testing.T) {
 	require.False(t, m.fileBrowserActive)
 	require.True(t, m.saveDialogActive)
 	require.Equal(t, "/tmp/mystack.yml", m.saveFileInput.Value())
+}
+
+// --- Deploy progress tests (#444) ---
+
+func TestDeploy_EditMode_SetsDeployingState(t *testing.T) {
+	fastSpinner(t)
+	m := testModel()
+	m.editStackName = "mystack"
+	cmd := m.Update(editorContentMsg{Content: "version: '3'", OriginalContent: "version: '2'"})
+	require.NotNil(t, cmd)
+	require.True(t, m.deploying)
+	require.Equal(t, "mystack", m.deployingStack)
+	require.False(t, m.deployStartedAt.IsZero())
+}
+
+func TestDeploy_CreateInline_SetsDeployingState(t *testing.T) {
+	fastSpinner(t)
+	m := testModel()
+	m.createDialogActive = true
+	m.createDialogStep = "details-inline"
+	m.createNameInput.SetValue("mystack")
+	m.createDialogContent = "version: '3'\nservices:\n  web:\n    image: nginx"
+	m.Update(key("enter"))
+	require.True(t, m.deploying)
+	require.Equal(t, "mystack", m.deployingStack)
+}
+
+func TestDeploy_CreateFromFile_SetsDeployingState(t *testing.T) {
+	fastSpinner(t)
+	composePath := filepath.Join(t.TempDir(), "compose.yml")
+	require.NoError(t, os.WriteFile(composePath, []byte("services:\n  web:\n    image: nginx\n"), 0o600))
+
+	m := testModel()
+	m.createDialogActive = true
+	m.createDialogStep = "details-file"
+	m.createNameInput.SetValue("mystack")
+	m.createFileInput.SetValue(composePath)
+	m.Update(key("enter"))
+	require.True(t, m.deploying)
+	require.Equal(t, "mystack", m.deployingStack)
+}
+
+func TestDeploy_Success_EmitsStackDeployedMsg(t *testing.T) {
+	fastSpinner(t)
+	m := testModel()
+	m.createDialogActive = true
+	m.createDialogStep = "details-inline"
+	m.createNameInput.SetValue("mystack")
+	m.createDialogContent = "version: '3'\nservices:\n  web:\n    image: nginx"
+	cmd := m.Update(key("enter"))
+
+	deployed, ok := firstOfType[stackDeployedMsg](runBatch(cmd))
+	require.True(t, ok, "deploy cmd must report success with stackDeployedMsg")
+	require.Equal(t, "mystack", deployed.StackName)
+}
+
+func TestUpdate_StackDeployedMsg_ClearsDeployingAndToasts(t *testing.T) {
+	fastSpinner(t)
+	m := testModel()
+	m.beginDeploy("mystack")
+	m.Update(stackDeployedMsg{StackName: "mystack"})
+	require.False(t, m.deploying)
+	require.Equal(t, "", m.deployingStack)
+	require.Contains(t, m.toastMessage, "mystack")
+	require.True(t, time.Now().Before(m.toastUntil))
+}
+
+// Guards the blank-list regression: the create paths used to return a Msg with
+// no Stacks, which emptied the list until the next poll.
+func TestUpdate_StackDeployedMsg_ReloadsStacks(t *testing.T) {
+	fastSpinner(t)
+	snapMock := noopSnapshotOps()
+	snap := snapshotWithStacks("alpha", "beta")
+	snapMock.getSnapshotFn = func() *docker.SwarmSnapshot { return snap }
+	m := testModel(func(m *Model) { m.deps.Snapshot = snapMock })
+	m.beginDeploy("alpha")
+
+	cmd := m.Update(stackDeployedMsg{StackName: "alpha"})
+	loaded, ok := firstOfType[Msg](runBatch(cmd))
+	require.True(t, ok, "deploy success must reload the stack list")
+	require.Len(t, loaded.Stacks, 2)
+}
+
+func TestUpdate_StackCreateErrorMsg_ClearsDeploying(t *testing.T) {
+	m := testModel()
+	m.beginDeploy("mystack")
+	m.Update(stackCreateErrorMsg{Err: fmt.Errorf("deployment failed")})
+	require.False(t, m.deploying)
+	require.True(t, m.createDialogActive)
+}
+
+func TestUpdate_StackUpdateErrorMsg_ClearsDeploying(t *testing.T) {
+	m := testModel()
+	m.beginDeploy("mystack")
+	m.Update(stackUpdateErrorMsg{StackName: "mystack", Err: fmt.Errorf("invalid yaml")})
+	require.False(t, m.deploying)
+	require.True(t, m.confirmDialog.Visible)
+}
+
+func TestUpdate_SpinnerTickMsg_ReArmsWhileDeploying(t *testing.T) {
+	fastSpinner(t)
+	m := testModel()
+	m.beginDeploy("mystack")
+	cmd := m.Update(SpinnerTickMsg(time.Now()))
+	require.Equal(t, 1, m.spinner)
+	require.NotNil(t, cmd)
+}
+
+func TestUpdate_SpinnerTickMsg_StopsWhenIdle(t *testing.T) {
+	m := testModel()
+	cmd := m.Update(SpinnerTickMsg(time.Now()))
+	require.Equal(t, 1, m.spinner)
+	require.Nil(t, cmd, "the animation must not re-arm at rest")
+}
+
+func TestUpdate_SpinnerTickMsg_ReArmsWhileToastVisible(t *testing.T) {
+	fastSpinner(t)
+	m := testModel()
+	m.showToast("deployed")
+	cmd := m.Update(SpinnerTickMsg(time.Now()))
+	require.NotNil(t, cmd, "the toast needs redraws to disappear on time")
+}
+
+// A deploy raises Docker events, which the app turns into a plain Msg. That must
+// not be mistaken for the deploy finishing.
+func TestUpdate_Msg_DoesNotClearDeploying(t *testing.T) {
+	m := testModel()
+	m.beginDeploy("mystack")
+	m.Update(Msg{NodeID: "node1", Stacks: fakeStacks("mystack")})
+	require.True(t, m.deploying)
+	require.Equal(t, "mystack", m.deployingStack)
 }
