@@ -4,6 +4,7 @@
 package charts
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -46,7 +47,7 @@ func TestNamedBackendRefreshDoesNotTouchTheSharedCache(t *testing.T) {
 	mine := &docker.SwarmSnapshot{Services: []swarm.Service{{ID: "sentinel"}}}
 	docker.SetSnapshot(mine)
 
-	require.NoError(t, NewDockerBackend("swarm-b").RefreshSnapshot())
+	require.NoError(t, NewDockerBackend("swarm-b").RefreshSnapshot(context.Background()))
 
 	got := docker.GetSnapshot()
 	require.NotNil(t, got)

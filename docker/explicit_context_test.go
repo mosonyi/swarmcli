@@ -4,6 +4,7 @@
 package docker
 
 import (
+	"context"
 	"testing"
 
 	"github.com/docker/docker/api/types/swarm"
@@ -18,9 +19,9 @@ func TestExplicitContextRejectsEmptyName(t *testing.T) {
 	_, err := ClientFor("")
 	require.ErrorContains(t, err, "docker context name is required")
 
-	require.ErrorContains(t, DeployStackInContext("", "web", "services: {}\n", ResolveImageDefault),
+	require.ErrorContains(t, DeployStackInContext(context.Background(), "", "web", "services: {}\n", ResolveImageDefault),
 		"docker context name is required")
-	require.ErrorContains(t, RemoveStackCLIInContext("", "web"),
+	require.ErrorContains(t, RemoveStackCLIInContext(context.Background(), "", "web"),
 		"docker context name is required")
 }
 

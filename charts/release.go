@@ -70,17 +70,23 @@ type ServiceState struct {
 
 // Backend abstracts the Docker operations the release engine needs, so the
 // lifecycle logic is unit-testable without a live Swarm.
+//
+// Every method takes a context and is expected to honour it. Release operations
+// are the long ones — a --wait deploy legitimately runs for minutes — and the
+// daemon is reached over a connection the caller does not hold, so a controller
+// being shut down, or retiring the application it is syncing, has no other way to
+// stop work already in flight.
 type Backend interface {
-	DeployStack(name, manifest string, resolve string) error
-	RemoveStack(name string) error
+	DeployStack(ctx context.Context, name, manifest string, resolve string) error
+	RemoveStack(ctx context.Context, name string) error
 	// RefreshSnapshot invalidates the shared Docker state cache after a mutation
 	// so subsequent reads (status, convergence polling) do not see stale data.
-	RefreshSnapshot() error
+	RefreshSnapshot(ctx context.Context) error
 	CreateConfig(ctx context.Context, name string, data []byte, labels map[string]string) error
 	ListConfigs(ctx context.Context) ([]ConfigMeta, error)
 	InspectConfig(ctx context.Context, name string) ([]byte, error)
 	DeleteConfig(ctx context.Context, name string) error
-	StackServices(name string) []ServiceState
+	StackServices(ctx context.Context, name string) []ServiceState
 	StackVolumes(ctx context.Context, name string) ([]string, error)
 	RemoveVolume(ctx context.Context, name string) error
 	// NetworkScopes returns existing network names mapped to their scope
@@ -293,7 +299,7 @@ func (e *Engine) deployAndRecord(ctx context.Context, rel *Release, opts Install
 		}
 		return rel, err
 	}
-	if err := e.Backend.DeployStack(rel.Name, rel.Manifest, opts.ResolveImage); err != nil {
+	if err := e.Backend.DeployStack(ctx, rel.Name, rel.Manifest, opts.ResolveImage); err != nil {
 		rel.Status = StatusFailed
 		// Roll back networks we auto-created for this install so a failed deploy
 		// leaves no trace; pre-existing networks are untouched.
@@ -306,7 +312,7 @@ func (e *Engine) deployAndRecord(ctx context.Context, rel *Release, opts Install
 	}
 	// The deploy mutated swarm state; invalidate the shared cache so the
 	// convergence poll and any follow-up status read see fresh data.
-	_ = e.Backend.RefreshSnapshot()
+	_ = e.Backend.RefreshSnapshot(ctx)
 	// Persist the networks we auto-created this revision so uninstall can report
 	// what it leaves behind (see Uninstall). Networks already present from an
 	// earlier revision are not re-created here, so uninstall unions across all
@@ -316,7 +322,7 @@ func (e *Engine) deployAndRecord(ctx context.Context, rel *Release, opts Install
 		return rel, fmt.Errorf("stack %q was deployed but recording its release history failed: %w; re-run install/upgrade to reconcile", rel.Name, err)
 	}
 	if opts.Wait {
-		if err := e.waitReady(rel.Name, opts.Timeout); err != nil {
+		if err := e.waitReady(ctx, rel.Name, opts.Timeout); err != nil {
 			return rel, err
 		}
 	}
@@ -562,10 +568,10 @@ func (e *Engine) Uninstall(ctx context.Context, release string, purgeVolumes boo
 	// failed (e.g. a retry where the stack is already gone). Errors are
 	// aggregated and returned together.
 	var errs []error
-	if err := e.Backend.RemoveStack(release); err != nil {
+	if err := e.Backend.RemoveStack(ctx, release); err != nil {
 		errs = append(errs, fmt.Errorf("removing stack: %w", err))
 	} else {
-		_ = e.Backend.RefreshSnapshot()
+		_ = e.Backend.RefreshSnapshot(ctx)
 	}
 
 	if purgeVolumes {
@@ -652,7 +658,7 @@ func (e *Engine) Status(ctx context.Context, release string) (*Release, []Servic
 	if cur == nil {
 		return nil, nil, fmt.Errorf("release %q not found", release)
 	}
-	return cur, e.Backend.StackServices(release), nil
+	return cur, e.Backend.StackServices(ctx, release), nil
 }
 
 // --- helpers ---
@@ -925,13 +931,18 @@ const defaultStabilityWindow = 5 * time.Second
 // continue from any of them on its own — the paused pair needs a human, and a
 // completed rollback is a deploy that already failed and was undone — so
 // waiting out the timeout only delays the same answer.
-func (e *Engine) waitReady(release string, timeout time.Duration) error {
+//
+// A cancelled ctx ends the wait with the context's own error rather than running
+// on to the timeout. This is the longest thing a release operation does, and the
+// timeout it would otherwise serve out defaults to five minutes — far longer than
+// the grace period a caller being shut down has to work with.
+func (e *Engine) waitReady(ctx context.Context, release string, timeout time.Duration) error {
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
 	}
 	deadline := e.now().Add(timeout)
 	for {
-		switch c := Rollup(e.Backend.StackServices(release)); c.Phase {
+		switch c := Rollup(e.Backend.StackServices(ctx, release)); c.Phase {
 		case PhaseWedged:
 			return fmt.Errorf("release %q: %s", release, c.Reason)
 		case PhaseConverged:
@@ -940,7 +951,11 @@ func (e *Engine) waitReady(release string, timeout time.Duration) error {
 		if !e.now().Before(deadline) {
 			return fmt.Errorf("timed out after %s waiting for release %q to converge", timeout, release)
 		}
-		time.Sleep(waitPollInterval)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(waitPollInterval):
+		}
 	}
 }
 

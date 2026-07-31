@@ -302,6 +302,48 @@ func TestApplyFailsFastAndReportsPartialProgress(t *testing.T) {
 	require.NotContains(t, fb.deployed, "second", "apply must stop at the first failure")
 }
 
+// Cancelling an apply stops it at the same seam a failure does: between
+// releases. A controller retiring an application, or shutting down, must not
+// keep converging the rest of the file — and the error it gets back has to be
+// the context's, or it cannot tell its own teardown from a broken release.
+func TestApplyStopsBetweenReleasesOnCancellation(t *testing.T) {
+	body := `releases:
+  - name: first
+    chart: swarmcli-charts/demo
+    version: "0.1.0"
+  - name: second
+    chart: swarmcli-charts/demo
+    version: "0.1.0"
+`
+	e, fb, src, rf := applyEnv(t, body, "0.1.0")
+	ctx, cancel := context.WithCancel(context.Background())
+	e.Backend = &cancellingBackend{fakeBackend: fb, cancel: cancel}
+
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{})
+	require.NoError(t, err)
+
+	res, err := e.Apply(ctx, plan, InstallOptions{})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Len(t, res, 1, "the release that did converge is still reported")
+	require.Contains(t, fb.deployed, "first")
+	require.NotContains(t, fb.deployed, "second", "apply must not converge the remainder of a cancelled plan")
+}
+
+// cancellingBackend cancels the apply the moment one release has been deployed,
+// which is what a controller told to stop halfway through a run looks like.
+type cancellingBackend struct {
+	*fakeBackend
+	cancel context.CancelFunc
+}
+
+func (b *cancellingBackend) DeployStack(ctx context.Context, name, manifest, resolve string) error {
+	if err := b.fakeBackend.DeployStack(ctx, name, manifest, resolve); err != nil {
+		return err
+	}
+	b.cancel()
+	return nil
+}
+
 // A release that appears between planning and applying must upgrade cleanly
 // rather than colliding with "already exists".
 func TestApplyToleratesReleaseAppearingAfterPlan(t *testing.T) {

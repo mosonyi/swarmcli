@@ -79,18 +79,22 @@ func (r ResolveImage) Valid() bool {
 
 // DeployStack deploys a stack with the provided name and YAML content, leaving
 // image resolution at Docker's default. See DeployStackResolved.
+//
+// It is the TUI's entry point, and a Bubble Tea command has no context to
+// inherit, so the background one is spelled out here instead of being pushed
+// onto every caller. Everything below this takes a context.
 func DeployStack(stackName string, yamlContent string) error {
-	return DeployStackResolved(stackName, yamlContent, ResolveImageDefault)
+	return DeployStackResolved(context.Background(), stackName, yamlContent, ResolveImageDefault)
 }
 
 // DeployStackResolved deploys a stack with an explicit image-resolution mode,
 // on whichever context the process is pointed at.
-func DeployStackResolved(stackName string, yamlContent string, resolve ResolveImage) error {
+func DeployStackResolved(ctx context.Context, stackName string, yamlContent string, resolve ResolveImage) error {
 	ctxName, err := GetDockerContext()
 	if err != nil {
 		return fmt.Errorf("failed to get docker context: %w", err)
 	}
-	return DeployStackInContext(ctxName, stackName, yamlContent, resolve)
+	return DeployStackInContext(ctx, ctxName, stackName, yamlContent, resolve)
 }
 
 // DeployStackInContext deploys a stack to an explicitly named Docker context.
@@ -99,7 +103,11 @@ func DeployStackResolved(stackName string, yamlContent string, resolve ResolveIm
 // context is what keeps the target an argument rather than whatever
 // DOCKER_CONTEXT or `docker context show` happens to say at the moment the
 // command runs.
-func DeployStackInContext(ctxName, stackName, yamlContent string, resolve ResolveImage) error {
+//
+// Cancelling ctx kills the child. Nothing else can reach it: the CLI holds its
+// own connection to the daemon, so a caller being torn down while the daemon is
+// unresponsive would otherwise sit on a `docker stack deploy` that never returns.
+func DeployStackInContext(ctx context.Context, ctxName, stackName, yamlContent string, resolve ResolveImage) error {
 	if ctxName == "" {
 		return fmt.Errorf("docker context name is required")
 	}
@@ -139,12 +147,19 @@ func DeployStackInContext(ctxName, stackName, yamlContent string, resolve Resolv
 		args = append(args, "--resolve-image", string(resolve))
 	}
 	args = append(args, stackName)
-	cmd := exec.Command("docker", args...)
+	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Env = os.Environ()
 
 	// Capture output for error reporting
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		// A killed child reports "signal: killed", which reads as a deploy that
+		// failed and would send us into the network cleanup below. Report the
+		// cancellation itself so a caller shutting down can tell the two apart
+		// and does not spend its remaining seconds tidying up.
+		if cerr := ctx.Err(); cerr != nil {
+			return fmt.Errorf("deploying stack %q: %w", stackName, cerr)
+		}
 		// If deployment failed, try to clean up any networks that might have been created
 		// This handles the case where a network with the wrong type was created
 		if networkNames := extractNetworkNames(yamlContent); len(networkNames) > 0 {
@@ -162,26 +177,32 @@ func DeployStackInContext(ctxName, stackName, yamlContent string, resolve Resolv
 // counterpart to DeployStack. Unlike RemoveStack (services only), this removes
 // the stack's services, networks, configs and secrets while leaving volumes
 // intact — matching standard Docker stack semantics.
-func RemoveStackCLI(stackName string) error {
+func RemoveStackCLI(ctx context.Context, stackName string) error {
 	ctxName, err := GetDockerContext()
 	if err != nil {
 		return fmt.Errorf("failed to get docker context: %w", err)
 	}
-	return RemoveStackCLIInContext(ctxName, stackName)
+	return RemoveStackCLIInContext(ctx, ctxName, stackName)
 }
 
 // RemoveStackCLIInContext is RemoveStackCLI against an explicitly named context.
-func RemoveStackCLIInContext(ctxName, stackName string) error {
+// As with DeployStackInContext, cancelling ctx kills the child.
+func RemoveStackCLIInContext(ctx context.Context, ctxName, stackName string) error {
 	if ctxName == "" {
 		return fmt.Errorf("docker context name is required")
 	}
 	if stackName == "" {
 		return fmt.Errorf("stack name cannot be empty")
 	}
-	cmd := exec.Command("docker", "--context", ctxName, "stack", "rm", stackName)
+	cmd := exec.CommandContext(ctx, "docker", "--context", ctxName, "stack", "rm", stackName)
 	cmd.Env = os.Environ()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		// A killed child produces no output to interpret, so decide on the
+		// cancellation before reading the message below.
+		if cerr := ctx.Err(); cerr != nil {
+			return fmt.Errorf("removing stack %q: %w", stackName, cerr)
+		}
 		// An already-absent stack is success: makes uninstall idempotent so a
 		// retry after a partial teardown can still finish cleanup.
 		if strings.Contains(string(output), "Nothing found in stack") {

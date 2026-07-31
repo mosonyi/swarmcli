@@ -273,9 +273,19 @@ type ApplyResult struct {
 // It stops at the first failure and returns the results completed so far
 // alongside the error, so a partial apply still reports what it did. Re-running
 // is safe: the successful releases become no-ops.
+//
+// A cancelled context stops it the same way, and at the same seam: the next
+// release is never started, and the error is the context's, so a caller can tell
+// a shutdown from a release that failed. Checking here rather than relying on the
+// deploy to fail is what keeps the boundary clean — Upgrade would otherwise be
+// entered, and a stack half-deployed by a killed CLI is worse than one not
+// deployed at all.
 func (e *Engine) Apply(ctx context.Context, plan *Plan, opts InstallOptions) ([]ApplyResult, error) {
 	var results []ApplyResult
 	for _, rp := range plan.Releases {
+		if err := ctx.Err(); err != nil {
+			return results, err
+		}
 		if rp.Action == ActionUnchanged {
 			results = append(results, ApplyResult{Name: rp.Name, Action: ActionUnchanged})
 			continue
