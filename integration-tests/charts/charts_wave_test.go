@@ -33,14 +33,25 @@ func waveChart(t *testing.T, name, stack string) string {
 }
 
 // fastStack comes up as soon as swarm can schedule it.
+//
+// Two choices here are about making "fast" true rather than hoped for, and both
+// were learned the hard way: the first version of this used alpine on any node
+// and the healthy wave took longer than the whole apply's timeout, failing on the
+// release that was supposed to work.
+//
+//   - The same image the rest of this package deploys, so whichever node runs it
+//     has already pulled it. A cold pull is most of what a first deploy spends.
+//   - Pinned to the manager, so it lands on the node the suite has been using
+//     rather than on a worker seeing the image for the first time.
 const fastStack = `version: "3.9"
 
 services:
   app:
-    image: alpine:latest
-    command: ["sh", "-c", "while true; do sleep 3600; done"]
+    image: traefik/whoami:v1.10
     deploy:
       replicas: 1
+      placement:
+        constraints: [node.role == manager]
 `
 
 // waveReleaseFile writes a release file from name/wave/chart triples.
@@ -151,7 +162,11 @@ func TestApplyStopsAtAWaveThatDoesNotConverge(t *testing.T) {
 	plan, err := eng.PlanApply(ctx, rf, src, charts.PlanOptions{})
 	require.NoError(t, err)
 
-	const timeout = 20 * time.Second
+	// The timeout bounds *each* wave, not the apply, so it has to be comfortable
+	// for the healthy wave that goes first — and everything above it is the cost
+	// of the wave that never converges. Both halves of that trade are real, and
+	// it is the same number an operator has to pick for `--timeout`.
+	const timeout = 45 * time.Second
 	start := time.Now()
 	results, err := eng.Apply(ctx, plan, charts.InstallOptions{Timeout: timeout})
 	elapsed := time.Since(start)
