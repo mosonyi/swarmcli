@@ -170,6 +170,85 @@ func TestChartsTemplateAcceptsAFileTheChartShips(t *testing.T) {
 	require.Contains(t, o, "file: files/nginx.conf")
 }
 
+// valueChartDir writes the chart shape #537 exists for: a config the chart does
+// not ship, supplied by the operator, whose swarm object is named after the
+// content it carries so that changing the content rotates it. Swarm config data
+// is immutable — `docker stack deploy` reacts to changed content under an
+// existing name with ConfigUpdate, which swarmkit refuses with "only updates to
+// Labels are allowed" — so a stable name would not update, it would fail.
+func valueChartDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "templates"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Chart.yaml"),
+		[]byte("name: renovate\nversion: 1.0.0\nswarmcliVersion: \">= 1.13.0\"\n"), 0o644))
+	// config: "" so the name below renders before anything supplies it; an
+	// operator who forgets --set-file is then refused rather than deploying it.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "values.yaml"), []byte("config: \"\"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "templates", "stack.yaml"), []byte(
+		"services:\n  renovate:\n    image: renovate/renovate\n    configs:\n"+
+			"      - source: config\n        target: /usr/src/app/config.js\n"+
+			"configs:\n  config:\n    file: values/config\n"+
+			"    name: \"{{ .Release.Name }}_config_{{ .Values.config | sha256sum | trunc 12 }}\"\n"), 0o644))
+	return dir
+}
+
+func TestChartsTemplateSetFileSuppliesAConfig(t *testing.T) {
+	dir := valueChartDir(t)
+	js := filepath.Join(t.TempDir(), "config.js")
+	require.NoError(t, os.WriteFile(js, []byte("module.exports = { platform: 'github' };\n"), 0o644))
+
+	render := func() string {
+		var code int
+		o, errOut := capture(t, func() {
+			code = Dispatch([]string{"charts", "template", "renovate", dir, "--set-file", "config=" + js}, "dev")
+		})
+		require.Equal(t, 0, code, errOut)
+		return o
+	}
+
+	first := render()
+	require.Contains(t, first, "file: values/config")
+	require.Regexp(t, `name: renovate_config_[0-9a-f]{12}`, first)
+
+	// Rotation: new content, new name — which is the whole mechanism, and the
+	// only thing Swarm offers for changing a config's contents.
+	require.NoError(t, os.WriteFile(js, []byte("module.exports = { platform: 'gitea' };\n"), 0o644))
+	require.NotEqual(t, first, render(), "changed content must render a different config name")
+}
+
+func TestChartsTemplateSetFileRefusals(t *testing.T) {
+	dir := valueChartDir(t)
+	js := filepath.Join(t.TempDir(), "config.js")
+	require.NoError(t, os.WriteFile(js, []byte("module.exports = {};\n"), 0o644))
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			// The chart renders — the refusal is the resolution, and without it
+			// the operator would get an empty config deployed over a working one.
+			"forgotten flag", nil, `"values/config" is empty`,
+		},
+		{"unreadable file", []string{"--set-file", "config=" + filepath.Join(dir, "nope.js")}, "read"},
+		{"no key", []string{"--set-file", js}, "expected key=path"},
+		{"empty path", []string{"--set-file", "config="}, "expected key=path"},
+		{"malformed key", []string{"--set-file", "config..x=" + js}, "--set-file"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var code int
+			o, errOut := capture(t, func() {
+				code = Dispatch(append([]string{"charts", "template", "renovate", dir}, tc.args...), "dev")
+			})
+			require.Equal(t, 1, code)
+			require.Empty(t, o, "a manifest that cannot be deployed must not be printed as if it could")
+			require.Contains(t, errOut, tc.want)
+		})
+	}
+}
+
 func TestParseArgs(t *testing.T) {
 	pos, f, err := parseArgs([]string{"rel", "repo/chart", "-f", "a.yaml", "--values", "b.yaml", "--set", "x=1", "--dry-run", "--timeout", "10m"})
 	require.NoError(t, err)
@@ -181,10 +260,20 @@ func TestParseArgs(t *testing.T) {
 }
 
 func TestParseArgsInlineValue(t *testing.T) {
-	_, f, err := parseArgs([]string{"--set=a=1", "--version=2.0.0"})
+	_, f, err := parseArgs([]string{"--set=a=1", "--set-file=b=./b.js", "--version=2.0.0"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"a=1"}, f.sets)
+	require.Equal(t, []string{"b=./b.js"}, f.setFiles)
 	require.Equal(t, "2.0.0", f.version)
+}
+
+func TestParseArgsSetFile(t *testing.T) {
+	_, f, err := parseArgs([]string{"--set-file", "a=./a.js", "--set-file", "b.c=./b.js"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"a=./a.js", "b.c=./b.js"}, f.setFiles)
+
+	_, _, err = parseArgs([]string{"--set-file"})
+	require.ErrorContains(t, err, "requires a value")
 }
 
 func TestParseArgsRequirements(t *testing.T) {
@@ -253,6 +342,7 @@ func TestChartsApplyRejectsUnsupportedFlags(t *testing.T) {
 
 	for _, flag := range [][]string{
 		{"--set", "a=1"},
+		{"--set-file", "a=/dev/null"},
 		{"--version", "1.0.0"},
 		{"--reuse-values"},
 		{"--install"},

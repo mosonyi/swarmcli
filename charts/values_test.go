@@ -97,3 +97,73 @@ func TestMergeValuesSetListErrors(t *testing.T) {
 		require.Contains(t, err.Error(), "--set")
 	}
 }
+
+// --- --set-file (#537) ---
+
+// The whole point of a separate flag: --set applies inference and comma
+// splitting, and both destroy a file. A config.js is full of commas and a
+// one-line file may read "true".
+func TestApplySetFilesTakesTheContentVerbatim(t *testing.T) {
+	const js = "module.exports = { a: 1, b: [2, 3] };\n"
+	dst := map[string]any{}
+	require.NoError(t, ApplySetFiles(dst, []SetFile{
+		{Key: "config", Data: []byte(js)},
+		{Key: "flag", Data: []byte("true")},
+	}))
+	require.Equal(t, js, dst["config"])
+	require.Equal(t, "true", dst["flag"], "a file reading \"true\" is a string, not a bool")
+}
+
+func TestApplySetFilesWritesANestedKey(t *testing.T) {
+	dst := map[string]any{"renovate": map[string]any{"image": "renovate/renovate"}}
+	require.NoError(t, ApplySetFiles(dst, []SetFile{{Key: "renovate.config", Data: []byte("x")}}))
+	require.Equal(t, map[string]any{"image": "renovate/renovate", "config": "x"}, dst["renovate"])
+}
+
+// --set-file is applied after MergeValues, so it wins over a values file and a
+// --set naming the same key.
+func TestApplySetFilesOverrideOrder(t *testing.T) {
+	dst, err := MergeValues(map[string]any{"config": "from defaults"}, nil, []string{"config=from --set"})
+	require.NoError(t, err)
+	require.NoError(t, ApplySetFiles(dst, []SetFile{{Key: "config", Data: []byte("from --set-file")}}))
+	require.Equal(t, "from --set-file", dst["config"])
+}
+
+func TestApplySetFilesRejectsAMalformedKey(t *testing.T) {
+	for _, key := range []string{"", "a..b", "a[x]", "[0]"} {
+		require.Error(t, ApplySetFiles(map[string]any{}, []SetFile{{Key: key, Data: []byte("x")}}),
+			"--set-file %q must be rejected", key)
+	}
+}
+
+// lookupPath is the inverse of setPath, and every path setPath writes it must
+// read back — that pairing is what lets a manifest's values/<key> resolve
+// against the effective values, whatever put them there.
+func TestLookupPathRoundTripsSetPath(t *testing.T) {
+	for _, path := range []string{"a", "a.b.c", "a[0]", "a.b[1].c"} {
+		steps, err := parseSetPath(path)
+		require.NoError(t, err)
+		dst := map[string]any{}
+		setPath(dst, steps, "x")
+		got, ok := lookupPath(dst, steps)
+		require.True(t, ok, "lookupPath must find what setPath wrote at %q", path)
+		require.Equal(t, "x", got)
+	}
+}
+
+func TestLookupPathReportsAbsence(t *testing.T) {
+	values := map[string]any{"a": map[string]any{"b": "x"}, "list": []any{"one"}}
+	for _, path := range []string{
+		"missing",   // no such key
+		"a.missing", // no such key under an existing map
+		"a.b.c",     // hop into a scalar
+		"list[1]",   // index past the end
+		"a[0]",      // index into a map
+		"list.key",  // key of a list
+	} {
+		steps, err := parseSetPath(path)
+		require.NoError(t, err)
+		_, ok := lookupPath(values, steps)
+		require.False(t, ok, "%q names no value", path)
+	}
+}

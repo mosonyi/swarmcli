@@ -83,6 +83,10 @@ interactively; apply never does. template, diff and show only warn. Pass
 Common options:
   -f, --values <file>   Values file (repeatable). For apply: the release file.
       --set k=v         Override a value (repeatable)
+      --set-file k=path Set a value to a file's contents (repeatable). A chart
+                        references it as values/<k> from a config's file:, which
+                        is how an operator supplies a config the chart does not
+                        ship. See charts/README.md.
       --version <ver>   Chart version, for a <repo>/<chart> reference (default: latest).
                         Not valid with a local chart path — its Chart.yaml sets the version.
       --dry-run         Render and validate without deploying
@@ -110,8 +114,8 @@ other version — it cannot tell you the chart RUNS on that version, because thi
 binary carries only its own engine's behaviour. Rendering with a real binary of
 that version is the only thing that settles that.
 
-apply honours --wait, --timeout, --history-max and --resolve-image. It REJECTS --set, --version,
---reuse-values, --install, --purge-volumes, --requirements and --revision rather
+apply honours --wait, --timeout, --history-max and --resolve-image. It REJECTS --set,
+--set-file, --version, --reuse-values, --install, --purge-volumes, --requirements and --revision rather
 than ignoring them: the release file is the only source of truth, so a value passed
 on the command line would be a lie. outdated refreshes the repository indexes first
 and falls back to the cached ones if the network is unavailable.
@@ -703,6 +707,15 @@ func prepare(release, ref string, f flags, base map[string]any, pol compatPolicy
 	if err != nil {
 		return "", nil, rc, nil, nil, fail(err)
 	}
+	setFiles, err := readSetFiles(f.setFiles)
+	if err != nil {
+		return "", nil, rc, nil, nil, fail(err)
+	}
+	// After the merge and before validation: a --set-file is an override like
+	// --set, and the schema should see the content the render will.
+	if err := charts.ApplySetFiles(values, setFiles); err != nil {
+		return "", nil, rc, nil, nil, fail(err)
+	}
 	if err := charts.ValidateValues(ch.Schema, values); err != nil {
 		return "", nil, rc, nil, nil, fail(err)
 	}
@@ -725,7 +738,7 @@ func prepare(release, ref string, f flags, base map[string]any, pol compatPolicy
 	// fail() prints the error and nothing else: a path a chart may not read is a
 	// breaking change with no compatibility flag behind it, so this message is
 	// the whole of the migration path and must reach the operator verbatim.
-	chartFiles, err = charts.ResolveManifestFiles(manifest, ch.Files)
+	chartFiles, err = charts.ResolveManifestFiles(manifest, ch.Files, values)
 	if err != nil {
 		return "", nil, rc, nil, nil, fail(err)
 	}
@@ -834,6 +847,31 @@ func readValuesFiles(paths []string) ([][]byte, error) {
 			return nil, fmt.Errorf("read values file %q: %w", p, err)
 		}
 		out = append(out, b)
+	}
+	return out, nil
+}
+
+// readSetFiles parses each --set-file "key=path" and reads the file the
+// operator named.
+//
+// Split on the FIRST "=", so a path containing one still works; a key cannot
+// contain one, since a values path is dots and bracketed indices.
+func readSetFiles(specs []string) ([]charts.SetFile, error) {
+	var out []charts.SetFile
+	for _, s := range specs {
+		key, path, ok := strings.Cut(s, "=")
+		if !ok {
+			return nil, fmt.Errorf("--set-file %q: expected key=path", s)
+		}
+		key, path = strings.TrimSpace(key), strings.TrimSpace(path)
+		if key == "" || path == "" {
+			return nil, fmt.Errorf("--set-file %q: expected key=path", s)
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("--set-file %s: read %q: %w", key, path, err)
+		}
+		out = append(out, charts.SetFile{Key: key, Data: b})
 	}
 	return out, nil
 }

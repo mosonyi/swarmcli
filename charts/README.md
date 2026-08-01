@@ -220,6 +220,7 @@ from a directory on your own disk:
 | `file:` / `env_file:` | |
 |---|---|
 | `files/nginx.conf`, `files/tls/ca.pem` | resolved against the chart |
+| `values/config` | resolved against the values — see below; a config's `file:` only |
 | `nginx.conf` | refused — outside `files/`, so not something the chart ships |
 | `files/missing.conf` | refused — the chart does not contain it |
 | `../../etc/shadow` | refused — escapes the chart |
@@ -244,16 +245,75 @@ configs:
     external: true
 ```
 
-**Declare a `swarmcliVersion` floor on any chart that uses `files/`** (see
+### A config the operator supplies
+
+The section above is about files a chart *ships*. A config the **operator**
+writes — a `config.js` they keep in their own git repository — is the other
+half, and `values/` is how a chart accepts one:
+
+```yaml
+# templates/configs.yaml
+configs:
+  config:
+    file: values/config
+    # Swarm config data is immutable, so the name has to change when the
+    # content does. Hashing the content makes that automatic and idempotent.
+    name: "{{ .Release.Name }}_config_{{ .Values.config | sha256sum | trunc 12 }}"
+```
+
+```yaml
+# values.yaml — "" so the name above renders; the operator supplies the content
+config: ""
+```
+
+```bash
+swarmcli charts upgrade renovate swarmcli-charts/renovate \
+  -f values.yaml --set-file config=./config.js
+```
+
+`--set-file <key>=<path>` reads the file into `.Values.<key>` verbatim — no comma
+splitting, no `{a,b}` list literal and no type inference, all of which `--set`
+does and all of which would corrupt a file. `values/<key>` then materialises that
+value beside the manifest for the `docker` CLI to read, exactly as `files/` does
+for a file the chart ships. The key is the full values path, so a nested one is
+`values/renovate.config`.
+
+Two rules keep this as safe as the refusals above:
+
+- **The operator names the path, never the chart.** That is the whole asymmetry.
+  A path on the operator's own command line carries exactly the authority they
+  already have; a path a chart chose does not, which is why `file: /etc/shadow`
+  stays refused.
+- **Only a config's `file:` may name `values/`.** A secret's is refused, and so
+  is `env_file:`. Values are stored in the release record — see below — so secret
+  *material* would land in the one place a secret exists to keep it out of.
+  Secrets stay `docker secret create` + `external: true`.
+
+An absent or empty value is refused rather than deployed, so an operator who
+forgets `--set-file` gets a message and not an empty config over a working one.
+
+**Why rotation, rather than editing the config?** Swarm config data is immutable.
+`docker stack deploy` reacts to changed content under an existing name by calling
+`ConfigUpdate`, and swarmkit refuses that with `only updates to Labels are
+allowed` — so a stable name does not update the config, it fails the deploy. A
+content-derived name is the only mechanism Swarm offers, and it is idempotent for
+free: unchanged content resolves to the same name and the same bytes, which is
+the one `ConfigUpdate` swarmkit does allow. Superseded configs are left in place
+— Swarm refuses to delete one still in use, and a custom `name:` still carries
+the stack's namespace label, so `docker stack rm` collects them.
+
+**Declare a `swarmcliVersion` floor on any chart that uses `files/` or
+`values/`** (see
 [Declaring the swarmcli a chart needs](#declaring-the-swarmcli-a-chart-needs),
-and set it to the release that introduced `files/`). A swarmcli older than that
-parses `Chart.yaml` leniently, ignores `files/` entirely, carries no guard, and
+and set it to the release that introduced them). A swarmcli older than that
+parses `Chart.yaml` leniently, ignores both entirely, carries no guard, and
 resolves `file: files/nginx.conf` against a temp directory of its own — so it
 does not fail, it deploys something else. Nothing can be done to an
 already-released binary, which makes the constraint the only thing that turns
 that into a refusal.
 
-Two consequences worth knowing:
+Two consequences worth knowing, and they apply to `values/` exactly as they do
+to `files/`:
 
 - **The referenced files are stored in the release record**, so a rollback
   deploys the bytes the original deploy sent rather than whatever the chart says
@@ -265,8 +325,10 @@ Two consequences worth knowing:
 - **That record is as readable as the manifest beside it.** A file referenced by
   a chart is stored verbatim in the same Docker Config, with the same exposure
   [issue #465](https://github.com/Eldara-Tech/swarmcli/issues/465) describes for
-  the manifest. Secret *material* still belongs in a Docker secret created
-  outside the chart and referenced with `external: true`.
+  the manifest — and so is every value, for **every retained revision**, not just
+  the current one. That is the reason a `values/` path may only give a *config*
+  its content: secret *material* still belongs in a Docker secret created outside
+  the chart and referenced with `external: true`.
 
 ### Declaring the swarmcli a chart needs
 
