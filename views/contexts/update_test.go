@@ -597,6 +597,103 @@ func TestCreateDialog_Enter_ClearsError(t *testing.T) {
 	require.Equal(t, "", m.GetError())
 }
 
+// --- #525: a printable character must never be a hotkey over a focused input ---
+
+// certDialog opens the create dialog with TLS on and one cert field focused.
+func certDialog(t *testing.T, focus int) *Model {
+	t.Helper()
+	m := testModel()
+	m.createDialogActive = true
+	m.createTLSEnabled = true
+	m.createInputFocus = focus
+	m.updateCreateFocus()
+	return m
+}
+
+// Every certificate path a Docker context needs is under a directory with an
+// "f" in it more often than not — /etc/docker/certs.d, fullchain.pem.
+func TestCreateDialog_CertFields_F_TypesIntoFocusedInput(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		focus int
+		value func(*Model) string
+	}{
+		{"ca", 4, func(m *Model) string { return m.createCAInput.Value() }},
+		{"cert", 5, func(m *Model) string { return m.createCertInput.Value() }},
+		{"key", 6, func(m *Model) string { return m.createKeyInput.Value() }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := certDialog(t, tc.focus)
+			for _, k := range []string{"f", "u", "l", "l", "F"} {
+				m.Update(key(k))
+			}
+			require.Equal(t, "fullF", tc.value(m))
+			require.False(t, m.certFileBrowserActive, "f must not open the cert browser")
+			// The other two cert fields must be untouched.
+			require.Empty(t, m.createNameInput.Value())
+			require.Empty(t, m.createDescInput.Value())
+			require.Empty(t, m.createHostInput.Value())
+		})
+	}
+}
+
+func TestCreateDialog_CertFields_BrowseKey_OpensCertBrowser(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		focus  int
+		target string
+	}{
+		{"ca", 4, "ca"},
+		{"cert", 5, "cert"},
+		{"key", 6, "key"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := certDialog(t, tc.focus)
+			cmd := m.Update(key("ctrl+o"))
+			require.True(t, m.certFileBrowserActive)
+			require.Equal(t, tc.target, m.certFileTarget)
+			require.NotNil(t, cmd)
+		})
+	}
+}
+
+// Unlike the other dialogs this one has three path inputs, so the chord has no
+// unambiguous target away from them and must do nothing.
+func TestCreateDialog_BrowseKey_NoOpAwayFromCertFields(t *testing.T) {
+	for focus := range 4 {
+		m := certDialog(t, focus)
+		m.Update(key("ctrl+o"))
+		require.False(t, m.certFileBrowserActive, "focus %d must not open the cert browser", focus)
+	}
+
+	// Nor with TLS off, where the cert fields are skipped by tab entirely.
+	m := testModel()
+	m.createDialogActive = true
+	m.createInputFocus = 4
+	m.Update(key("ctrl+o"))
+	require.False(t, m.certFileBrowserActive)
+}
+
+func TestCreateDialog_RoutesEveryKeyToFocusedInput(t *testing.T) {
+	value := map[int]func(*Model) string{
+		0: func(m *Model) string { return m.createNameInput.Value() },
+		1: func(m *Model) string { return m.createDescInput.Value() },
+		2: func(m *Model) string { return m.createHostInput.Value() },
+		4: func(m *Model) string { return m.createCAInput.Value() },
+		5: func(m *Model) string { return m.createCertInput.Value() },
+		6: func(m *Model) string { return m.createKeyInput.Value() },
+	}
+	for _, k := range []string{"f", "F", "e", "x"} {
+		t.Run(k, func(t *testing.T) {
+			for _, focus := range []int{0, 1, 2, 4, 5, 6} {
+				m := certDialog(t, focus)
+				m.Update(key(k))
+				require.Equal(t, k, value[focus](m), "focus %d must receive %q", focus, k)
+			}
+		})
+	}
+}
+
 // --- Edit dialog ---
 
 func TestEditDialog_Esc_Closes(t *testing.T) {

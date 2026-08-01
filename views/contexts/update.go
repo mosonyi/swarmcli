@@ -6,6 +6,7 @@ package contexts
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Eldara-Tech/swarmcli/ui/dialog"
 	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
 	helpview "github.com/Eldara-Tech/swarmcli/views/help"
 	"github.com/Eldara-Tech/swarmcli/views/view"
@@ -417,8 +418,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				m.SetError("")
 				m.SetSuccess("")
 				return nil
-			case "f":
-				// Open file browser for cert file selection (only if focused on cert inputs)
+			case dialog.BrowseKey:
+				// Open file browser for cert file selection. Unlike the other
+				// dialogs this one has three path inputs, so the focused one is
+				// the target and the key does nothing elsewhere.
 				if m.createInputFocus >= 4 && m.createInputFocus <= 6 && m.createTLSEnabled {
 					// Determine which cert file is being browsed
 					switch m.createInputFocus {
@@ -463,17 +466,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					m.fileBrowserPath = currentPath
 					return LoadCertFilesCmd(currentPath)
 				}
-				// If not on cert fields, pass 'f' to the textinput
-				var cmd tea.Cmd
-				switch m.createInputFocus {
-				case 0:
-					m.createNameInput, cmd = m.createNameInput.Update(msg)
-				case 1:
-					m.createDescInput, cmd = m.createDescInput.Update(msg)
-				case 2:
-					m.createHostInput, cmd = m.createHostInput.Update(msg)
-				}
-				return cmd
+				return nil
 			case "tab", "shift+tab", "down":
 				// Move focus forward
 				m.createInputFocus++

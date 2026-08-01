@@ -260,21 +260,21 @@ func (m *Model) renderCreateDialog() string {
 		// CA file with browse button indicator
 		caLine := m.createCAInput.View()
 		if m.createInputFocus == 4 {
-			caLine += "  " + dialog.KeyStyle.Render("[f: Browse]")
+			caLine += "  " + dialog.KeyStyle.Render(dialog.BrowseHint)
 		}
 		lines = append(lines, dialog.ItemStyle.Render(caLine))
 
 		// Cert file with browse button indicator
 		certLine := m.createCertInput.View()
 		if m.createInputFocus == 5 {
-			certLine += "  " + dialog.KeyStyle.Render("[f: Browse]")
+			certLine += "  " + dialog.KeyStyle.Render(dialog.BrowseHint)
 		}
 		lines = append(lines, dialog.ItemStyle.Render(certLine))
 
 		// Key file with browse button indicator
 		keyLine := m.createKeyInput.View()
 		if m.createInputFocus == 6 {
-			keyLine += "  " + dialog.KeyStyle.Render("[f: Browse]")
+			keyLine += "  " + dialog.KeyStyle.Render(dialog.BrowseHint)
 		}
 		lines = append(lines, dialog.ItemStyle.Render(keyLine))
 	}
@@ -298,11 +298,12 @@ func (m *Model) renderCreateDialog() string {
 			dialog.KeyStyle.Render("<Enter>"),
 			dialog.KeyStyle.Render("<Esc>"))
 	} else {
-		helpText = fmt.Sprintf(" %s Create • %s Navigate • %s Toggle TLS • %s Browse • %s Cancel",
+		// No Browse entry here: this line already sets the dialog's width, and
+		// the per-field hint advertises the key exactly when it is usable.
+		helpText = fmt.Sprintf(" %s Create • %s Navigate • %s Toggle TLS • %s Cancel",
 			dialog.KeyStyle.Render("<Enter>"),
 			dialog.KeyStyle.Render("<Tab/↑/↓>"),
 			dialog.KeyStyle.Render("<Space>"),
-			dialog.KeyStyle.Render("<f>"),
 			dialog.KeyStyle.Render("<Esc>"))
 	}
 	lines = append(lines, dialog.HelpStyle.Render(helpText))

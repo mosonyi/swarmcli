@@ -181,11 +181,9 @@ func (m *Model) renderCreateDialog() string {
 		lines = append(lines, dialog.ItemStyle.Render(m.createNameInput.View()))
 		lines = append(lines, dialog.ItemStyle.Render(""))
 
-		// Show file path input with browse indicator when focused
-		fileLine := m.createFileInput.View()
-		if m.createInputFocus == 1 {
-			fileLine += "  " + dialog.KeyStyle.Render("[f: Browse]")
-		}
+		// Show file path input with browse indicator. The key is a chord, so it
+		// works from any focus and the hint is always shown.
+		fileLine := m.createFileInput.View() + "  " + dialog.KeyStyle.Render(dialog.BrowseHint)
 		lines = append(lines, dialog.ItemStyle.Render(fileLine))
 		lines = append(lines, dialog.ItemStyle.Render(""))
 

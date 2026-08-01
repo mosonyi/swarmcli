@@ -7,6 +7,9 @@ import (
 	"testing"
 
 	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/ui/dialog"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/stretchr/testify/require"
 )
@@ -128,3 +131,17 @@ var errTest = errorMsg(testErr{})
 type testErr struct{}
 
 func (testErr) Error() string { return "test error" }
+
+// --- #525: the browse hint advertises the chord, from any focus ---
+
+func TestRenderCreateDialog_ShowsBrowseHintAtEveryFocus(t *testing.T) {
+	for _, focus := range []int{0, 1, 2, 3} {
+		m := testModel()
+		m.createDialogActive = true
+		m.createDialogStep = "details-file"
+		m.createInputFocus = focus
+		out := ansi.Strip(m.renderCreateDialog())
+		require.Contains(t, out, dialog.BrowseHint, "focus %d must show the browse hint", focus)
+		require.NotContains(t, out, "[f: Browse]")
+	}
+}

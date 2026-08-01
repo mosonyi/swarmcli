@@ -4,7 +4,13 @@
 package contexts
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/Eldara-Tech/swarmcli/ui/dialog"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/stretchr/testify/require"
 )
@@ -148,4 +154,41 @@ func TestView_CreateDialog_TLSEnabled(t *testing.T) {
 	loadContexts(m, fakeContexts("ctx1"))
 	out := m.View()
 	require.Contains(t, out, "TLS")
+}
+
+// --- #525: the browse hint, and the width it is laid out around ---
+
+func TestRenderCreateDialog_ShowsBrowseHintOnFocusedCertField(t *testing.T) {
+	for _, focus := range []int{4, 5, 6} {
+		m := testModel()
+		m.createDialogActive = true
+		m.createTLSEnabled = true
+		m.createInputFocus = focus
+		m.updateCreateFocus()
+		out := ansi.Strip(m.renderCreateDialog())
+		require.Equal(t, 1, strings.Count(out, dialog.BrowseHint),
+			"focus %d must hint exactly its own cert field", focus)
+		require.NotContains(t, out, "[f: Browse]")
+	}
+}
+
+// The help line sets this dialog's width, and with the browse entry on it the
+// dialog rendered 89 cells wide — nine past an 80-column terminal. The
+// per-field hint carries the key instead, so the line must stay off it.
+func TestRenderCreateDialog_FitsIn80Columns(t *testing.T) {
+	m := testModel()
+	m.createDialogActive = true
+	m.createTLSEnabled = true
+	m.createInputFocus = 4
+	m.updateCreateFocus()
+
+	out := ansi.Strip(m.renderCreateDialog())
+	widest := 0
+	for _, line := range strings.Split(out, "\n") {
+		if w := lipgloss.Width(line); w > widest {
+			widest = w
+		}
+	}
+	require.LessOrEqual(t, widest, 80, "the create dialog must fit an 80-column terminal:\n%s", out)
+	require.NotContains(t, out, "Browse •", "the help line must not carry the browse key")
 }
