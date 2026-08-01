@@ -6,6 +6,7 @@ package stacksview
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Eldara-Tech/swarmcli/docker"
 	"github.com/Eldara-Tech/swarmcli/ui/dialog"
@@ -191,4 +192,47 @@ func widestLine(s string) int {
 		}
 	}
 	return max
+}
+
+func TestView_Deploying_ShowsFooterStatus(t *testing.T) {
+	m := testModel()
+	loadStacks(m, fakeStacks("alpha", "beta"))
+	m.setRenderItem()
+	m.List.Viewport.Width = 80
+	m.List.Viewport.Height = 20
+	m.beginDeploy("alpha")
+
+	out := ansi.Strip(m.View())
+	require.Contains(t, out, `Deploying stack "alpha"`)
+	require.Contains(t, out, "0s")
+	require.NotContains(t, out, "Stack 1 of", "the deploy status replaces the row counter")
+}
+
+func TestView_Deploying_ShowsElapsed(t *testing.T) {
+	m := testModel()
+	loadStacks(m, fakeStacks("alpha"))
+	m.setRenderItem()
+	m.List.Viewport.Width = 80
+	m.List.Viewport.Height = 20
+	m.beginDeploy("alpha")
+	m.deployStartedAt = time.Now().Add(-90 * time.Second)
+
+	require.Contains(t, ansi.Strip(m.View()), "1m30s")
+}
+
+func TestView_Toast_ShownThenExpires(t *testing.T) {
+	m := testModel()
+	loadStacks(m, fakeStacks("alpha"))
+	m.setRenderItem()
+	m.List.Viewport.Width = 80
+	m.List.Viewport.Height = 20
+
+	m.showToast("✓ Stack \"alpha\" deployed")
+	require.Contains(t, ansi.Strip(m.View()), "deployed")
+
+	m.toastUntil = time.Now().Add(-time.Second)
+	out := ansi.Strip(m.View())
+	require.NotContains(t, out, "deployed")
+	require.Contains(t, out, "Stack 1 of")
+	require.Equal(t, "", m.toastMessage, "an expired toast is cleared")
 }
