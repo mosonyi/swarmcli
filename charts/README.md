@@ -78,7 +78,7 @@ swarmcli charts outdated                                   # what has a newer ch
 | Behaviour | |
 |---|---|
 | Missing release | installed |
-| Changed chart version, values, or rendered manifest | upgraded |
+| Changed chart version, values, rendered manifest, or referenced `files/` content | upgraded |
 | Identical | **skipped — no new revision** |
 | On the swarm but not in the file | **reported, never removed** |
 | Installed by this file, no longer in it | **reported as an orphan, still never removed** |
@@ -181,6 +181,8 @@ mychart/
 
 `apiVersion` is `v1` (the only format this build reads; absent means `v1`).
 
+### Files a chart ships
+
 `files/` is collected and carried with the chart, keyed by each file's path
 relative to the chart root — `files/nginx.conf`, `files/tls/ca.pem`. It is
 deliberately not Helm's `.Files`: only `files/` is collected, never "everything
@@ -189,8 +191,82 @@ config and a rule that sweeps up whatever is lying beside `values.yaml` ships
 `values.yaml.bak`, a `.env` or an editor swap file to the swarm. Templates stay
 in `templates/`, which unlike `files/` is flat.
 
-Nothing reads these files yet — what a manifest may do with them lands with
-[#528](https://github.com/Eldara-Tech/swarmcli/issues/528).
+Compose gives a config or a secret its content in exactly one way, which is what
+these are for:
+
+```yaml
+# templates/configs.yaml
+configs:
+  nginx:
+    file: files/nginx.conf
+```
+
+A config's `file:`, a secret's `file:` and a service's `env_file:` all mean **the
+chart**: the path is resolved against the chart root, and the file the manifest
+names is carried to the deploy and written beside the rendered manifest for the
+`docker` CLI to read.
+
+That is new, and it replaces something worse. Those three keys are resolved by
+the docker CLI against the directory of the compose file it is handed, which was
+the temp file swarmcli wrote — so `file: ./nginx.conf` read `$TMPDIR/nginx.conf`,
+a path any local user can plant a file in, and `file: /etc/shadow` was read as
+the invoking operator into a Docker config readable by anyone with Docker access.
+A relative path has therefore never meant what a chart author intended.
+
+So a path that cannot mean a file in the chart is refused, and the rule is the
+same for every chart however it was loaded — from a repository, from a `.tgz`, or
+from a directory on your own disk:
+
+| `file:` / `env_file:` | |
+|---|---|
+| `files/nginx.conf`, `files/tls/ca.pem` | resolved against the chart |
+| `nginx.conf` | refused — outside `files/`, so not something the chart ships |
+| `files/missing.conf` | refused — the chart does not contain it |
+| `../../etc/shadow` | refused — escapes the chart |
+| `/etc/shadow` | refused — absolute, **for every chart** |
+
+A local-directory chart is not an exception, deliberately: vendoring a repository
+chart to disk would otherwise convert it from the refused case to the permitted
+one, granting the most privilege to the workflow that most obscures where a chart
+came from.
+
+**To keep a file the operator manages**, create the resource outside the chart
+and reference it — the same answer as for any other input a chart must not
+carry:
+
+```bash
+docker config create nginx-site /etc/myapp/nginx.conf   # or docker secret create
+```
+
+```yaml
+configs:
+  nginx-site:
+    external: true
+```
+
+**Declare a `swarmcliVersion` floor on any chart that uses `files/`** (see
+[Declaring the swarmcli a chart needs](#declaring-the-swarmcli-a-chart-needs),
+and set it to the release that introduced `files/`). A swarmcli older than that
+parses `Chart.yaml` leniently, ignores `files/` entirely, carries no guard, and
+resolves `file: files/nginx.conf` against a temp directory of its own — so it
+does not fail, it deploys something else. Nothing can be done to an
+already-released binary, which makes the constraint the only thing that turns
+that into a refusal.
+
+Two consequences worth knowing:
+
+- **The referenced files are stored in the release record**, so a rollback
+  deploys the bytes the original deploy sent rather than whatever the chart says
+  today (it may say nothing: rollback replays a stored manifest and never reads a
+  chart). Only the files the manifest names are stored, and they share the
+  record's ~500 KiB gzipped Docker Config budget with the manifest — an install
+  whose record would not fit is refused before anything is deployed, naming the
+  sizes.
+- **That record is as readable as the manifest beside it.** A file referenced by
+  a chart is stored verbatim in the same Docker Config, with the same exposure
+  [issue #465](https://github.com/Eldara-Tech/swarmcli/issues/465) describes for
+  the manifest. Secret *material* still belongs in a Docker secret created
+  outside the chart and referenced with `external: true`.
 
 ### Declaring the swarmcli a chart needs
 

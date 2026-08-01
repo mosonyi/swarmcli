@@ -195,7 +195,7 @@ func TestUnchangedComparesTheOwner(t *testing.T) {
 		{"an unparseable stamp is healed", "not-a-stamp", "apply/a", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := unchanged(rel(tc.stamp), chart, nil, manifest, tc.owner)
+			got, err := unchanged(rel(tc.stamp), chart, nil, manifest, tc.owner, nil)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})

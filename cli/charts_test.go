@@ -112,6 +112,64 @@ func TestChartsShowValuesPreservesComments(t *testing.T) {
 	require.Equal(t, raw, o)
 }
 
+// fileChartDir writes a chart whose single template gives a config its content
+// with file: ref, plus one file under files/ for a well-formed ref to name.
+func fileChartDir(t *testing.T, ref string) string {
+	t.Helper()
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "templates"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "files"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Chart.yaml"),
+		[]byte("name: demo\nversion: 1.0.0\nswarmcliVersion: \">= 1.13.0\"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "templates", "stack.yaml"),
+		[]byte("services:\n  web:\n    image: nginx\nconfigs:\n  site:\n    file: "+ref+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "files", "nginx.conf"),
+		[]byte("server { listen 80; }"), 0o644))
+	return dir
+}
+
+// prepare is the second of the two places a *Chart and a rendered manifest
+// coexist, and it backs template, diff, install and upgrade alike — so a path
+// the chart may not read is refused on all four, at the earliest point an author
+// or an operator can see it. There is no compatibility flag behind this refusal,
+// so the message it prints IS the migration path and has to survive to stderr
+// whole: the path, the rule, and the operator-managed replacement.
+func TestChartsTemplateRefusesAPathOutsideTheChart(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		ref   string
+		wants []string
+	}{
+		{"absolute", "/etc/shadow", []string{`"/etc/shadow"`, "absolute path", "external: true", "docker config create"}},
+		{"escapes the chart", "../../etc/shadow", []string{`"../../etc/shadow"`, "escapes the chart"}},
+		{"outside files/", "nginx.conf", []string{`"nginx.conf"`, "outside files/", `"files/nginx.conf"`}},
+		{"not in the chart", "files/missing.conf", []string{`"files/missing.conf"`, "not in the chart"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := fileChartDir(t, tc.ref)
+			var code int
+			o, errOut := capture(t, func() {
+				code = Dispatch([]string{"charts", "template", "site", dir}, "dev")
+			})
+			require.Equal(t, 1, code)
+			require.Empty(t, o, "a manifest that cannot be deployed must not be printed as if it could")
+			for _, want := range tc.wants {
+				require.Contains(t, errOut, want)
+			}
+		})
+	}
+}
+
+// And the shape the refusals exist to permit still renders.
+func TestChartsTemplateAcceptsAFileTheChartShips(t *testing.T) {
+	var code int
+	o, errOut := capture(t, func() {
+		code = Dispatch([]string{"charts", "template", "site", fileChartDir(t, "files/nginx.conf")}, "dev")
+	})
+	require.Equal(t, 0, code, errOut)
+	require.Contains(t, o, "file: files/nginx.conf")
+}
+
 func TestParseArgs(t *testing.T) {
 	pos, f, err := parseArgs([]string{"rel", "repo/chart", "-f", "a.yaml", "--values", "b.yaml", "--set", "x=1", "--dry-run", "--timeout", "10m"})
 	require.NoError(t, err)

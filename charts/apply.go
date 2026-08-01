@@ -4,8 +4,10 @@
 package charts
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"maps"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -33,6 +35,16 @@ type ReleasePlan struct {
 	Values       map[string]any `json:"values,omitempty"`
 	Manifest     string         `json:"manifest"`
 	Requirements *Requirements  `json:"requirements,omitempty"`
+	// Files are the chart files Manifest references, resolved while the chart
+	// was still in scope. Apply re-attaches them to InstallOptions per release,
+	// exactly as it does Requirements.
+	//
+	// json:"-" because ReleasePlan is a wire type — a controller serialises a
+	// plan to show what it would do — and base64 file bytes are neither
+	// readable there nor anything a reader of a plan asked for. It is a
+	// consequence, not a limitation: nothing reconstructs an Engine.Apply from
+	// a plan's JSON.
+	Files map[string][]byte `json:"-"`
 	// CurrentManifest is the deployed manifest, for diffing. Empty for an install.
 	CurrentManifest string `json:"currentManifest,omitempty"`
 	// Compat is the chart's engine requirement checked against this build.
@@ -217,6 +229,17 @@ func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource,
 	if err != nil {
 		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w%s", rf.Path, spec.Name, err, compatHint(compat))
 	}
+	// One of the two places a *Chart and a rendered manifest coexist, so one of
+	// the two places the manifest's file: keys can be resolved at all — the
+	// chart is out of scope by the time this returns. A refusal fails the whole
+	// plan before anything is deployed, and its text survives intact under the
+	// same file/release prefix every other failure here carries: for a chart
+	// that reads a path outside itself, that message is the entire migration
+	// path there is.
+	chartFiles, err := ResolveManifestFiles(manifest, ch.Files)
+	if err != nil {
+		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
+	}
 
 	rp := ReleasePlan{
 		Name:         spec.Name,
@@ -226,6 +249,7 @@ func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource,
 		Values:       values,
 		Manifest:     manifest,
 		Requirements: req,
+		Files:        chartFiles,
 		Compat:       compat,
 	}
 
@@ -236,7 +260,7 @@ func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource,
 	default:
 		rp.FromVersion = cur.Chart.Version
 		rp.CurrentManifest = cur.Manifest
-		same, err := unchanged(&cur, rc, values, manifest, owner)
+		same, err := unchanged(&cur, rc, values, manifest, owner, chartFiles)
 		if err != nil {
 			return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
 		}
@@ -292,6 +316,7 @@ func (e *Engine) Apply(ctx context.Context, plan *Plan, opts InstallOptions) ([]
 		}
 		o := opts
 		o.Requirements = rp.Requirements
+		o.Files = rp.Files
 		// Always Upgrade with Install set, never Install: a release that appeared
 		// between planning and applying then upgrades cleanly instead of failing
 		// with "already exists".
@@ -306,8 +331,24 @@ func (e *Engine) Apply(ctx context.Context, plan *Plan, opts InstallOptions) ([]
 }
 
 // unchanged reports whether the current revision already encodes the desired
-// state: same chart, same rendered manifest, same values — and the ownership
-// this plan is being asked to establish.
+// state: same chart, same rendered manifest, same files, same values — and the
+// ownership this plan is being asked to establish.
+//
+// Files are in the comparison because they are deployed content that nothing
+// else here can stand in for. A chart's files/ can change with neither a
+// version bump nor a manifest change — editing files/nginx.conf and re-running
+// `charts apply ./mychart` is the local-development loop — and while that
+// comparison was missing, such a release planned as ActionUnchanged and the
+// edited bytes never left the machine. Nil and empty compare equal: one means
+// "this release ships no files" and so does the other.
+//
+// Requirements are deliberately not compared, and that asymmetry is meant. They
+// declare what must already exist on the swarm for a deploy to work — external
+// networks, secrets, configs — and are re-rendered and re-checked at pre-flight
+// on every deploy that happens; they are not content the deploy sends. A
+// requirements-only edit therefore changes nothing about the deployed release,
+// and forcing a revision for it would spend a Docker Config to record a
+// no-change. Adding them here would need its own argument, not this one.
 //
 // Ownership is part of the desired state because the stamp is the only evidence
 // prune has. deployAndRecord is the sole writer of rel.Owner, and Apply skips
@@ -325,7 +366,7 @@ func (e *Engine) Apply(ctx context.Context, plan *Plan, opts InstallOptions) ([]
 // unparseable stamp is no evidence of anything, so it is a mismatch and gets
 // healed. An empty plan owner never forces: an apply that claims nothing must
 // not strip a stamp somebody else wrote.
-func unchanged(cur *Release, chart ReleaseChart, values map[string]any, manifest, owner string) (bool, error) {
+func unchanged(cur *Release, chart ReleaseChart, values map[string]any, manifest, owner string, files map[string][]byte) (bool, error) {
 	if cur == nil || cur.Status == StatusUninstalled {
 		return false, nil
 	}
@@ -333,6 +374,9 @@ func unchanged(cur *Release, chart ReleaseChart, values map[string]any, manifest
 		return false, nil
 	}
 	if cur.Manifest != manifest {
+		return false, nil
+	}
+	if !maps.EqualFunc(cur.Files, files, bytes.Equal) {
 		return false, nil
 	}
 	if owner != "" && cur.Owner != "" && !ownedBy(*cur, owner) {

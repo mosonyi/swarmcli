@@ -409,7 +409,7 @@ func chartsTemplate(args []string) int {
 		return usageErr("charts template <release> <repo/chart>")
 	}
 	release, ref := pos[0], pos[1]
-	manifest, _, _, req, code := prepare(release, ref, f, nil, compatWarn)
+	manifest, _, _, req, _, code := prepare(release, ref, f, nil, compatWarn)
 	if code >= 0 {
 		return code
 	}
@@ -440,7 +440,7 @@ func chartsInstall(args []string) int {
 		return usageErr("charts install <release> <repo/chart>")
 	}
 	release, ref := pos[0], pos[1]
-	manifest, values, rc, req, code := prepare(release, ref, f, nil, compatEnforce)
+	manifest, values, rc, req, chartFiles, code := prepare(release, ref, f, nil, compatEnforce)
 	if code >= 0 {
 		return code
 	}
@@ -450,6 +450,7 @@ func chartsInstall(args []string) int {
 		Timeout:      f.timeout,
 		HistoryMax:   f.historyMax,
 		Requirements: req,
+		Files:        chartFiles,
 		ResolveImage: f.resolveImage,
 	})
 	if err != nil {
@@ -481,7 +482,7 @@ func chartsUpgrade(args []string) int {
 			// re-validates the release, so a genuine backend error still surfaces.
 		}
 	}
-	manifest, values, rc, req, code := prepare(release, ref, f, base, compatEnforce)
+	manifest, values, rc, req, chartFiles, code := prepare(release, ref, f, base, compatEnforce)
 	if code >= 0 {
 		return code
 	}
@@ -492,6 +493,7 @@ func chartsUpgrade(args []string) int {
 		Timeout:      f.timeout,
 		HistoryMax:   f.historyMax,
 		Requirements: req,
+		Files:        chartFiles,
 		ResolveImage: f.resolveImage,
 	})
 	if err != nil {
@@ -657,7 +659,7 @@ func chartsDiff(args []string) int {
 	if f.reuseValues {
 		base = cur.Values
 	}
-	next, _, _, _, code := prepare(release, ref, f, base, compatWarn)
+	next, _, _, _, _, code := prepare(release, ref, f, base, compatWarn)
 	if code >= 0 {
 		return code
 	}
@@ -672,30 +674,37 @@ func chartsDiff(args []string) int {
 // prepare loads the chart, merges + validates values, and renders the manifest.
 // base, when non-nil, replaces the chart defaults as the merge base (used by
 // `upgrade --reuse-values` to layer overrides over the previous release).
-func prepare(release, ref string, f flags, base map[string]any, pol compatPolicy) (manifest string, values map[string]any, rc charts.ReleaseChart, req *charts.Requirements, code int) {
+//
+// chartFiles are the chart files the rendered manifest's file:/env_file: keys
+// name. They are resolved here because this is one of only two places a *Chart
+// and a rendered manifest coexist — the chart is gone by the time any of this
+// returns — and every command routed through prepare wants the same answer:
+// template and diff show a manifest that could actually be deployed, install
+// and upgrade deploy it.
+func prepare(release, ref string, f flags, base map[string]any, pol compatPolicy) (manifest string, values map[string]any, rc charts.ReleaseChart, req *charts.Requirements, chartFiles map[string][]byte, code int) {
 	ch, _, c := loadChart(ref, f.version)
 	if c >= 0 {
-		return "", nil, rc, nil, c
+		return "", nil, rc, nil, nil, c
 	}
 	// Before rendering, not after: a chart that needs a newer engine would
 	// otherwise fail somewhere inside Render, and "function X not defined" is a
 	// far worse answer than naming the version it wants.
 	if c := applyCompat(charts.CheckCompat(ch.Metadata), pol, f.skipCompatCheck); c >= 0 {
-		return "", nil, rc, nil, c
+		return "", nil, rc, nil, nil, c
 	}
 	if base == nil {
 		base = ch.Values
 	}
 	files, err := readValuesFiles(f.values)
 	if err != nil {
-		return "", nil, rc, nil, fail(err)
+		return "", nil, rc, nil, nil, fail(err)
 	}
 	values, err = charts.MergeValues(base, files, f.sets)
 	if err != nil {
-		return "", nil, rc, nil, fail(err)
+		return "", nil, rc, nil, nil, fail(err)
 	}
 	if err := charts.ValidateValues(ch.Schema, values); err != nil {
-		return "", nil, rc, nil, fail(err)
+		return "", nil, rc, nil, nil, fail(err)
 	}
 	ctx := charts.RenderContext{
 		Values:  values,
@@ -704,17 +713,24 @@ func prepare(release, ref string, f flags, base map[string]any, pol compatPolicy
 	}
 	manifest, err = charts.Render(ch, ctx)
 	if err != nil {
-		return "", nil, rc, nil, fail(err)
+		return "", nil, rc, nil, nil, fail(err)
 	}
 	// requirements.yaml is rendered with the same values as the manifest, so an
 	// operator-chosen network/secret name (e.g. database.network) is validated
 	// against the name the manifest actually references.
 	req, err = charts.RenderRequirements(ch, ctx)
 	if err != nil {
-		return "", nil, rc, nil, fail(err)
+		return "", nil, rc, nil, nil, fail(err)
+	}
+	// fail() prints the error and nothing else: a path a chart may not read is a
+	// breaking change with no compatibility flag behind it, so this message is
+	// the whole of the migration path and must reach the operator verbatim.
+	chartFiles, err = charts.ResolveManifestFiles(manifest, ch.Files)
+	if err != nil {
+		return "", nil, rc, nil, nil, fail(err)
 	}
 	rc = charts.ReleaseChart{Name: ch.Metadata.Name, Version: ch.Metadata.Version, AppVersion: ch.Metadata.AppVersion}
-	return manifest, values, rc, req, -1
+	return manifest, values, rc, req, chartFiles, -1
 }
 
 // --- uninstall / list / status ---

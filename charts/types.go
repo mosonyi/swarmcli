@@ -171,6 +171,23 @@ type Release struct {
 	// release nothing claimed — an imperative install, or an apply from a file
 	// declaring no owner — and an unowned release is never a prune candidate.
 	Owner string `yaml:"owner,omitempty" json:"owner,omitempty"`
+	// Files are the chart files this revision's manifest references, keyed by
+	// their chart-relative path, so that a rollback deploys what the original
+	// deploy did. Rollback has no chart in scope — it replays a stored manifest,
+	// with no ChartSource, no re-render and no filesystem — so anything not here
+	// is gone, and the manifest it replays names files that do not exist.
+	//
+	// The referenced subset, not the chart's whole files/ tree: this record is a
+	// Docker Config with a hard size ceiling it shares with the manifest, so an
+	// asset the manifest never names must not spend it. Absent for a manifest
+	// naming none, which is every manifest a chart without a files/ directory
+	// can produce, and for records written before this field existed.
+	//
+	// releaseFiles, not a bare map[string][]byte, only so that YAML stores the
+	// bytes as base64 rather than as a sequence of decimal integers — see its
+	// doc comment. The two types are assignable both ways, so nothing that
+	// produces or consumes a file set has to know about it.
+	Files releaseFiles `yaml:"files,omitempty" json:"files,omitempty"`
 }
 
 // ReleaseChart is the chart reference recorded in a Release.

@@ -4,8 +4,15 @@
 package charts
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
+	"strconv"
 	"testing"
 	"time"
 
@@ -252,6 +259,216 @@ func TestInstallFailureDoesNotRecord(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, rel.Revision)
 	require.Equal(t, StatusDeployed, rel.Status)
+}
+
+// incompressible returns n bytes gzip cannot shrink, so a test can exceed a
+// limit measured after compression without depending on how well anything
+// compresses.
+func incompressible(t *testing.T, n int) []byte {
+	t.Helper()
+	b := make([]byte, n)
+	_, err := rand.Read(b)
+	require.NoError(t, err)
+	return b
+}
+
+// The record's size ceiling is checked before the deploy, not after it.
+//
+// It used to be reached only from record(), which runs once the stack is
+// already up — so an over-limit release deployed and then vanished: no Config
+// means no list, no history, no status and no rollback, and the engine that
+// made it cannot even uninstall it. Nothing had hit it while the budget was a
+// ~500 KiB gzipped manifest; a chart's files share that budget and a couple of
+// certificates reach it, which is what turns a latent defect into a live one.
+func TestAnOversizedRecordRefusesBeforeAnythingIsDeployed(t *testing.T) {
+	fb := newFakeBackend()
+	e := testEngine(fb)
+	// fb.deployed is the recorder: DeployStack is the only thing that writes it.
+	//
+	// More raw bytes than the limit, and incompressible, so the record is over
+	// budget however it happens to encode them — the assertion is about the
+	// check running early, not about a particular serialisation surviving.
+	files := map[string][]byte{"files/tls/ca.pem": incompressible(t, 520<<10)}
+
+	rel, err := e.Install(context.Background(), "demo", ReleaseChart{Name: "demo", Version: "1"},
+		nil, "services:\n  a:\n    image: x\n", InstallOptions{Files: files})
+	require.Error(t, err)
+	require.Empty(t, fb.deployed, "the stack must not be deployed when its record cannot be written")
+	require.Empty(t, fb.configs)
+	require.Equal(t, StatusFailed, rel.Status)
+
+	// The sizes, and the file that spends them: gzipped total alone names
+	// nothing the operator can shrink.
+	require.Contains(t, err.Error(), "Docker Config limit")
+	require.Contains(t, err.Error(), strconv.Itoa(maxConfigPayload))
+	require.Contains(t, err.Error(), "files/tls/ca.pem: 532480 bytes")
+	require.Contains(t, err.Error(), "external: true")
+}
+
+// The same release without the files fits, so the refusal above is about size
+// and not about carrying files at all.
+func TestARecordedRevisionCarriesItsFiles(t *testing.T) {
+	fb := newFakeBackend()
+	e := testEngine(fb)
+	files := map[string][]byte{"files/nginx.conf": []byte("server { listen 80; }")}
+
+	_, err := e.Install(context.Background(), "demo", ReleaseChart{Name: "demo", Version: "1"},
+		nil, "services:\n  a:\n    image: x\n", InstallOptions{Files: files})
+	require.NoError(t, err)
+	require.Equal(t, files, fb.lastDeploy.Files)
+
+	stored, err := decodeRelease(fb.configs[releaseConfigName("demo", 1)].data)
+	require.NoError(t, err)
+	// The conversion is require.Equal's, not the code's: Release.Files is the
+	// named releaseFiles so YAML stores base64, and reflect.DeepEqual compares
+	// types before contents.
+	require.Equal(t, files, map[string][]byte(stored.Files))
+}
+
+// storedYAML is the record as storeRevision wrote it, ungzipped: the exact
+// bytes the Docker Config holds, which is the only place the stored format is
+// visible.
+func storedYAML(t *testing.T, fb *fakeBackend, release string, rev int) string {
+	t.Helper()
+	r, err := gzip.NewReader(bytes.NewReader(fb.configs[releaseConfigName(release, rev)].data))
+	require.NoError(t, err)
+	raw, err := io.ReadAll(r)
+	require.NoError(t, err)
+	require.NoError(t, r.Close())
+	return string(raw)
+}
+
+// The stored form of Release.Files is base64, not yaml.v3's default for a
+// []byte — a sequence node holding one decimal integer per byte.
+//
+// The default is not merely ugly. It costs ~13 characters of YAML per byte of
+// content and, measured through this path, 18,365 gzipped bytes for 100 KiB of
+// config text where base64 costs 5,784; the record shares one ~500 KiB Docker
+// Config budget with the manifest, so the difference is chart content that
+// could not ship. See releaseFiles for the numbers and for why a stored format
+// is not free to change once releases exist in the field.
+func TestARecordedRevisionStoresItsFilesAsBase64(t *testing.T) {
+	fb := newFakeBackend()
+	e := testEngine(fb)
+	text := []byte("server { listen 80; }")
+	// Bytes no text encoding carries, so nothing can quietly degrade to a plain
+	// YAML string and still round-trip.
+	binary := []byte{0x00, 0xff, 0xfe, 0x01, 0x80, 0x0a, 0x7f}
+
+	rel := &Release{
+		Name: "demo", Revision: 1, Status: StatusDeployed,
+		Chart:    ReleaseChart{Name: "demo", Version: "1"},
+		Manifest: "services:\n  a:\n    image: x\n",
+		Files:    releaseFiles{"files/nginx.conf": text, "files/tls/ca.der": binary},
+	}
+	require.NoError(t, e.storeRevision(context.Background(), rel))
+
+	stored := storedYAML(t, fb, "demo", 1)
+	require.Contains(t, stored, base64.StdEncoding.EncodeToString(text))
+	require.Contains(t, stored, base64.StdEncoding.EncodeToString(binary))
+	// 115 is 's', the first element of the sequence yaml.v3 writes for the text
+	// above when the []byte is left to itself.
+	require.NotContains(t, stored, "- 115")
+	require.NotRegexp(t, `(?m)^\s+- \d+$`, stored, "no file may be stored as a sequence of decimal bytes")
+
+	back, err := decodeRelease(fb.configs[releaseConfigName("demo", 1)].data)
+	require.NoError(t, err)
+	require.Equal(t, map[string][]byte{"files/nginx.conf": text, "files/tls/ca.der": binary},
+		map[string][]byte(back.Files))
+}
+
+// A release with no files must store exactly what it stored before this
+// encoding existed: no files: key at all. The literal below was captured from
+// the code as it was before the change, so this is a byte-identical comparison
+// and not a restatement of what the encoder now happens to do.
+//
+// omitempty gets there for nil and for an empty map alike — yaml.v3 tests the
+// map's length before it ever calls MarshalYAML — and both must decode back to
+// nil, or a rollback of a fileless release would deploy an empty map where the
+// original deploy sent nothing.
+func TestAFilelessRecordIsUnchangedByTheFileEncoding(t *testing.T) {
+	const golden = `release: demo
+revision: 1
+status: deployed
+chart:
+    name: demo
+    version: 0.1.0
+values:
+    replicas: 2
+manifest: |
+    services:
+      web:
+        image: nginx
+created: "2023-11-14T22:13:20Z"
+namespace: demo
+owner: apply/prod:release/demo
+`
+	for _, tc := range []struct {
+		name  string
+		files releaseFiles
+	}{
+		{"nil", nil},
+		{"empty", releaseFiles{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fb := newFakeBackend()
+			e := testEngine(fb)
+			rel := &Release{
+				Name: "demo", Revision: 1, Status: StatusDeployed,
+				Chart:     ReleaseChart{Name: "demo", Version: "0.1.0"},
+				Values:    map[string]any{"replicas": 2},
+				Manifest:  "services:\n  web:\n    image: nginx\n",
+				Created:   "2023-11-14T22:13:20Z",
+				Namespace: "demo",
+				Owner:     "apply/prod:release/demo",
+				Files:     tc.files,
+			}
+			require.NoError(t, e.storeRevision(context.Background(), rel))
+			require.Equal(t, golden, storedYAML(t, fb, "demo", 1))
+
+			back, err := decodeRelease(fb.configs[releaseConfigName("demo", 1)].data)
+			require.NoError(t, err)
+			require.Nil(t, back.Files)
+		})
+	}
+}
+
+// A stored value that is not base64 must fail loudly, naming the file.
+//
+// Decoding it as empty content would be the worst outcome available: "this
+// release shipped an empty file" is something a record may legitimately say, so
+// nothing downstream could tell corruption from truth — and a rollback would
+// then deploy that emptiness over a config that was fine.
+func TestACorruptStoredFileNamesTheKeyRatherThanReadingAsEmpty(t *testing.T) {
+	gz, err := gzipBytes([]byte("release: demo\nrevision: 1\nfiles:\n    files/nginx.conf: \"not base64!\"\n"))
+	require.NoError(t, err)
+
+	_, err = decodeRelease(gz)
+	require.ErrorContains(t, err, "files/nginx.conf")
+	require.ErrorContains(t, err, "base64")
+}
+
+// encoding/json needs no equivalent of releaseFiles: it already encodes a
+// []byte as a base64 string, and a named map type is a plain map to it. So
+// Release's JSON shape is exactly what charts/json_test.go pins, which is why
+// that file stays green untouched.
+func TestReleaseFilesAreAlreadyBase64InJSON(t *testing.T) {
+	body := []byte("server { listen 80; }")
+	b, err := json.Marshal(Release{Name: "demo", Files: releaseFiles{"files/nginx.conf": body}})
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(b, &got))
+	require.Equal(t, map[string]any{"files/nginx.conf": base64.StdEncoding.EncodeToString(body)}, got["files"])
+
+	var back Release
+	require.NoError(t, json.Unmarshal(b, &back))
+	require.Equal(t, map[string][]byte{"files/nginx.conf": body}, map[string][]byte(back.Files))
+
+	// Absent rather than null when there are none, like every other optional key.
+	b, err = json.Marshal(Release{Name: "demo"})
+	require.NoError(t, err)
+	require.NotContains(t, string(b), "files")
 }
 
 const extNetManifest = "version: \"3.9\"\n" +

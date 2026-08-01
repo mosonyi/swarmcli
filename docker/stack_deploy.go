@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -94,7 +95,9 @@ func DeployStackResolved(ctx context.Context, stackName string, yamlContent stri
 	if err != nil {
 		return fmt.Errorf("failed to get docker context: %w", err)
 	}
-	return DeployStackInContext(ctx, ctxName, stackName, yamlContent, resolve)
+	// nil files: the TUI's raw-editor path deploys a document the operator typed,
+	// with no chart behind it to resolve a file: against.
+	return DeployStackInContext(ctx, ctxName, stackName, yamlContent, resolve, nil)
 }
 
 // DeployStackInContext deploys a stack to an explicitly named Docker context.
@@ -107,7 +110,11 @@ func DeployStackResolved(ctx context.Context, stackName string, yamlContent stri
 // Cancelling ctx kills the child. Nothing else can reach it: the CLI holds its
 // own connection to the daemon, so a caller being torn down while the daemon is
 // unresponsive would otherwise sit on a `docker stack deploy` that never returns.
-func DeployStackInContext(ctx context.Context, ctxName, stackName, yamlContent string, resolve ResolveImage) error {
+//
+// files are the chart files the manifest's file: and env_file: keys name, keyed
+// by their slash-separated chart-relative path; they are written beside the
+// manifest so those keys resolve to them. nil for a manifest that names none.
+func DeployStackInContext(ctx context.Context, ctxName, stackName, yamlContent string, resolve ResolveImage, files map[string][]byte) error {
 	if ctxName == "" {
 		return fmt.Errorf("docker context name is required")
 	}
@@ -123,26 +130,17 @@ func DeployStackInContext(ctx context.Context, ctxName, stackName, yamlContent s
 		return fmt.Errorf("stack name cannot be empty")
 	}
 
-	// Create temporary file with the YAML content
-	tmpFile, err := os.CreateTemp("", "swarmcli-stack-*.yml")
+	// Write the manifest and the chart's files into one temporary directory
+	dir, manifestPath, err := writeStackTree(files, yamlContent)
 	if err != nil {
-		return fmt.Errorf("failed to create temporary file: %w", err)
+		return err
 	}
 	defer func() {
-		_ = os.Remove(tmpFile.Name())
+		_ = os.RemoveAll(dir)
 	}()
 
-	// Write YAML content to temp file
-	if _, err := tmpFile.WriteString(yamlContent); err != nil {
-		_ = tmpFile.Close()
-		return fmt.Errorf("failed to write YAML to temporary file: %w", err)
-	}
-	if err := tmpFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temporary file: %w", err)
-	}
-
 	// Execute docker stack deploy command
-	args := []string{"--context", ctxName, "stack", "deploy", "-c", tmpFile.Name()}
+	args := []string{"--context", ctxName, "stack", "deploy", "-c", manifestPath}
 	if resolve != ResolveImageDefault {
 		args = append(args, "--resolve-image", string(resolve))
 	}
@@ -171,6 +169,65 @@ func DeployStackInContext(ctx context.Context, ctxName, stackName, yamlContent s
 
 	l().Infof("Stack %q deployed successfully", stackName)
 	return nil
+}
+
+// writeStackTree materialises one deploy into a fresh temporary directory: the
+// compose document at <dir>/stack.yml, and every entry of files at its
+// chart-relative path beneath it. It returns the directory and the manifest's
+// path; the caller removes the directory. Nothing is left behind on error.
+//
+// A directory rather than the single temp file this used to be, because
+// `docker stack deploy -c <path>` makes filepath.Dir(<path>) the compose working
+// directory and resolves every file: and env_file: against it, reading them
+// client-side before anything reaches the daemon. With a bare temp file that
+// made `file: ./nginx.conf` mean $TMPDIR/nginx.conf; putting the chart's files
+// in the same directory, at the paths the manifest uses, is what makes those
+// keys mean the chart.
+func writeStackTree(files map[string][]byte, manifest string) (dir string, manifestPath string, err error) {
+	// MkdirTemp creates it 0o700, which is what this wants: the content passing
+	// through here is on its way into a swarm config and is written as the
+	// operator, so no other local user should be able to read it — or, worse,
+	// swap it out between the write and the `docker` process reading it.
+	dir, err = os.MkdirTemp("", "swarmcli-stack-*")
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create temporary directory: %w", err)
+	}
+	// A failure below leaves a partial tree, and the caller never learns its path
+	// because it only gets a directory back on success, so clean it up here.
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(dir)
+			dir, manifestPath = "", ""
+		}
+	}()
+
+	for name, data := range files {
+		// Re-check containment even though the caller resolved these keys
+		// against the chart. They are chart-authored, and what a bad one buys is
+		// a write outside the temporary directory as the operator.
+		rel := filepath.FromSlash(name)
+		path := filepath.Join(dir, rel)
+		if filepath.IsAbs(rel) || !strings.HasPrefix(path, dir+string(os.PathSeparator)) {
+			err = fmt.Errorf("refusing chart file %q: it resolves outside the stack directory", name)
+			return
+		}
+		if err = os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			err = fmt.Errorf("failed to create directory for chart file %q: %w", name, err)
+			return
+		}
+		if err = os.WriteFile(path, data, 0o600); err != nil {
+			err = fmt.Errorf("failed to write chart file %q: %w", name, err)
+			return
+		}
+	}
+
+	// Last, so no chart file can displace the manifest.
+	manifestPath = filepath.Join(dir, "stack.yml")
+	if err = os.WriteFile(manifestPath, []byte(manifest), 0o600); err != nil {
+		err = fmt.Errorf("failed to write stack manifest: %w", err)
+		return
+	}
+	return dir, manifestPath, nil
 }
 
 // RemoveStackCLI tears down a stack via `docker stack rm`, the symmetric
