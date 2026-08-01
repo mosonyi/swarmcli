@@ -5,6 +5,8 @@ package charts
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -495,6 +497,168 @@ func TestPlanApplyMissingValuesFileFailsBeforeDeploying(t *testing.T) {
 	_, err := e.PlanApply(context.Background(), rf, src, PlanOptions{})
 	require.ErrorContains(t, err, "absent.yaml")
 	require.ErrorContains(t, err, "hello")
+	require.Empty(t, fb.deployed)
+}
+
+// fileChart is demoChart plus a files/ directory and a template that references
+// one of its entries, which is the shape planning has to resolve.
+func fileChart(t *testing.T, version, ref string) *Chart {
+	t.Helper()
+	ch := demoChart(t, version)
+	ch.Files = map[string][]byte{"files/nginx.conf": []byte("server { listen 80; }")}
+	ch.Templates["templates/site.yaml"] = "configs:\n  site:\n    file: " + ref + "\n"
+	return ch
+}
+
+// planRelease is one of the two places a *Chart and a rendered manifest coexist,
+// so it is one of the two places file: can be resolved at all — the chart goes
+// out of scope when it returns, and Apply, Upgrade and the record downstream of
+// it never see one.
+func TestPlanApplyResolvesTheFilesTheManifestNames(t *testing.T) {
+	e, fb, src, rf := applyEnv(t, oneRelease)
+	src.charts["swarmcli-charts/demo@0.1.0"] = fileChart(t, "0.1.0", "files/nginx.conf")
+	ctx := context.Background()
+
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{})
+	require.NoError(t, err)
+	require.Equal(t, map[string][]byte{"files/nginx.conf": []byte("server { listen 80; }")}, plan.Releases[0].Files)
+
+	// And Apply re-attaches them per release, the way it does Requirements.
+	_, err = e.Apply(ctx, plan, InstallOptions{})
+	require.NoError(t, err)
+	require.Equal(t, plan.Releases[0].Files, fb.lastDeploy.Files)
+}
+
+// A chart's files/ can change with neither a version bump nor a manifest
+// change — edit files/nginx.conf, re-run `charts apply` against the same local
+// chart — and that is the local-development loop, so it is how this feature is
+// most often used. While unchanged() did not compare files, such a release
+// planned as ActionUnchanged and the edited bytes never left the machine.
+func TestPlanApplyDetectsAFilesOnlyChange(t *testing.T) {
+	e, fb, src, rf := applyEnv(t, oneRelease)
+	src.charts["swarmcli-charts/demo@0.1.0"] = fileChart(t, "0.1.0", "files/nginx.conf")
+	ctx := context.Background()
+
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{})
+	require.NoError(t, err)
+	_, err = e.Apply(ctx, plan, InstallOptions{})
+	require.NoError(t, err)
+
+	// Same chart version and same templates, so the rendered manifest is
+	// byte-identical: only the file content distinguishes the two.
+	edited := fileChart(t, "0.1.0", "files/nginx.conf")
+	edited.Files["files/nginx.conf"] = []byte("server { listen 8080; }")
+	src.charts["swarmcli-charts/demo@0.1.0"] = edited
+
+	plan2, err := e.PlanApply(ctx, rf, src, PlanOptions{})
+	require.NoError(t, err)
+	require.Equal(t, plan.Releases[0].Manifest, plan2.Releases[0].Manifest,
+		"the manifest must be identical, or this proves nothing about files")
+	require.Equal(t, ActionUpgrade, plan2.Releases[0].Action)
+
+	// And the edited bytes reach the deploy, which is the point of noticing.
+	_, err = e.Apply(ctx, plan2, InstallOptions{})
+	require.NoError(t, err)
+	require.Equal(t, map[string][]byte{"files/nginx.conf": []byte("server { listen 8080; }")}, fb.lastDeploy.Files)
+}
+
+// The other half of the same comparison: noticing a file change must not make
+// every apply an upgrade. The no-churn guarantee TestApplyInstallsThenIsIdempotent
+// pins has to hold for a release that ships files too.
+func TestPlanApplyWithTheSameFilesStaysUnchanged(t *testing.T) {
+	e, fb, src, rf := applyEnv(t, oneRelease)
+	src.charts["swarmcli-charts/demo@0.1.0"] = fileChart(t, "0.1.0", "files/nginx.conf")
+	ctx := context.Background()
+
+	plan, err := e.PlanApply(ctx, rf, src, PlanOptions{})
+	require.NoError(t, err)
+	_, err = e.Apply(ctx, plan, InstallOptions{})
+	require.NoError(t, err)
+	before := len(fb.configs)
+
+	// A freshly built chart, so the second plan compares equal bytes rather than
+	// the same map — and the stored side has been through YAML and gzip.
+	src.charts["swarmcli-charts/demo@0.1.0"] = fileChart(t, "0.1.0", "files/nginx.conf")
+	plan2, err := e.PlanApply(ctx, rf, src, PlanOptions{})
+	require.NoError(t, err)
+	require.Equal(t, ActionUnchanged, plan2.Releases[0].Action)
+
+	_, err = e.Apply(ctx, plan2, InstallOptions{})
+	require.NoError(t, err)
+	require.Len(t, fb.configs, before, "an unchanged apply must not record a revision")
+}
+
+// nil and empty both mean "this release ships no files", and they turn up in
+// either position: a record written before Files existed decodes to nil, and a
+// manifest naming no file resolves to nil, but a map that happens to be empty
+// must not read as a change. TestApplyInstallsThenIsIdempotent covers the
+// fileless case end to end; this pins the comparison itself, both directions.
+func TestUnchangedComparesTheFiles(t *testing.T) {
+	const manifest = "services: {}\n"
+	chart := ReleaseChart{Name: "demo", Version: "0.1.0"}
+	rel := func(files releaseFiles) *Release {
+		return &Release{Name: "hello", Status: StatusDeployed, Chart: chart, Manifest: manifest, Files: files}
+	}
+
+	for _, tc := range []struct {
+		name    string
+		stored  releaseFiles
+		desired map[string][]byte
+		want    bool
+	}{
+		{"nil against nil", nil, nil, true},
+		{"nil against empty", nil, map[string][]byte{}, true},
+		{"empty against nil", releaseFiles{}, nil, true},
+		{"empty against empty", releaseFiles{}, map[string][]byte{}, true},
+		{"the same content", releaseFiles{"files/a.conf": []byte("x")}, map[string][]byte{"files/a.conf": []byte("x")}, true},
+		{"edited content", releaseFiles{"files/a.conf": []byte("x")}, map[string][]byte{"files/a.conf": []byte("y")}, false},
+		{"a file added", nil, map[string][]byte{"files/a.conf": []byte("x")}, false},
+		{"a file removed", releaseFiles{"files/a.conf": []byte("x")}, nil, false},
+		{"a file renamed", releaseFiles{"files/a.conf": []byte("x")}, map[string][]byte{"files/b.conf": []byte("x")}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := unchanged(rel(tc.stored), chart, nil, manifest, "", tc.desired)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// A plan is a wire type: a controller serialises one to show what it would do.
+// File bytes are not something a reader of a plan asked for, and base64 in the
+// middle of a diff is not something anyone can read, so Files carries json:"-".
+// charts/json_test.go pins the rest of the key shape and must stay green
+// untouched — which a json:"-" field is, being invisible to it.
+func TestReleasePlanFilesStayOutOfThePlanJSON(t *testing.T) {
+	b, err := json.Marshal(Plan{Releases: []ReleasePlan{{
+		Name:     "hello",
+		Manifest: "services: {}\n",
+		Files:    map[string][]byte{"files/nginx.conf": []byte("server { listen 80; }")},
+	}}})
+	require.NoError(t, err)
+	require.NotContains(t, string(b), "files")
+	require.NotContains(t, string(b), base64.StdEncoding.EncodeToString([]byte("server { listen 80; }")))
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(b, &got))
+	rp := got["releases"].([]any)[0].(map[string]any)
+	require.NotContains(t, rp, "Files")
+}
+
+// A path a chart may not read fails the whole plan, before any release in it is
+// deployed, and the refusal reaches the operator intact: it names the offending
+// path and the replacement, and for this one breaking shape that message is the
+// entire migration path there is.
+func TestPlanApplyRefusesAPathOutsideTheChart(t *testing.T) {
+	e, fb, src, rf := applyEnv(t, oneRelease)
+	src.charts["swarmcli-charts/demo@0.1.0"] = fileChart(t, "0.1.0", "/etc/shadow")
+
+	_, err := e.PlanApply(context.Background(), rf, src, PlanOptions{})
+	require.ErrorContains(t, err, `"/etc/shadow"`)
+	require.ErrorContains(t, err, "absolute path")
+	require.ErrorContains(t, err, "external: true")
+	require.ErrorContains(t, err, rf.Path)
+	require.ErrorContains(t, err, `release "hello"`)
 	require.Empty(t, fb.deployed)
 }
 

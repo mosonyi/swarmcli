@@ -64,6 +64,74 @@ func TestRollbackCopiesTargetRevision(t *testing.T) {
 	require.Equal(t, 3, cur.Revision)
 }
 
+// TestRollbackReplaysTheFilesTheOriginalDeploySent is the end-to-end test for
+// the file chain, and the only one that crosses all six of its links:
+// InstallOptions.Files -> Release.Files -> storeRevision's gzip -> decodeRelease
+// -> newRevision on the rollback path -> DeployRequest.Files.
+//
+// It has to be end to end because every link fails the same silent way. A drop
+// anywhere yields an empty map, and an empty map is exactly what a chart with no
+// files/ directory legitimately produces — so nothing downstream can tell the
+// two apart, and a test of any single link passes while the chain is severed.
+//
+// Rollback is where it matters: it holds no chart, no ChartSource and no
+// filesystem, so unless the bytes came back out of the stored record there is
+// nowhere else they could have come from.
+func TestRollbackReplaysTheFilesTheOriginalDeploySent(t *testing.T) {
+	fb := newFakeBackend()
+	e := testEngine(fb)
+	ctx := context.Background()
+	const manifest = "services:\n  web:\n    image: nginx\nconfigs:\n  site:\n    file: files/nginx.conf\n"
+
+	v1 := map[string][]byte{"files/nginx.conf": []byte("server { listen 80; }")}
+	v2 := map[string][]byte{"files/nginx.conf": []byte("server { listen 8080; }")}
+
+	_, err := e.Install(ctx, "demo", ReleaseChart{Name: "c", Version: "1"}, nil, manifest, InstallOptions{Files: v1})
+	require.NoError(t, err)
+	require.Equal(t, v1, fb.lastDeploy.Files)
+
+	// The manifest is unchanged between the revisions, so only the files can
+	// distinguish what rev 3 deploys from what rev 2 did.
+	_, err = e.Upgrade(ctx, "demo", ReleaseChart{Name: "c", Version: "2"}, nil, manifest, InstallOptions{Files: v2})
+	require.NoError(t, err)
+	require.Equal(t, v2, fb.lastDeploy.Files)
+
+	// No Files in the options: whatever rev 3 deploys, it read off rev 1.
+	rb, err := e.Rollback(ctx, "demo", 1, InstallOptions{})
+	require.NoError(t, err)
+	require.Equal(t, 3, rb.Revision)
+	require.Equal(t, v1, fb.lastDeploy.Files, "a rollback must deploy the bytes the revision it replays deployed")
+	require.Equal(t, v1, map[string][]byte(rb.Files), "and record them, so rolling back to the rollback replays them too")
+
+	// Through the whole store/decode round trip once more, from the record
+	// rather than from the value Rollback returned.
+	stored, err := e.GetRevision(ctx, "demo", 3)
+	require.NoError(t, err)
+	require.Equal(t, v1, map[string][]byte(stored.Files))
+}
+
+// A chart with no files/ directory must keep behaving exactly as it did before
+// any of this existed: nothing recorded, nothing deployed, and nil rather than
+// an empty map at every step — the round trip through YAML and gzip is where a
+// nil would otherwise come back as something else.
+func TestRollbackOfAReleaseWithoutFilesCarriesNone(t *testing.T) {
+	fb := newFakeBackend()
+	e := testEngine(fb)
+	ctx := context.Background()
+	mustInstall(t, e, "demo", "services:\n  s:\n    image: v1\n")
+	_, err := e.Upgrade(ctx, "demo", ReleaseChart{Name: "c", Version: "2"}, nil, "services:\n  s:\n    image: v2\n", InstallOptions{})
+	require.NoError(t, err)
+
+	rb, err := e.Rollback(ctx, "demo", 1, InstallOptions{})
+	require.NoError(t, err)
+	require.Nil(t, rb.Files)
+	require.Nil(t, fb.lastDeploy.Files)
+
+	stored, err := e.GetRevision(ctx, "demo", 1)
+	require.NoError(t, err)
+	require.Nil(t, stored.Files)
+}
+
 func TestRollbackUnknownRevision(t *testing.T) {
 	e := testEngine(newFakeBackend())
 	ctx := context.Background()

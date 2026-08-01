@@ -7,9 +7,12 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -88,8 +91,7 @@ type DeployRequest struct {
 	// manifest is resolved, and must not let a path escape that root.
 	//
 	// Empty for a manifest that names none, which is every manifest a chart
-	// without a files/ directory can produce. Nothing populates this yet — see
-	// #528.
+	// without a files/ directory can produce.
 	Files map[string][]byte
 }
 
@@ -163,6 +165,15 @@ type InstallOptions struct {
 	// every external resource the manifest references must be declared in it. Nil
 	// falls back to manifest-driven pre-flight (auto-create attachable overlays).
 	Requirements *Requirements
+	// Files are the chart files the manifest references, already resolved
+	// against the chart by the caller that still had one (ResolveManifestFiles).
+	// They are recorded on the revision and handed to the deploy.
+	//
+	// Carried the same way Requirements is, and for the same reason: it is
+	// chart-derived data the engine needs, and the engine has no chart. Nil for
+	// a manifest that names no file — and nil on a rollback, which is not a
+	// gap: a rollback replays the files off the revision it is rolling back to.
+	Files map[string][]byte
 	// Owner claims the release for a manifest or controller, e.g.
 	// "apply/prod-swarm" or "cd/edge". It is recorded on every revision this
 	// call writes, as the id half of an OwnerRef naming the release.
@@ -190,7 +201,7 @@ func (e *Engine) Install(ctx context.Context, release string, chart ReleaseChart
 		return nil, fmt.Errorf("release %q already exists (revision %d); use upgrade", release, cur.Revision)
 	}
 
-	rel := e.newRevision(release, nextRevision(revs), chart, values, manifest)
+	rel := e.newRevision(release, nextRevision(revs), chart, values, manifest, opts.Files)
 	return e.deployAndRecord(ctx, rel, opts)
 }
 
@@ -211,7 +222,7 @@ func (e *Engine) Upgrade(ctx context.Context, release string, chart ReleaseChart
 			return nil, fmt.Errorf("release %q does not exist; use install or upgrade --install", release)
 		}
 	}
-	rel := e.newRevision(release, nextRevision(revs), chart, values, manifest)
+	rel := e.newRevision(release, nextRevision(revs), chart, values, manifest, opts.Files)
 	return e.deployAndRecord(ctx, rel, opts)
 }
 
@@ -238,7 +249,12 @@ func (e *Engine) Rollback(ctx context.Context, release string, targetRev int, op
 	if target.Status == StatusFailed {
 		return nil, fmt.Errorf("cannot roll back to failed revision %d", targetRev)
 	}
-	rel := e.newRevision(release, nextRevision(revs), target.Chart, target.Values, target.Manifest)
+	// target.Files, never opts.Files: a rollback is a replay, not a re-resolution.
+	// Nothing on this path has a chart — no ChartSource, no re-render, not even a
+	// filesystem — so the stored record is the only thing that knows what the
+	// manifest being replayed refers to, and deploying it without those bytes
+	// deploys a manifest naming files that are gone.
+	rel := e.newRevision(release, nextRevision(revs), target.Chart, target.Values, target.Manifest, target.Files)
 	return e.deployAndRecord(ctx, rel, opts)
 }
 
@@ -277,7 +293,11 @@ func (e *Engine) GetRevision(ctx context.Context, release string, rev int) (*Rel
 }
 
 // newRevision builds an unsaved, deployed-status revision.
-func (e *Engine) newRevision(release string, rev int, chart ReleaseChart, values map[string]any, manifest string) *Release {
+//
+// files travels with the manifest rather than beside it because the two are one
+// document: the manifest's file: keys are meaningless without the bytes they
+// name, and a revision recorded without them is one no rollback can replay.
+func (e *Engine) newRevision(release string, rev int, chart ReleaseChart, values map[string]any, manifest string, files map[string][]byte) *Release {
 	return &Release{
 		Name:      release,
 		Revision:  rev,
@@ -285,6 +305,7 @@ func (e *Engine) newRevision(release string, rev int, chart ReleaseChart, values
 		Chart:     chart,
 		Values:    values,
 		Manifest:  manifest,
+		Files:     files,
 		Namespace: release,
 		Created:   e.now().UTC().Format(time.RFC3339),
 	}
@@ -309,6 +330,17 @@ func (e *Engine) deployAndRecord(ctx context.Context, rel *Release, opts Install
 	if opts.DryRun {
 		return rel, nil
 	}
+	// Measure the record before anything is mutated. record() runs after the
+	// deploy, so an over-limit payload used to fail once the stack was already
+	// up — and a release with no record is invisible to list, history, status
+	// and rollback, which is worse than not deploying at all. The bytes are
+	// thrown away: storeRevision re-encodes per attempt because record() bumps
+	// the revision number on a collision, so this is an early refusal and
+	// storeRevision's own check remains the one that gates the write.
+	if _, err := encodeRevision(rel); err != nil {
+		rel.Status = StatusFailed
+		return rel, err
+	}
 	// Validate prerequisites that cannot be auto-created (external secrets and
 	// configs) before mutating any swarm state, so a missing one fails fast
 	// without leaving auto-created networks behind.
@@ -324,7 +356,12 @@ func (e *Engine) deployAndRecord(ctx context.Context, rel *Release, opts Install
 		}
 		return rel, err
 	}
-	if err := e.Backend.DeployStack(ctx, DeployRequest{Name: rel.Name, Manifest: rel.Manifest, Resolve: opts.ResolveImage}); err != nil {
+	// rel.Files rather than opts.Files: the revision is the one thing every entry
+	// point has already agreed on, and on a rollback it is the only one that
+	// carries files at all.
+	if err := e.Backend.DeployStack(ctx, DeployRequest{
+		Name: rel.Name, Manifest: rel.Manifest, Resolve: opts.ResolveImage, Files: rel.Files,
+	}); err != nil {
 		rel.Status = StatusFailed
 		// Roll back networks we auto-created for this install so a failed deploy
 		// leaves no trace; pre-existing networks are untouched.
@@ -791,18 +828,124 @@ func isAlreadyExists(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "already exists")
 }
 
-// storeRevision writes a single release revision as a gzipped, labeled Config.
-func (e *Engine) storeRevision(ctx context.Context, rel *Release) error {
+// releaseFiles is Release.Files as it is stored: base64 in YAML, one string per
+// file, rather than what yaml.v3 does with a []byte left to itself.
+//
+// yaml.v3 has no special case for []byte. It sees a slice of integers and
+// writes a sequence node per byte — "files/a.conf:\n    - 104\n    - 101" —
+// which is roughly 13 characters of YAML for every byte of content, and gzip
+// only partly undoes it because what it then compresses is decimal digits
+// rather than the content's own redundancy. Measured through this exact path
+// (yaml.Marshal then gzipBytes) with 100 KiB of nginx-style config: 1,378,425
+// bytes of YAML and 18,365 gzipped, against 136,823 and 5,784 for base64 —
+// where gzipping the content on its own is 4,356. For incompressible content, a
+// certificate or a keyring, the integer sequence costs ~1.7x the raw size
+// gzipped (172,006 for 100 KiB) where base64 costs ~1.006x (103,090).
+//
+// That matters because the budget is not notional: the record is one Docker
+// Config, maxConfigPayload is measured after gzip, and a chart's files spend
+// that budget alongside the rendered manifest they belong to. Every byte the
+// encoding wastes is a byte of chart content that cannot ship.
+//
+// It is fixed here rather than later because this is a stored format. A record
+// written under one encoding has to be readable by whatever reads it next —
+// history, status, rollback — so changing it after releases exist in the field
+// means either a migration or a reader that understands both. There is no
+// version marker in the payload to hang that off.
+//
+// Nil and empty both marshal to nil, so `omitempty` still elides the key and a
+// release with no files stores exactly the bytes it stored before this type
+// existed; both decode back to nil, so a rollback of such a release deploys no
+// files rather than an empty map. encoding/json needs none of this — it already
+// encodes []byte as base64 — so Release's JSON shape is untouched.
+type releaseFiles map[string][]byte
+
+func (f releaseFiles) MarshalYAML() (any, error) {
+	if len(f) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]string, len(f))
+	for name, body := range f {
+		out[name] = base64.StdEncoding.EncodeToString(body)
+	}
+	return out, nil
+}
+
+// UnmarshalYAML decodes the stored form, and refuses a value that is not
+// base64 instead of yielding empty content for it. Silence there would be the
+// worst possible failure: a corrupt record would read as "this release shipped
+// an empty file", and a rollback would deploy that emptiness over a config that
+// was fine.
+func (f *releaseFiles) UnmarshalYAML(value *yaml.Node) error {
+	var encoded map[string]string
+	if err := value.Decode(&encoded); err != nil {
+		return err
+	}
+	if len(encoded) == 0 {
+		*f = nil
+		return nil
+	}
+	out := make(releaseFiles, len(encoded))
+	for name, body := range encoded {
+		raw, err := base64.StdEncoding.DecodeString(body)
+		if err != nil {
+			return fmt.Errorf("release file %q: %w", name, err)
+		}
+		out[name] = raw
+	}
+	*f = out
+	return nil
+}
+
+// encodeRevision is the record exactly as it would be stored: marshalled,
+// gzipped, and refused if it does not fit a Docker Config.
+//
+// It is called twice per deploy on purpose — once by deployAndRecord before it
+// mutates anything, once by storeRevision for the write — because the two
+// answers can legitimately differ: record() bumps rel.Revision when a
+// concurrent actor claims the number, which changes the payload. Encoding once
+// and reusing the bytes would store a payload naming a revision the Config is
+// not.
+func encodeRevision(rel *Release) ([]byte, error) {
 	payload, err := yaml.Marshal(rel)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	gz, err := gzipBytes(payload)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(gz) > maxConfigPayload {
-		return fmt.Errorf("release payload is %d bytes gzipped, exceeding the %d-byte Docker Config limit", len(gz), maxConfigPayload)
+		return nil, oversizeRecord(rel, len(gz))
+	}
+	return gz, nil
+}
+
+// oversizeRecord explains a release that will not fit its Config.
+//
+// It itemises the manifest and every file the manifest names, because gzipped
+// total is the one number an operator cannot act on: the budget is spent by
+// uncompressed content they choose, and until this refusal moved ahead of the
+// deploy nobody had to be told what to shrink — the stack was already up.
+func oversizeRecord(rel *Release, gz int) error {
+	var b strings.Builder
+	fmt.Fprintf(&b, "release %q revision %d cannot be recorded: its payload is %d bytes gzipped, exceeding the %d-byte Docker Config limit\n",
+		rel.Name, rel.Revision, gz, maxConfigPayload)
+	fmt.Fprintf(&b, "  manifest: %d bytes\n", len(rel.Manifest))
+	for _, name := range slices.Sorted(maps.Keys(rel.Files)) {
+		fmt.Fprintf(&b, "  %s: %d bytes\n", name, len(rel.Files[name]))
+	}
+	b.WriteString("shrink the manifest or the chart files it references (sizes shown uncompressed), " +
+		"or keep large content out of the chart: create it with docker config create / docker secret create " +
+		"and reference it with external: true")
+	return errors.New(b.String())
+}
+
+// storeRevision writes a single release revision as a gzipped, labeled Config.
+func (e *Engine) storeRevision(ctx context.Context, rel *Release) error {
+	gz, err := encodeRevision(rel)
+	if err != nil {
+		return err
 	}
 	labels := map[string]string{
 		LabelType:         TypeRelease,
