@@ -6,6 +6,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/Eldara-Tech/swarmcli/charts"
@@ -152,15 +153,28 @@ func rejectUnsupported(f flags) error {
 }
 
 func printPlan(plan *charts.Plan, withDiff bool) {
+	// The wave column appears only for a plan that has more than one, which is
+	// the difference between telling an operator something and adding a column of
+	// zeroes to every plan anyone has ever printed.
+	waved := spansWaves(plan.Releases)
+
 	var rows [][]string
 	for _, r := range plan.Releases {
 		from := r.FromVersion
 		if from == "" {
 			from = "-"
 		}
-		rows = append(rows, []string{r.Name, r.Ref, from, r.ToVersion, string(r.Action)})
+		row := []string{r.Name, r.Ref, from, r.ToVersion, string(r.Action)}
+		if waved {
+			row = append(row, strconv.Itoa(r.Wave))
+		}
+		rows = append(rows, row)
 	}
-	table([]string{"RELEASE", "CHART", "FROM", "TO", "ACTION"}, rows)
+	headers := []string{"RELEASE", "CHART", "FROM", "TO", "ACTION"}
+	if waved {
+		headers = append(headers, "WAVE")
+	}
+	table(headers, rows)
 
 	if withDiff {
 		for _, r := range plan.Releases {
@@ -174,6 +188,20 @@ func printPlan(plan *charts.Plan, withDiff bool) {
 
 	install, upgrade, unchanged := plan.Counts()
 	outf("\n%d to install, %d to upgrade, %d unchanged\n", install, upgrade, unchanged)
+	if waved {
+		outln("applied in wave order; each wave converges before the next begins")
+	}
+}
+
+// spansWaves reports whether a plan declares more than one wave, which is the
+// only case where the ordering is worth saying anything about.
+func spansWaves(releases []charts.ReleasePlan) bool {
+	for _, r := range releases {
+		if r.Wave != releases[0].Wave {
+			return true
+		}
+	}
+	return false
 }
 
 // reportUnclaimed names everything the swarm holds that this apply did not just

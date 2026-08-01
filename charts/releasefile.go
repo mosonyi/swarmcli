@@ -29,6 +29,12 @@ import (
 // obvious hazard of borrowing another tool's vocabulary: pasting real Helmfile
 // syntax fails loudly and names the key, rather than silently doing half of what
 // was meant.
+//
+// `wave` is the one key that is ours rather than Helmfile's. Renovate's manager
+// reads the three keys above and ignores everything else, so declaring it costs
+// nothing there; what it does cost is that a file using it cannot be read by a
+// swarmcli older than the release that added it, since unknown keys are refused
+// rather than skipped. That is true of every key this file has ever gained.
 type ReleaseFile struct {
 	APIVersion   string     `yaml:"apiVersion,omitempty"`
 	Repositories []RepoSpec `yaml:"repositories,omitempty"`
@@ -62,6 +68,20 @@ type ReleaseSpec struct {
 	Chart   string   `yaml:"chart"`
 	Version string   `yaml:"version,omitempty"`
 	Values  []string `yaml:"values,omitempty"`
+	// Wave groups releases that are applied together. Every release in one wave
+	// is deployed, the whole wave is waited for, and only then does the next
+	// start — so a migration that does not converge stops the releases that
+	// depend on it from ever being deployed.
+	//
+	// Ascending, and 0 by default. That is Argo CD's sync-wave, and it is also
+	// the reading that keeps a file declaring nothing behaving exactly as it
+	// always has: one wave, applied in file order, with no barrier and no extra
+	// read of the swarm. Negative is legal, and is how something is put in front
+	// of an existing set without renumbering it.
+	//
+	// Within a wave the order is the file's, and it is not meaningful — that is
+	// the whole point of putting two releases in one wave. Do not rely on it.
+	Wave int `yaml:"wave,omitempty"`
 }
 
 // LoadReleaseFile reads and validates a release manifest.

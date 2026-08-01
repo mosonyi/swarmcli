@@ -27,19 +27,30 @@ type fakeBackend struct {
 	// lastDeploy is the whole request the last deploy carried. deployed keeps
 	// only two of its fields, and Name, Manifest and Resolve are all strings,
 	// so a pair of them swapped at the call site still fills that map.
-	lastDeploy    DeployRequest
-	volumes       map[string][]string
-	services      map[string][]ServiceState
-	networkScopes map[string]string     // network name -> scope
-	secrets       map[string]struct{}   // existing secret names
-	createNetErr  map[string]error      // network name -> error to return on create
-	createdNets   map[string]createdNet // network name -> driver/attachable used on create
-	failNext      bool
-	rmStackErr    error
-	refreshErr    error
-	secretsErr    error                   // error to return from SecretNames
-	onCreate      func(name string) error // hook to simulate concurrent config creation
-	deleteCfgErr  map[string]error        // config name -> error to return on delete
+	lastDeploy DeployRequest
+	// deployOrder is the sequence deploys arrived in. deployed is a map, so
+	// until this existed the order Apply converges releases in was not
+	// observable at all — the closest any test could get was inferring it from
+	// the first-failure semantics. Sync waves are entirely about that order, so
+	// they are asserted on what reached the backend rather than on what Apply
+	// reports having done.
+	deployOrder []string
+	// stackServiceCalls counts the reads a convergence wait makes, so a test can
+	// state that a wave triggered no wait at all rather than infer it from
+	// elapsed time.
+	stackServiceCalls int
+	volumes           map[string][]string
+	services          map[string][]ServiceState
+	networkScopes     map[string]string     // network name -> scope
+	secrets           map[string]struct{}   // existing secret names
+	createNetErr      map[string]error      // network name -> error to return on create
+	createdNets       map[string]createdNet // network name -> driver/attachable used on create
+	failNext          bool
+	rmStackErr        error
+	refreshErr        error
+	secretsErr        error                   // error to return from SecretNames
+	onCreate          func(name string) error // hook to simulate concurrent config creation
+	deleteCfgErr      map[string]error        // config name -> error to return on delete
 	// listData makes ListConfigs carry each payload, as the Docker backend
 	// does. Off by default so the rest of the suite keeps exercising the
 	// inspect fallback a Backend that omits it relies on.
@@ -75,6 +86,7 @@ func (f *fakeBackend) DeployStack(_ context.Context, req DeployRequest) error {
 		return fmt.Errorf("boom")
 	}
 	f.deployed[req.Name] = req.Manifest
+	f.deployOrder = append(f.deployOrder, req.Name)
 	f.lastDeploy = req
 	return nil
 }
@@ -125,6 +137,7 @@ func (f *fakeBackend) DeleteConfig(_ context.Context, name string) error {
 	return nil
 }
 func (f *fakeBackend) StackServices(_ context.Context, name string) []ServiceState {
+	f.stackServiceCalls++
 	return f.services[name]
 }
 func (f *fakeBackend) StackVolumes(_ context.Context, name string) ([]string, error) {

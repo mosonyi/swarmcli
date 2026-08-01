@@ -64,6 +64,16 @@ removes a release the file does not mention — it reports those instead.
       chart: swarmcli-charts/traefik
       version: "0.1.1"
       values: [./traefik.yaml]     # relative to the release file, not the CWD
+    - name: hello
+      chart: swarmcli-charts/whoami
+      version: "0.1.8"
+      wave: 1                      # deployed only once wave 0 has converged
+
+Releases apply in wave order, then file order. A wave that does not converge stops
+every wave after it, so nothing that depends on a failed migration is deployed.
+Waves default to 0, so a file declaring none applies in file order as it always
+has. The barrier does not need --wait; --wait is the separate question of whether
+each individual release blocks, and --timeout bounds each wave.
 
 A chart may declare its external networks/secrets/configs in requirements.yaml:
 install pre-flights them (auto-creating networks marked autoCreate, validating

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func parse(t *testing.T, body string) (*ReleaseFile, error) {
@@ -33,6 +34,50 @@ releases:
 	require.Len(t, rf.Releases, 2)
 	require.Equal(t, "swarmcli-charts", rf.Repositories[0].Name)
 	require.Equal(t, "0.1.1", rf.Releases[0].Version)
+}
+
+// A release declares its wave, or is in wave 0 by having said nothing.
+func TestParseReadsWaves(t *testing.T) {
+	rf, err := parse(t, `releases:
+  - {name: db, chart: r/pg, version: "1"}
+  - {name: migrate, chart: r/migrate, version: "1", wave: 1}
+  - {name: api, chart: r/api, version: "1", wave: 2}
+  - {name: early, chart: r/early, version: "1", wave: -1}
+`)
+	require.NoError(t, err)
+	require.Equal(t, []int{0, 1, 2, -1}, []int{
+		rf.Releases[0].Wave, rf.Releases[1].Wave, rf.Releases[2].Wave, rf.Releases[3].Wave,
+	}, "an undeclared wave is 0 and a negative one is legal; the file's own order is untouched by parsing")
+}
+
+// A release file round-trips through Marshal without growing a wave nobody
+// wrote.
+//
+// This is not tidiness. swarmcli-cd synthesises a release file for its
+// one-application-one-chart source by marshalling this struct and handing the
+// bytes back to ParseReleaseFile, so an un-omitted zero would put `wave: 0` into
+// every such application — a key an operator never wrote, in a file they cannot
+// see, for a file with one release where waves cannot mean anything.
+func TestMarshalOmitsAnUndeclaredWave(t *testing.T) {
+	doc, err := yaml.Marshal(ReleaseFile{
+		APIVersion: "v1",
+		Releases:   []ReleaseSpec{{Name: "solo", Chart: "./charts/app"}},
+	})
+	require.NoError(t, err)
+	require.NotContains(t, string(doc), "wave")
+
+	// And a declared one survives the same trip, so the omission is about zero
+	// rather than about the field.
+	doc, err = yaml.Marshal(ReleaseFile{
+		APIVersion: "v1",
+		Releases:   []ReleaseSpec{{Name: "solo", Chart: "./charts/app", Wave: 3}},
+	})
+	require.NoError(t, err)
+	require.Contains(t, string(doc), "wave: 3")
+
+	rf, err := parse(t, string(doc))
+	require.NoError(t, err)
+	require.Equal(t, 3, rf.Releases[0].Wave)
 }
 
 // A file an automated updater rewrites must fail loudly on a typo, not silently
@@ -106,6 +151,11 @@ func TestParseValidationErrors(t *testing.T) {
 		"repo bad name":  {"repositories:\n  - {name: \"../../../../pwned\", url: https://x}\nreleases:\n  - {name: a, chart: r/c, version: \"1\"}\n", "invalid repository name"},
 		"bad apiVersion": {"apiVersion: v2\nreleases:\n  - {name: a, chart: r/c, version: \"1\"}\n", "unsupported apiVersion"},
 		"bad rel name":   {"releases:\n  - {name: \"Bad Name\", chart: r/c, version: \"1\"}\n", "Bad Name"},
+		// A wave is an ordering, so anything that is not a number is a mistake
+		// rather than something to coerce. yaml refuses it for us and reports the
+		// line, though not the key — same as any other type mismatch in this file.
+		// Asserted so that stays true if the field's type is ever widened.
+		"wave not a number": {"releases:\n  - {name: a, chart: r/c, version: \"1\", wave: soon}\n", "cannot unmarshal"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := parse(t, tc.body)

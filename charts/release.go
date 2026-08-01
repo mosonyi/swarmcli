@@ -1094,8 +1094,19 @@ const defaultStabilityWindow = 5 * time.Second
 
 // waitReady polls until every service in the release is running its target task
 // count and has held it for the stability window, or the timeout elapses.
+func (e *Engine) waitReady(ctx context.Context, release string, timeout time.Duration) error {
+	return e.waitWave(ctx, []string{release}, timeout)
+}
+
+// waitWave polls until every named release has converged, or the timeout elapses.
 //
-// It returns early with an error when swarm reports the rollout wedged
+// One deadline covers the whole wave rather than one per release. The releases in
+// a wave were deployed one after another without waiting, so their rollouts
+// overlap; charging the wave the sum of what it spends in parallel would make the
+// timeout mean something different depending on how many releases happened to
+// share a wave.
+//
+// It returns early with an error when swarm reports any of them wedged
 // ("paused" / "rollback_paused" / "rollback_completed"): swarm will not
 // continue from any of them on its own — the paused pair needs a human, and a
 // completed rollback is a deploy that already failed and was undone — so
@@ -1105,20 +1116,33 @@ const defaultStabilityWindow = 5 * time.Second
 // on to the timeout. This is the longest thing a release operation does, and the
 // timeout it would otherwise serve out defaults to five minutes — far longer than
 // the grace period a caller being shut down has to work with.
-func (e *Engine) waitReady(ctx context.Context, release string, timeout time.Duration) error {
+func (e *Engine) waitWave(ctx context.Context, releases []string, timeout time.Duration) error {
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
 	}
 	deadline := e.now().Add(timeout)
+	// Reused across polls rather than reallocated: this loop runs for as long as
+	// a rollout takes, which is minutes.
+	pending := make([]string, 0, len(releases))
 	for {
-		switch c := Rollup(e.Backend.StackServices(ctx, release)); c.Phase {
-		case PhaseWedged:
-			return fmt.Errorf("release %q: %s", release, c.Reason)
-		case PhaseConverged:
+		pending = pending[:0]
+		for _, release := range releases {
+			switch c := Rollup(e.Backend.StackServices(ctx, release)); c.Phase {
+			case PhaseWedged:
+				// Named individually, and the same message a single-release wait
+				// has always produced: the release that wedged is the one to go
+				// and look at, not the group it was in.
+				return fmt.Errorf("release %q: %s", release, c.Reason)
+			case PhaseConverged:
+			default:
+				pending = append(pending, release)
+			}
+		}
+		if len(pending) == 0 {
 			return nil
 		}
 		if !e.now().Before(deadline) {
-			return fmt.Errorf("timed out after %s waiting for release %q to converge", timeout, release)
+			return fmt.Errorf("timed out after %s waiting for %s to converge", timeout, releaseList(pending))
 		}
 		select {
 		case <-ctx.Done():
@@ -1126,6 +1150,21 @@ func (e *Engine) waitReady(ctx context.Context, release string, timeout time.Dur
 		case <-time.After(waitPollInterval):
 		}
 	}
+}
+
+// releaseList renders the releases a wait gave up on, singular or plural. One
+// release produces exactly the phrase this wait produced before it could take
+// more than one, so a caller matching on that text — and the integration suite
+// does — is unaffected.
+func releaseList(releases []string) string {
+	if len(releases) == 1 {
+		return fmt.Sprintf("release %q", releases[0])
+	}
+	quoted := make([]string, 0, len(releases))
+	for _, r := range releases {
+		quoted = append(quoted, fmt.Sprintf("%q", r))
+	}
+	return "releases " + strings.Join(quoted, ", ")
 }
 
 // Phase is how far a rollout has got.
