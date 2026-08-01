@@ -108,7 +108,10 @@ swarmcli charts outdated                          # releases with a newer chart 
 `apply` reads a release file pinning each release to a chart version, so the
 deployed state is reproducible and an automated updater (e.g. Renovate) has
 something concrete to bump. It never removes a release the file does not mention —
-it reports those instead. See [charts/README.md](charts/README.md#declarative-releases-gitops).
+it reports those instead. Releases can declare a `wave`, which groups the ones
+that go out together and makes each group converge before the next begins — so a
+migration that fails stops what depends on it from ever starting. See
+[charts/README.md](charts/README.md#declarative-releases-gitops).
 
 A chart can declare the swarmcli it needs (`swarmcliVersion: ">= 1.13.0"` in
 `Chart.yaml`). Installing it on an older build fails naming the version to

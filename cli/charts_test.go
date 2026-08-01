@@ -374,6 +374,26 @@ func TestPrintPlan(t *testing.T) {
 	// An install has no prior version; it must render as "-", not empty.
 	require.Regexp(t, `hello\s+r/whoami\s+-\s+0\.1\.8\s+install`, o)
 	require.Contains(t, o, "1 to install, 1 to upgrade, 1 unchanged")
+	// A plan with one wave says nothing about waves. Every plan printed before
+	// they existed is one of these, and a column of zeroes on all of them would
+	// be noise rather than information.
+	require.NotContains(t, o, "WAVE")
+}
+
+// A plan spanning waves shows which one each release is in, and says what that
+// means for the order.
+func TestPrintPlanShowsWavesWhenThereIsMoreThanOne(t *testing.T) {
+	plan := &charts.Plan{Releases: []charts.ReleasePlan{
+		{Name: "db", Ref: "r/pg", Action: charts.ActionInstall, ToVersion: "1.0.0"},
+		{Name: "migrate", Ref: "r/migrate", Action: charts.ActionInstall, ToVersion: "1.0.0", Wave: 1},
+		{Name: "api", Ref: "r/api", Action: charts.ActionInstall, ToVersion: "1.0.0", Wave: 2},
+	}}
+	o, _ := capture(t, func() { printPlan(plan, false) })
+
+	require.Contains(t, o, "WAVE")
+	require.Regexp(t, `db\s+r/pg\s+-\s+1\.0\.0\s+install\s+0`, o)
+	require.Regexp(t, `api\s+r/api\s+-\s+1\.0\.0\s+install\s+2`, o)
+	require.Contains(t, o, "each wave converges before the next begins")
 }
 
 // --diff shows a manifest diff for changed releases and skips unchanged ones.

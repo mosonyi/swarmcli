@@ -5,10 +5,12 @@ package charts
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
 	"os"
+	"slices"
 
 	"gopkg.in/yaml.v3"
 )
@@ -27,6 +29,14 @@ type ReleasePlan struct {
 	Name   string `json:"name"`
 	Ref    string `json:"ref"`
 	Action Action `json:"action"`
+	// Wave is the release file's ReleaseSpec.Wave, carried here because Apply
+	// never sees the file — only this plan — so it is the only place a grouping
+	// could be read from.
+	//
+	// Omitted when zero, which is both the default and "explicitly first". The
+	// two are the same thing: there is no "unset" wave to tell apart from wave 0,
+	// so nothing is lost by the omission.
+	Wave int `json:"wave,omitempty"`
 	// FromVersion is the currently deployed chart version, empty for an install.
 	FromVersion string `json:"fromVersion,omitempty"`
 	ToVersion   string `json:"toVersion"`
@@ -66,7 +76,12 @@ type Plan struct {
 	// InstallOptions.Owner — so that the next plan recognises these releases as
 	// its own rather than as somebody else's.
 	Owner string `json:"owner,omitempty"`
-	// Releases, in file order.
+	// Releases, in wave order and then file order — which for a file declaring no
+	// wave is exactly file order, as it always was.
+	//
+	// This is the order Apply converges them in, so it is also the order to
+	// render: a caller showing a plan is showing what will happen, in the
+	// sequence it will happen.
 	Releases []ReleasePlan `json:"releases"`
 	// Unmanaged names releases that exist on the swarm, are absent from the
 	// file, and carry no stamp saying this file produced them. Apply never
@@ -124,6 +139,12 @@ type PlanOptions struct {
 // them is deployed. A bad value in the third release therefore aborts the whole
 // apply instead of leaving the swarm half-converged — and `--dry-run` is just
 // "stop after planning".
+//
+// The releases come back in wave order, sorted here rather than grouped at each
+// consumer. That is what makes plan order execution order everywhere at once:
+// Apply only has to notice where a run of equal waves ends, a renderer shows the
+// sequence things happen in, and a controller walking the plan to correct drift
+// inherits the ordering without knowing waves exist.
 func (e *Engine) PlanApply(ctx context.Context, rf *ReleaseFile, src ChartSource, opts PlanOptions) (*Plan, error) {
 	owner := rf.ownerID()
 	if opts.Owner != "" {
@@ -158,6 +179,13 @@ func (e *Engine) PlanApply(ctx context.Context, rf *ReleaseFile, src ChartSource
 		}
 		plan.Releases = append(plan.Releases, rp)
 	}
+	// Stable, so that within a wave the file's order survives. It is not a
+	// meaningful order — declaring two releases in one wave is precisely saying
+	// it does not matter — but an arbitrary one would make a plan render
+	// differently every time it was computed.
+	slices.SortStableFunc(plan.Releases, func(a, b ReleasePlan) int {
+		return cmp.Compare(a.Wave, b.Wave)
+	})
 
 	for _, rel := range current {
 		switch {
@@ -244,6 +272,7 @@ func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource,
 	rp := ReleasePlan{
 		Name:         spec.Name,
 		Ref:          spec.Chart,
+		Wave:         spec.Wave,
 		ToVersion:    rc.Version,
 		Chart:        rc,
 		Values:       values,
@@ -280,7 +309,7 @@ type ApplyResult struct {
 	Revision int    `json:"revision,omitempty"` // 0 when unchanged (nothing was recorded)
 }
 
-// Apply converges the swarm to a plan, in file order.
+// Apply converges the swarm to a plan, one wave at a time.
 //
 // It never deletes. A release on the swarm that is absent from the file is
 // reported and left alone — either as Plan.Unmanaged, where nothing says which
@@ -304,30 +333,87 @@ type ApplyResult struct {
 // deploy to fail is what keeps the boundary clean — Upgrade would otherwise be
 // entered, and a stack half-deployed by a killed CLI is worse than one not
 // deployed at all.
+//
+// # Waves
+//
+// A plan spanning more than one wave is deployed in groups: every release in a
+// wave is written, the wave is waited for, and only then does the next start. A
+// wave that does not converge is a failure like any other, so nothing in any
+// later wave is deployed at all — no service, no revision record — which is the
+// point of declaring one. A plan with a single wave, which is every plan from a
+// file that declares no wave, takes no barrier and reads the swarm no more often
+// than it ever did.
+//
+// The barrier does not depend on opts.Wait, and that is deliberate rather than an
+// oversight: a wave is meaningless without it, so requiring a second opt-in would
+// leave "declared waves that silently did nothing" as the default reading of a
+// file. Wait keeps its own meaning underneath — whether each individual release
+// blocks — so setting it inside a wave serialises that wave, which is exactly
+// what it says and exactly what waves exist to stop being necessary.
 func (e *Engine) Apply(ctx context.Context, plan *Plan, opts InstallOptions) ([]ApplyResult, error) {
 	var results []ApplyResult
-	for _, rp := range plan.Releases {
-		if err := ctx.Err(); err != nil {
-			return results, err
+	waves := waveGroups(plan.Releases)
+
+	for i, wave := range waves {
+		// What this wave actually deployed, which is not the wave: a release the
+		// plan called unchanged is skipped above and is not waited for here.
+		// Waiting for one would let a release nothing in this apply touched — one
+		// deployed weeks ago and degraded since — stop every wave after it, on
+		// every apply, forever. Health is a question somebody else asks.
+		var wrote []string
+		for _, rp := range wave {
+			if err := ctx.Err(); err != nil {
+				return results, err
+			}
+			if rp.Action == ActionUnchanged {
+				results = append(results, ApplyResult{Name: rp.Name, Action: ActionUnchanged})
+				continue
+			}
+			o := opts
+			o.Requirements = rp.Requirements
+			o.Files = rp.Files
+			// Always Upgrade with Install set, never Install: a release that appeared
+			// between planning and applying then upgrades cleanly instead of failing
+			// with "already exists".
+			o.Install = true
+			rel, err := e.Upgrade(ctx, rp.Name, rp.Chart, rp.Values, rp.Manifest, o)
+			if err != nil {
+				return results, fmt.Errorf("release %q: %w", rp.Name, err)
+			}
+			results = append(results, ApplyResult{Name: rp.Name, Action: rp.Action, Revision: rel.Revision})
+			wrote = append(wrote, rp.Name)
 		}
-		if rp.Action == ActionUnchanged {
-			results = append(results, ApplyResult{Name: rp.Name, Action: ActionUnchanged})
+
+		// Between waves, and not after the last one. Under opts.Wait every release
+		// in the final wave has already been waited for individually; without it
+		// the caller asked not to block, and there is no later wave whose safety
+		// depends on this one being live.
+		if i == len(waves)-1 || len(wrote) == 0 {
 			continue
 		}
-		o := opts
-		o.Requirements = rp.Requirements
-		o.Files = rp.Files
-		// Always Upgrade with Install set, never Install: a release that appeared
-		// between planning and applying then upgrades cleanly instead of failing
-		// with "already exists".
-		o.Install = true
-		rel, err := e.Upgrade(ctx, rp.Name, rp.Chart, rp.Values, rp.Manifest, o)
-		if err != nil {
-			return results, fmt.Errorf("release %q: %w", rp.Name, err)
+		if err := e.waitWave(ctx, wrote, opts.Timeout); err != nil {
+			return results, err
 		}
-		results = append(results, ApplyResult{Name: rp.Name, Action: rp.Action, Revision: rel.Revision})
 	}
 	return results, nil
+}
+
+// waveGroups splits releases into contiguous runs of equal Wave.
+//
+// It relies on PlanApply having sorted them, and a caller that hands over an
+// unsorted slice gets more groups rather than wrong ones — every run is still
+// internally one wave, so the barriers land in defensible places. Sorting again
+// here would hide the mistake instead.
+func waveGroups(releases []ReleasePlan) [][]ReleasePlan {
+	var groups [][]ReleasePlan
+	for i, start := 0, 0; i < len(releases); i++ {
+		if i+1 < len(releases) && releases[i+1].Wave == releases[start].Wave {
+			continue
+		}
+		groups = append(groups, releases[start:i+1])
+		start = i + 1
+	}
+	return groups
 }
 
 // unchanged reports whether the current revision already encodes the desired

@@ -82,6 +82,7 @@ swarmcli charts outdated                                   # what has a newer ch
 | Identical | **skipped — no new revision** |
 | On the swarm but not in the file | **reported, never removed** |
 | Installed by this file, no longer in it | **reported as an orphan, still never removed** |
+| A `wave` that does not converge | **every later wave is skipped entirely** |
 
 Two of those deserve the emphasis. Releases are **never deleted** — apply prints
 the `uninstall` command and leaves the decision to you. And an unchanged release
@@ -128,8 +129,49 @@ upgrade production on the next `apply`. For a **local** chart path (`chart:
 `Chart.yaml` sets the version, so there is nothing to select.
 
 Unknown keys are rejected, so a typo fails loudly instead of quietly doing nothing.
-Releases are applied in file order; add `--wait` if a later release needs an
-earlier one live.
+Releases are applied in wave order, then file order — see below.
+
+#### Sync waves
+
+`wave` groups releases that go out together. Every release in a wave is deployed,
+the whole wave converges, and only then does the next wave start:
+
+```yaml
+releases:
+  - name: db
+    chart: ./charts/postgres          # no wave: means wave 0
+  - name: migrate
+    chart: ./charts/migrate
+    wave: 1
+  - name: api
+    chart: ./charts/api
+    wave: 2
+  - name: worker
+    chart: ./charts/worker
+    wave: 2                           # with api — the order between them is not meaningful
+```
+
+The failure semantics are the point as much as the ordering. **A wave that does
+not converge stops every wave after it**: nothing later is deployed at all, no
+service and no revision record, so a migration that fails can never let the API
+that depends on it start.
+
+Waves are ascending and default to `0`, so a file that declares none is one wave
+applied in file order — exactly what it has always done, with no waiting added.
+Negative numbers are legal, and are how you put something in front of an existing
+set without renumbering it.
+
+**`wave` is not `--wait`, and does not need it.** The barrier between waves always
+happens; `--wait` is the separate, older question of whether each *individual*
+release blocks until it is live. Setting both serialises everything inside a wave,
+which is the thing waves exist to stop being necessary — so with waves declared,
+leave `--wait` off unless you also want the last wave waited for. `--timeout`
+bounds each wave, and defaults to five minutes.
+
+`wave` is the one key here that is not Helmfile's, so Renovate ignores it (see
+below). Note that a release file using it cannot be read *at all* by a swarmcli
+older than the release this landed in: unknown keys are refused rather than
+skipped, which is the same trade every key in this file has made.
 
 `apply` honours `--wait`, `--timeout` and `--history-max`. It **rejects** `--set`,
 `--version`, `--reuse-values`, `--install`, `--purge-volumes`, `--requirements` and

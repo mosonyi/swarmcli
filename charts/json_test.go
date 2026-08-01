@@ -75,6 +75,23 @@ func TestPlanJSONKeys(t *testing.T) {
 	// Empty for an install/unchanged plan; omitempty keeps it out.
 	require.NotContains(t, rp, "fromVersion")
 	require.NotContains(t, rp, "currentManifest")
+	// Wave 0 is both the default and "explicitly first" — the same thing, since
+	// there is no unset wave to tell apart — so omitting it loses nothing and
+	// keeps a plan from a file that declares no wave byte-identical to what it
+	// has always served.
+	require.NotContains(t, rp, "wave")
+}
+
+// A declared wave reaches the wire, because a consumer rendering a plan has to
+// be able to show the order it will be applied in.
+func TestPlanJSONCarriesADeclaredWave(t *testing.T) {
+	b, err := json.Marshal(Plan{Releases: []ReleasePlan{{Name: "api", Wave: 2}}})
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(b, &got))
+	rp := got["releases"].([]any)[0].(map[string]any)
+	require.Equal(t, float64(2), rp["wave"])
 }
 
 func TestApplyResultJSONKeys(t *testing.T) {
