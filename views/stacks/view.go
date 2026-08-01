@@ -108,15 +108,9 @@ func (m *Model) renderCreateDialog() string {
 		lines = append(lines, dialog.ItemStyle.Render(m.createNameInput.View()))
 		lines = append(lines, dialog.ItemStyle.Render(""))
 
-		// Show file path input with browse indicator when focused
-		// Always reserve space for the hint to prevent dialog resizing
-		fileLine := m.createFileInput.View()
-		if m.createInputFocus == 1 {
-			fileLine += "  " + dialog.KeyStyle.Render("[f: Browse]")
-		} else {
-			// Add invisible spacing to maintain consistent width
-			fileLine += "             " // 13 characters to match "  [f: Browse]"
-		}
+		// Show file path input with browse indicator. The key is a chord, so it
+		// works from any focus and the hint is always shown.
+		fileLine := m.createFileInput.View() + "  " + dialog.KeyStyle.Render(dialog.BrowseHint)
 		lines = append(lines, dialog.ItemStyle.Render(fileLine))
 		lines = append(lines, dialog.ItemStyle.Render(""))
 
@@ -131,7 +125,7 @@ func (m *Model) renderCreateDialog() string {
 			helpText = fmt.Sprintf(" %s Deploy • %s Navigate • %s Browse • %s Cancel",
 				dialog.KeyStyle.Render("<Enter>"),
 				dialog.KeyStyle.Render("<Tab>"),
-				dialog.KeyStyle.Render("<f>"),
+				dialog.KeyStyle.Render(dialog.BrowseHelpKey),
 				dialog.KeyStyle.Render("<Esc>"))
 		}
 		lines = append(lines, dialog.HelpStyle.Render(helpText))
@@ -222,7 +216,7 @@ func (m *Model) renderSaveDialog() string {
 	}
 
 	fileLine := m.saveFileInput.View()
-	fileLine += "  " + dialog.KeyStyle.Render("[f: Browse]")
+	fileLine += "  " + dialog.KeyStyle.Render(dialog.BrowseHint)
 	lines = append(lines, dialog.ItemStyle.Render(fileLine))
 	lines = append(lines, dialog.ItemStyle.Render(""))
 
@@ -234,7 +228,7 @@ func (m *Model) renderSaveDialog() string {
 	} else {
 		helpText = fmt.Sprintf(" %s Save • %s Browse • %s Cancel",
 			dialog.KeyStyle.Render("<Enter>"),
-			dialog.KeyStyle.Render("<f>"),
+			dialog.KeyStyle.Render(dialog.BrowseHelpKey),
 			dialog.KeyStyle.Render("<Esc>"))
 	}
 	lines = append(lines, dialog.HelpStyle.Render(helpText))

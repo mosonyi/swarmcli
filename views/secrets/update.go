@@ -8,6 +8,7 @@ import (
 	"github.com/Eldara-Tech/swarmcli/core/primitives/hash"
 	"github.com/Eldara-Tech/swarmcli/ui"
 	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/ui/dialog"
 	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
 	helpview "github.com/Eldara-Tech/swarmcli/views/help"
 	loading "github.com/Eldara-Tech/swarmcli/views/loading"
@@ -619,49 +620,15 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 				m.createLabelsInput.Blur()
 			}
 			return nil
-		case " ":
-			// Handle space key depending on focused input
-			switch m.createInputFocus {
-			case 3:
-				// Toggle encode when focused on encode toggle
-				m.createEncodeSecret = !m.createEncodeSecret
-				return nil
-			case 0:
-				var cmd tea.Cmd
-				m.createNameInput, cmd = m.createNameInput.Update(msg)
-				return cmd
-			case 1:
-				var cmd tea.Cmd
-				m.createFileInput, cmd = m.createFileInput.Update(msg)
-				return cmd
-			case 2:
-				var cmd tea.Cmd
-				m.createLabelsInput, cmd = m.createLabelsInput.Update(msg)
-				return cmd
-			default:
-				return nil
+		case dialog.BrowseKey:
+			// The dialog has one path input, so browsing needs no focus check.
+			m.createDialogActive = false
+			m.fileBrowserActive = true
+			homeDir, _ := os.UserHomeDir()
+			if homeDir == "" {
+				homeDir = "/"
 			}
-		case "f", "F":
-			switch m.createInputFocus {
-			case 1:
-				m.createDialogActive = false
-				m.fileBrowserActive = true
-				homeDir, _ := os.UserHomeDir()
-				if homeDir == "" {
-					homeDir = "/"
-				}
-				return loadFilesCmd(homeDir)
-			case 0:
-				var cmd tea.Cmd
-				m.createNameInput, cmd = m.createNameInput.Update(msg)
-				return cmd
-			case 2:
-				var cmd tea.Cmd
-				m.createLabelsInput, cmd = m.createLabelsInput.Update(msg)
-				return cmd
-			default:
-				return nil
-			}
+			return loadFilesCmd(homeDir)
 		case "enter":
 			if m.createDialogError != "" {
 				m.createDialogError = ""
@@ -692,6 +659,14 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 			m.createFileInput.Blur()
 			m.createLabelsInput.Blur()
 			return m.createSecretFromFileCmd(m.createNameInput.Value(), filePath, labels, m.createEncodeSecret)
+		case " ":
+			// Toggle encode when focused on encode toggle
+			if m.createInputFocus == 3 {
+				m.createEncodeSecret = !m.createEncodeSecret
+				return nil
+			}
+			// Otherwise it is just a character — route it like any other key.
+			fallthrough
 		default:
 			var cmd tea.Cmd
 			switch m.createInputFocus {
@@ -742,49 +717,15 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 				m.createEncodeSecret = !m.createEncodeSecret
 				return nil
 			}
-			// Otherwise pass to focused input
-			switch m.createInputFocus {
-			case 0:
-				var cmd tea.Cmd
-				m.createNameInput, cmd = m.createNameInput.Update(msg)
-				if m.createDialogError != "" {
-					m.createDialogError = ""
-				}
-				return cmd
-			case 2:
-				var cmd tea.Cmd
-				m.createLabelsInput, cmd = m.createLabelsInput.Update(msg)
-				if m.createDialogError != "" {
-					m.createDialogError = ""
-				}
-				return cmd
-			default:
-				return nil
-			}
+			return m.routeInlineKey(msg)
 		case "e", "E":
-			switch m.createInputFocus {
-			case 1:
-				// Open editor for content - don't require name to be set yet
+			// Open editor for content - don't require name to be set yet
+			if m.createInputFocus == 1 {
 				m.createDialogActive = false
 				m.createNameInput.Blur()
 				return openEditorForContentCmd(m.createSecretData)
-			case 0:
-				var cmd tea.Cmd
-				m.createNameInput, cmd = m.createNameInput.Update(msg)
-				if m.createDialogError != "" {
-					m.createDialogError = ""
-				}
-				return cmd
-			case 2:
-				var cmd tea.Cmd
-				m.createLabelsInput, cmd = m.createLabelsInput.Update(msg)
-				if m.createDialogError != "" {
-					m.createDialogError = ""
-				}
-				return cmd
-			default:
-				return nil
 			}
+			return m.routeInlineKey(msg)
 		case "enter":
 			if m.createDialogError != "" {
 				m.createDialogError = ""
@@ -814,28 +755,31 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 			m.createLabelsInput.Blur()
 			return m.createSecretFromContentCmd(m.createNameInput.Value(), []byte(m.createSecretData), labels, m.createEncodeSecret)
 		default:
-			switch m.createInputFocus {
-			case 0:
-				var cmd tea.Cmd
-				m.createNameInput, cmd = m.createNameInput.Update(msg)
-				if m.createDialogError != "" {
-					m.createDialogError = ""
-				}
-				return cmd
-			case 2:
-				var cmd tea.Cmd
-				m.createLabelsInput, cmd = m.createLabelsInput.Update(msg)
-				if m.createDialogError != "" {
-					m.createDialogError = ""
-				}
-				return cmd
-			default:
-				return nil
-			}
+			return m.routeInlineKey(msg)
 		}
 	}
 
 	return nil
+}
+
+// routeInlineKey passes a key to whichever input has focus in the inline create
+// dialog. Space and "e" both need it as well as the default branch, and
+// fallthrough only reaches the next clause, so the routing lives here — one
+// copy that cannot disagree with itself when a field is added.
+func (m *Model) routeInlineKey(msg tea.KeyMsg) tea.Cmd {
+	var cmd tea.Cmd
+	switch m.createInputFocus {
+	case 0:
+		m.createNameInput, cmd = m.createNameInput.Update(msg)
+	case 2:
+		m.createLabelsInput, cmd = m.createLabelsInput.Update(msg)
+	default:
+		return nil
+	}
+	if m.createDialogError != "" {
+		m.createDialogError = ""
+	}
+	return cmd
 }
 
 func (m *Model) handleFileBrowserKey(msg tea.KeyMsg) tea.Cmd {

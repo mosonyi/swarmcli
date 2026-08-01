@@ -441,6 +441,109 @@ func TestCreateDialog_DetailsFile_Space_TogglesEncode(t *testing.T) {
 	require.NotEqual(t, initial, m.createEncodeSecret)
 }
 
+// --- #525: a printable character must never be a hotkey over a focused input ---
+
+func secretFileDialog(t *testing.T) *Model {
+	t.Helper()
+	m := testModel()
+	m.createDialogActive = true
+	m.createDialogStep = "details-file"
+	m.createInputFocus = 0
+	m.createNameInput.Focus()
+	m.Update(key("tab"))
+	require.Equal(t, 1, m.createInputFocus)
+	return m
+}
+
+func TestCreateDialog_DetailsFile_F_TypesIntoPath(t *testing.T) {
+	m := secretFileDialog(t)
+	m.createFileInput.SetValue("/etc/ssl/")
+	m.Update(key("f"))
+	m.Update(key("F"))
+	require.Equal(t, "/etc/ssl/fF", m.createFileInput.Value())
+	require.False(t, m.fileBrowserActive, "f must not open the browser")
+}
+
+func TestCreateDialog_DetailsFile_BrowseKey_OpensFileBrowser(t *testing.T) {
+	m := secretFileDialog(t)
+	cmd := m.Update(key("ctrl+o"))
+	require.False(t, m.createDialogActive)
+	require.True(t, m.fileBrowserActive)
+	require.NotNil(t, cmd)
+}
+
+func TestCreateDialog_DetailsFile_BrowseKey_FromNameFocus(t *testing.T) {
+	m := testModel()
+	m.createDialogActive = true
+	m.createDialogStep = "details-file"
+	m.createInputFocus = 0
+	m.createNameInput.Focus()
+	require.NotNil(t, m.Update(key("ctrl+o")))
+	require.True(t, m.fileBrowserActive)
+}
+
+// Both dialog steps hold an encode toggle at focus 3 and route every other key
+// to the focused input. The toggle must keep working and must not swallow a
+// space typed into a field.
+func TestCreateDialog_RoutesEveryKeyToFocusedInput(t *testing.T) {
+	steps := map[string][]int{
+		"details-file":   {0, 1, 2},
+		"details-inline": {0, 2},
+	}
+	value := map[int]func(*Model) string{
+		0: func(m *Model) string { return m.createNameInput.Value() },
+		1: func(m *Model) string { return m.createFileInput.Value() },
+		2: func(m *Model) string { return m.createLabelsInput.Value() },
+	}
+	focusInput := map[int]func(*Model){
+		0: func(m *Model) { m.createNameInput.Focus() },
+		1: func(m *Model) { m.createFileInput.Focus() },
+		2: func(m *Model) { m.createLabelsInput.Focus() },
+	}
+
+	for step, focuses := range steps {
+		for _, k := range []string{"f", "F", "e", "x", " "} {
+			t.Run(step+"/"+k, func(t *testing.T) {
+				for _, focus := range focuses {
+					m := testModel()
+					m.createDialogActive = true
+					m.createDialogStep = step
+					m.createInputFocus = focus
+					focusInput[focus](m)
+					m.Update(key(k))
+					require.Equal(t, k, value[focus](m), "focus %d must receive %q", focus, k)
+				}
+
+				// Focus 3 is the encode toggle, not an input.
+				m := testModel()
+				m.createDialogActive = true
+				m.createDialogStep = step
+				m.createInputFocus = 3
+				before := m.createEncodeSecret
+				m.Update(key(k))
+				if k == " " {
+					require.NotEqual(t, before, m.createEncodeSecret, "space must toggle encode")
+				} else {
+					require.Equal(t, before, m.createEncodeSecret)
+				}
+				require.Empty(t, m.createNameInput.Value())
+				require.Empty(t, m.createFileInput.Value())
+				require.Empty(t, m.createLabelsInput.Value())
+			})
+		}
+	}
+}
+
+func TestCreateDialog_DetailsInline_E_OpensEditorAtContent(t *testing.T) {
+	m := testModel()
+	m.createDialogActive = true
+	m.createDialogStep = "details-inline"
+	m.createInputFocus = 1
+	cmd := m.Update(key("e"))
+	require.False(t, m.createDialogActive)
+	require.NotNil(t, cmd)
+}
+
 // --- UsedBy view key tests ---
 
 func TestUsedByView_Esc_ClosesView(t *testing.T) {
