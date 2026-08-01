@@ -8,6 +8,9 @@ import (
 	"testing"
 
 	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/ui/dialog"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/stretchr/testify/require"
 )
@@ -113,4 +116,18 @@ func TestLabelsScroll_Truncation(t *testing.T) {
 	truncated := filterlist.ScrollWindow(full, 0, 5)
 	require.Contains(t, truncated, "…")
 	require.Equal(t, 5, len([]rune(truncated)))
+}
+
+// --- #525: the browse hint advertises the chord, from any focus ---
+
+func TestRenderCreateDialog_ShowsBrowseHintAtEveryFocus(t *testing.T) {
+	for _, focus := range []int{0, 1, 2} {
+		m := testModel()
+		m.createDialogActive = true
+		m.createDialogStep = "details-file"
+		m.createInputFocus = focus
+		out := ansi.Strip(m.renderCreateDialog())
+		require.Contains(t, out, dialog.BrowseHint, "focus %d must show the browse hint", focus)
+		require.NotContains(t, out, "[f: Browse]")
+	}
 }

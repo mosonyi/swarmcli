@@ -11,6 +11,7 @@ import (
 	"github.com/Eldara-Tech/swarmcli/docker"
 	"github.com/Eldara-Tech/swarmcli/ui"
 	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/ui/dialog"
 	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
 	helpview "github.com/Eldara-Tech/swarmcli/views/help"
 	view "github.com/Eldara-Tech/swarmcli/views/view"
@@ -776,28 +777,15 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 				m.createNameInput.Focus()
 			}
 			return nil
-		case "f", "F":
-			// Only open file browser when focused on file input
-			if m.createInputFocus == 1 {
-				m.createDialogActive = false
-				m.fileBrowserActive = true
-				homeDir, _ := os.UserHomeDir()
-				if homeDir == "" {
-					homeDir = "/"
-				}
-				return loadFilesCmd(homeDir)
+		case dialog.BrowseKey:
+			// The dialog has one path input, so browsing needs no focus check.
+			m.createDialogActive = false
+			m.fileBrowserActive = true
+			homeDir, _ := os.UserHomeDir()
+			if homeDir == "" {
+				homeDir = "/"
 			}
-			// Otherwise let textinput handle it (typing 'f')
-			var cmd tea.Cmd
-			if m.createInputFocus == 0 {
-				m.createNameInput, cmd = m.createNameInput.Update(msg)
-			} else {
-				m.createFileInput, cmd = m.createFileInput.Update(msg)
-			}
-			if m.createDialogError != "" {
-				m.createDialogError = ""
-			}
-			return cmd
+			return loadFilesCmd(homeDir)
 		case "enter":
 			// If there's an error, clear it and stay in editing mode
 			if m.createDialogError != "" {
@@ -878,31 +866,6 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 				m.createLabelsInput.Blur()
 			}
 			return nil
-		case "e", "E":
-			switch m.createInputFocus {
-			case 1:
-				// Open editor for content - don't require name to be set yet
-				m.createDialogActive = false
-				m.createNameInput.Blur()
-				m.createLabelsInput.Blur()
-				return openEditorForContentCmd(m.createConfigData)
-			case 0:
-				var cmd tea.Cmd
-				m.createNameInput, cmd = m.createNameInput.Update(msg)
-				if m.createDialogError != "" {
-					m.createDialogError = ""
-				}
-				return cmd
-			case 2:
-				var cmd tea.Cmd
-				m.createLabelsInput, cmd = m.createLabelsInput.Update(msg)
-				if m.createDialogError != "" {
-					m.createDialogError = ""
-				}
-				return cmd
-			default:
-				return nil
-			}
 		case "enter":
 			// If there's an error, clear it and stay in editing mode
 			if m.createDialogError != "" {
@@ -935,6 +898,16 @@ func (m *Model) handleCreateDialogKey(msg tea.KeyMsg) tea.Cmd {
 			m.createNameInput.Blur()
 			m.createLabelsInput.Blur()
 			return m.createConfigFromContentCmd(m.createNameInput.Value(), []byte(m.createConfigData), labels)
+		case "e", "E":
+			// Open editor for content - don't require name to be set yet
+			if m.createInputFocus == 1 {
+				m.createDialogActive = false
+				m.createNameInput.Blur()
+				m.createLabelsInput.Blur()
+				return openEditorForContentCmd(m.createConfigData)
+			}
+			// Otherwise it is just a letter — route it like any other key.
+			fallthrough
 		default:
 			// Pass keys to the focused textinput
 			var cmd tea.Cmd

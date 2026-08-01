@@ -470,6 +470,123 @@ func TestFileBrowser_UpDown(t *testing.T) {
 	require.Equal(t, 0, m.fileBrowserCursor)
 }
 
+// --- #525: a printable character must never be a hotkey over a focused input ---
+
+func configFileDialog(t *testing.T) *Model {
+	t.Helper()
+	m := testModel()
+	m.createDialogActive = true
+	m.createDialogStep = "details-file"
+	m.createInputFocus = 0
+	m.createNameInput.Focus()
+	m.Update(key("tab"))
+	require.Equal(t, 1, m.createInputFocus)
+	return m
+}
+
+func TestCreateDialog_DetailsFile_F_TypesIntoPath(t *testing.T) {
+	m := configFileDialog(t)
+	m.createFileInput.SetValue("~/config/")
+	m.Update(key("f"))
+	m.Update(key("F"))
+	require.Equal(t, "~/config/fF", m.createFileInput.Value())
+	require.False(t, m.fileBrowserActive, "f must not open the browser")
+}
+
+func TestCreateDialog_DetailsFile_BrowseKey_OpensFileBrowser(t *testing.T) {
+	m := configFileDialog(t)
+	cmd := m.Update(key("ctrl+o"))
+	require.False(t, m.createDialogActive)
+	require.True(t, m.fileBrowserActive)
+	require.NotNil(t, cmd)
+}
+
+func TestCreateDialog_DetailsFile_BrowseKey_FromNameFocus(t *testing.T) {
+	m := testModel()
+	m.createDialogActive = true
+	m.createDialogStep = "details-file"
+	m.createInputFocus = 0
+	m.createNameInput.Focus()
+	require.NotNil(t, m.Update(key("ctrl+o")))
+	require.True(t, m.fileBrowserActive)
+}
+
+// The labels field is reachable in details-file — picking a file with an
+// invalid labels value lands there — and "f" used to be inserted into the path
+// the browser had just filled in, silently corrupting it.
+func TestCreateDialog_DetailsFile_LabelsFocus_KeepsPathIntact(t *testing.T) {
+	m := testModel()
+	m.createDialogActive = true
+	m.createDialogStep = "details-file"
+	m.createNameInput.SetValue("myconfig")
+	m.createLabelsInput.SetValue("bad-format")
+
+	// Pick a file in the browser: labels fail to parse, so focus lands on them.
+	// Opening the browser hides the dialog, which is what routes keys to it.
+	m.createDialogActive = false
+	m.fileBrowserActive = true
+	m.fileBrowserFiles = []string{"/tmp/app.conf"}
+	m.fileBrowserCursor = 0
+	m.Update(key("enter"))
+	require.Equal(t, 2, m.createInputFocus, "a labels parse failure must focus the labels field")
+	require.Equal(t, "/tmp/app.conf", m.createFileInput.Value())
+
+	m.Update(key("f"))
+	require.Equal(t, "bad-formatf", m.createLabelsInput.Value(), "f must reach the labels field")
+	require.Equal(t, "/tmp/app.conf", m.createFileInput.Value(), "the chosen path must not be touched")
+}
+
+func TestCreateDialog_DetailsFile_RoutesEveryKeyToFocusedInput(t *testing.T) {
+	for _, k := range []string{"f", "F", "e", "x", " "} {
+		t.Run(k, func(t *testing.T) {
+			for _, tc := range []struct {
+				focus int
+				value func(*Model) string
+			}{
+				{0, func(m *Model) string { return m.createNameInput.Value() }},
+				{1, func(m *Model) string { return m.createFileInput.Value() }},
+				{2, func(m *Model) string { return m.createLabelsInput.Value() }},
+			} {
+				m := testModel()
+				m.createDialogActive = true
+				m.createDialogStep = "details-file"
+				m.createInputFocus = tc.focus
+				switch tc.focus {
+				case 0:
+					m.createNameInput.Focus()
+				case 1:
+					m.createFileInput.Focus()
+				case 2:
+					m.createLabelsInput.Focus()
+				}
+				m.Update(key(k))
+				require.Equal(t, k, tc.value(m), "focus %d must receive %q", tc.focus, k)
+			}
+		})
+	}
+}
+
+func TestCreateDialog_DetailsInline_E_TypesIntoFocusedInput(t *testing.T) {
+	m := testModel()
+	m.createDialogActive = true
+	m.createDialogStep = "details-inline"
+	m.createInputFocus = 2
+	m.createLabelsInput.Focus()
+	m.Update(key("e"))
+	require.Equal(t, "e", m.createLabelsInput.Value())
+	require.True(t, m.createDialogActive, "e at the labels field must not open the editor")
+}
+
+func TestCreateDialog_DetailsInline_E_OpensEditorAtContent(t *testing.T) {
+	m := testModel()
+	m.createDialogActive = true
+	m.createDialogStep = "details-inline"
+	m.createInputFocus = 1
+	cmd := m.Update(key("e"))
+	require.False(t, m.createDialogActive)
+	require.NotNil(t, cmd)
+}
+
 // --- parseLabels tests ---
 
 func TestParseLabels_Empty(t *testing.T) {

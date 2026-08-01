@@ -470,6 +470,102 @@ func TestCreateDialog_DetailsFile_EnterEmptyPath(t *testing.T) {
 	require.Contains(t, m.createDialogError, "file path")
 }
 
+// --- #525: a printable character must never be a hotkey over a focused input ---
+
+// createFileDialog opens the create dialog on details-file with the file input
+// focused, the way tabbing there leaves it.
+func createFileDialog(t *testing.T) *Model {
+	t.Helper()
+	m := testModel()
+	m.createDialogActive = true
+	m.createDialogStep = "details-file"
+	m.createInputFocus = 0
+	m.createNameInput.Focus()
+	m.Update(key("tab"))
+	require.Equal(t, 1, m.createInputFocus)
+	return m
+}
+
+func TestCreateDialog_DetailsFile_F_TypesIntoPath(t *testing.T) {
+	m := createFileDialog(t)
+	m.createFileInput.SetValue("/etc/docker/certs.d/")
+	m.Update(key("f"))
+	require.Equal(t, "/etc/docker/certs.d/f", m.createFileInput.Value())
+	require.False(t, m.fileBrowserActive, "f must not open the browser")
+	require.True(t, m.createDialogActive)
+}
+
+func TestCreateDialog_DetailsFile_ShiftF_TypesIntoPath(t *testing.T) {
+	m := createFileDialog(t)
+	m.Update(key("F"))
+	require.Equal(t, "F", m.createFileInput.Value())
+	require.False(t, m.fileBrowserActive)
+}
+
+func TestCreateDialog_DetailsFile_BrowseKey_OpensFileBrowser(t *testing.T) {
+	m := createFileDialog(t)
+	cmd := m.Update(key("ctrl+o"))
+	require.False(t, m.createDialogActive)
+	require.True(t, m.fileBrowserActive)
+	require.Equal(t, "create", m.fileBrowserContext)
+	require.NotNil(t, cmd)
+}
+
+// The chord is unambiguous — there is one path input — so it browses from the
+// name field too, where the old "f" hotkey did nothing.
+func TestCreateDialog_DetailsFile_BrowseKey_FromNameFocus(t *testing.T) {
+	m := testModel()
+	m.createDialogActive = true
+	m.createDialogStep = "details-file"
+	m.createInputFocus = 0
+	m.createNameInput.Focus()
+	cmd := m.Update(key("ctrl+o"))
+	require.True(t, m.fileBrowserActive)
+	require.NotNil(t, cmd)
+}
+
+func TestCreateDialog_DetailsFile_RoutesEveryKeyToFocusedInput(t *testing.T) {
+	for _, k := range []string{"f", "F", "e", "x", " "} {
+		t.Run(k, func(t *testing.T) {
+			m := testModel()
+			m.createDialogActive = true
+			m.createDialogStep = "details-file"
+			m.createInputFocus = 0
+			m.createNameInput.Focus()
+
+			m.Update(key(k))
+			require.Equal(t, k, m.createNameInput.Value(), "focus 0 must type into the name")
+			require.Empty(t, m.createFileInput.Value(), "focus 0 must not touch the path")
+
+			m.Update(key("tab"))
+			m.Update(key(k))
+			require.Equal(t, k, m.createFileInput.Value(), "focus 1 must type into the path")
+			require.Equal(t, k, m.createNameInput.Value(), "focus 1 must not touch the name")
+		})
+	}
+}
+
+func TestCreateDialog_DetailsInline_E_TypesIntoName(t *testing.T) {
+	m := testModel()
+	m.createDialogActive = true
+	m.createDialogStep = "details-inline"
+	m.createInputFocus = 0
+	m.createNameInput.Focus()
+	m.Update(key("e"))
+	require.Equal(t, "e", m.createNameInput.Value())
+	require.True(t, m.createDialogActive, "e at the name field must not open the editor")
+}
+
+func TestCreateDialog_DetailsInline_E_OpensEditorAtContent(t *testing.T) {
+	m := testModel()
+	m.createDialogActive = true
+	m.createDialogStep = "details-inline"
+	m.createInputFocus = 1
+	cmd := m.Update(key("e"))
+	require.False(t, m.createDialogActive)
+	require.NotNil(t, cmd)
+}
+
 func TestCreateDialog_DetailsInline_Esc(t *testing.T) {
 	m := testModel()
 	m.createDialogActive = true
@@ -715,16 +811,31 @@ func TestSaveDialog_EnterWithError_ClearsError(t *testing.T) {
 	require.True(t, m.saveDialogActive)
 }
 
-func TestSaveDialog_F_OpensFileBrowser(t *testing.T) {
+func TestSaveDialog_BrowseKey_OpensFileBrowser(t *testing.T) {
 	m := testModel()
 	m.saveDialogActive = true
 	m.saveStackName = "mystack"
 	m.saveFileInput.SetValue("mystack.yml")
-	cmd := m.Update(key("f"))
+	cmd := m.Update(key("ctrl+o"))
 	require.False(t, m.saveDialogActive)
 	require.True(t, m.fileBrowserActive)
 	require.Equal(t, "save", m.fileBrowserContext)
 	require.NotNil(t, cmd)
+}
+
+// The save dialog never had a focus guard at all, so "f" was unreachable in its
+// only field — and its placeholder ("./my-stack.yml") invites relative paths.
+func TestSaveDialog_F_TypesIntoPath(t *testing.T) {
+	m := testModel()
+	m.saveDialogActive = true
+	m.saveStackName = "mystack"
+	m.saveFileInput.Focus()
+	m.saveFileInput.SetValue("./con")
+	m.Update(key("f"))
+	m.Update(key("F"))
+	require.Equal(t, "./confF", m.saveFileInput.Value())
+	require.True(t, m.saveDialogActive)
+	require.False(t, m.fileBrowserActive)
 }
 
 func TestStackSavedMsg_ShowsSuccess(t *testing.T) {
