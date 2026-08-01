@@ -169,14 +169,28 @@ mychart/
 ├── values.yaml         # default values
 ├── values.schema.json  # optional JSON Schema validated before render
 ├── README.md
-└── templates/          # Go-templated Compose fragments
-    ├── stack.yaml
-    ├── configs.yaml
-    ├── secrets.yaml
-    └── volumes.yaml
+├── templates/          # Go-templated Compose fragments
+│   ├── stack.yaml
+│   ├── configs.yaml
+│   ├── secrets.yaml
+│   └── volumes.yaml
+└── files/              # optional; files the chart carries, read recursively
+    ├── nginx.conf
+    └── tls/ca.pem
 ```
 
 `apiVersion` is `v1` (the only format this build reads; absent means `v1`).
+
+`files/` is collected and carried with the chart, keyed by each file's path
+relative to the chart root — `files/nginx.conf`, `files/tls/ca.pem`. It is
+deliberately not Helm's `.Files`: only `files/` is collected, never "everything
+that is not a known member", because a chart's file set is destined for a swarm
+config and a rule that sweeps up whatever is lying beside `values.yaml` ships
+`values.yaml.bak`, a `.env` or an editor swap file to the swarm. Templates stay
+in `templates/`, which unlike `files/` is flat.
+
+Nothing reads these files yet — what a manifest may do with them lands with
+[#528](https://github.com/Eldara-Tech/swarmcli/issues/528).
 
 ### Declaring the swarmcli a chart needs
 

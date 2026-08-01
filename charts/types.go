@@ -78,6 +78,23 @@ type Chart struct {
 	Readme          string            // README.md, empty if absent
 	Requirements    *Requirements     // parsed requirements.yaml (raw, unrendered), nil if absent
 	RequirementsRaw []byte            // raw requirements.yaml bytes, nil if absent; re-rendered with values at pre-flight
+	// Files are the chart's files/ directory, keyed by path relative to the
+	// chart root — "files/nginx.conf", "files/tls/ca.pem". Nil for a chart
+	// without a files/ directory, which is every chart written before it
+	// existed.
+	//
+	// It is a directory rather than Helm's "everything that is not a known
+	// member" because a chart's file set ends up inside a swarm config, and a
+	// rule that sweeps up whatever happens to be lying beside values.yaml is a
+	// rule that ships an editor backup to the swarm: values.yaml.bak, .env, a
+	// vim swap file, a stray .git. An explicit directory is one rule, both
+	// loaders implement it identically, and a chart author can see what they
+	// are shipping by listing one directory.
+	//
+	// Templates are not here; they are in Templates. Unlike templates/, which
+	// is deliberately flat, files/ is read recursively — files/tls/ca.pem is an
+	// obvious shape and there is no reason to forbid it.
+	Files map[string][]byte
 }
 
 // Requirements is the parsed, defaulted requirements.yaml: the external
