@@ -330,6 +330,35 @@ to `files/`:
   its content: secret *material* still belongs in a Docker secret created outside
   the chart and referenced with `external: true`.
 
+### Bind mounts name the node, so their source must be absolute
+
+A `file:` reads the chart. A bind mount does not read anything — it names a path
+on **whichever node runs the task**, which is a machine the chart author has
+never seen. So a source that is not absolute has nothing to resolve against, and
+is refused before the deploy:
+
+```yaml
+services:
+  web:
+    volumes:
+      - ./data:/data          # refused — relative
+      - ~/data:/data          # refused — that is your home, not the node's
+      - /srv/app/data:/data   # deployed — a path on the node
+      - data:/data            # deployed — a named volume
+```
+
+This is the same defect as the one above, one key over: the docker CLI resolved
+those sources against the temp directory swarmcli deploys from, so `./data` meant
+a directory swarmcli itself deletes when the deploy returns. Nothing was read or
+disclosed — a bind source is a string the daemon acts on — but the mount was
+never the one the chart meant.
+
+An absolute source is deployed as written, and is deliberately privileged: a bind
+of `/var/run/docker.sock` on a manager is the swarm's control plane. That is a
+property of compose, and CE leaves the decision with the operator who installs
+the chart. swarmcli-cd, which reconciles charts nobody is watching, additionally
+requires the application's own allowlist to name the path.
+
 ### Declaring the swarmcli a chart needs
 
 A chart may state the chart engine it requires, as a SemVer constraint:

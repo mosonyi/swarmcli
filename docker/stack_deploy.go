@@ -125,6 +125,13 @@ func DeployStackInContext(ctx context.Context, ctxName, stackName, yamlContent s
 	if err := ValidateStackYAML(yamlContent); err != nil {
 		return fmt.Errorf("validation failed: %w", err)
 	}
+	// Before writeStackTree, because the directory it creates is what a bind
+	// source that is not absolute would silently resolve against. Unwrapped: the
+	// message states the rule and names the replacement, and is all the operator
+	// gets.
+	if err := checkBindSources(yamlContent); err != nil {
+		return err
+	}
 
 	if stackName == "" {
 		return fmt.Errorf("stack name cannot be empty")
