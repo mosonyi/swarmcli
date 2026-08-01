@@ -100,6 +100,43 @@ func TestColumns_HealthColumnAndFootnote(t *testing.T) {
 		"HEALTH should sit immediately after STATUS")
 }
 
+// statusCell returns the rendered STATUS cell for e.
+func statusCell(m *Model, e docker.ServiceEntry) string {
+	for _, c := range m.serviceColumns() {
+		if c.col.Label == "STATUS" {
+			return c.col.Cell(e)
+		}
+	}
+	return ""
+}
+
+// REPLICAS counts every running replica, superseded ones included, so a
+// start-first rollout that has not moved a single replica onto the new
+// generation still reads 2/2. STATUS is where that gets said (issue #480).
+func TestColumns_StatusShowsRolloutProgress(t *testing.T) {
+	m := testModel()
+	loadWithFilter(m, AllFilter, fakeEntries("web"))
+
+	rollingOut := docker.ServiceEntry{
+		Status: "updating", RollingOut: true, ReplicasOnNode: 2, ReplicasTotal: 2, UpToDate: 1,
+	}
+	require.Equal(t, "updating · 1/2 new", statusCell(m, rollingOut))
+
+	landed := rollingOut
+	landed.UpToDate = 2
+	require.Equal(t, "updating", statusCell(m, landed), "no counter once every replica is current")
+
+	settled := docker.ServiceEntry{Status: "active", ReplicasOnNode: 1, ReplicasTotal: 2, UpToDate: 1}
+	require.Equal(t, "active", statusCell(m, settled), "a restart outside a rollout is not a stale version")
+
+	pulling := rollingOut
+	pulling.PullProgress = "pulling · 3/12 layers"
+	require.Equal(t, "pulling · 3/12 layers", statusCell(m, pulling), "a pull in flight still owns the cell")
+
+	unknown := docker.ServiceEntry{Status: "updating", RollingOut: true, ReplicasTotal: 0}
+	require.Equal(t, "updating", statusCell(m, unknown), "no target to count against")
+}
+
 func TestExpandedRow_ContainerStateFallback(t *testing.T) {
 	m := testModel()
 	loadWithFilter(m, AllFilter, fakeEntries("web"))
@@ -142,18 +179,79 @@ func TestFirstNonEmpty(t *testing.T) {
 }
 
 func TestFormatTaskRow_ConditionalColumns(t *testing.T) {
-	// Neither flag set → layout matches the pre-existing NAME…ERROR row.
-	plain := formatTaskRow("web.1", "node-1", "Running", "running 8m", "healthy", "8000/tcp", "boom", false, false)
+	cells := taskRow{
+		replica: "1", image: "web:v2", node: "node-1", desired: "Running",
+		current: "running 8m", health: "healthy", ports: "8000/tcp", errText: "boom",
+	}
+
+	// No flags set → the mandatory REPLICA…ERROR row only.
+	plain := formatTaskRow(cells, taskRowColumns{})
+	require.NotContains(t, plain, "web:v2")
 	require.NotContains(t, plain, "healthy")
 	require.NotContains(t, plain, "8000/tcp")
 	require.Contains(t, plain, "boom")
 
-	// Both flags set → HEALTH and PORTS appear before ERROR.
-	full := formatTaskRow("web.1", "node-1", "Running", "running 8m", "healthy", "8000/tcp", "boom", true, true)
-	require.Contains(t, full, "healthy")
-	require.Contains(t, full, "8000/tcp")
+	// All set → IMAGE sits before NODE, HEALTH and PORTS before ERROR.
+	full := formatTaskRow(cells, taskRowColumns{image: true, health: true, ports: true})
+	require.Less(t, indexOf(full, "web:v2"), indexOf(full, "node-1"))
 	require.Less(t, indexOf(full, "healthy"), indexOf(full, "boom"))
 	require.Less(t, indexOf(full, "8000/tcp"), indexOf(full, "boom"))
+}
+
+// The reported confusion: three task rows against a target of 2 read as a
+// contradiction, because the slot — the one field that says two of them are one
+// replica being replaced — was truncated out of the NAME column (issue #480).
+func TestExpandedRow_ReplicaAndImageIdentifyGenerations(t *testing.T) {
+	m := testModel()
+	loadWithFilter(m, AllFilter, fakeEntries("web"))
+	m.expandedServices["id-web"] = true
+	m.serviceTasks["id-web"] = []docker.TaskEntry{
+		{Slot: 1, Image: "registry.example.com/acme/web:v2", NodeName: "node-29",
+			DesiredState: "Running", CurrentState: "preparing 26s"},
+		{Slot: 2, Image: "registry.example.com/acme/web:v2", NodeName: "node-02",
+			DesiredState: "Running", CurrentState: "running 36s"},
+		{Slot: 1, Image: "registry.example.com/acme/web:v1", NodeName: "node-03",
+			DesiredState: "Running", CurrentState: "running 2 weeks"},
+	}
+	m.setRenderItem()
+
+	out := m.List.RenderItem(m.List.Filtered[0], false, 0)
+	require.Contains(t, out, "REPLICA", "the slot must be a column of its own")
+	require.NotContains(t, out, "web.1", "the service name is on the row above, not repeated per task")
+	require.Contains(t, out, "IMAGE", "generations differ, so IMAGE earns its width")
+	require.Contains(t, out, "web:v1", "the outgoing generation is identifiable")
+	require.Contains(t, out, "web:v2")
+	require.NotContains(t, out, "registry.example.com", "the registry path is dropped, the tag is not")
+}
+
+// A settled service renders no wider than before: every replica agrees on the
+// image, so the column would only repeat the service row above it.
+func TestExpandedRow_ImageColumnHiddenWhenGenerationsAgree(t *testing.T) {
+	m := testModel()
+	loadWithFilter(m, AllFilter, fakeEntries("web"))
+	m.expandedServices["id-web"] = true
+	m.serviceTasks["id-web"] = []docker.TaskEntry{
+		{Slot: 1, Image: "acme/web:v2", NodeName: "node-1", DesiredState: "Running", CurrentState: "running 8m"},
+		{Slot: 2, Image: "acme/web:v2", NodeName: "node-2", DesiredState: "Running", CurrentState: "running 8m"},
+	}
+	m.setRenderItem()
+
+	out := m.List.RenderItem(m.List.Filtered[0], false, 0)
+	require.NotContains(t, out, "IMAGE")
+	require.NotContains(t, out, "web:v2")
+}
+
+// A global service's tasks carry no slot; NODE is what tells them apart.
+func TestExpandedRow_GlobalServiceHasNoSlot(t *testing.T) {
+	require.Equal(t, "—", replicaCell(docker.TaskEntry{Slot: 0}))
+	require.Equal(t, "3", replicaCell(docker.TaskEntry{Slot: 3}))
+}
+
+func TestShortImage(t *testing.T) {
+	require.Equal(t, "frontend:v1.3.23", shortImage("dockerhub.esix.hu/eldara-tech/swarmcli-website/frontend:v1.3.23"))
+	require.Equal(t, "repo:tag", shortImage("host:5000/repo:tag"), "a registry port is not a path separator")
+	require.Equal(t, "nginx:latest", shortImage("nginx:latest"))
+	require.Equal(t, "", shortImage(""))
 }
 
 func indexOf(s, sub string) int {

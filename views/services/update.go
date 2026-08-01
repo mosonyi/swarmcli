@@ -18,6 +18,7 @@ import (
 	"github.com/Eldara-Tech/swarmcli/views/taskutil"
 	"github.com/Eldara-Tech/swarmcli/views/view"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -648,13 +649,10 @@ func (m *Model) refreshServiceErrorsFromSnapshot() {
 	svcDesired := make(map[string]int)
 	svcRunning := make(map[string]int)
 	for _, svc := range snap.Services {
-		desired := 1
-		if svc.Spec.Mode.Replicated != nil && svc.Spec.Mode.Replicated.Replicas != nil {
-			desired = int(*svc.Spec.Mode.Replicated.Replicas)
-		} else if svc.Spec.Mode.Global != nil {
-			desired = len(snap.Nodes)
-		}
-		svcDesired[svc.ID] = desired
+		// Shared with the loaders rather than duplicated: counting every node as
+		// a global service's target flagged a fully healthy service as erroring
+		// for as long as one node stayed drained or down (issue #480).
+		svcDesired[svc.ID] = snap.DesiredReplicas(svc)
 		// Initialize svcRunning with 0 for all services
 		svcRunning[svc.ID] = 0
 	}
@@ -796,34 +794,45 @@ func (m *Model) setRenderItem() {
 				// HEALTH cell shows the healthcheck token when present, else the
 				// container's live state (running / restarting / exited), so the
 				// column appears whenever the decorator is active.
-				showHealth, showPorts := false, false
+				// IMAGE earns its width only while the replicas disagree about it:
+				// that is a rollout, and it is the column that says which row is
+				// the outgoing generation. In a settled service every row would
+				// repeat the image already on the service row above.
+				show := taskRowColumns{}
 				for _, t := range tasks {
 					if t.Health != "" || t.ContainerState != "" {
-						showHealth = true
+						show.health = true
 					}
 					if t.Ports != "" {
-						showPorts = true
+						show.ports = true
+					}
+					if t.Image != tasks[0].Image {
+						show.image = true
 					}
 				}
 
 				// Add task header (include ERROR column)
 				taskHeaderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Italic(true)
 				// Align header columns with task row formatting
-				taskHeader := formatTaskRow("NAME", "NODE", "DESIRED STATE", "CURRENT STATE",
-					"HEALTH", "PORTS", "ERROR", showHealth, showPorts)
+				taskHeader := formatTaskRow(taskRow{
+					replica: "REPLICA", image: "IMAGE", node: "NODE",
+					desired: "DESIRED STATE", current: "CURRENT STATE",
+					health: "HEALTH", ports: "PORTS", errText: "ERROR",
+				}, show)
 				lineStr += "\n" + taskHeaderStyle.Render(taskHeader)
 
 				// Add each task as a row
 				for taskIdx, task := range tasks {
-					taskName := filterlist.TruncateRunes(task.Name, 22)
-					taskNode := filterlist.TruncateRunes(task.NodeName, 12)
-					taskDesired := filterlist.TruncateRunes(task.DesiredState, 13)
-					taskCurrent := filterlist.TruncateRunes(task.StatusText(), 40)
-					taskHealth := dashIfEmpty(filterlist.TruncateRunes(firstNonEmpty(task.Health, task.ContainerState), 9))
-					taskPorts := dashIfEmpty(filterlist.TruncateRunes(task.Ports, 20))
-					taskErr := filterlist.TruncateRunes(task.Error, 30)
-					rowText := formatTaskRow(taskName, taskNode, taskDesired, taskCurrent,
-						taskHealth, taskPorts, taskErr, showHealth, showPorts)
+					rowText := formatTaskRow(taskRow{
+						replica: replicaCell(task),
+						image:   filterlist.TruncateRunes(shortImage(task.Image), 20),
+						node:    filterlist.TruncateRunes(task.NodeName, 12),
+						desired: filterlist.TruncateRunes(task.DesiredState, 13),
+						current: filterlist.TruncateRunes(task.StatusText(), 40),
+						health:  dashIfEmpty(filterlist.TruncateRunes(firstNonEmpty(task.Health, task.ContainerState), 9)),
+						ports:   dashIfEmpty(filterlist.TruncateRunes(task.Ports, 20)),
+						errText: filterlist.TruncateRunes(task.Error, 30),
+					}, show)
 
 					// Check if this task is selected
 					taskSelected := selected && m.selectedTaskIndex == taskIdx
@@ -859,19 +868,51 @@ func (m *Model) setRenderItem() {
 	}
 }
 
+// taskRow is one expanded task sub-row's cells, or the header's labels.
+type taskRow struct {
+	replica, image, node, desired, current, health, ports, errText string
+}
+
+// taskRowColumns says which optional columns the caller found data for.
+type taskRowColumns struct {
+	image, health, ports bool
+}
+
 // formatTaskRow lays out one expanded task sub-row (or the header when passed
-// labels). The HEALTH and PORTS columns are only emitted when the caller found
-// data for them, so services without per-container health/port info render
-// exactly as before.
-func formatTaskRow(name, node, desired, current, health, ports, errText string, showHealth, showPorts bool) string {
-	s := fmt.Sprintf("   %-22s  %-12s  %-13s  %-40s", name, node, desired, current)
-	if showHealth {
-		s += fmt.Sprintf("  %-9s", health)
+// labels). The IMAGE, HEALTH and PORTS columns are only emitted when the caller
+// found data worth showing, so a settled service renders no wider than before.
+func formatTaskRow(r taskRow, show taskRowColumns) string {
+	s := fmt.Sprintf("   %-7s", r.replica)
+	if show.image {
+		s += fmt.Sprintf("  %-20s", r.image)
 	}
-	if showPorts {
-		s += fmt.Sprintf("  %-20s", ports)
+	s += fmt.Sprintf("  %-12s  %-13s  %-40s", r.node, r.desired, r.current)
+	if show.health {
+		s += fmt.Sprintf("  %-9s", r.health)
 	}
-	return s + "  " + errText
+	if show.ports {
+		s += fmt.Sprintf("  %-20s", r.ports)
+	}
+	return s + "  " + r.errText
+}
+
+// replicaCell identifies which replica a task belongs to. A global service's
+// tasks carry no slot; the NODE column is what distinguishes them there.
+func replicaCell(t docker.TaskEntry) string {
+	if t.Slot <= 0 {
+		return "—"
+	}
+	return strconv.Itoa(t.Slot)
+}
+
+// shortImage drops the registry and repository path, keeping the last segment
+// and its tag — the part that differs between two generations of one service.
+// The service row above already carries the full reference.
+func shortImage(image string) string {
+	if i := strings.LastIndex(image, "/"); i >= 0 {
+		return image[i+1:]
+	}
+	return image
 }
 
 // taskRowStyle tints an expanded task sub-row by container status: failed

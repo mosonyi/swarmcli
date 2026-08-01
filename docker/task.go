@@ -14,8 +14,12 @@ import (
 
 // TaskEntry represents a task in a human-readable format
 type TaskEntry struct {
-	ID           string
-	Name         string
+	ID   string
+	Name string
+	// Slot is the replica this task belongs to, so two tasks of the same slot
+	// read as one replica being replaced rather than as two replicas. Zero for a
+	// global service, whose tasks carry no slot and are identified by node.
+	Slot         int
 	ServiceName  string
 	Image        string
 	NodeName     string
@@ -143,6 +147,7 @@ func GetTasksForStack(stackName string) ([]TaskEntry, error) {
 			tasks = append(tasks, TaskEntry{
 				ID:           id,
 				Name:         fmt.Sprintf("%s.%d", svc.Spec.Name, task.Slot),
+				Slot:         task.Slot,
 				ServiceName:  svc.Spec.Name,
 				Image:        image,
 				NodeName:     nodeName,
@@ -255,6 +260,7 @@ func GetTasksForService(serviceID string) ([]TaskEntry, error) {
 			tasks = append(tasks, TaskEntry{
 				ID:           id,
 				Name:         fmt.Sprintf("%s.%d", serviceName, task.Slot),
+				Slot:         task.Slot,
 				ServiceName:  serviceName,
 				Image:        image,
 				NodeName:     nodeName,

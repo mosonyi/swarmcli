@@ -47,9 +47,10 @@ type ServiceState struct {
 	Status   string
 
 	// Running counts tasks that are actually running on an active node.
-	// Deliberately not derived from Replicas: that string counts tasks by
-	// DESIRED state, so it reaches its target the moment Swarm schedules the
-	// tasks rather than when they are up (see issue #480).
+	// Deliberately not derived from Replicas: that string mirrors `docker
+	// service ls` and so counts every generation, superseded tasks included, and
+	// counts them wherever they sit — a down node's stale task included (see
+	// issue #480).
 	Running int
 	// Desired is the target task count over active nodes.
 	Desired int
@@ -1178,10 +1179,10 @@ func (s ServiceState) Convergence() Convergence {
 		return Convergence{PhaseProgressing, "rolling back"}
 	}
 	// Parity is measured from the actual running count, not the Replicas display
-	// string. That string counts tasks by DESIRED state, so it reaches parity
-	// the instant swarm schedules the tasks — before any container is up — which
-	// made --wait return immediately on a fresh install, where UpdateState is
-	// empty and the in-flight arm above cannot fire either (issue #473).
+	// string. That string counts every generation on any node, so it can reach
+	// parity on tasks this package would not accept — which made --wait return
+	// early on a fresh install, where UpdateState is empty and the in-flight arm
+	// above cannot fire either (issue #473).
 	//
 	// A job's task ends Complete and is never replaced, so requiring a running
 	// task would report a step that succeeded as one that never came up. A

@@ -167,10 +167,11 @@ func (b *dockerBackend) StackServices(ctx context.Context, name string) []Servic
 // swarms is not forced through the ambient one.
 func ServiceStatesFrom(snap *docker.SwarmSnapshot, name string) []ServiceState {
 	entries := snap.StackServices(name)
-	// Convergence facts come from a separate loader because ServiceEntry counts
-	// replicas by desired state, which is right for the services view but wrong
-	// for deciding a rollout finished (issues #473, #480). Both now read the
-	// same snapshot, so the display and the decision cannot disagree.
+	// Convergence facts come from a separate loader because ServiceEntry mirrors
+	// `docker service ls` — counting every generation, on any node — which is
+	// right for the services view but wrong for deciding a rollout finished
+	// (issues #473, #480). Both now read the same snapshot, so the display and
+	// the decision cannot disagree.
 	conv := make(map[string]docker.ServiceConvergence, len(entries))
 	for _, c := range snap.StackConvergence(name) {
 		conv[c.Name] = c
