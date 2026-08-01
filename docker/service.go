@@ -11,6 +11,7 @@ import (
 	"io"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -352,10 +353,21 @@ type ServiceEntry struct {
 	ServiceID      string
 	ReplicasOnNode int
 	ReplicasTotal  int
-	Status         string
-	Mode           string
-	Image          string
-	Ports          string
+	// UpToDate counts the replicas running the service's *current* generation.
+	// ReplicasOnNode counts every running task, superseded ones included, so it
+	// matches `docker service ls` — which means a start-first rollout reads as
+	// fully converged while the outgoing generation is what is actually up. The
+	// two together say what one ratio cannot: how many replicas are serving, and
+	// how many of those are the version being rolled out (issue #480).
+	UpToDate int
+	// RollingOut reports a rollout in flight — updating, paused, or either
+	// rollback state. It gates the display of UpToDate: outside a rollout a
+	// replica short of the current generation is a restart, not a stale version.
+	RollingOut bool
+	Status     string
+	Mode       string
+	Image      string
+	Ports      string
 	// Health is an aggregate health summary for the service's running replicas
 	// (e.g. "2/2 healthy"); "" when unknown. The swarm API does not expose
 	// container health, so the default loaders leave it empty; it is an
@@ -388,8 +400,12 @@ func LoadNodeServices(nodeID string) []ServiceEntry {
 		// Count tasks running on this node
 		onNode := countTasksForNode(svc.ID, nodeID, snap)
 
-		// Skip if no tasks on this node
-		if onNode == 0 {
+		// Skip if the node neither runs a task for this service nor is meant to.
+		// Presence cannot be read off onNode alone: that counts running tasks, so
+		// a service whose task here is still preparing — or wedged pending on an
+		// unsatisfiable constraint — would vanish from the view of the very node
+		// an operator opened to find out why.
+		if onNode == 0 && !hasIntendedTaskOnNode(svc.ID, nodeID, snap) {
 			continue
 		}
 
@@ -399,6 +415,8 @@ func LoadNodeServices(nodeID string) []ServiceEntry {
 			ServiceID:      svc.ID,
 			ReplicasOnNode: onNode,
 			ReplicasTotal:  desired,
+			UpToDate:       countUpToDateTasks(svc.ID, snap),
+			RollingOut:     isRollingOut(svc),
 			Status:         getServiceStatus(svc),
 			Mode:           getServiceMode(svc),
 			Image:          getServiceImage(svc),
@@ -443,6 +461,8 @@ func (snap *SwarmSnapshot) StackServices(stackName string) []ServiceEntry {
 			ServiceID:      svc.ID,
 			ReplicasOnNode: onNode,
 			ReplicasTotal:  desired,
+			UpToDate:       countUpToDateTasks(svc.ID, snap),
+			RollingOut:     isRollingOut(svc),
 			Status:         getServiceStatus(svc),
 			Mode:           getServiceMode(svc),
 			Image:          getServiceImage(svc),
@@ -480,6 +500,8 @@ func LoadAllServices() []ServiceEntry {
 			ServiceID:      svc.ID,
 			ReplicasOnNode: onNode,
 			ReplicasTotal:  desired,
+			UpToDate:       countUpToDateTasks(svc.ID, snap),
+			RollingOut:     isRollingOut(svc),
 			Status:         getServiceStatus(svc),
 			Mode:           getServiceMode(svc),
 			Image:          getServiceImage(svc),
@@ -506,7 +528,7 @@ func getServiceStackAndDesired(svc swarm.Service, snap *SwarmSnapshot) (stack st
 	// target is one task per node that can actually run one, so a drained or
 	// down node lowers the target instead of making the service read
 	// permanently short (issue #480).
-	desired = desiredOverActiveNodes(svc, len(activeNodeIDs(snap)))
+	desired = snap.DesiredReplicas(svc)
 	return
 }
 
@@ -521,8 +543,8 @@ func getServiceStackAndDesired(svc swarm.Service, snap *SwarmSnapshot) (stack st
 // operator most needs the truth (issue #480).
 //
 // Superseded tasks from a rolling update are still counted while they run,
-// matching `docker service ls`. Up-to-dateness is a different question from
-// readiness, and LoadStackConvergence is where --wait asks it.
+// matching `docker service ls`. Up-to-dateness is the separate question
+// countUpToDateTasks answers, and LoadStackConvergence is where --wait asks it.
 func countTasksForNode(serviceID, nodeID string, snap *SwarmSnapshot) int {
 	count := 0
 	for _, t := range snap.Tasks {
@@ -537,6 +559,87 @@ func countTasksForNode(serviceID, nodeID string, snap *SwarmSnapshot) int {
 		}
 	}
 	return count
+}
+
+// hasIntendedTaskOnNode reports whether swarm means to run a task of this
+// service on the node, whatever state that task has reached. It is the
+// visibility test the node-scoped services view needs: a task still preparing,
+// or pending on a constraint it cannot satisfy, is exactly what the operator
+// opened that node to see, and counting only running tasks hid it.
+func hasIntendedTaskOnNode(serviceID, nodeID string, snap *SwarmSnapshot) bool {
+	for _, t := range snap.Tasks {
+		if t.ServiceID == serviceID && t.NodeID == nodeID && t.DesiredState == swarm.TaskStateRunning {
+			return true
+		}
+	}
+	return false
+}
+
+// countUpToDateTasks counts the running tasks belonging to the service's current
+// generation — one per slot at most, so a start-first rollout cannot count the
+// outgoing task it is replacing.
+//
+// The current generation is the newest task per slot, by CreatedAt: swarm
+// creates a slot's replacement after the task it supersedes, so creation order
+// *is* generation order. DesiredState cannot draw the line, because under
+// start-first the outgoing task keeps DesiredState=running until its replacement
+// is up — which is precisely the window where the count matters.
+//
+// This is deliberately not taskutil.LatestTasksByServiceKey: that helper prefers
+// a task that wants to be running over a newer terminal one, because it picks a
+// task worth surfacing an error from. Here that preference would pick the
+// outgoing task and report the old generation as current.
+func countUpToDateTasks(serviceID string, snap *SwarmSnapshot) int {
+	newest := make(map[string]swarm.Task)
+	for _, t := range snap.Tasks {
+		if t.ServiceID != serviceID {
+			continue
+		}
+		// An unassigned task has neither slot nor node, so it has no identity to
+		// be the newest of; it is also, by definition, not running yet.
+		key := taskSlotKey(t)
+		if key == "" {
+			continue
+		}
+		if cur, seen := newest[key]; !seen || t.CreatedAt.After(cur.CreatedAt) {
+			newest[key] = t
+		}
+	}
+
+	count := 0
+	for _, t := range newest {
+		if t.Status.State == swarm.TaskStateRunning {
+			count++
+		}
+	}
+	return count
+}
+
+// taskSlotKey identifies the replica a task belongs to: the slot for a
+// replicated service, the node for a global one (whose tasks carry no slot).
+// Empty when the task has neither, i.e. it has not been assigned yet.
+func taskSlotKey(t swarm.Task) string {
+	if t.Slot > 0 {
+		return strconv.Itoa(t.Slot)
+	}
+	return t.NodeID
+}
+
+// isRollingOut reports a rollout in flight. The paused states count: a rollout
+// halted by a failing task is the case where an operator most needs to see how
+// far it got. The completed states do not — the generation on show is the
+// current one.
+func isRollingOut(svc swarm.Service) bool {
+	if svc.UpdateStatus == nil {
+		return false
+	}
+	switch svc.UpdateStatus.State {
+	case swarm.UpdateStateUpdating, swarm.UpdateStatePaused,
+		swarm.UpdateStateRollbackStarted, swarm.UpdateStateRollbackPaused:
+		return true
+	default:
+		return false
+	}
 }
 
 // sortEntries sorts entries by stack name then service name
