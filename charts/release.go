@@ -68,6 +68,31 @@ type ServiceState struct {
 	NewestTaskAge time.Duration
 }
 
+// DeployRequest is one deploy.
+//
+// A struct rather than a parameter list: Backend is implemented outside this
+// repository (swarmcli-cd's backend.Backend), so a field added later costs an
+// implementation nothing, while widening the parameter list is a breaking
+// change to every one of them. This method has been widened twice; it will not
+// be widened again.
+type DeployRequest struct {
+	// Name is the stack, which is also the release name.
+	Name string
+	// Manifest is the rendered compose document.
+	Manifest string
+	// Resolve is the --resolve-image mode, empty for the daemon's default.
+	Resolve string
+	// Files are the chart files the manifest's file: and env_file: keys name,
+	// keyed by their chart-relative path. A backend that serves them must make
+	// each one readable at exactly that relative path from wherever the
+	// manifest is resolved, and must not let a path escape that root.
+	//
+	// Empty for a manifest that names none, which is every manifest a chart
+	// without a files/ directory can produce. Nothing populates this yet — see
+	// #528.
+	Files map[string][]byte
+}
+
 // Backend abstracts the Docker operations the release engine needs, so the
 // lifecycle logic is unit-testable without a live Swarm.
 //
@@ -77,7 +102,7 @@ type ServiceState struct {
 // being shut down, or retiring the application it is syncing, has no other way to
 // stop work already in flight.
 type Backend interface {
-	DeployStack(ctx context.Context, name, manifest string, resolve string) error
+	DeployStack(ctx context.Context, req DeployRequest) error
 	RemoveStack(ctx context.Context, name string) error
 	// RefreshSnapshot invalidates the shared Docker state cache after a mutation
 	// so subsequent reads (status, convergence polling) do not see stale data.
@@ -299,7 +324,7 @@ func (e *Engine) deployAndRecord(ctx context.Context, rel *Release, opts Install
 		}
 		return rel, err
 	}
-	if err := e.Backend.DeployStack(ctx, rel.Name, rel.Manifest, opts.ResolveImage); err != nil {
+	if err := e.Backend.DeployStack(ctx, DeployRequest{Name: rel.Name, Manifest: rel.Manifest, Resolve: opts.ResolveImage}); err != nil {
 		rel.Status = StatusFailed
 		// Roll back networks we auto-created for this install so a failed deploy
 		// leaves no trace; pre-existing networks are untouched.

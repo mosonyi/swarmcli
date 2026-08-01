@@ -15,8 +15,12 @@ import (
 
 // fakeBackend is an in-memory Backend for lifecycle tests.
 type fakeBackend struct {
-	configs       map[string]fakeConfig
-	deployed      map[string]string // stack name -> manifest
+	configs  map[string]fakeConfig
+	deployed map[string]string // stack name -> manifest
+	// lastDeploy is the whole request the last deploy carried. deployed keeps
+	// only two of its fields, and Name, Manifest and Resolve are all strings,
+	// so a pair of them swapped at the call site still fills that map.
+	lastDeploy    DeployRequest
 	volumes       map[string][]string
 	services      map[string][]ServiceState
 	networkScopes map[string]string     // network name -> scope
@@ -58,12 +62,13 @@ func newFakeBackend() *fakeBackend {
 	}
 }
 
-func (f *fakeBackend) DeployStack(_ context.Context, name, manifest, resolve string) error {
+func (f *fakeBackend) DeployStack(_ context.Context, req DeployRequest) error {
 	if f.failNext {
 		f.failNext = false
 		return fmt.Errorf("boom")
 	}
-	f.deployed[name] = manifest
+	f.deployed[req.Name] = req.Manifest
+	f.lastDeploy = req
 	return nil
 }
 func (f *fakeBackend) RemoveStack(_ context.Context, name string) error {
@@ -186,6 +191,26 @@ func TestInstallRecordsRevisionOne(t *testing.T) {
 	require.Equal(t, TypeRelease, cfg.labels[LabelType])
 	require.Equal(t, "my-demo", cfg.labels[LabelRelease])
 	require.Equal(t, "1", cfg.labels[LabelRevision])
+}
+
+// The three strings deployAndRecord unpacks into a DeployRequest come from
+// three different places — the release's name, the release's manifest and the
+// caller's options — and all three fields are strings, so a pair of them
+// swapped at the call site compiles. Resolve is the one nothing else would
+// notice: no other test reads it back, so a deploy resolving images the wrong
+// way stays green. This reads all three apart.
+func TestDeployRequestCarriesEachFieldToItsOwnPlace(t *testing.T) {
+	fb := newFakeBackend()
+	e := testEngine(fb)
+	const manifest = "version: \"3.9\"\nservices:\n  app:\n    image: x\n"
+
+	_, err := e.Install(context.Background(), "my-demo", ReleaseChart{Name: "demo", Version: "0.1.0"},
+		nil, manifest, InstallOptions{ResolveImage: "changed"})
+	require.NoError(t, err)
+
+	require.Equal(t, "my-demo", fb.lastDeploy.Name, "Name must be the release name")
+	require.Equal(t, manifest, fb.lastDeploy.Manifest, "Manifest must be the rendered manifest")
+	require.Equal(t, "changed", fb.lastDeploy.Resolve, "Resolve must be InstallOptions.ResolveImage")
 }
 
 func TestInstallRejectsExisting(t *testing.T) {
