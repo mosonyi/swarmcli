@@ -22,8 +22,27 @@ import (
 // breaking change into a support question.
 const chartFilesRule = "a chart may only read files it ships in " + filesDir + "/"
 
-// ResolveManifestFiles returns the chart files a rendered manifest names, and
-// refuses every path that cannot mean a file in the chart.
+// valuesDir is the one other directory a manifest may name: not a directory on
+// anyone's disk, but the effective values, materialised as files.
+//
+// It exists because a config the OPERATOR supplies had no mechanism at all.
+// Compose gives a config its content only through file:, there is no content:
+// field to inline with (docker/cli v28.5.1 config_schema_v3.9.json is
+// name/file/external/labels/template_driver, additionalProperties: false), and a
+// chart naming a path outside itself is exactly what chartFilesRule refuses —
+// rightly, since the docker CLI reads it as the invoking operator.
+//
+// The asymmetry that makes this safe is that the OPERATOR names the path, on
+// their own command line (--set-file), and the chart names only a values key. A
+// path the operator typed carries the authority they already have; a path a
+// chart chose does not. See issue #537.
+const valuesDir = "values"
+
+// valuesFilesRule is the sentence every refusal of a values/ path carries.
+const valuesFilesRule = valuesDir + "/ names a value, which the operator supplies (--set-file <key>=<path>, or a values file)"
+
+// ResolveManifestFiles returns the files a rendered manifest names, and refuses
+// every path that cannot mean either a file in the chart or one of values.
 //
 // Exactly three compose keys read a path — a config's file:, a secret's file:
 // and a service's env_file: — and the docker CLI resolves all three against the
@@ -40,36 +59,37 @@ const chartFilesRule = "a chart may only read files it ships in " + filesDir + "
 // into a swarm config that anyone with Docker access can read.
 //
 // This therefore refuses on the way past, in order: a path that is absolute,
-// one that escapes the chart, and one the chart does not contain — the last
-// including anything outside files/. None of it depends on where the chart was
-// loaded from. Trusting a local-path chart with an absolute path would grant the
-// most privilege to vendoring a repository chart to disk, which is the workflow
-// that most obscures a chart's origin.
+// one that escapes the chart, and one that is neither in the chart's files/ nor
+// in values/. None of it depends on where the chart was loaded from. Trusting a
+// local-path chart with an absolute path would grant the most privilege to
+// vendoring a repository chart to disk, which is the workflow that most obscures
+// a chart's origin.
 //
-// What survives comes back keyed exactly as Chart.Files keys it, and is
-// materialised beside the manifest at that same relative path — which is what
-// makes file: mean the chart. Only the referenced subset is returned: it is
-// persisted in the release record so a rollback replays the bytes the original
-// deploy sent, and that record has a hard size ceiling it shares with the
-// manifest.
+// A files/ path comes back keyed exactly as Chart.Files keys it; a values/ path
+// comes back keyed by the path the manifest wrote, carrying the value's bytes.
+// Both are materialised beside the manifest at that relative path — which is
+// what makes file: mean the chart, or the operator's own file, and nothing else.
+// Only the referenced subset is returned: it is persisted in the release record
+// so a rollback replays the bytes the original deploy sent, and that record has
+// a hard size ceiling it shares with the manifest.
 //
 // A manifest naming no file at all yields a nil map and no error, which is every
 // manifest a chart without a files/ directory can produce.
-func ResolveManifestFiles(manifest string, files map[string][]byte) (map[string][]byte, error) {
+func ResolveManifestFiles(manifest string, files map[string][]byte, values map[string]any) (map[string][]byte, error) {
 	refs, err := manifestFileRefs(manifest)
 	if err != nil {
 		return nil, err
 	}
 	var out map[string][]byte
 	for _, ref := range refs {
-		key, err := ref.resolve(files)
+		key, data, err := ref.resolve(files, values)
 		if err != nil {
 			return nil, err
 		}
 		if out == nil {
 			out = map[string][]byte{}
 		}
-		out[key] = files[key]
+		out[key] = data
 	}
 	return out, nil
 }
@@ -81,33 +101,92 @@ type fileRef struct {
 	path string // the path exactly as the manifest wrote it
 }
 
-// resolve returns the Chart.Files key this reference names, or the error that
-// refuses it. Every message names the offending path and states the rule; the
-// absolute one additionally names its replacement, because it is the only
-// refusal with a working chart behind it.
-func (r fileRef) resolve(files map[string][]byte) (string, error) {
+// resolve returns the key this reference contributes to the resolved file set
+// and the bytes behind it, or the error that refuses it. Every message names the
+// offending path and states the rule; the absolute one additionally names its
+// replacements, because it is the only refusal with a working chart behind it.
+func (r fileRef) resolve(files map[string][]byte, values map[string]any) (string, []byte, error) {
 	if path.IsAbs(r.path) {
-		return "", fmt.Errorf(
+		return "", nil, fmt.Errorf(
 			"%s: %q is an absolute path, and %s — copy it into the chart's %s/ and reference it by that path, "+
+				"or let the operator supply it (--set-file <key>=%s, referenced as %s/<key>), "+
 				"or keep it operator-managed by creating it outside the chart "+
 				"(docker config create <name> <path>, or docker secret create) and referencing it with external: true",
-			r.key, r.path, chartFilesRule, filesDir)
+			r.key, r.path, chartFilesRule, filesDir, r.path, valuesDir)
 	}
 	// The value came from YAML, which is slash-separated whatever the host is,
 	// so this is path and not filepath. Clean resolves every interior "..", so a
 	// leading one afterwards is the complete test for leaving the chart root.
 	clean := path.Clean(r.path)
 	if clean == ".." || strings.HasPrefix(clean, "../") {
-		return "", fmt.Errorf("%s: %q escapes the chart, and %s", r.key, r.path, chartFilesRule)
+		return "", nil, fmt.Errorf("%s: %q escapes the chart, and %s", r.key, r.path, chartFilesRule)
+	}
+	if key, ok := strings.CutPrefix(clean, valuesDir+"/"); ok {
+		data, err := r.resolveValue(key, values)
+		return clean, data, err
 	}
 	if !strings.HasPrefix(clean, filesDir+"/") {
-		return "", fmt.Errorf("%s: %q is outside %s/, and %s — reference it as %q",
-			r.key, r.path, filesDir, chartFilesRule, filesDir+"/"+clean)
+		return "", nil, fmt.Errorf("%s: %q is outside %s/ and %s/, and %s — reference it as %q",
+			r.key, r.path, filesDir, valuesDir, chartFilesRule, filesDir+"/"+clean)
 	}
 	if _, ok := files[clean]; !ok {
-		return "", fmt.Errorf("%s: %q is not in the chart, and %s", r.key, r.path, chartFilesRule)
+		return "", nil, fmt.Errorf("%s: %q is not in the chart, and %s", r.key, r.path, chartFilesRule)
 	}
-	return clean, nil
+	return clean, files[clean], nil
+}
+
+// resolveValue returns the bytes of the value a values/ path names.
+//
+// Only a config's file: may name one, and the two refusals are not symmetry for
+// its own sake. A values/ path is content the operator supplied through values,
+// and values are persisted in the release record — a Docker Config readable by
+// anyone with Docker access, for every retained revision, not just the current
+// one. Routing a SECRET's material through that would put it in the one place a
+// secret exists to keep it out of, so a secret stays what it has always been:
+// created outside the chart, referenced with external: true. env_file: is
+// refused for a different reason — it is expanded into the service's
+// environment, where docker inspect shows it, and it creates no config object,
+// so none of the rotation this mechanism exists for applies to it.
+func (r fileRef) resolveValue(key string, values map[string]any) ([]byte, error) {
+	if !strings.HasPrefix(r.key, "configs.") {
+		// Each refusal names its own replacement: a secret's is an external
+		// secret, and env_file:'s is the environment: block it expands into
+		// anyway, or a file the chart ships.
+		remedy := "put them in the service's environment: block, or ship the file in " + filesDir + "/"
+		if strings.HasPrefix(r.key, "secrets.") {
+			remedy = "create it outside the chart (docker secret create <name> <path>) " +
+				"and reference it with external: true"
+		}
+		return nil, fmt.Errorf("%s: %q — only a config's file: may name %s/, because a value is stored in the "+
+			"release record and is as readable as any config — %s",
+			r.key, r.path, valuesDir, remedy)
+	}
+	steps, err := parseSetPath(key)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %q is not a values path: %w", r.key, r.path, err)
+	}
+	v, ok := lookupPath(values, steps)
+	if !ok {
+		return nil, fmt.Errorf("%s: %q names no value, and %s", r.key, r.path, valuesFilesRule)
+	}
+	// Deliberately not a stringified number or a marshalled map: a config's
+	// content is a file the operator wrote, and anything else here is a chart
+	// naming the wrong key — which should say so rather than deploy a plausible
+	// rendering of the wrong thing.
+	s, ok := v.(string)
+	if !ok {
+		return nil, fmt.Errorf("%s: %q is a %T, and only a string can be a file — %s", r.key, r.path, v, valuesFilesRule)
+	}
+	// An empty value is unsupplied, not empty content. A chart referencing
+	// values/<key> has to default that key in values.yaml — to "", since a
+	// template computing the config's rotating name from it must render before
+	// anything here runs — so the operator who forgets --set-file arrives with
+	// exactly this, and the alternative to refusing is deploying an empty config
+	// over a working one. A config that must genuinely be empty can be a newline.
+	if s == "" {
+		return nil, fmt.Errorf("%s: %q is empty, and %s", r.key, r.path, valuesFilesRule)
+	}
+	return []byte(s), nil
 }
 
 // manifestFileRefs returns every path the manifest asks the docker CLI to read,

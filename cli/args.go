@@ -17,6 +17,7 @@ import (
 type flags struct {
 	values       []string // -f/--values, repeatable
 	sets         []string // --set, repeatable
+	setFiles     []string // --set-file key=path, repeatable
 	version      string   // --version, chart version selector
 	dryRun       bool
 	wait         bool
@@ -82,6 +83,12 @@ func parseArgs(args []string) ([]string, flags, error) {
 				return nil, f, err
 			}
 			f.sets = append(f.sets, v)
+		case "--set-file":
+			v, err := next()
+			if err != nil {
+				return nil, f, err
+			}
+			f.setFiles = append(f.setFiles, v)
 		case "--resolve-image":
 			v, err := next()
 			if err != nil {

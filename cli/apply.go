@@ -123,6 +123,9 @@ func rejectUnsupported(f flags) error {
 	if len(f.sets) > 0 {
 		bad = append(bad, "--set")
 	}
+	if len(f.setFiles) > 0 {
+		bad = append(bad, "--set-file")
+	}
 	if f.version != "" {
 		bad = append(bad, "--version")
 	}

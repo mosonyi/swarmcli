@@ -64,6 +64,37 @@ func applySet(dst map[string]any, expr string) error {
 	return nil
 }
 
+// SetFile is one --set-file: the values key to populate, and the bytes read
+// from the path the operator named. The caller does the reading, so nothing in
+// this package opens a file it was not handed.
+type SetFile struct {
+	Key  string
+	Data []byte
+}
+
+// ApplySetFiles sets each key to its file's contents, verbatim.
+//
+// It is --set without the parsing: no comma splitting, no "{a,b}" list literal
+// and no type inference, because the content is a file the operator wrote and
+// every one of those would corrupt it — a config.js full of commas would be cut
+// into fragments, and one reading "true" would become a boolean.
+//
+// Applied after MergeValues, so a --set-file wins over both a values file and a
+// --set naming the same key, matching the order the flags are documented in.
+func ApplySetFiles(dst map[string]any, sets []SetFile) error {
+	for _, sf := range sets {
+		if sf.Key == "" {
+			return fmt.Errorf("--set-file: empty key")
+		}
+		steps, err := parseSetPath(sf.Key)
+		if err != nil {
+			return fmt.Errorf("--set-file %q: %w", sf.Key, err)
+		}
+		setPath(dst, steps, string(sf.Data))
+	}
+	return nil
+}
+
 // setStep is one hop of a --set path: a map key, or a list index.
 type setStep struct {
 	key     string
@@ -161,6 +192,37 @@ func inferValue(s string) any {
 		return out
 	}
 	return inferScalar(unescapeCommas(s))
+}
+
+// lookupPath reads the value at the given hops, reporting whether every hop
+// existed. The inverse of setPath, and the reason a manifest's values/<key> is
+// resolved against the effective values rather than against the --set-file
+// flags: an upgrade with --reuse-values, a values file carrying the content
+// inline, and a rollback replaying a stored record all reach the value the same
+// way, and none of them has a flag to consult.
+//
+// A hop into something that is not the container the step wants — a key of a
+// list, an index of a map — is absent rather than an error, which is what
+// "names no value" means to the caller.
+func lookupPath(cur any, steps []setStep) (any, bool) {
+	for _, s := range steps {
+		if s.isIndex {
+			lst, ok := cur.([]any)
+			if !ok || s.index >= len(lst) {
+				return nil, false
+			}
+			cur = lst[s.index]
+			continue
+		}
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		if cur, ok = m[s.key]; !ok {
+			return nil, false
+		}
+	}
+	return cur, true
 }
 
 // setPath assigns val at the given hops, creating maps and lists along the way and

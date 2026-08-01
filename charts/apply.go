@@ -236,7 +236,7 @@ func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource,
 	// same file/release prefix every other failure here carries: for a chart
 	// that reads a path outside itself, that message is the entire migration
 	// path there is.
-	chartFiles, err := ResolveManifestFiles(manifest, ch.Files)
+	chartFiles, err := ResolveManifestFiles(manifest, ch.Files, values)
 	if err != nil {
 		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
 	}
