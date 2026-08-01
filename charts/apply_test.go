@@ -336,8 +336,8 @@ type cancellingBackend struct {
 	cancel context.CancelFunc
 }
 
-func (b *cancellingBackend) DeployStack(ctx context.Context, name, manifest, resolve string) error {
-	if err := b.fakeBackend.DeployStack(ctx, name, manifest, resolve); err != nil {
+func (b *cancellingBackend) DeployStack(ctx context.Context, req DeployRequest) error {
+	if err := b.fakeBackend.DeployStack(ctx, req); err != nil {
 		return err
 	}
 	b.cancel()

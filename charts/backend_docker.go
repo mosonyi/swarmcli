@@ -24,6 +24,11 @@ type dockerBackend struct {
 	ctxName string
 }
 
+// Compile-time proof that the production backend still satisfies Backend: an
+// interface implemented outside this repository is one whose in-repo
+// implementation can drift out of it without any call site noticing.
+var _ Backend = (*dockerBackend)(nil)
+
 // NewDockerBackend returns a Backend bound to an explicitly named Docker
 // context, for callers that must address a specific swarm rather than the one
 // the process happens to be pointed at.
@@ -69,12 +74,12 @@ func (b *dockerBackend) snapshot(ctx context.Context) (*docker.SwarmSnapshot, er
 	return docker.SnapshotWith(ctx, cli)
 }
 
-func (b *dockerBackend) DeployStack(ctx context.Context, name, manifest, resolve string) error {
+func (b *dockerBackend) DeployStack(ctx context.Context, req DeployRequest) error {
 	ctxName, err := b.contextName()
 	if err != nil {
 		return err
 	}
-	return docker.DeployStackInContext(ctx, ctxName, name, manifest, docker.ResolveImage(resolve))
+	return docker.DeployStackInContext(ctx, ctxName, req.Name, req.Manifest, docker.ResolveImage(req.Resolve))
 }
 
 func (b *dockerBackend) RemoveStack(ctx context.Context, name string) error {
