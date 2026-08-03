@@ -63,26 +63,26 @@ func TestResolveManifestFilesRefusesEveryShapeOnEveryKey(t *testing.T) {
 			// its message is the entire migration path (R-4): the rule, and the
 			// operator-managed replacement by name.
 			wants: []string{
-				`"/etc/shadow"`, "absolute path", "files/",
+				`'/etc/shadow'`, "absolute path", "files/",
 				"external: true", "docker config create", "docker secret create",
 			},
 		},
 		{
 			name:  "escapes the chart",
 			path:  "../../etc/shadow",
-			wants: []string{`"../../etc/shadow"`, "escapes the chart", "files/"},
+			wants: []string{`'../../etc/shadow'`, "escapes the chart", "files/"},
 		},
 		{
 			name:  "well-formed but absent",
 			path:  "files/missing.conf",
-			wants: []string{`"files/missing.conf"`, "not in the chart", "files/"},
+			wants: []string{`'files/missing.conf'`, "not in the chart", "files/"},
 		},
 		{
 			// The likeliest author mistake, so the message has to say files/ and
 			// show the corrected path.
 			name:  "outside files/",
 			path:  "nginx.conf",
-			wants: []string{`"nginx.conf"`, "outside files/", `"files/nginx.conf"`},
+			wants: []string{`'nginx.conf'`, "outside files/", `'files/nginx.conf'`},
 		},
 	}
 	for _, k := range keys {
@@ -104,7 +104,7 @@ func TestResolveManifestFilesEscapesFromInsideFiles(t *testing.T) {
 	// files/../../etc/shadow cleans to ../etc/shadow: it leaves the chart root
 	// even though it started under files/, which is what path.Clean is for.
 	_, err := ResolveManifestFiles(configManifest("files/../../etc/shadow"), chartFiles(), nil)
-	require.ErrorContains(t, err, `"files/../../etc/shadow" escapes the chart`)
+	require.ErrorContains(t, err, `'files/../../etc/shadow' escapes the chart`)
 
 	// files/../nginx.conf stays inside the chart but leaves files/, so it is the
 	// outside-files/ refusal and not the escape one.
@@ -187,7 +187,7 @@ func TestResolveManifestFilesReadsBothEnvFileShapes(t *testing.T) {
 		manifest := "services:\n  web:\n    image: nginx\n    env_file:\n" +
 			"      - files/nginx.conf\n      - /etc/shadow\n"
 		_, err := ResolveManifestFiles(manifest, chartFiles(), nil)
-		require.ErrorContains(t, err, `"/etc/shadow"`)
+		require.ErrorContains(t, err, `'/etc/shadow'`)
 	})
 }
 
@@ -203,7 +203,7 @@ func TestResolveManifestFilesSeesEntriesBesideAMalformedOne(t *testing.T) {
 	}
 	for _, manifest := range cases {
 		_, err := ResolveManifestFiles(manifest, chartFiles(), nil)
-		require.ErrorContains(t, err, `"/etc/shadow"`, manifest)
+		require.ErrorContains(t, err, `'/etc/shadow'`, manifest)
 	}
 }
 
@@ -232,7 +232,7 @@ func TestResolveManifestFilesRefusesDeterministically(t *testing.T) {
 
 func TestResolveManifestFilesRefusesAgainstAChartWithNoFiles(t *testing.T) {
 	_, err := ResolveManifestFiles(configManifest("files/nginx.conf"), nil, nil)
-	require.ErrorContains(t, err, `"files/nginx.conf" is not in the chart`)
+	require.ErrorContains(t, err, `'files/nginx.conf' is not in the chart`)
 }
 
 // --- values/: the config the operator supplies (#537) ---
@@ -303,25 +303,25 @@ func TestResolveManifestFilesRefusesAValueItCannotUse(t *testing.T) {
 		values map[string]any
 		want   string
 	}{
-		{"absent", "values/config", nil, `"values/config" names no value`},
+		{"absent", "values/config", nil, `'values/config' names no value`},
 		{
 			// The chart has to default the key so its rotating name renders, so
 			// this is what a forgotten --set-file looks like — and deploying an
 			// empty config over a working one is the worst available outcome.
 			"empty", "values/config",
 			map[string]any{"config": ""},
-			`"values/config" is empty`,
+			`'values/config' is empty`,
 		},
 		{
 			"absent under a key that exists", "values/renovate.config",
 			map[string]any{"renovate": map[string]any{"other": "x"}},
-			`"values/renovate.config" names no value`,
+			`'values/renovate.config' names no value`,
 		},
 		{
 			// Walking into a scalar as if it were a map is absence, not a panic.
 			"parent is not a map", "values/renovate.config",
 			map[string]any{"renovate": "not a map"},
-			`"values/renovate.config" names no value`,
+			`'values/renovate.config' names no value`,
 		},
 		{
 			"a map is not a file", "values/config",

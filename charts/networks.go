@@ -84,7 +84,7 @@ func externalResourceNames(manifest, topLevelKey string) ([]string, error) {
 		}
 		switch {
 		case res.Name != "" && deprecated != "":
-			return nil, fmt.Errorf("%s %q: external.name and name conflict; use only name",
+			return nil, fmt.Errorf("%s '%s': external.name and name conflict; use only name",
 				strings.TrimSuffix(topLevelKey, "s"), key)
 		case res.Name != "":
 			names = append(names, res.Name)

@@ -248,7 +248,7 @@ func (m *Model) findSecretByName(name string) (*docker.SecretWithDecodedData, er
 			return &m.secrets[i], nil
 		}
 	}
-	return nil, fmt.Errorf("secret %q not found", name)
+	return nil, fmt.Errorf("secret '%s' not found", name)
 }
 
 func (m *Model) addSecret(sec docker.SecretWithDecodedData) {

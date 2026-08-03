@@ -235,7 +235,7 @@ func (m *Model) findConfigByName(name string) (*docker.ConfigWithDecodedData, er
 			return &m.configs[i], nil
 		}
 	}
-	return nil, fmt.Errorf("config %q not found", name)
+	return nil, fmt.Errorf("config '%s' not found", name)
 }
 
 func (m *Model) addConfig(cfg docker.ConfigWithDecodedData) {

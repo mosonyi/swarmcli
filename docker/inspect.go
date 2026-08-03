@@ -80,7 +80,7 @@ func Inspect(ctx context.Context, t InspectType, id string) (string, error) {
 		}
 
 		if len(stackServices) == 0 {
-			return "", fmt.Errorf("stack %q not found", id)
+			return "", fmt.Errorf("stack '%s' not found", id)
 		}
 		obj = stackServices
 

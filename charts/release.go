@@ -199,7 +199,7 @@ func (e *Engine) Install(ctx context.Context, release string, chart ReleaseChart
 		return nil, err
 	}
 	if cur := currentRevision(revs); cur != nil && cur.Status != StatusUninstalled {
-		return nil, fmt.Errorf("release %q already exists (revision %d); use upgrade", release, cur.Revision)
+		return nil, fmt.Errorf("release '%s' already exists (revision %d); use upgrade", release, cur.Revision)
 	}
 
 	rel := e.newRevision(release, nextRevision(revs), chart, values, manifest, opts.Files)
@@ -220,7 +220,7 @@ func (e *Engine) Upgrade(ctx context.Context, release string, chart ReleaseChart
 	cur := currentRevision(revs)
 	if cur == nil || cur.Status == StatusUninstalled {
 		if !opts.Install {
-			return nil, fmt.Errorf("release %q does not exist; use install or upgrade --install", release)
+			return nil, fmt.Errorf("release '%s' does not exist; use install or upgrade --install", release)
 		}
 	}
 	rel := e.newRevision(release, nextRevision(revs), chart, values, manifest, opts.Files)
@@ -236,7 +236,7 @@ func (e *Engine) Rollback(ctx context.Context, release string, targetRev int, op
 		return nil, err
 	}
 	if len(revs) == 0 {
-		return nil, fmt.Errorf("release %q not found", release)
+		return nil, fmt.Errorf("release '%s' not found", release)
 	}
 	var target *Release
 	for i := range revs {
@@ -245,7 +245,7 @@ func (e *Engine) Rollback(ctx context.Context, release string, targetRev int, op
 		}
 	}
 	if target == nil {
-		return nil, fmt.Errorf("release %q has no revision %d", release, targetRev)
+		return nil, fmt.Errorf("release '%s' has no revision %d", release, targetRev)
 	}
 	if target.Status == StatusFailed {
 		return nil, fmt.Errorf("cannot roll back to failed revision %d", targetRev)
@@ -267,7 +267,7 @@ func (e *Engine) History(ctx context.Context, release string) ([]Release, error)
 		return nil, err
 	}
 	if len(revs) == 0 {
-		return nil, fmt.Errorf("release %q not found", release)
+		return nil, fmt.Errorf("release '%s' not found", release)
 	}
 	return revs, nil
 }
@@ -280,7 +280,7 @@ func (e *Engine) GetRevision(ctx context.Context, release string, rev int) (*Rel
 		return nil, err
 	}
 	if len(revs) == 0 {
-		return nil, fmt.Errorf("release %q not found", release)
+		return nil, fmt.Errorf("release '%s' not found", release)
 	}
 	if rev <= 0 {
 		return currentRevision(revs), nil
@@ -290,7 +290,7 @@ func (e *Engine) GetRevision(ctx context.Context, release string, rev int) (*Rel
 			return &revs[i], nil
 		}
 	}
-	return nil, fmt.Errorf("release %q has no revision %d", release, rev)
+	return nil, fmt.Errorf("release '%s' has no revision %d", release, rev)
 }
 
 // newRevision builds an unsaved, deployed-status revision.
@@ -382,7 +382,7 @@ func (e *Engine) deployAndRecord(ctx context.Context, rel *Release, opts Install
 	// revisions.
 	rel.ManagedNetworks = created
 	if err := e.record(ctx, rel); err != nil {
-		return rel, fmt.Errorf("stack %q was deployed but recording its release history failed: %w; re-run install/upgrade to reconcile", rel.Name, err)
+		return rel, fmt.Errorf("stack '%s' was deployed but recording its release history failed: %w; re-run install/upgrade to reconcile", rel.Name, err)
 	}
 	if opts.Wait {
 		if err := e.waitReady(ctx, rel.Name, opts.Timeout); err != nil {
@@ -563,7 +563,7 @@ func (e *Engine) ensureExternalSecretsConfigs(ctx context.Context, manifest stri
 		for _, name := range secrets {
 			rr, _ := req.secret(name)
 			if _, ok := have[name]; !ok {
-				reasons = append(reasons, fmt.Sprintf("  secret %q does not exist%s", name, requirementDescription(rr)))
+				reasons = append(reasons, fmt.Sprintf("  secret '%s' does not exist%s", name, requirementDescription(rr)))
 				cmds = append(cmds, fmt.Sprintf("  docker secret create %s <file>", name))
 			}
 		}
@@ -581,7 +581,7 @@ func (e *Engine) ensureExternalSecretsConfigs(ctx context.Context, manifest stri
 		for _, name := range configs {
 			rr, _ := req.config(name)
 			if _, ok := have[name]; !ok {
-				reasons = append(reasons, fmt.Sprintf("  config %q does not exist%s", name, requirementDescription(rr)))
+				reasons = append(reasons, fmt.Sprintf("  config '%s' does not exist%s", name, requirementDescription(rr)))
 				cmds = append(cmds, fmt.Sprintf("  docker config create %s <file>", name))
 			}
 		}
@@ -623,7 +623,7 @@ func (e *Engine) Uninstall(ctx context.Context, release string, purgeVolumes boo
 		return nil, err
 	}
 	if len(revs) == 0 {
-		return nil, fmt.Errorf("release %q not found", release)
+		return nil, fmt.Errorf("release '%s' not found", release)
 	}
 
 	// Continue cleanup on partial failure rather than aborting: a stranded
@@ -643,7 +643,7 @@ func (e *Engine) Uninstall(ctx context.Context, release string, purgeVolumes boo
 		} else {
 			for _, v := range vols {
 				if err := e.Backend.RemoveVolume(ctx, v); err != nil {
-					errs = append(errs, fmt.Errorf("removing volume %q: %w", v, err))
+					errs = append(errs, fmt.Errorf("removing volume '%s': %w", v, err))
 				}
 			}
 		}
@@ -719,7 +719,7 @@ func (e *Engine) Status(ctx context.Context, release string) (*Release, []Servic
 	}
 	cur := currentRevision(revs)
 	if cur == nil {
-		return nil, nil, fmt.Errorf("release %q not found", release)
+		return nil, nil, fmt.Errorf("release '%s' not found", release)
 	}
 	return cur, e.Backend.StackServices(ctx, release), nil
 }
@@ -750,13 +750,13 @@ func (e *Engine) allRevisions(ctx context.Context) (map[string][]Release, error)
 		if data == nil {
 			d, err := e.Backend.InspectConfig(ctx, m.Name)
 			if err != nil {
-				return nil, fmt.Errorf("read release config %q: %w", m.Name, err)
+				return nil, fmt.Errorf("read release config '%s': %w", m.Name, err)
 			}
 			data = d
 		}
 		rel, err := decodeRelease(data)
 		if err != nil {
-			return nil, fmt.Errorf("decode release config %q: %w", m.Name, err)
+			return nil, fmt.Errorf("decode release config '%s': %w", m.Name, err)
 		}
 		out[rel.Name] = append(out[rel.Name], *rel)
 	}
@@ -820,7 +820,7 @@ func (e *Engine) record(ctx context.Context, rel *Release) error {
 		}
 		rel.Revision = nextRevision(revs)
 	}
-	return fmt.Errorf("could not allocate a free revision for release %q after %d attempts", rel.Name, maxRecordRetries)
+	return fmt.Errorf("could not allocate a free revision for release '%s' after %d attempts", rel.Name, maxRecordRetries)
 }
 
 // isAlreadyExists reports whether err is a Docker "config already exists"
@@ -890,7 +890,7 @@ func (f *releaseFiles) UnmarshalYAML(value *yaml.Node) error {
 	for name, body := range encoded {
 		raw, err := base64.StdEncoding.DecodeString(body)
 		if err != nil {
-			return fmt.Errorf("release file %q: %w", name, err)
+			return fmt.Errorf("release file '%s': %w", name, err)
 		}
 		out[name] = raw
 	}
@@ -930,7 +930,7 @@ func encodeRevision(rel *Release) ([]byte, error) {
 // deploy nobody had to be told what to shrink — the stack was already up.
 func oversizeRecord(rel *Release, gz int) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "release %q revision %d cannot be recorded: its payload is %d bytes gzipped, exceeding the %d-byte Docker Config limit\n",
+	fmt.Fprintf(&b, "release '%s' revision %d cannot be recorded: its payload is %d bytes gzipped, exceeding the %d-byte Docker Config limit\n",
 		rel.Name, rel.Revision, gz, maxConfigPayload)
 	fmt.Fprintf(&b, "  manifest: %d bytes\n", len(rel.Manifest))
 	for _, name := range slices.Sorted(maps.Keys(rel.Files)) {
@@ -1014,7 +1014,7 @@ func (e *Engine) Prune(ctx context.Context, release string, keep int, dryRun boo
 		return PruneResult{}, err
 	}
 	if len(revs) == 0 {
-		return PruneResult{}, fmt.Errorf("release %q not found", release)
+		return PruneResult{}, fmt.Errorf("release '%s' not found", release)
 	}
 	return e.pruneRevs(ctx, release, revs, keep, dryRun)
 }
@@ -1132,7 +1132,7 @@ func (e *Engine) waitWave(ctx context.Context, releases []string, timeout time.D
 				// Named individually, and the same message a single-release wait
 				// has always produced: the release that wedged is the one to go
 				// and look at, not the group it was in.
-				return fmt.Errorf("release %q: %s", release, c.Reason)
+				return fmt.Errorf("release '%s': %s", release, c.Reason)
 			case PhaseConverged:
 			default:
 				pending = append(pending, release)
@@ -1158,11 +1158,11 @@ func (e *Engine) waitWave(ctx context.Context, releases []string, timeout time.D
 // does — is unaffected.
 func releaseList(releases []string) string {
 	if len(releases) == 1 {
-		return fmt.Sprintf("release %q", releases[0])
+		return fmt.Sprintf("release '%s'", releases[0])
 	}
 	quoted := make([]string, 0, len(releases))
 	for _, r := range releases {
-		quoted = append(quoted, fmt.Sprintf("%q", r))
+		quoted = append(quoted, fmt.Sprintf("'%s'", r))
 	}
 	return "releases " + strings.Join(quoted, ", ")
 }
@@ -1276,7 +1276,7 @@ func Rollup(states []ServiceState) Convergence {
 	for _, s := range states {
 		c := s.Convergence()
 		if phaseRank(c.Phase) > phaseRank(worst.Phase) {
-			worst = Convergence{c.Phase, fmt.Sprintf("service %q: %s", s.Name, c.Reason)}
+			worst = Convergence{c.Phase, fmt.Sprintf("service '%s': %s", s.Name, c.Reason)}
 		}
 	}
 	return worst
@@ -1337,7 +1337,7 @@ func validateReleaseName(name string) error {
 		return fmt.Errorf("release name is required")
 	}
 	if !isPlainName(name) {
-		return fmt.Errorf("invalid release name %q: use letters, digits, '-', '_', '.'", name)
+		return fmt.Errorf("invalid release name '%s': use letters, digits, '-', '_', '.'", name)
 	}
 	return nil
 }

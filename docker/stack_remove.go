@@ -35,7 +35,7 @@ func RemoveStack(ctx context.Context, stackName string) error {
 	}
 
 	if len(stackServices) == 0 {
-		return fmt.Errorf("no services found in stack %q", stackName)
+		return fmt.Errorf("no services found in stack '%s'", stackName)
 	}
 
 	// Remove all services in the stack

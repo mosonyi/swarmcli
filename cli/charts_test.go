@@ -140,10 +140,10 @@ func TestChartsTemplateRefusesAPathOutsideTheChart(t *testing.T) {
 		ref   string
 		wants []string
 	}{
-		{"absolute", "/etc/shadow", []string{`"/etc/shadow"`, "absolute path", "external: true", "docker config create"}},
-		{"escapes the chart", "../../etc/shadow", []string{`"../../etc/shadow"`, "escapes the chart"}},
-		{"outside files/", "nginx.conf", []string{`"nginx.conf"`, "outside files/", `"files/nginx.conf"`}},
-		{"not in the chart", "files/missing.conf", []string{`"files/missing.conf"`, "not in the chart"}},
+		{"absolute", "/etc/shadow", []string{`'/etc/shadow'`, "absolute path", "external: true", "docker config create"}},
+		{"escapes the chart", "../../etc/shadow", []string{`'../../etc/shadow'`, "escapes the chart"}},
+		{"outside files/", "nginx.conf", []string{`'nginx.conf'`, "outside files/", `'files/nginx.conf'`}},
+		{"not in the chart", "files/missing.conf", []string{`'files/missing.conf'`, "not in the chart"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := fileChartDir(t, tc.ref)
@@ -230,7 +230,7 @@ func TestChartsTemplateSetFileRefusals(t *testing.T) {
 		{
 			// The chart renders — the refusal is the resolution, and without it
 			// the operator would get an empty config deployed over a working one.
-			"forgotten flag", nil, `"values/config" is empty`,
+			"forgotten flag", nil, `'values/config' is empty`,
 		},
 		{"unreadable file", []string{"--set-file", "config=" + filepath.Join(dir, "nope.js")}, "read"},
 		{"no key", []string{"--set-file", js}, "expected key=path"},
@@ -289,7 +289,7 @@ func TestParseArgsRequirements(t *testing.T) {
 // name the CLI does not know.
 func TestParseArgsRejectsDebug(t *testing.T) {
 	_, _, err := parseArgs([]string{"--debug"})
-	require.EqualError(t, err, `unknown flag "--debug"`)
+	require.EqualError(t, err, `unknown flag '--debug'`)
 }
 
 func TestParseIntRejectsGarbage(t *testing.T) {

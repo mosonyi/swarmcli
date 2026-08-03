@@ -116,7 +116,7 @@ func InspectSecret(ctx context.Context, nameOrID string) (*SecretWithDecodedData
 
 	sec, _, err := cli.SecretInspectWithRaw(ctx, nameOrID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to inspect secret %q: %w", nameOrID, err)
+		return nil, fmt.Errorf("failed to inspect secret '%s': %w", nameOrID, err)
 	}
 
 	l().Infof("[InspectSecret] Secret %q inspected successfully", sec.Spec.Name)
@@ -180,13 +180,13 @@ func createSecretWithSpec(ctx context.Context, spec swarm.SecretSpec, logPrefix 
 	id, err := cli.SecretCreate(ctx, spec)
 	if err != nil {
 		l().Errorf("%s Failed to create secret %q: %v", logPrefix, secName, err)
-		return swarm.Secret{}, fmt.Errorf("failed to create secret %q: %w", secName, err)
+		return swarm.Secret{}, fmt.Errorf("failed to create secret '%s': %w", secName, err)
 	}
 
 	newSec, _, err := cli.SecretInspectWithRaw(ctx, id.ID)
 	if err != nil {
 		l().Errorf("%s Created secret %q but failed to re-inspect: %v", logPrefix, secName, err)
-		return swarm.Secret{}, fmt.Errorf("failed to inspect new secret %q: %w", secName, err)
+		return swarm.Secret{}, fmt.Errorf("failed to inspect new secret '%s': %w", secName, err)
 	}
 
 	l().Infof("%s Successfully created new secret %q (ID=%s)", logPrefix, newSec.Spec.Name, newSec.ID)
@@ -267,7 +267,7 @@ func DeleteSecret(ctx context.Context, nameOrID string) error {
 		for i, s := range svcs {
 			names[i] = s.Spec.Name
 		}
-		return fmt.Errorf("cannot delete secret %q: still used by services %v", sec.Secret.Spec.Name, names)
+		return fmt.Errorf("cannot delete secret '%s': still used by services %v", sec.Secret.Spec.Name, names)
 	}
 
 	return cli.SecretRemove(ctx, sec.Secret.ID)

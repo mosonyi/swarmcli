@@ -53,8 +53,8 @@ func TestLoadChartAPIVersion(t *testing.T) {
 	}{
 		{name: "absent means v1", line: ""},
 		{name: "explicit v1", line: "apiVersion: v1\n"},
-		{name: "a future format is refused", line: "apiVersion: v2\n", wantErr: `unsupported apiVersion "v2"`},
-		{name: "nonsense is refused", line: "apiVersion: v99\n", wantErr: `unsupported apiVersion "v99"`},
+		{name: "a future format is refused", line: "apiVersion: v2\n", wantErr: `unsupported apiVersion 'v2'`},
+		{name: "nonsense is refused", line: "apiVersion: v99\n", wantErr: `unsupported apiVersion 'v99'`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tgz := packEntries(t, map[string]string{

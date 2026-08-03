@@ -112,7 +112,7 @@ func ParseReleaseFile(data []byte, path string) (*ReleaseFile, error) {
 
 func (rf *ReleaseFile) validate() error {
 	if rf.APIVersion != "" && rf.APIVersion != "v1" {
-		return rf.errf("unsupported apiVersion %q (expected v1)", rf.APIVersion)
+		return rf.errf("unsupported apiVersion '%s' (expected v1)", rf.APIVersion)
 	}
 	if len(rf.Releases) == 0 {
 		return rf.errf("no releases declared")
@@ -136,7 +136,7 @@ func (rf *ReleaseFile) validate() error {
 		case r.URL == "":
 			return rf.errf("repositories[%d] (%s): url is required", i, r.Name)
 		case seenRepo[r.Name]:
-			return rf.errf("repositories[%d]: duplicate repository %q", i, r.Name)
+			return rf.errf("repositories[%d]: duplicate repository '%s'", i, r.Name)
 		}
 		seenRepo[r.Name] = true
 	}
@@ -154,7 +154,7 @@ func (rf *ReleaseFile) validate() error {
 			return rf.errf("%s: %v", where, err)
 		}
 		if seenRelease[r.Name] {
-			return rf.errf("%s: duplicate release %q", where, r.Name)
+			return rf.errf("%s: duplicate release '%s'", where, r.Name)
 		}
 		seenRelease[r.Name] = true
 
@@ -165,7 +165,7 @@ func (rf *ReleaseFile) validate() error {
 			// A local chart carries its version in its own Chart.yaml; there is
 			// nothing for `version:` to select, so accepting it would be a lie.
 			if r.Version != "" {
-				return rf.errf("%s: version must be omitted for the local chart %q (its Chart.yaml sets the version)", where, r.Chart)
+				return rf.errf("%s: version must be omitted for the local chart '%s' (its Chart.yaml sets the version)", where, r.Chart)
 			}
 			continue
 		}

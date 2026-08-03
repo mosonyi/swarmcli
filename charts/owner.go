@@ -43,14 +43,14 @@ func (o OwnerRef) String() string { return o.ID + ":" + o.Kind + "/" + o.Name }
 func ParseOwner(s string) (OwnerRef, error) {
 	id, rest, ok := strings.Cut(s, ":")
 	if !ok {
-		return OwnerRef{}, fmt.Errorf("owner stamp %q is not <id>:<kind>/<name>", s)
+		return OwnerRef{}, fmt.Errorf("owner stamp '%s' is not <id>:<kind>/<name>", s)
 	}
 	kind, name, ok := strings.Cut(rest, "/")
 	if !ok {
-		return OwnerRef{}, fmt.Errorf("owner stamp %q is not <id>:<kind>/<name>", s)
+		return OwnerRef{}, fmt.Errorf("owner stamp '%s' is not <id>:<kind>/<name>", s)
 	}
 	if id == "" || kind == "" || name == "" {
-		return OwnerRef{}, fmt.Errorf("owner stamp %q has an empty id, kind or name", s)
+		return OwnerRef{}, fmt.Errorf("owner stamp '%s' has an empty id, kind or name", s)
 	}
 	return OwnerRef{ID: id, Kind: kind, Name: name}, nil
 }
@@ -63,7 +63,7 @@ func validateOwnerID(id string) error {
 	case id == "":
 		return fmt.Errorf("owner is empty")
 	case strings.Contains(id, ":"):
-		return fmt.Errorf("invalid owner %q: must not contain ':'", id)
+		return fmt.Errorf("invalid owner '%s': must not contain ':'", id)
 	}
 	return nil
 }

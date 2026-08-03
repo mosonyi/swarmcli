@@ -134,7 +134,7 @@ func RemoveVolume(ctx context.Context, name string, force bool) error {
 // RemoveVolumeWith is RemoveVolume against an explicit client.
 func RemoveVolumeWith(ctx context.Context, cli *client.Client, name string, force bool) error {
 	if err := cli.VolumeRemove(ctx, name, force); err != nil {
-		return fmt.Errorf("removing volume %q: %w", name, err)
+		return fmt.Errorf("removing volume '%s': %w", name, err)
 	}
 	return nil
 }

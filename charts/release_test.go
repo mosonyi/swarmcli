@@ -793,12 +793,12 @@ func TestRollupTakesTheWorstPhase(t *testing.T) {
 	}
 	c := Rollup(states)
 	require.Equal(t, PhaseWedged, c.Phase)
-	require.Contains(t, c.Reason, `service "db"`)
+	require.Contains(t, c.Reason, `service 'db'`)
 
 	// Progressing wins over converged the same way, and names the service.
 	c = Rollup(states[:2])
 	require.Equal(t, PhaseProgressing, c.Phase)
-	require.Equal(t, `service "api": 0/1 tasks running`, c.Reason)
+	require.Equal(t, `service 'api': 0/1 tasks running`, c.Reason)
 
 	require.Equal(t, PhaseConverged, Rollup(states[:1]).Phase)
 }

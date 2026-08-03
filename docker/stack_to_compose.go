@@ -300,7 +300,7 @@ func ReconstructStackCompose(stackName string) (string, error) {
 	}
 
 	if len(serviceNames) == 0 {
-		return "", fmt.Errorf("no services found in stack %q", stackName)
+		return "", fmt.Errorf("no services found in stack '%s'", stackName)
 	}
 
 	// Build network ID to name mapping

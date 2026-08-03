@@ -185,7 +185,7 @@ func buildClientFor(ctxName string) (*client.Client, error) {
 func clientOptsFor(host, ca, cert, key string, skipVerify bool) ([]client.Opt, error) {
 	helper, err := connhelper.GetConnectionHelper(host)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve a connection helper for %q: %w", host, err)
+		return nil, fmt.Errorf("failed to resolve a connection helper for '%s': %w", host, err)
 	}
 
 	opts := []client.Opt{client.WithAPIVersionNegotiation()}

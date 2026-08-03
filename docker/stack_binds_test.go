@@ -42,7 +42,7 @@ func TestCheckBindSourcesRefusesASourceThatIsNotAbsolute(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err := checkBindSources(bindManifest(tc.volumes))
 			require.Error(t, err, "want a source that is not absolute refused")
-			require.ErrorContains(t, err, `service "app"`)
+			require.ErrorContains(t, err, `service 'app'`)
 			require.ErrorContains(t, err, tc.source)
 			require.ErrorContains(t, err, "must be absolute")
 		})
@@ -126,7 +126,7 @@ func TestCheckBindSourcesSeesEverySiblingService(t *testing.T) {
 	err := checkBindSources("services:\n" +
 		"  1:\n    image: nginx\n" +
 		"  app:\n    image: nginx\n    volumes: [\"./data:/data\"]\n")
-	require.ErrorContains(t, err, `service "app"`)
+	require.ErrorContains(t, err, `service 'app'`)
 }
 
 // A manifest with more than one offender always refuses on the same one, so the
@@ -136,7 +136,7 @@ func TestCheckBindSourcesRefusesTheFirstServiceInOrder(t *testing.T) {
 		"  zebra:\n    image: nginx\n    volumes: [\"./z:/z\"]\n" +
 		"  alpha:\n    image: nginx\n    volumes: [\"./a:/a\"]\n"
 	for range 5 {
-		require.ErrorContains(t, checkBindSources(manifest), `service "alpha"`)
+		require.ErrorContains(t, checkBindSources(manifest), `service 'alpha'`)
 	}
 }
 

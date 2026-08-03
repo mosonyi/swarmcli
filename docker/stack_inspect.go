@@ -200,7 +200,7 @@ func GetStackInspection(stackName string) (string, error) {
 	}
 
 	if len(desc.Services) == 0 {
-		return "", fmt.Errorf("no services found in stack %q", stackName)
+		return "", fmt.Errorf("no services found in stack '%s'", stackName)
 	}
 
 	desc.ServiceCount = len(desc.Services)

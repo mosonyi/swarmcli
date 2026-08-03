@@ -164,7 +164,7 @@ func (m *Model) deleteSecretCmd(name string) tea.Cmd {
 		defer cancel()
 		err := secretOps.DeleteSecret(ctx, name)
 		if err != nil {
-			return errorMsg(fmt.Errorf("failed to delete secret %q: %w", name, err))
+			return errorMsg(fmt.Errorf("failed to delete secret '%s': %w", name, err))
 		}
 		return secretDeletedMsg{Name: name}
 	}

@@ -70,7 +70,7 @@ func Render(ch *Chart, ctx RenderContext) (string, error) {
 	delete(merged, "version")
 
 	if len(merged) == 0 {
-		return "", fmt.Errorf("chart %q rendered an empty manifest", ch.Metadata.Name)
+		return "", fmt.Errorf("chart '%s' rendered an empty manifest", ch.Metadata.Name)
 	}
 
 	var buf bytes.Buffer

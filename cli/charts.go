@@ -177,7 +177,7 @@ func chartsMain(args []string) int {
 	case "outdated":
 		return chartsOutdated(rest)
 	default:
-		return usageErr(fmt.Sprintf("unknown charts command %q\n\n%s", sub, chartsUsage))
+		return usageErr(fmt.Sprintf("unknown charts command '%s'\n\n%s", sub, chartsUsage))
 	}
 }
 
@@ -271,7 +271,7 @@ func chartsRepo(args []string) int {
 		outf("%q has been removed from your repositories\n", rest[0])
 		return 0
 	default:
-		return usageErr(fmt.Sprintf("unknown charts repo command %q", sub))
+		return usageErr(fmt.Sprintf("unknown charts repo command '%s'", sub))
 	}
 }
 
@@ -348,7 +348,7 @@ func chartsShow(args []string) int {
 		}
 		_, _ = stdout.Write(ch.Schema)
 	default:
-		return usageErr(fmt.Sprintf("unknown show target %q (want chart|values|schema)", what))
+		return usageErr(fmt.Sprintf("unknown show target '%s' (want chart|values|schema)", what))
 	}
 	return 0
 }
@@ -536,7 +536,7 @@ func chartsRollback(args []string) int {
 	}
 	rev, err := parseInt(pos[1])
 	if err != nil {
-		return usageErr(fmt.Sprintf("invalid revision %q", pos[1]))
+		return usageErr(fmt.Sprintf("invalid revision '%s'", pos[1]))
 	}
 	rel, err := charts.NewEngine().Rollback(context.Background(), pos[0], rev, charts.InstallOptions{
 		Wait: f.wait, Timeout: f.timeout, HistoryMax: f.historyMax,
@@ -644,7 +644,7 @@ func chartsGet(args []string) int {
 	case "manifest":
 		outln(rel.Manifest)
 	default:
-		return usageErr(fmt.Sprintf("unknown get target %q (want values|manifest)", what))
+		return usageErr(fmt.Sprintf("unknown get target '%s' (want values|manifest)", what))
 	}
 	return 0
 }
@@ -654,7 +654,7 @@ func chartsDiff(args []string) int {
 		return usageErr("charts diff upgrade <release> <repo/chart>")
 	}
 	if args[0] != "upgrade" {
-		return usageErr(fmt.Sprintf("unknown diff target %q (want upgrade)", args[0]))
+		return usageErr(fmt.Sprintf("unknown diff target '%s' (want upgrade)", args[0]))
 	}
 	pos, f, err := parseArgs(args[1:])
 	if err != nil {
@@ -854,7 +854,7 @@ func readValuesFiles(paths []string) ([][]byte, error) {
 	for _, p := range paths {
 		b, err := os.ReadFile(p)
 		if err != nil {
-			return nil, fmt.Errorf("read values file %q: %w", p, err)
+			return nil, fmt.Errorf("read values file '%s': %w", p, err)
 		}
 		out = append(out, b)
 	}
@@ -871,15 +871,15 @@ func readSetFiles(specs []string) ([]charts.SetFile, error) {
 	for _, s := range specs {
 		key, path, ok := strings.Cut(s, "=")
 		if !ok {
-			return nil, fmt.Errorf("--set-file %q: expected key=path", s)
+			return nil, fmt.Errorf("--set-file '%s': expected key=path", s)
 		}
 		key, path = strings.TrimSpace(key), strings.TrimSpace(path)
 		if key == "" || path == "" {
-			return nil, fmt.Errorf("--set-file %q: expected key=path", s)
+			return nil, fmt.Errorf("--set-file '%s': expected key=path", s)
 		}
 		b, err := os.ReadFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("--set-file %s: read %q: %w", key, path, err)
+			return nil, fmt.Errorf("--set-file %s: read '%s': %w", key, path, err)
 		}
 		out = append(out, charts.SetFile{Key: key, Data: b})
 	}
