@@ -170,7 +170,7 @@ func TestApplyStopsAtAWaveThatDoesNotConverge(t *testing.T) {
 
 	results, err := e.Apply(context.Background(), plan, InstallOptions{Timeout: 20 * time.Millisecond})
 	require.ErrorContains(t, err, "timed out")
-	require.ErrorContains(t, err, `"migrate"`, "the release that held the wave up is the one to name")
+	require.ErrorContains(t, err, `'migrate'`, "the release that held the wave up is the one to name")
 
 	require.Equal(t, []string{"db", "migrate"}, fb.deployOrder,
 		"wave 2 must not be deployed at all — no service and no revision record")
@@ -239,7 +239,7 @@ func TestWaitWaveNamesOneReleaseTheWayItAlwaysHas(t *testing.T) {
 	e := NewEngineWith(fb)
 
 	err := e.waitReady(context.Background(), "solo", 20*time.Millisecond)
-	require.ErrorContains(t, err, `timed out after 20ms waiting for release "solo" to converge`)
+	require.ErrorContains(t, err, `timed out after 20ms waiting for release 'solo' to converge`)
 }
 
 // And it names all of them, but only the ones that had not converged: a wave of
@@ -253,7 +253,7 @@ func TestWaitWaveNamesOnlyWhatDidNotConverge(t *testing.T) {
 	e := NewEngineWith(fb)
 
 	err := e.waitWave(context.Background(), []string{"quick", "slow", "alsoSlow"}, 20*time.Millisecond)
-	require.ErrorContains(t, err, `releases "slow", "alsoSlow"`)
+	require.ErrorContains(t, err, `releases 'slow', 'alsoSlow'`)
 	require.NotContains(t, err.Error(), "quick")
 }
 
@@ -267,7 +267,7 @@ func TestWaitWaveFailsFastOnAWedgedRelease(t *testing.T) {
 	e := NewEngineWith(fb)
 
 	err := e.waitWave(context.Background(), []string{"fine", "stuck"}, time.Hour)
-	require.ErrorContains(t, err, `release "stuck"`)
+	require.ErrorContains(t, err, `release 'stuck'`)
 	require.NotContains(t, err.Error(), "timed out", "swarm will not continue on its own, so waiting is pointless")
 }
 

@@ -90,7 +90,7 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 		return fmt.Errorf("stopped after 10 redirects")
 	}
 	if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
-		return fmt.Errorf("refusing redirect to non-http(s) URL %q", req.URL.Redacted())
+		return fmt.Errorf("refusing redirect to non-http(s) URL '%s'", req.URL.Redacted())
 	}
 	return nil
 }
@@ -122,12 +122,12 @@ func validateRepoName(name string) error {
 	case name == "":
 		return fmt.Errorf("repository name is required")
 	case !isPlainName(name):
-		return fmt.Errorf("invalid repository name %q: use letters, digits, '-', '_', '.'", name)
+		return fmt.Errorf("invalid repository name '%s': use letters, digits, '-', '_', '.'", name)
 	case name == "." || name == "..":
 		// Harmless today only because indexFile prefixes the name, which leaves
 		// "index-.." rather than "..". Refusing them keeps that accident from
 		// quietly becoming load-bearing.
-		return fmt.Errorf("invalid repository name %q", name)
+		return fmt.Errorf("invalid repository name '%s'", name)
 	}
 	return nil
 }
@@ -150,7 +150,7 @@ func (s *RepoStore) checkPlaintext(u *url.URL) error {
 	if u.Scheme != "http" || s.AllowPlaintext {
 		return nil
 	}
-	return fmt.Errorf("refusing the plaintext URL %q: anything on the path to it decides what gets "+
+	return fmt.Errorf("refusing the plaintext URL '%s': anything on the path to it decides what gets "+
 		"deployed on your swarm, and the index digest travels the same path; set %s=1 if this is an "+
 		"internal registry on a network you already trust", u.Redacted(), AllowPlaintextEnv)
 }
@@ -188,7 +188,7 @@ func (s *RepoStore) Add(name, repoURL string) error {
 	}
 	for _, r := range repos {
 		if r.Name == name {
-			return fmt.Errorf("repository %q already exists", name)
+			return fmt.Errorf("repository '%s' already exists", name)
 		}
 	}
 	repoURL = strings.TrimRight(repoURL, "/")
@@ -228,7 +228,7 @@ func (s *RepoStore) Remove(name string) error {
 		out = append(out, r)
 	}
 	if !found {
-		return fmt.Errorf("repository %q not found", name)
+		return fmt.Errorf("repository '%s' not found", name)
 	}
 	if err := s.save(out); err != nil {
 		return err
@@ -257,11 +257,11 @@ func (s *RepoStore) Update(name string) (changed, unchanged []string, err error)
 		// is not one to fetch an index for, let alone write one under.
 		path, err := s.indexFile(r.Name)
 		if err != nil {
-			return changed, unchanged, fmt.Errorf("update %q: %w", r.Name, err)
+			return changed, unchanged, fmt.Errorf("update '%s': %w", r.Name, err)
 		}
 		idx, err := s.fetchIndex(r.URL)
 		if err != nil {
-			return changed, unchanged, fmt.Errorf("update %q: %w", r.Name, err)
+			return changed, unchanged, fmt.Errorf("update '%s': %w", r.Name, err)
 		}
 		// The served index is byte-stable between releases, so an identical
 		// payload means nothing new — report it as already up-to-date.
@@ -279,7 +279,7 @@ func (s *RepoStore) Update(name string) (changed, unchanged []string, err error)
 		changed = append(changed, r.Name)
 	}
 	if name != "" && len(changed)+len(unchanged) == 0 {
-		return nil, nil, fmt.Errorf("repository %q not found", name)
+		return nil, nil, fmt.Errorf("repository '%s' not found", name)
 	}
 	return changed, unchanged, nil
 }
@@ -292,14 +292,14 @@ func (s *RepoStore) LoadIndex(name string) (*Index, error) {
 	}
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		return nil, fmt.Errorf("no cached index for %q; run `charts repo update`", name)
+		return nil, fmt.Errorf("no cached index for '%s'; run `charts repo update`", name)
 	}
 	if err != nil {
 		return nil, err
 	}
 	var idx Index
 	if err := yaml.Unmarshal(data, &idx); err != nil {
-		return nil, fmt.Errorf("parse index for %q: %w", name, err)
+		return nil, fmt.Errorf("parse index for '%s': %w", name, err)
 	}
 	return &idx, nil
 }
@@ -351,7 +351,7 @@ func (s *RepoStore) EnsureRepos(specs []RepoSpec) error {
 				return err
 			}
 		case have != want:
-			return fmt.Errorf("repository %q is already configured with a different URL (%s); "+
+			return fmt.Errorf("repository '%s' is already configured with a different URL (%s); "+
 				"refusing to repoint it — run `swarmcli charts repo remove %s` first if that is intended",
 				spec.Name, have, spec.Name)
 		default:
@@ -360,7 +360,7 @@ func (s *RepoStore) EnsureRepos(specs []RepoSpec) error {
 			// resolve one to the wrong version. Failing the whole apply because
 			// the network blipped would be worse than proceeding offline.
 			if _, _, err := s.Update(spec.Name); err != nil {
-				s.warnf("could not refresh repository %q (%v); using the cached index\n", spec.Name, err)
+				s.warnf("could not refresh repository '%s' (%v); using the cached index\n", spec.Name, err)
 			}
 		}
 	}
@@ -415,7 +415,7 @@ func (s *RepoStore) Search(keyword string) ([]ChartHit, error) {
 func (s *RepoStore) Resolve(ref, version string) (IndexEntry, string, error) {
 	repoName, chartName, ok := strings.Cut(ref, "/")
 	if !ok || repoName == "" || chartName == "" {
-		return IndexEntry{}, "", fmt.Errorf("chart reference must be <repo>/<chart>, got %q", ref)
+		return IndexEntry{}, "", fmt.Errorf("chart reference must be <repo>/<chart>, got '%s'", ref)
 	}
 	repos, err := s.List()
 	if err != nil {
@@ -428,7 +428,7 @@ func (s *RepoStore) Resolve(ref, version string) (IndexEntry, string, error) {
 		}
 	}
 	if baseURL == "" {
-		return IndexEntry{}, "", fmt.Errorf("repository %q not found", repoName)
+		return IndexEntry{}, "", fmt.Errorf("repository '%s' not found", repoName)
 	}
 	idx, err := s.LoadIndex(repoName)
 	if err != nil {
@@ -436,7 +436,7 @@ func (s *RepoStore) Resolve(ref, version string) (IndexEntry, string, error) {
 	}
 	versions := idx.Entries[chartName]
 	if len(versions) == 0 {
-		return IndexEntry{}, "", fmt.Errorf("chart %q not found in repository %q", chartName, repoName)
+		return IndexEntry{}, "", fmt.Errorf("chart '%s' not found in repository '%s'", chartName, repoName)
 	}
 	if version == "" {
 		return latestVersion(versions), baseURL, nil
@@ -450,28 +450,28 @@ func (s *RepoStore) Resolve(ref, version string) (IndexEntry, string, error) {
 			return v, baseURL, nil
 		}
 	}
-	return IndexEntry{}, "", fmt.Errorf("chart %q version %q not found", chartName, version)
+	return IndexEntry{}, "", fmt.Errorf("chart '%s' version '%s' not found", chartName, version)
 }
 
 // Pull downloads and loads the chart described by entry, resolving relative URLs
 // against baseURL.
 func (s *RepoStore) Pull(entry IndexEntry, baseURL string) (*Chart, error) {
 	if len(entry.URLs) == 0 {
-		return nil, fmt.Errorf("chart %q has no download URL", entry.Name)
+		return nil, fmt.Errorf("chart '%s' has no download URL", entry.Name)
 	}
 	tarURL := entry.URLs[0]
 	u, err := url.Parse(tarURL)
 	if err != nil {
-		return nil, fmt.Errorf("invalid chart download URL %q: %w", tarURL, err)
+		return nil, fmt.Errorf("invalid chart download URL '%s': %w", tarURL, err)
 	}
 	if !u.IsAbs() {
 		tarURL = strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(tarURL, "/")
 		if u, err = url.Parse(tarURL); err != nil {
-			return nil, fmt.Errorf("invalid chart download URL %q: %w", tarURL, err)
+			return nil, fmt.Errorf("invalid chart download URL '%s': %w", tarURL, err)
 		}
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return nil, fmt.Errorf("chart download URL must be http(s), got %q", tarURL)
+		return nil, fmt.Errorf("chart download URL must be http(s), got '%s'", tarURL)
 	}
 	// The index may point the tarball anywhere — a CDN, a release asset — so the
 	// scheme has to be checked here too, not only where the repository was added.
@@ -498,7 +498,7 @@ func (s *RepoStore) Pull(entry IndexEntry, baseURL string) (*Chart, error) {
 	}
 	if err := verifyDigest(entry, body); err != nil {
 		if errors.Is(err, errNoDigest) {
-			s.warnf("chart %q version %s: repository index publishes no digest; integrity not verified\n",
+			s.warnf("chart '%s' version %s: repository index publishes no digest; integrity not verified\n",
 				entry.Name, entry.Version)
 		} else {
 			return nil, err
@@ -533,7 +533,7 @@ func verifyDigest(entry IndexEntry, body []byte) error {
 	// we cannot actually check rather than silently skipping verification.
 	if alg, hexsum, ok := strings.Cut(want, ":"); ok {
 		if alg != "sha256" {
-			return fmt.Errorf("chart %q version %s: unsupported digest algorithm %q",
+			return fmt.Errorf("chart '%s' version %s: unsupported digest algorithm '%s'",
 				entry.Name, entry.Version, alg)
 		}
 		want = hexsum
@@ -541,7 +541,7 @@ func verifyDigest(entry IndexEntry, body []byte) error {
 	sum := sha256.Sum256(body)
 	got := hex.EncodeToString(sum[:])
 	if !strings.EqualFold(got, want) {
-		return fmt.Errorf("chart %q version %s: digest mismatch (index says %s, download is %s); "+
+		return fmt.Errorf("chart '%s' version %s: digest mismatch (index says %s, download is %s); "+
 			"the repository index and the chart archive disagree — refusing to install"+staleIndexHint,
 			entry.Name, entry.Version, want, got)
 	}

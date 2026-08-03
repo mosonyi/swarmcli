@@ -193,7 +193,7 @@ func (l *dirLoader) loadTemplates(ch *Chart) error {
 	entries, err := os.ReadDir(tdir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("chart %q has no %s/ directory", l.root, templatesDir)
+			return fmt.Errorf("chart '%s' has no %s/ directory", l.root, templatesDir)
 		}
 		return fmt.Errorf("read %s/: %w", templatesDir, err)
 	}
@@ -392,11 +392,11 @@ func validateChart(ch *Chart) error {
 	switch ch.Metadata.APIVersion {
 	case "", chartAPIVersionV1:
 	default:
-		return fmt.Errorf("Chart.yaml: unsupported apiVersion %q (expected %q)",
+		return fmt.Errorf("Chart.yaml: unsupported apiVersion '%s' (expected '%s')",
 			ch.Metadata.APIVersion, chartAPIVersionV1)
 	}
 	if len(ch.Templates) == 0 {
-		return fmt.Errorf("chart %q has no templates", ch.Metadata.Name)
+		return fmt.Errorf("chart '%s' has no templates", ch.Metadata.Name)
 	}
 	return nil
 }

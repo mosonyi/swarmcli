@@ -119,7 +119,7 @@ func DeployStackInContext(ctx context.Context, ctxName, stackName, yamlContent s
 		return fmt.Errorf("docker context name is required")
 	}
 	if !resolve.Valid() {
-		return fmt.Errorf("invalid --resolve-image %q: want always, changed or never", string(resolve))
+		return fmt.Errorf("invalid --resolve-image '%s': want always, changed or never", string(resolve))
 	}
 	// Validate first
 	if err := ValidateStackYAML(yamlContent); err != nil {
@@ -163,7 +163,7 @@ func DeployStackInContext(ctx context.Context, ctxName, stackName, yamlContent s
 		// cancellation itself so a caller shutting down can tell the two apart
 		// and does not spend its remaining seconds tidying up.
 		if cerr := ctx.Err(); cerr != nil {
-			return fmt.Errorf("deploying stack %q: %w", stackName, cerr)
+			return fmt.Errorf("deploying stack '%s': %w", stackName, cerr)
 		}
 		// If deployment failed, try to clean up any networks that might have been created
 		// This handles the case where a network with the wrong type was created
@@ -215,15 +215,15 @@ func writeStackTree(files map[string][]byte, manifest string) (dir string, manif
 		rel := filepath.FromSlash(name)
 		path := filepath.Join(dir, rel)
 		if filepath.IsAbs(rel) || !strings.HasPrefix(path, dir+string(os.PathSeparator)) {
-			err = fmt.Errorf("refusing chart file %q: it resolves outside the stack directory", name)
+			err = fmt.Errorf("refusing chart file '%s': it resolves outside the stack directory", name)
 			return
 		}
 		if err = os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			err = fmt.Errorf("failed to create directory for chart file %q: %w", name, err)
+			err = fmt.Errorf("failed to create directory for chart file '%s': %w", name, err)
 			return
 		}
 		if err = os.WriteFile(path, data, 0o600); err != nil {
-			err = fmt.Errorf("failed to write chart file %q: %w", name, err)
+			err = fmt.Errorf("failed to write chart file '%s': %w", name, err)
 			return
 		}
 	}
@@ -265,7 +265,7 @@ func RemoveStackCLIInContext(ctx context.Context, ctxName, stackName string) err
 		// A killed child produces no output to interpret, so decide on the
 		// cancellation before reading the message below.
 		if cerr := ctx.Err(); cerr != nil {
-			return fmt.Errorf("removing stack %q: %w", stackName, cerr)
+			return fmt.Errorf("removing stack '%s': %w", stackName, cerr)
 		}
 		// An already-absent stack is success: makes uninstall idempotent so a
 		// retry after a partial teardown can still finish cleanup.

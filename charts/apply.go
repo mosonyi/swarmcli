@@ -222,22 +222,22 @@ func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource,
 
 	ch, err := src.Load(ref, spec.Version)
 	if err != nil {
-		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
+		return ReleasePlan{}, fmt.Errorf("%s: release '%s': %w", rf.Path, spec.Name, err)
 	}
 	compat := CheckCompat(ch.Metadata)
 
 	files, err := readFiles(rf.ValuesPaths(spec), read)
 	if err != nil {
-		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
+		return ReleasePlan{}, fmt.Errorf("%s: release '%s': %w", rf.Path, spec.Name, err)
 	}
 	// No --set equivalent: the file is the only source of truth, so a value that
 	// is not in it cannot influence what gets deployed.
 	values, err := MergeValues(ch.Values, files, nil)
 	if err != nil {
-		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
+		return ReleasePlan{}, fmt.Errorf("%s: release '%s': %w", rf.Path, spec.Name, err)
 	}
 	if err := ValidateValues(ch.Schema, values); err != nil {
-		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
+		return ReleasePlan{}, fmt.Errorf("%s: release '%s': %w", rf.Path, spec.Name, err)
 	}
 
 	rc := ReleaseChartOf(ch)
@@ -251,11 +251,11 @@ func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource,
 	// feature produced (compatHint is empty unless the chart is incompatible).
 	manifest, err := Render(ch, rctx)
 	if err != nil {
-		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w%s", rf.Path, spec.Name, err, compatHint(compat))
+		return ReleasePlan{}, fmt.Errorf("%s: release '%s': %w%s", rf.Path, spec.Name, err, compatHint(compat))
 	}
 	req, err := RenderRequirements(ch, rctx)
 	if err != nil {
-		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w%s", rf.Path, spec.Name, err, compatHint(compat))
+		return ReleasePlan{}, fmt.Errorf("%s: release '%s': %w%s", rf.Path, spec.Name, err, compatHint(compat))
 	}
 	// One of the two places a *Chart and a rendered manifest coexist, so one of
 	// the two places the manifest's file: keys can be resolved at all — the
@@ -266,7 +266,7 @@ func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource,
 	// path there is.
 	chartFiles, err := ResolveManifestFiles(manifest, ch.Files, values)
 	if err != nil {
-		return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
+		return ReleasePlan{}, fmt.Errorf("%s: release '%s': %w", rf.Path, spec.Name, err)
 	}
 
 	rp := ReleasePlan{
@@ -291,7 +291,7 @@ func (e *Engine) planRelease(rf *ReleaseFile, spec ReleaseSpec, src ChartSource,
 		rp.CurrentManifest = cur.Manifest
 		same, err := unchanged(&cur, rc, values, manifest, owner, chartFiles)
 		if err != nil {
-			return ReleasePlan{}, fmt.Errorf("%s: release %q: %w", rf.Path, spec.Name, err)
+			return ReleasePlan{}, fmt.Errorf("%s: release '%s': %w", rf.Path, spec.Name, err)
 		}
 		if same {
 			rp.Action = ActionUnchanged
@@ -378,7 +378,7 @@ func (e *Engine) Apply(ctx context.Context, plan *Plan, opts InstallOptions) ([]
 			o.Install = true
 			rel, err := e.Upgrade(ctx, rp.Name, rp.Chart, rp.Values, rp.Manifest, o)
 			if err != nil {
-				return results, fmt.Errorf("release %q: %w", rp.Name, err)
+				return results, fmt.Errorf("release '%s': %w", rp.Name, err)
 			}
 			results = append(results, ApplyResult{Name: rp.Name, Action: rp.Action, Revision: rel.Revision})
 			wrote = append(wrote, rp.Name)
@@ -515,7 +515,7 @@ func readFiles(paths []string, read func(string) ([]byte, error)) ([][]byte, err
 	for _, p := range paths {
 		b, err := read(p)
 		if err != nil {
-			return nil, fmt.Errorf("read values file %q: %w", p, err)
+			return nil, fmt.Errorf("read values file '%s': %w", p, err)
 		}
 		out = append(out, b)
 	}

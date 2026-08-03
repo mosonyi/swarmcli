@@ -50,7 +50,7 @@ func validateSubnet(prefixStr string, wantIPv6 bool) error {
 	}
 	pfx, err := netip.ParsePrefix(prefixStr)
 	if err != nil {
-		return fmt.Errorf("invalid subnet CIDR: %q", prefixStr)
+		return fmt.Errorf("invalid subnet CIDR: '%s'", prefixStr)
 	}
 	if wantIPv6 {
 		if !pfx.Addr().Is6() {
@@ -71,7 +71,7 @@ func validateGateway(addrStr string, wantIPv6 bool) error {
 	}
 	addr, err := netip.ParseAddr(addrStr)
 	if err != nil {
-		return fmt.Errorf("invalid gateway IP: %q", addrStr)
+		return fmt.Errorf("invalid gateway IP: '%s'", addrStr)
 	}
 	if wantIPv6 {
 		if !addr.Is6() {

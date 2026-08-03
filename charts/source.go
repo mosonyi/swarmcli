@@ -33,7 +33,7 @@ func (s *repoSource) Load(ref, version string) (*Chart, error) {
 			// Previously the flag was accepted and silently dropped here, so
 			// `install foo ./chart --version 2.0.0` quietly installed whatever
 			// Chart.yaml said. A local directory has exactly one version.
-			return nil, fmt.Errorf("chart %q is a local path: --version does not apply (the chart's own Chart.yaml sets the version)", ref)
+			return nil, fmt.Errorf("chart '%s' is a local path: --version does not apply (the chart's own Chart.yaml sets the version)", ref)
 		}
 		return loadLocalChart(ref)
 	}
@@ -41,12 +41,12 @@ func (s *repoSource) Load(ref, version string) (*Chart, error) {
 	// ("./" omitted). Keep resolving those for backwards compatibility.
 	if info, err := os.Stat(ref); err == nil {
 		if version != "" {
-			return nil, fmt.Errorf("chart %q is a local path: --version does not apply (the chart's own Chart.yaml sets the version)", ref)
+			return nil, fmt.Errorf("chart '%s' is a local path: --version does not apply (the chart's own Chart.yaml sets the version)", ref)
 		}
 		return loadStatted(ref, info.IsDir())
 	}
 	if s.store == nil {
-		return nil, fmt.Errorf("chart %q not found on disk and no repositories are configured", ref)
+		return nil, fmt.Errorf("chart '%s' not found on disk and no repositories are configured", ref)
 	}
 	entry, base, err := s.store.Resolve(ref, version)
 	if err != nil {
@@ -72,7 +72,7 @@ func loadLocalChart(path string) (*Chart, error) {
 	if err != nil {
 		// An explicit path that does not exist is a typo, not a repository
 		// reference. Say so, instead of the misleading "must be <repo>/<chart>".
-		return nil, fmt.Errorf("chart path %q not found", path)
+		return nil, fmt.Errorf("chart path '%s' not found", path)
 	}
 	return loadStatted(path, info.IsDir())
 }

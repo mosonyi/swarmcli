@@ -108,7 +108,7 @@ type fileRef struct {
 func (r fileRef) resolve(files map[string][]byte, values map[string]any) (string, []byte, error) {
 	if path.IsAbs(r.path) {
 		return "", nil, fmt.Errorf(
-			"%s: %q is an absolute path, and %s — copy it into the chart's %s/ and reference it by that path, "+
+			"%s: '%s' is an absolute path, and %s — copy it into the chart's %s/ and reference it by that path, "+
 				"or let the operator supply it (--set-file <key>=%s, referenced as %s/<key>), "+
 				"or keep it operator-managed by creating it outside the chart "+
 				"(docker config create <name> <path>, or docker secret create) and referencing it with external: true",
@@ -119,18 +119,18 @@ func (r fileRef) resolve(files map[string][]byte, values map[string]any) (string
 	// leading one afterwards is the complete test for leaving the chart root.
 	clean := path.Clean(r.path)
 	if clean == ".." || strings.HasPrefix(clean, "../") {
-		return "", nil, fmt.Errorf("%s: %q escapes the chart, and %s", r.key, r.path, chartFilesRule)
+		return "", nil, fmt.Errorf("%s: '%s' escapes the chart, and %s", r.key, r.path, chartFilesRule)
 	}
 	if key, ok := strings.CutPrefix(clean, valuesDir+"/"); ok {
 		data, err := r.resolveValue(key, values)
 		return clean, data, err
 	}
 	if !strings.HasPrefix(clean, filesDir+"/") {
-		return "", nil, fmt.Errorf("%s: %q is outside %s/ and %s/, and %s — reference it as %q",
+		return "", nil, fmt.Errorf("%s: '%s' is outside %s/ and %s/, and %s — reference it as '%s'",
 			r.key, r.path, filesDir, valuesDir, chartFilesRule, filesDir+"/"+clean)
 	}
 	if _, ok := files[clean]; !ok {
-		return "", nil, fmt.Errorf("%s: %q is not in the chart, and %s", r.key, r.path, chartFilesRule)
+		return "", nil, fmt.Errorf("%s: '%s' is not in the chart, and %s", r.key, r.path, chartFilesRule)
 	}
 	return clean, files[clean], nil
 }
@@ -157,17 +157,17 @@ func (r fileRef) resolveValue(key string, values map[string]any) ([]byte, error)
 			remedy = "create it outside the chart (docker secret create <name> <path>) " +
 				"and reference it with external: true"
 		}
-		return nil, fmt.Errorf("%s: %q — only a config's file: may name %s/, because a value is stored in the "+
+		return nil, fmt.Errorf("%s: '%s' — only a config's file: may name %s/, because a value is stored in the "+
 			"release record and is as readable as any config — %s",
 			r.key, r.path, valuesDir, remedy)
 	}
 	steps, err := parseSetPath(key)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %q is not a values path: %w", r.key, r.path, err)
+		return nil, fmt.Errorf("%s: '%s' is not a values path: %w", r.key, r.path, err)
 	}
 	v, ok := lookupPath(values, steps)
 	if !ok {
-		return nil, fmt.Errorf("%s: %q names no value, and %s", r.key, r.path, valuesFilesRule)
+		return nil, fmt.Errorf("%s: '%s' names no value, and %s", r.key, r.path, valuesFilesRule)
 	}
 	// Deliberately not a stringified number or a marshalled map: a config's
 	// content is a file the operator wrote, and anything else here is a chart
@@ -175,7 +175,7 @@ func (r fileRef) resolveValue(key string, values map[string]any) ([]byte, error)
 	// rendering of the wrong thing.
 	s, ok := v.(string)
 	if !ok {
-		return nil, fmt.Errorf("%s: %q is a %T, and only a string can be a file — %s", r.key, r.path, v, valuesFilesRule)
+		return nil, fmt.Errorf("%s: '%s' is a %T, and only a string can be a file — %s", r.key, r.path, v, valuesFilesRule)
 	}
 	// An empty value is unsupplied, not empty content. A chart referencing
 	// values/<key> has to default that key in values.yaml — to "", since a
@@ -184,7 +184,7 @@ func (r fileRef) resolveValue(key string, values map[string]any) ([]byte, error)
 	// exactly this, and the alternative to refusing is deploying an empty config
 	// over a working one. A config that must genuinely be empty can be a newline.
 	if s == "" {
-		return nil, fmt.Errorf("%s: %q is empty, and %s", r.key, r.path, valuesFilesRule)
+		return nil, fmt.Errorf("%s: '%s' is empty, and %s", r.key, r.path, valuesFilesRule)
 	}
 	return []byte(s), nil
 }

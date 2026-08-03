@@ -70,7 +70,7 @@ func checkBindSources(manifest string) error {
 			if !ok || source == "" || isAbsBindSource(source) {
 				continue
 			}
-			return fmt.Errorf("service %q: bind source %q is relative; a swarm bind mount names a path "+
+			return fmt.Errorf("service '%s': bind source '%s' is relative; a swarm bind mount names a path "+
 				"on the node that runs the task, so it must be absolute (or use a named volume)", name, source)
 		}
 	}

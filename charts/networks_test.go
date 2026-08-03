@@ -62,5 +62,5 @@ func TestExternalNetworks(t *testing.T) {
 
 func TestExternalNetworksRejectsBothForms(t *testing.T) {
 	_, err := externalNetworks("networks:\n  alias:\n    external:\n      name: deprecated\n    name: current\n")
-	require.EqualError(t, err, `network "alias": external.name and name conflict; use only name`)
+	require.EqualError(t, err, `network 'alias': external.name and name conflict; use only name`)
 }

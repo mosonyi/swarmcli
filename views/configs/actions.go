@@ -223,7 +223,7 @@ func (m *Model) deleteConfigCmd(name string) tea.Cmd {
 		defer cancel()
 		err := configOps.DeleteConfig(ctx, name)
 		if err != nil {
-			return errorMsg(fmt.Errorf("failed to delete config %q: %w", name, err))
+			return errorMsg(fmt.Errorf("failed to delete config '%s': %w", name, err))
 		}
 		return configDeletedMsg{Name: name}
 	}

@@ -158,7 +158,7 @@ func InspectConfigWith(ctx context.Context, cli *client.Client, nameOrID string)
 
 	cfg, _, err := cli.ConfigInspectWithRaw(ctx, nameOrID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to inspect config %q: %w", nameOrID, err)
+		return nil, fmt.Errorf("failed to inspect config '%s': %w", nameOrID, err)
 	}
 
 	l().Infof("[InspectConfig] Config %q inspected successfully (size=%d bytes)", cfg.Spec.Name, len(cfg.Spec.Data))
@@ -229,13 +229,13 @@ func createConfigWithSpec(ctx context.Context, cli *client.Client, spec swarm.Co
 	id, err := cli.ConfigCreate(ctx, spec)
 	if err != nil {
 		l().Errorf("%s Failed to create config %q: %v", logPrefix, cfgName, err)
-		return swarm.Config{}, fmt.Errorf("failed to create config %q: %w", cfgName, err)
+		return swarm.Config{}, fmt.Errorf("failed to create config '%s': %w", cfgName, err)
 	}
 
 	newCfg, _, err := cli.ConfigInspectWithRaw(ctx, id.ID)
 	if err != nil {
 		l().Errorf("%s Created config %q but failed to re-inspect: %v", logPrefix, cfgName, err)
-		return swarm.Config{}, fmt.Errorf("failed to inspect new config %q: %w", cfgName, err)
+		return swarm.Config{}, fmt.Errorf("failed to inspect new config '%s': %w", cfgName, err)
 	}
 
 	l().Infof("%s Successfully created new config %q (ID=%s)", logPrefix, newCfg.Spec.Name, newCfg.ID)
@@ -320,7 +320,7 @@ func DeleteConfigWith(ctx context.Context, cli *client.Client, nameOrID string) 
 		for i, s := range svcs {
 			names[i] = s.Spec.Name
 		}
-		return fmt.Errorf("cannot delete config %q: still used by services %v", cfg.Config.Spec.Name, names)
+		return fmt.Errorf("cannot delete config '%s': still used by services %v", cfg.Config.Spec.Name, names)
 	}
 
 	return cli.ConfigRemove(ctx, cfg.Config.ID)

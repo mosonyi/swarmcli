@@ -654,11 +654,11 @@ func TestPlanApplyRefusesAPathOutsideTheChart(t *testing.T) {
 	src.charts["swarmcli-charts/demo@0.1.0"] = fileChart(t, "0.1.0", "/etc/shadow")
 
 	_, err := e.PlanApply(context.Background(), rf, src, PlanOptions{})
-	require.ErrorContains(t, err, `"/etc/shadow"`)
+	require.ErrorContains(t, err, `'/etc/shadow'`)
 	require.ErrorContains(t, err, "absolute path")
 	require.ErrorContains(t, err, "external: true")
 	require.ErrorContains(t, err, rf.Path)
-	require.ErrorContains(t, err, `release "hello"`)
+	require.ErrorContains(t, err, `release 'hello'`)
 	require.Empty(t, fb.deployed)
 }
 
@@ -671,7 +671,7 @@ func TestPlanApplyErrorsNameTheFileAndRelease(t *testing.T) {
 	rf.Releases[0].Version = "9.9.9"
 	_, err := e.PlanApply(context.Background(), rf, src, PlanOptions{})
 	require.ErrorContains(t, err, rf.Path)
-	require.ErrorContains(t, err, `release "hello"`)
+	require.ErrorContains(t, err, `release 'hello'`)
 }
 
 // A values file that violates the chart's schema must abort planning — before any
@@ -687,7 +687,7 @@ func TestPlanApplyRejectsSchemaViolationBeforeDeploying(t *testing.T) {
 	_, err := e.PlanApply(context.Background(), rf, src, PlanOptions{})
 	require.Error(t, err)
 	require.ErrorContains(t, err, rf.Path)
-	require.ErrorContains(t, err, `release "hello"`)
+	require.ErrorContains(t, err, `release 'hello'`)
 	require.Empty(t, fb.deployed, "a schema violation must abort before anything deploys")
 }
 

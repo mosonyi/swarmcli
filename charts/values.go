@@ -47,15 +47,15 @@ func applySet(dst map[string]any, expr string) error {
 	for _, pair := range splitSet(expr) {
 		eq := strings.IndexByte(pair, '=')
 		if eq < 0 {
-			return fmt.Errorf("--set %q: expected key=value", pair)
+			return fmt.Errorf("--set '%s': expected key=value", pair)
 		}
 		path := unescapeCommas(strings.TrimSpace(pair[:eq]))
 		if path == "" {
-			return fmt.Errorf("--set %q: empty key", pair)
+			return fmt.Errorf("--set '%s': empty key", pair)
 		}
 		steps, err := parseSetPath(path)
 		if err != nil {
-			return fmt.Errorf("--set %q: %w", pair, err)
+			return fmt.Errorf("--set '%s': %w", pair, err)
 		}
 		// Every path starts with a map key and dst is non-nil, so setPath walks
 		// into dst and mutates it in place.
@@ -88,7 +88,7 @@ func ApplySetFiles(dst map[string]any, sets []SetFile) error {
 		}
 		steps, err := parseSetPath(sf.Key)
 		if err != nil {
-			return fmt.Errorf("--set-file %q: %w", sf.Key, err)
+			return fmt.Errorf("--set-file '%s': %w", sf.Key, err)
 		}
 		setPath(dst, steps, string(sf.Data))
 	}
@@ -113,23 +113,23 @@ func parseSetPath(path string) ([]setStep, error) {
 		}
 		name, idx, indexed := strings.Cut(seg, "[")
 		if name == "" {
-			return nil, fmt.Errorf("list index %q has no key", seg)
+			return nil, fmt.Errorf("list index '%s' has no key", seg)
 		}
 		if strings.ContainsRune(name, ']') {
-			return nil, fmt.Errorf("unbalanced ']' in %q", seg)
+			return nil, fmt.Errorf("unbalanced ']' in '%s'", seg)
 		}
 		steps = append(steps, setStep{key: name})
 		for rest := "[" + idx; indexed && rest != ""; {
 			if rest[0] != '[' {
-				return nil, fmt.Errorf("unexpected %q after a list index in %q", rest, seg)
+				return nil, fmt.Errorf("unexpected '%s' after a list index in '%s'", rest, seg)
 			}
 			end := strings.IndexByte(rest, ']')
 			if end < 0 {
-				return nil, fmt.Errorf("unbalanced '[' in %q", seg)
+				return nil, fmt.Errorf("unbalanced '[' in '%s'", seg)
 			}
 			n, err := strconv.Atoi(rest[1:end])
 			if err != nil || n < 0 {
-				return nil, fmt.Errorf("invalid list index %q in %q", rest[1:end], seg)
+				return nil, fmt.Errorf("invalid list index '%s' in '%s'", rest[1:end], seg)
 			}
 			steps = append(steps, setStep{index: n, isIndex: true})
 			rest = rest[end+1:]

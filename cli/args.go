@@ -95,7 +95,7 @@ func parseArgs(args []string) ([]string, flags, error) {
 				return nil, f, err
 			}
 			if !docker.ResolveImage(v).Valid() || v == "" {
-				return nil, f, fmt.Errorf("invalid value for --resolve-image: %q (want always, changed or never)", v)
+				return nil, f, fmt.Errorf("invalid value for --resolve-image: '%s' (want always, changed or never)", v)
 			}
 			f.resolveImage = v
 		case "--version":
@@ -111,7 +111,7 @@ func parseArgs(args []string) ([]string, flags, error) {
 			}
 			d, err := time.ParseDuration(v)
 			if err != nil {
-				return nil, f, fmt.Errorf("invalid --timeout %q: %w", v, err)
+				return nil, f, fmt.Errorf("invalid --timeout '%s': %w", v, err)
 			}
 			f.timeout = d
 		case "--history-max":
@@ -121,7 +121,7 @@ func parseArgs(args []string) ([]string, flags, error) {
 			}
 			n, err := parseInt(v)
 			if err != nil {
-				return nil, f, fmt.Errorf("invalid --history-max %q: %w", v, err)
+				return nil, f, fmt.Errorf("invalid --history-max '%s': %w", v, err)
 			}
 			f.historyMax = n
 		case "--revision":
@@ -131,7 +131,7 @@ func parseArgs(args []string) ([]string, flags, error) {
 			}
 			n, err := parseInt(v)
 			if err != nil {
-				return nil, f, fmt.Errorf("invalid --revision %q: %w", v, err)
+				return nil, f, fmt.Errorf("invalid --revision '%s': %w", v, err)
 			}
 			f.revision = n
 		case "--reuse-values":
@@ -157,7 +157,7 @@ func parseArgs(args []string) ([]string, flags, error) {
 			}
 			f.forVersion = v
 		default:
-			return nil, f, fmt.Errorf("unknown flag %q", name)
+			return nil, f, fmt.Errorf("unknown flag '%s'", name)
 		}
 	}
 	return pos, f, nil
@@ -178,7 +178,7 @@ func splitFlag(a string) (name, val string, hasVal bool) {
 func parseInt(s string) (int, error) {
 	n, err := strconv.Atoi(strings.TrimSpace(s))
 	if err != nil || n < 0 {
-		return 0, fmt.Errorf("not a non-negative integer: %q", s)
+		return 0, fmt.Errorf("not a non-negative integer: '%s'", s)
 	}
 	return n, nil
 }

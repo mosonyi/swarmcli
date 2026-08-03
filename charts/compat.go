@@ -117,7 +117,7 @@ func CheckCompatAgainst(cf Chartfile, engine string) CompatFinding {
 	}
 	c, err := semver.NewConstraint(cf.SwarmcliVersion)
 	if err != nil {
-		f.Reason = fmt.Sprintf("swarmcliVersion %q is not a valid SemVer constraint", cf.SwarmcliVersion)
+		f.Reason = fmt.Sprintf("swarmcliVersion '%s' is not a valid SemVer constraint", cf.SwarmcliVersion)
 		return f
 	}
 	if strings.TrimSpace(engine) == "" {
@@ -126,7 +126,7 @@ func CheckCompatAgainst(cf Chartfile, engine string) CompatFinding {
 	}
 	core, ok := coreVersion(engine)
 	if !ok {
-		f.Reason = fmt.Sprintf("chart-engine version %q is not valid SemVer", engine)
+		f.Reason = fmt.Sprintf("chart-engine version '%s' is not valid SemVer", engine)
 		return f
 	}
 	if c.Check(core) {

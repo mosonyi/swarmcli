@@ -39,12 +39,12 @@ func parseLabels(input string) (map[string]string, error) {
 		}
 		parts := strings.SplitN(pair, "=", 2)
 		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid label format: %q (expected key=value)", pair)
+			return nil, fmt.Errorf("invalid label format: '%s' (expected key=value)", pair)
 		}
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
 		if key == "" {
-			return nil, fmt.Errorf("label key cannot be empty in: %q", pair)
+			return nil, fmt.Errorf("label key cannot be empty in: '%s'", pair)
 		}
 		labels[key] = value
 	}

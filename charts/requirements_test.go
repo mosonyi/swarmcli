@@ -88,7 +88,7 @@ func TestExternalResourceNames(t *testing.T) {
 			name:     "declaring both forms is refused",
 			manifest: "configs:\n  alias:\n    external:\n      name: deprecated\n    name: current\n",
 			key:      "configs",
-			wantErr:  `config "alias": external.name and name conflict; use only name`,
+			wantErr:  `config 'alias': external.name and name conflict; use only name`,
 		},
 		{
 			name:     "non-external and external:false are ignored",
@@ -149,7 +149,7 @@ func TestEnsureExternalSecretsConfigs(t *testing.T) {
 		e := testEngine(newFakeBackend())
 		err := e.ensureExternalSecretsConfigs(ctx, "secrets:\n  db:\n    external: true\n", nil)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), `secret "db" does not exist`)
+		require.Contains(t, err.Error(), `secret 'db' does not exist`)
 		require.Contains(t, err.Error(), "docker secret create db <file>")
 	})
 
@@ -157,7 +157,7 @@ func TestEnsureExternalSecretsConfigs(t *testing.T) {
 		e := testEngine(newFakeBackend())
 		err := e.ensureExternalSecretsConfigs(ctx, "configs:\n  nginx:\n    external: true\n", nil)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), `config "nginx" does not exist`)
+		require.Contains(t, err.Error(), `config 'nginx' does not exist`)
 		require.Contains(t, err.Error(), "docker config create nginx <file>")
 	})
 
@@ -184,7 +184,7 @@ func TestEnsureExternalSecretsConfigs(t *testing.T) {
 		err := e.ensureExternalSecretsConfigs(ctx,
 			"configs:\n  stolen:\n    external: true\n    name: absent-config\n", nil)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), `config "absent-config" does not exist`)
+		require.Contains(t, err.Error(), `config 'absent-config' does not exist`)
 		require.Contains(t, err.Error(), "docker config create absent-config <file>")
 		require.NotContains(t, err.Error(), "stolen")
 	})
@@ -211,7 +211,7 @@ func TestEnsureExternalSecretsConfigs(t *testing.T) {
 		e := testEngine(newFakeBackend())
 		err := e.ensureExternalSecretsConfigs(ctx,
 			"configs:\n  alias:\n    external:\n      name: deprecated\n    name: current\n", nil)
-		require.EqualError(t, err, `config "alias": external.name and name conflict; use only name`)
+		require.EqualError(t, err, `config 'alias': external.name and name conflict; use only name`)
 	})
 
 	t.Run("backend error is surfaced", func(t *testing.T) {
@@ -238,7 +238,7 @@ func TestEnsureExternalSecretsConfigs(t *testing.T) {
 		req := &Requirements{Secrets: []ResourceRequirement{{Name: "db", Description: "Postgres password"}}}
 		err := e.ensureExternalSecretsConfigs(ctx, "secrets:\n  db:\n    external: true\n", req)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), `secret "db" does not exist (Postgres password)`)
+		require.Contains(t, err.Error(), `secret 'db' does not exist (Postgres password)`)
 	})
 }
 
@@ -255,7 +255,7 @@ func TestInstallMissingSecretAbortsBeforeNetworkCreate(t *testing.T) {
 		ReleaseChart{Name: "demo", Version: "0.1.0"}, nil, manifest, InstallOptions{})
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), `secret "db" does not exist`)
+	require.Contains(t, err.Error(), `secret 'db' does not exist`)
 	require.Equal(t, StatusFailed, rel.Status)
 	require.NotContains(t, fb.networkScopes, "pub", "no network should be created when a prerequisite secret is missing")
 	require.Empty(t, fb.deployed, "nothing should be deployed")

@@ -314,7 +314,7 @@ func TestUpdateReportsFetchFailure(t *testing.T) {
 	require.NoError(t, s.Add("eldara", srv.URL))
 	serve = false
 	_, _, err := s.Update("") // all repos
-	require.ErrorContains(t, err, `update "eldara"`)
+	require.ErrorContains(t, err, `update 'eldara'`)
 }
 
 // A failed index download must not leave the repository half-added: List stays
