@@ -55,30 +55,33 @@ jobs:
               capture_output=True, text=True,
           )
 
-          # Parse the pretty-printed JSON stream (one object per message)
-          text, depth, start = proc.stdout, 0, None
+          # Parse the pretty-printed JSON stream (one object per message).
+          # raw_decode is string-aware; counting braces instead desynchronises on
+          # the first unmatched '{' inside advisory text or a symbol name, and
+          # the swallowed decode error then drops every later finding -- passing
+          # a vulnerable module as "no vulnerabilities found".
+          text, decoder, pos = proc.stdout, json.JSONDecoder(), 0
           symbol_vulns, saw_config = set(), False
-          for i, c in enumerate(text):
-              if c == '{':
-                  if depth == 0:
-                      start = i
-                  depth += 1
-              elif c == '}':
-                  depth -= 1
-                  if depth == 0 and start is not None:
-                      try:
-                          obj = json.loads(text[start:i+1])
-                          if 'config' in obj:
-                              saw_config = True
-                          if obj.get('finding'):
-                              f = obj['finding']
-                              osv = f.get('osv', '')
-                              # Symbol-level finding: trace has a frame with a function
-                              if osv and any('function' in fr for fr in f.get('trace', [])):
-                                  symbol_vulns.add(osv)
-                      except Exception:
-                          pass
-                      start = None
+          while True:
+              while pos < len(text) and text[pos].isspace():
+                  pos += 1
+              if pos >= len(text):
+                  break
+              try:
+                  obj, pos = decoder.raw_decode(text, pos)
+              except ValueError:
+                  sys.stderr.write(proc.stderr)
+                  print("govulncheck emitted unparsable JSON at offset %d -- "
+                        "refusing to report a clean scan" % pos)
+                  sys.exit(1)
+              if 'config' in obj:
+                  saw_config = True
+              if obj.get('finding'):
+                  f = obj['finding']
+                  osv = f.get('osv', '')
+                  # Symbol-level finding: trace has a frame with a function
+                  if osv and any('function' in fr for fr in f.get('trace', [])):
+                      symbol_vulns.add(osv)
 
           # Fail loudly if govulncheck errored instead of scanning. A silent
           # exit-0 here previously masked broken runs (e.g. a govulncheck built
