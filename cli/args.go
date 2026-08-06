@@ -32,6 +32,9 @@ type flags struct {
 	// skipCompatCheck (--skip-compat-check) downgrades a chart's unmet
 	// swarmcliVersion requirement from a refusal to a warning.
 	skipCompatCheck bool
+	// noRepoUpdate (--no-repo-update) leaves the cached repository indexes
+	// alone, so resolution answers out of them and touches no network.
+	noRepoUpdate bool
 	// forVersion (--for-version) lints a chart against a chart-engine version
 	// other than this build's.
 	forVersion string
@@ -150,6 +153,8 @@ func parseArgs(args []string) ([]string, flags, error) {
 			f.install = true
 		case "--skip-compat-check":
 			f.skipCompatCheck = true
+		case "--no-repo-update":
+			f.noRepoUpdate = true
 		case "--for-version":
 			v, err := next()
 			if err != nil {

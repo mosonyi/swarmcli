@@ -76,7 +76,8 @@ Helm-like chart package manager `swarmcli charts <command>`:
 # Repositories
 swarmcli charts repo add <name> <url>     # add a repo and download its index
 swarmcli charts repo list                 # list configured repos
-swarmcli charts repo update [name]        # refresh indexes (all, or one)
+swarmcli charts repo update [name]        # refresh indexes (all, or one); install
+                                          # and friends now refresh on their own
 swarmcli charts repo remove <name>        # remove a repo
 
 # Discovery

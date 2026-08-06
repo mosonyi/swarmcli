@@ -109,6 +109,7 @@ utils/log/
 | `DOCKER_CONTEXT` | Override Docker context | `docker context show` |
 | `TEST_LOG` | Enable logging in tests | unset |
 | `SWARMCLI_CHARTS_ALLOW_PLAINTEXT` | Opt out of the https-only default for chart repositories; read only by `cli`, which wires it to `charts.RepoStore.AllowPlaintext` (the `charts` package never reads the environment, so embedders keep the default) | unset (https only) |
+| `SWARMCLI_CHARTS_NO_AUTO_UPDATE` | Stop the CLI refreshing a repository index before resolving a chart from it; read only by `cli`, which wires it to `charts.RepoStore.Refresh` = `RefreshNever` (same for `--no-repo-update`). Embedders keep the `RefreshExplicit` default either way | unset (refreshes) |
 
 ## Pro Feature Boundary
 

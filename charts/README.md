@@ -476,6 +476,45 @@ or any static host. Configured repos and cached indexes live under
 repository's name is a component of its cache filename, so it is limited to
 letters, digits, `-`, `_` and `.`.
 
+### Staying current
+
+Every command that resolves a `<repo>/<chart>` reference refreshes that
+repository's index first — `install`, `upgrade`, `template`, `diff`, `show`,
+`lint` and `search`. `install foo swarmcli-charts/bar` therefore installs the
+`bar` the repository publishes, not the one the cache happened to hold when
+`repo update` was last run. `repo update` is still there and still does exactly
+what it says; you no longer have to remember it before installing.
+
+The refresh is best-effort and bounded by a short deadline. If the repository is
+unreachable the command says so and resolves from the cache — a cached index is
+a correct answer, merely possibly an old one, and refusing to install would
+trade a stale answer for no answer. If that cache is also more than a day old,
+a second line says how old, because at that point the version you get may not
+be the one you asked for.
+
+Each repository is fetched at most once per invocation, so an `apply` over
+twenty releases from one repository downloads one index.
+
+Turn it off for a single command with `--no-repo-update`, or for a machine:
+
+```bash
+export SWARMCLI_CHARTS_NO_AUTO_UPDATE=1
+```
+
+Either one means *no network*, not merely *no implicit fetch*: `apply` skips its
+own refresh too, and `outdated` reports against the cached indexes and says so.
+That is what an air-gapped or deliberately offline run wants — the same answer,
+without paying a timeout per repository to reach it. The one thing still
+fetched is a repository being added for the first time, by `repo add` or by an
+`apply` whose release file declares one this machine has never seen: there is
+no cached index to fall back to, so the alternative is not an offline answer
+but no answer.
+
+Programs embedding this package are unaffected. `RepoStore.Refresh` defaults to
+`RefreshExplicit`, which downloads only when asked (`Update`, `Add`,
+`EnsureRepos`); `cli` is what selects `RefreshAlways`. A daemon's network
+behaviour is not something a CLI convenience should change underneath it.
+
 ### Transport
 
 Repositories are **HTTPS by default**. A repository serves the tarball that
@@ -494,9 +533,10 @@ this is a default rather than a rule. Opt that machine out:
 export SWARMCLI_CHARTS_ALLOW_PLAINTEXT=1
 ```
 
-It is read once, where the CLI builds its repository store, so it covers every
-command that touches a repository — `repo add`, `repo update`, `search`,
-`install`, `upgrade`, `apply`. One line in a shell profile or a CI job's
+It is read once, where the CLI builds its repository store (the same place
+`SWARMCLI_CHARTS_NO_AUTO_UPDATE` is read), so it covers every command that
+touches a repository — `repo add`, `repo update`, `search`, `install`,
+`upgrade`, `apply`. One line in a shell profile or a CI job's
 environment restores a plaintext setup in full; nothing about it is one-way.
 Programs embedding this package get the https-only default and decide for
 themselves — the `charts` package never reads the environment.

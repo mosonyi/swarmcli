@@ -111,6 +111,8 @@ Common options:
       --revision <n>    get: select a specific revision
       --purge-volumes   uninstall: also remove the release's volumes
       --diff            apply: show each changed release's manifest diff (implies --dry-run)
+      --no-repo-update  Resolve from the cached repository indexes and touch no
+                        network (also: SWARMCLI_CHARTS_NO_AUTO_UPDATE=1)
       --skip-compat-check  Proceed despite a chart's unmet swarmcliVersion constraint
       --for-version <ver>  lint: check the chart's swarmcliVersion against <ver>
                         instead of this build's chart engine
@@ -127,8 +129,14 @@ that version is the only thing that settles that.
 apply honours --wait, --timeout, --history-max and --resolve-image. It REJECTS --set,
 --set-file, --version, --reuse-values, --install, --purge-volumes, --requirements and --revision rather
 than ignoring them: the release file is the only source of truth, so a value passed
-on the command line would be a lie. outdated refreshes the repository indexes first
-and falls back to the cached ones if the network is unavailable.
+on the command line would be a lie.
+
+Resolving a <repo>/<chart> reference refreshes that repository's index first, so
+install, upgrade, template, diff, show, lint and search see what the repository
+publishes now rather than what the cache last held. Each repository is fetched at
+most once per invocation. A repository that cannot be reached is reported and the
+cached index is used. --no-repo-update skips the network entirely, for which
+outdated reports against the cached indexes and says so.
 `
 
 // chartsMain dispatches `swarmcli charts ...`.
@@ -181,14 +189,37 @@ func chartsMain(args []string) int {
 	}
 }
 
-func newStore() (*charts.RepoStore, int) {
+// newStore builds the repository store every charts subcommand resolves
+// through, and is the single place CLI policy is applied to it.
+func newStore(f flags) (*charts.RepoStore, int) {
 	s, err := charts.NewRepoStore()
 	if err != nil {
 		return nil, fail(err)
 	}
 	s.Warnf = errf
 	s.AllowPlaintext = plaintextAllowed()
+	// An interactive user who types `charts install foo repo/bar` means the bar
+	// the repository publishes, not the one their cache happened to hold when
+	// they last ran `repo update`. Programs embedding the charts package keep
+	// the explicit-only default and decide for themselves.
+	//
+	// The opt-out is RefreshNever rather than RefreshExplicit: someone passing
+	// --no-repo-update is saying "do not go to the network", and apply's
+	// EnsureRepos would otherwise still spend a timeout per repository finding
+	// out what they already told us.
+	s.Refresh = charts.RefreshAlways
+	if f.noRepoUpdate || noAutoUpdateEnv() {
+		s.Refresh = charts.RefreshNever
+	}
 	return s, -1
+}
+
+// noAutoUpdateEnv reports whether the operator turned implicit refreshes off
+// for this machine. The flag covers one invocation; this covers a CI job or an
+// air-gapped host, where every invocation would otherwise pay the timeout.
+func noAutoUpdateEnv() bool {
+	off, err := strconv.ParseBool(strings.TrimSpace(os.Getenv(charts.NoAutoUpdateEnv)))
+	return err == nil && off
 }
 
 // plaintextAllowed reports whether the operator opted this machine out of the
@@ -209,7 +240,10 @@ func chartsRepo(args []string) int {
 	if len(args) == 0 {
 		return usageErr("charts repo requires a subcommand: add|list|update|remove")
 	}
-	store, code := newStore()
+	// Explicitly opted out rather than passed a zero flags: `repo update` IS the
+	// refresh and `repo add` fetches by definition, so an implicit one before
+	// either would be a second download of the same index.
+	store, code := newStore(flags{noRepoUpdate: true})
 	if code >= 0 {
 		return code
 	}
@@ -278,7 +312,7 @@ func chartsRepo(args []string) int {
 // --- search ---
 
 func chartsSearch(args []string) int {
-	pos, _, err := parseArgs(args)
+	pos, f, err := parseArgs(args)
 	if err != nil {
 		return usageErr(err.Error())
 	}
@@ -286,7 +320,7 @@ func chartsSearch(args []string) int {
 	if len(pos) > 0 {
 		keyword = pos[0]
 	}
-	store, code := newStore()
+	store, code := newStore(f)
 	if code >= 0 {
 		return code
 	}
@@ -318,7 +352,7 @@ func chartsShow(args []string) int {
 		return usageErr(err.Error())
 	}
 	_ = pos
-	ch, _, code := loadChart(ref, f.version)
+	ch, _, code := loadChart(ref, f)
 	if code >= 0 {
 		return code
 	}
@@ -390,7 +424,7 @@ func chartsLint(args []string) int {
 	if len(pos) != 1 {
 		return usageErr("charts lint <chart>")
 	}
-	ch, _, code := loadChart(pos[0], f.version)
+	ch, _, code := loadChart(pos[0], f)
 	if code >= 0 {
 		return code
 	}
@@ -696,7 +730,7 @@ func chartsDiff(args []string) int {
 // template and diff show a manifest that could actually be deployed, install
 // and upgrade deploy it.
 func prepare(release, ref string, f flags, base map[string]any, pol compatPolicy) (manifest string, values map[string]any, rc charts.ReleaseChart, req *charts.Requirements, chartFiles map[string][]byte, code int) {
-	ch, _, c := loadChart(ref, f.version)
+	ch, _, c := loadChart(ref, f)
 	if c >= 0 {
 		return "", nil, rc, nil, nil, c
 	}
@@ -837,12 +871,12 @@ func chartsStatus(args []string) int {
 // path, otherwise a "repo/chart" reference pulled from a configured repository.
 // The resolution itself lives in charts.ChartSource, so apply and the imperative
 // commands cannot drift apart.
-func loadChart(ref, version string) (*charts.Chart, charts.ReleaseChart, int) {
-	store, code := newStore()
+func loadChart(ref string, f flags) (*charts.Chart, charts.ReleaseChart, int) {
+	store, code := newStore(f)
 	if code >= 0 {
 		return nil, charts.ReleaseChart{}, code
 	}
-	ch, err := charts.NewChartSource(store).Load(ref, version)
+	ch, err := charts.NewChartSource(store).Load(ref, f.version)
 	if err != nil {
 		return nil, charts.ReleaseChart{}, fail(err)
 	}

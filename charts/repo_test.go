@@ -708,3 +708,232 @@ func TestUpdateMarksAnUnchangedIndexAsVerified(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, warnings, "an index just confirmed current is not stale")
 }
+
+// countingIndexServer serves an index whose body the test can change, and
+// counts index requests. The count is what the refresh-policy tests actually
+// assert: whether a fetch happened is not visible in any return value.
+func countingIndexServer(t *testing.T, body *string, up *bool, hits *int) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/index.yaml") {
+			http.NotFound(w, r)
+			return
+		}
+		*hits++
+		if !*up {
+			http.Error(w, "down", http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte(*body))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// reopen returns a second store over the same state directory. Add and a later
+// install are separate swarmcli invocations, and the once-per-process
+// bookkeeping is per store — a test that resolves through the same store Add
+// used is testing one process doing both, which is not the case being fixed.
+func reopen(t *testing.T, s *RepoStore) *RepoStore {
+	t.Helper()
+	n := NewRepoStoreAt(s.dir)
+	n.AllowPlaintext = true
+	n.Warnf = s.Warnf
+	return n
+}
+
+func indexWith(version string) string {
+	return "apiVersion: v1\nentries:\n  demo:\n    - {name: demo, version: " + version + ", urls: [\"d.tgz\"]}\n"
+}
+
+// The point of the whole feature: a resolution answers with what the repository
+// publishes now, not with what it published when the cache was written. No
+// ageing of the cache — under RefreshAlways a cache written a second ago is
+// refreshed too, and that is the behaviour being pinned down.
+func TestRefreshAlwaysResolvesWhatTheRepositoryPublishesNow(t *testing.T) {
+	body, up, hits := indexWith("0.1.0"), true, 0
+	srv := countingIndexServer(t, &body, &up, &hits)
+
+	s := newTestStore(t)
+	require.NoError(t, s.Add("eldara", srv.URL)) // caches 0.1.0
+
+	body = indexWith("0.2.0")
+
+	s = reopen(t, s)
+	s.Refresh = RefreshAlways
+	e, _, err := s.Resolve("eldara/demo", "")
+	require.NoError(t, err)
+	require.Equal(t, "0.2.0", e.Version)
+}
+
+// The embedder contract. swarmcli-cd builds a store per application on every
+// reconcile and refreshes on its own schedule; a store that was never told to
+// refresh must make no request of its own. Deleting this test is how that
+// becomes untrue by accident.
+func TestRefreshExplicitIsTheZeroValueAndFetchesNothing(t *testing.T) {
+	body, up, hits := indexWith("0.1.0"), true, 0
+	srv := countingIndexServer(t, &body, &up, &hits)
+
+	s := newTestStore(t)
+	require.NoError(t, s.Add("eldara", srv.URL))
+	require.Equal(t, 1, hits, "Add fetches once, by definition")
+
+	body = indexWith("0.2.0")
+
+	s = reopen(t, s)
+	require.Equal(t, RefreshExplicit, s.Refresh, "the zero value must be the safe one")
+	e, _, err := s.Resolve("eldara/demo", "")
+	require.NoError(t, err)
+	require.Equal(t, "0.1.0", e.Version, "an unasked store answers from the cache")
+	require.Equal(t, 1, hits, "and makes no request of its own")
+}
+
+// With no staleness window to rate-limit it, this is the only thing between an
+// apply resolving ten releases from one repository and ten downloads of the
+// same index. It is a correctness test, not a performance one.
+func TestRefreshAlwaysFetchesOncePerRepositoryPerProcess(t *testing.T) {
+	body, up, hits := indexWith("0.1.0"), true, 0
+	srv := countingIndexServer(t, &body, &up, &hits)
+
+	s := newTestStore(t)
+	require.NoError(t, s.Add("eldara", srv.URL))
+	s = reopen(t, s)
+	s.Refresh = RefreshAlways
+	hits = 0
+
+	for range 3 {
+		_, _, err := s.Resolve("eldara/demo", "")
+		require.NoError(t, err)
+	}
+	require.Equal(t, 1, hits)
+}
+
+// apply calls EnsureRepos, which refreshes every declared repository, and then
+// resolves charts from them. Without Update recording what it fetched, every
+// index would be downloaded twice per apply — green, and visible only in
+// somebody's bandwidth.
+func TestAnExplicitUpdateSuppressesTheImplicitOne(t *testing.T) {
+	body, up, hits := indexWith("0.1.0"), true, 0
+	srv := countingIndexServer(t, &body, &up, &hits)
+
+	s := newTestStore(t)
+	require.NoError(t, s.Add("eldara", srv.URL))
+	s = reopen(t, s)
+	s.Refresh = RefreshAlways
+	hits = 0
+
+	_, _, err := s.Update("")
+	require.NoError(t, err)
+	require.Equal(t, 1, hits)
+
+	_, _, err = s.Resolve("eldara/demo", "")
+	require.NoError(t, err)
+	require.Equal(t, 1, hits, "the index was already fetched in this process")
+}
+
+// A repository that is briefly unreachable must not stop a chart resolving:
+// the cache is a correct answer, merely possibly an old one, and refusing to
+// install would trade a stale answer for no answer.
+func TestRefreshFailureFallsBackToTheCache(t *testing.T) {
+	body, up, hits := indexWith("0.1.0"), true, 0
+	srv := countingIndexServer(t, &body, &up, &hits)
+
+	var warnings []string
+	s := newTestStore(t)
+	s.Warnf = func(format string, a ...any) { warnings = append(warnings, fmt.Sprintf(format, a...)) }
+	require.NoError(t, s.Add("eldara", srv.URL))
+	s = reopen(t, s)
+	s.Refresh = RefreshAlways
+	up, hits = false, 0
+
+	// Three resolutions, one attempt: recording the refresh before the fetch
+	// rather than after is what keeps a dead repository from costing a timeout
+	// per chart in the manifest.
+	for range 3 {
+		e, _, err := s.Resolve("eldara/demo", "")
+		require.NoError(t, err)
+		require.Equal(t, "0.1.0", e.Version)
+	}
+	require.Equal(t, 1, hits)
+	require.Len(t, warnings, 1)
+	require.Contains(t, warnings[0], "'eldara'")
+	require.Contains(t, warnings[0], "using the cached index")
+}
+
+// A configured repository whose cache file is gone resolves instead of telling
+// the user to run the command that would have been run for them.
+func TestRefreshAlwaysHealsAMissingCache(t *testing.T) {
+	body, up, hits := indexWith("0.1.0"), true, 0
+	srv := countingIndexServer(t, &body, &up, &hits)
+
+	s := newTestStore(t)
+	require.NoError(t, s.Add("eldara", srv.URL))
+	path, err := s.indexFile("eldara")
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(path))
+
+	s = reopen(t, s)
+	s.Refresh = RefreshExplicit
+	_, err = s.LoadIndex("eldara")
+	require.ErrorContains(t, err, "no cached index")
+
+	s.Refresh = RefreshAlways
+	e, _, err := s.Resolve("eldara/demo", "")
+	require.NoError(t, err)
+	require.Equal(t, "0.1.0", e.Version)
+}
+
+// RefreshNever is what --no-repo-update sets, and it has to reach EnsureRepos:
+// an air-gapped apply would otherwise pay a network timeout per repository to
+// arrive at the cached answer it was told to use.
+func TestRefreshNeverKeepsEnsureReposOffTheNetwork(t *testing.T) {
+	body, up, hits := indexWith("0.1.0"), true, 0
+	srv := countingIndexServer(t, &body, &up, &hits)
+
+	s := newTestStore(t)
+	require.NoError(t, s.Add("eldara", srv.URL))
+	s = reopen(t, s)
+	s.Refresh = RefreshNever
+	hits = 0
+
+	require.NoError(t, s.EnsureRepos([]RepoSpec{{Name: "eldara", URL: srv.URL}}))
+	require.Equal(t, 0, hits)
+
+	e, _, err := s.Resolve("eldara/demo", "")
+	require.NoError(t, err)
+	require.Equal(t, "0.1.0", e.Version)
+}
+
+// os.WriteFile truncates before it writes, so a reader arriving mid-write saw a
+// partial index. With a refresh on every install that window is no longer
+// theoretical. Assert the two observable consequences of writing through a
+// rename: nothing is left behind, and a failed write does not destroy what was
+// already there.
+func TestWriteCacheReplacesTheIndexInOneStep(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cache", "index-eldara.yaml")
+
+	require.NoError(t, writeCache(path, []byte("first")))
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "first", string(got))
+
+	require.NoError(t, writeCache(path, []byte("second")))
+	got, err = os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "second", string(got))
+
+	entries, err := os.ReadDir(filepath.Dir(path))
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "no temporary file survives a successful write")
+
+	// A directory in place of the target: the rename fails, and the point is
+	// that the failure is reported rather than leaving a truncated file.
+	blocked := filepath.Join(dir, "cache", "blocked.yaml")
+	require.NoError(t, os.Mkdir(blocked, 0o755))
+	require.Error(t, writeCache(blocked, []byte("third")))
+
+	entries, err = os.ReadDir(filepath.Dir(path))
+	require.NoError(t, err)
+	require.Len(t, entries, 2, "the failed write leaves no temporary file either")
+}

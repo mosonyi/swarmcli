@@ -34,7 +34,7 @@ func chartsApply(args []string) int {
 		return fail(err)
 	}
 
-	store, code := newStore()
+	store, code := newStore(f)
 	if code >= 0 {
 		return code
 	}
@@ -254,16 +254,22 @@ func reportUnmanaged(plan *charts.Plan) {
 // version its repositories offer. It is the human-facing complement to an
 // automated updater watching the release file.
 func chartsOutdated(args []string) int {
-	if _, _, err := parseArgs(args); err != nil {
+	_, f, err := parseArgs(args)
+	if err != nil {
 		return usageErr(err.Error())
 	}
-	store, code := newStore()
+	store, code := newStore(f)
 	if code >= 0 {
 		return code
 	}
 	// A read-only informational command must degrade, not fail: report against the
-	// cached indexes when the network is unavailable.
-	if _, _, err := store.Update(""); err != nil {
+	// cached indexes when the network is unavailable. --no-repo-update says the
+	// network is not to be used at all, which is the same destination without the
+	// timeout — outdated then reports against whatever is cached, which is the
+	// honest answer to "what does this machine know".
+	if f.noRepoUpdate || noAutoUpdateEnv() {
+		errf("not refreshing repositories; comparing against the cached indexes\n")
+	} else if _, _, err := store.Update(""); err != nil {
 		errf("could not refresh repositories (%v); comparing against the cached indexes\n", err)
 	}
 	indexes, err := store.Indexes()
