@@ -25,6 +25,9 @@ import (
 // httpTimeout bounds index and tarball downloads.
 const httpTimeout = 30 * time.Second
 
+// quickTimeout bounds an implicit RefreshAlways fetch. See RepoStore.quick.
+const quickTimeout = 5 * time.Second
+
 // maxIndexSize bounds an index.yaml download (defense against huge responses).
 const maxIndexSize = 16 << 20 // 16 MiB
 
@@ -34,9 +37,11 @@ const maxIndexSize = 16 << 20 // 16 MiB
 const maxChartArchiveSize = 20 << 20 // 20 MiB
 
 // staleAfter is how long a cached index may go unverified before reads of it
-// warn. Every path that resolves a chart — install, upgrade, template, search —
-// reads the cache and none of them refetches, so an unrefreshed cache answers
-// "latest" with whatever was newest when it was written, silently and for good.
+// warn. Under RefreshAlways nothing gets that far — the index is refreshed
+// before it is read — so this is what is left for the cases where it was not:
+// a refresh that failed, and a RefreshExplicit or RefreshNever store. There, an
+// unrefreshed cache answers "latest" with whatever was newest when it was
+// written, silently and for good.
 const staleAfter = 24 * time.Hour
 
 // AllowPlaintextEnv is the environment variable a host program may honour to set
@@ -46,11 +51,50 @@ const staleAfter = 24 * time.Hour
 // (yes, for an interactive user's own machine) is not automatically a daemon's.
 const AllowPlaintextEnv = "SWARMCLI_CHARTS_ALLOW_PLAINTEXT"
 
+// NoAutoUpdateEnv is the environment variable a host program may honour to
+// select RefreshNever. It lives here beside AllowPlaintextEnv so the docs and
+// the code cannot name it differently; as with that one, this package never
+// reads the environment itself.
+const NoAutoUpdateEnv = "SWARMCLI_CHARTS_NO_AUTO_UPDATE"
+
+// RefreshPolicy says when a RepoStore may download a repository index.
+//
+// Resolving a chart is otherwise a pure cache read — install, upgrade,
+// template, show, lint and search never refetch — which is how an install can
+// deploy the version that was newest whenever the cache was last written.
+type RefreshPolicy int
+
+const (
+	// RefreshExplicit downloads an index only when asked to: Update, Add and
+	// EnsureRepos. It is the zero value because it is what programs embedding
+	// this package already had, and because a daemon's network behaviour is not
+	// something a CLI convenience should change underneath it — swarmcli-cd
+	// builds a store per application on every reconcile and refreshes on its own
+	// schedule.
+	RefreshExplicit RefreshPolicy = iota
+	// RefreshAlways additionally refreshes a repository before the first read of
+	// its index in this process. An interactive user who types `install
+	// repo/chart` means the chart the repository publishes, not the one their
+	// cache happened to hold when they last ran `repo update`.
+	RefreshAlways
+	// RefreshNever downloads nothing, not even for EnsureRepos, and resolution
+	// answers out of whatever is cached. For an air-gapped or deliberately
+	// offline run, where the alternative is paying a network timeout per
+	// repository to reach the same answer.
+	RefreshNever
+)
+
 // RepoStore persists configured repositories and caches their indexes under a
 // base directory (default: the XDG state dir, ~/.local/state/swarmcli/charts).
 type RepoStore struct {
 	dir    string
 	client *http.Client
+	// quick is the client a RefreshAlways fetch uses. An implicit refresh is
+	// allowed to give up quickly because its fallback — the cached index — is a
+	// correct answer, merely possibly an old one; making an operator wait
+	// httpTimeout for that on a blackholed network would be a worse failure
+	// than the staleness the refresh exists to prevent.
+	quick *http.Client
 
 	// Warnf, when set, receives non-fatal diagnostics: a chart whose index entry
 	// publishes no digest, so its integrity could not be verified, and a
@@ -77,6 +121,19 @@ type RepoStore struct {
 	// apply resolving ten releases from one repository says it once rather than
 	// ten times.
 	warnedStale map[string]bool
+
+	// Refresh decides when this store goes to the network for an index. Its zero
+	// value is RefreshExplicit, which is what every embedder got before the
+	// policy existed. cli sets it; see the constants.
+	Refresh RefreshPolicy
+
+	// refreshed records the repositories already refreshed in this process,
+	// whether implicitly or by an explicit Update. With no staleness window
+	// to rate-limit it, this is the only thing standing between an apply
+	// resolving ten releases from one repository and ten downloads of the same
+	// index — and it is what stops apply's own EnsureRepos being followed by a
+	// second, implicit fetch of everything it just fetched.
+	refreshed map[string]bool
 }
 
 // NewRepoStore returns a store rooted at the standard charts state directory.
@@ -90,7 +147,11 @@ func NewRepoStore() (*RepoStore, error) {
 
 // NewRepoStoreAt returns a store rooted at dir (used in tests).
 func NewRepoStoreAt(dir string) *RepoStore {
-	return &RepoStore{dir: dir, client: &http.Client{Timeout: httpTimeout, CheckRedirect: checkRedirect}}
+	return &RepoStore{
+		dir:    dir,
+		client: &http.Client{Timeout: httpTimeout, CheckRedirect: checkRedirect},
+		quick:  &http.Client{Timeout: quickTimeout, CheckRedirect: checkRedirect},
+	}
 }
 
 // checkRedirect bounds redirects and refuses any hop to a non-http(s) URL,
@@ -205,7 +266,7 @@ func (s *RepoStore) Add(name, repoURL string) error {
 	repoURL = strings.TrimRight(repoURL, "/")
 	// Download and validate the index before persisting anything, so a failed
 	// download leaves no half-added repository behind.
-	idx, err := s.fetchIndex(repoURL)
+	idx, err := s.fetchIndex(repoURL, s.client)
 	if err != nil {
 		return fmt.Errorf("index download failed, repository not added: %w%s", err, githubPagesHint(repoURL))
 	}
@@ -213,14 +274,54 @@ func (s *RepoStore) Add(name, repoURL string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := writeCache(path, idx); err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, idx, 0o644); err != nil {
-		return err
-	}
+	// Add has just been to the network for this repository, so a RefreshAlways
+	// read must not go again. This is not hypothetical: EnsureRepos adds the
+	// repositories a release file declares and then resolves charts from them
+	// in the same process.
+	s.markRefreshed(name)
 	repos = append(repos, RepoEntry{Name: name, URL: repoURL})
 	return s.save(repos)
+}
+
+// writeCache replaces a cached index in one step. os.WriteFile truncates before
+// it writes, so a reader that arrives mid-write sees an empty or half-written
+// index — and under RefreshAlways a write happens on every install, not only
+// on an explicit `repo update`, so two swarmcli processes sharing a state
+// directory (a CI matrix, an apply running beside an install) really do
+// overlap. Writing beside the target and renaming over it means a reader sees
+// either the old index or the new one, and a failed write leaves the old one
+// readable rather than a truncated file.
+//
+// The temporary file is deliberately in the same directory: os.Rename is atomic
+// only within a filesystem, and anywhere else would be a different mount on
+// somebody's machine.
+func writeCache(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer func() { _ = os.Remove(tmp) }() // no-op once the rename succeeds
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	// CreateTemp makes the file 0600; the cache is world-readable like every
+	// other index this package writes.
+	if err := os.Chmod(tmp, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // Remove deletes a repository and its cached index.
@@ -256,6 +357,10 @@ func (s *RepoStore) Remove(name string) error {
 // Update downloads and caches the index for one repository (or all when name is
 // empty) and returns the names refreshed.
 func (s *RepoStore) Update(name string) (changed, unchanged []string, err error) {
+	return s.update(name, s.client)
+}
+
+func (s *RepoStore) update(name string, client *http.Client) (changed, unchanged []string, err error) {
 	repos, err := s.List()
 	if err != nil {
 		return nil, nil, err
@@ -270,7 +375,12 @@ func (s *RepoStore) Update(name string) (changed, unchanged []string, err error)
 		if err != nil {
 			return changed, unchanged, fmt.Errorf("update '%s': %w", r.Name, err)
 		}
-		idx, err := s.fetchIndex(r.URL)
+		// Recorded before the fetch, not after, and whatever the outcome: this
+		// says "this process has already been to the network for you", which is
+		// as true of a failure as of a success. Recording only successes would
+		// make a down repository cost one timeout per chart resolved.
+		s.markRefreshed(r.Name)
+		idx, err := s.fetchIndex(r.URL, client)
 		if err != nil {
 			return changed, unchanged, fmt.Errorf("update '%s': %w", r.Name, err)
 		}
@@ -287,10 +397,7 @@ func (s *RepoStore) Update(name string) (changed, unchanged []string, err error)
 			unchanged = append(unchanged, r.Name)
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			return changed, unchanged, err
-		}
-		if err := os.WriteFile(path, idx, 0o644); err != nil {
+		if err := writeCache(path, idx); err != nil {
 			return changed, unchanged, err
 		}
 		changed = append(changed, r.Name)
@@ -307,6 +414,7 @@ func (s *RepoStore) LoadIndex(name string) (*Index, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.autoRefresh(name)
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil, fmt.Errorf("no cached index for '%s'; run `charts repo update`", name)
@@ -322,9 +430,37 @@ func (s *RepoStore) LoadIndex(name string) (*Index, error) {
 	return &idx, nil
 }
 
+// autoRefresh re-downloads a repository's index before it is read, once per
+// repository per process. It is best-effort by construction: every caller has a
+// cached index to fall back on, and refusing to resolve a chart because a
+// repository was briefly unreachable would trade a stale answer for no answer.
+func (s *RepoStore) autoRefresh(name string) {
+	if s.Refresh != RefreshAlways || s.refreshed[name] {
+		return
+	}
+	// The short-deadline client, not s.client: see RepoStore.quick.
+	if _, _, err := s.update(name, s.quick); err != nil {
+		// The same sentence EnsureRepos emits for the same situation, so one
+		// thing going wrong reads as one thing wherever it is noticed.
+		s.warnf("could not refresh repository '%s' (%v); using the cached index\n", name, err)
+	}
+}
+
+// markRefreshed records that this process has already been to the network for a
+// repository. update calls it; autoRefresh reads it.
+func (s *RepoStore) markRefreshed(name string) {
+	if s.refreshed == nil {
+		s.refreshed = map[string]bool{}
+	}
+	s.refreshed[name] = true
+}
+
 // warnStale reports a cached index that has not been verified for staleAfter.
-// Resolution never refetches, so the alternative to saying so is an install that
-// quietly deploys the version that stopped being the latest days ago.
+// It is the fallback for when the refresh policy is not RefreshAlways or its
+// fetch failed: those are
+// the only paths left on which resolution answers out of a cache nobody has
+// checked, and an install that quietly deploys the version that stopped being
+// the latest days ago is what this exists to prevent.
 func (s *RepoStore) warnStale(path, name string) {
 	fi, err := os.Stat(path)
 	if err != nil {
@@ -398,6 +534,11 @@ func (s *RepoStore) EnsureRepos(specs []RepoSpec) error {
 				"refusing to repoint it — run `swarmcli charts repo remove %s` first if that is intended",
 				spec.Name, have, spec.Name)
 		default:
+			// RefreshNever means the caller has said there is no network to reach,
+			// so trying anyway buys the same cached answer one timeout later.
+			if s.Refresh == RefreshNever {
+				continue
+			}
 			// Refreshing is best-effort. Every version in the manifest is pinned,
 			// so a stale cache can only fail to resolve a chart — it can never
 			// resolve one to the wrong version. Failing the whole apply because
@@ -613,7 +754,7 @@ func githubPagesHint(repoURL string) string {
 	return fmt.Sprintf("%s https://%s.github.io/%s", base, strings.ToLower(parts[0]), parts[1])
 }
 
-func (s *RepoStore) fetchIndex(repoURL string) ([]byte, error) {
+func (s *RepoStore) fetchIndex(repoURL string, client *http.Client) ([]byte, error) {
 	// Add checks this before anything else, to fail without a round trip; the
 	// re-check is for Update, whose URLs come out of repos.json — including ones
 	// added before this store had an opinion about plain http.
@@ -621,7 +762,7 @@ func (s *RepoStore) fetchIndex(repoURL string) ([]byte, error) {
 		return nil, err
 	}
 	indexURL := strings.TrimRight(repoURL, "/") + "/index.yaml"
-	resp, err := s.client.Get(indexURL)
+	resp, err := client.Get(indexURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetch %s: %w", indexURL, err)
 	}

@@ -466,18 +466,53 @@ func TestReportUnclaimedCoversBothLists(t *testing.T) {
 func TestNewStoreWiresThePlaintextOptOut(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-	s, code := newStore()
+	s, code := newStore(flags{})
 	require.Equal(t, -1, code)
 	require.False(t, s.AllowPlaintext, "https-only unless the operator says otherwise")
 
 	t.Setenv(charts.AllowPlaintextEnv, "1")
-	s, code = newStore()
+	s, code = newStore(flags{})
 	require.Equal(t, -1, code)
 	require.True(t, s.AllowPlaintext)
 
 	// Anything that is not a truthy boolean leaves the default in place, rather
 	// than any non-empty value opting out by accident.
 	t.Setenv(charts.AllowPlaintextEnv, "maybe")
-	s, _ = newStore()
+	s, _ = newStore(flags{})
 	require.False(t, s.AllowPlaintext)
+}
+
+// The CLI is where "resolve what the repository publishes now" is turned on,
+// and both opt-outs have to reach the same place — an air-gapped machine sets
+// the environment variable once, a one-off offline run passes the flag.
+func TestNewStoreWiresTheRefreshPolicy(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	s, code := newStore(flags{})
+	require.Equal(t, -1, code)
+	require.Equal(t, charts.RefreshAlways, s.Refresh, "an interactive install means the current chart")
+
+	s, code = newStore(flags{noRepoUpdate: true})
+	require.Equal(t, -1, code)
+	require.Equal(t, charts.RefreshNever, s.Refresh, "--no-repo-update means no network at all")
+
+	t.Setenv(charts.NoAutoUpdateEnv, "1")
+	s, _ = newStore(flags{})
+	require.Equal(t, charts.RefreshNever, s.Refresh)
+
+	// As with the plaintext opt-out, only a truthy boolean counts: a stray
+	// non-empty value must not silently turn the feature off.
+	t.Setenv(charts.NoAutoUpdateEnv, "maybe")
+	s, _ = newStore(flags{})
+	require.Equal(t, charts.RefreshAlways, s.Refresh)
+}
+
+func TestNoRepoUpdateFlagParses(t *testing.T) {
+	_, f, err := parseArgs([]string{"--no-repo-update"})
+	require.NoError(t, err)
+	require.True(t, f.noRepoUpdate)
+
+	_, f, err = parseArgs([]string{})
+	require.NoError(t, err)
+	require.False(t, f.noRepoUpdate)
 }
