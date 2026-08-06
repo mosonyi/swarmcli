@@ -10,9 +10,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -640,4 +642,69 @@ func TestEnsureReposFailsWhenAnAbsentRepositoryCannotBeAdded(t *testing.T) {
 	repos, lerr := s.List()
 	require.NoError(t, lerr)
 	require.Empty(t, repos, "a failed add must persist nothing")
+}
+
+// age backdates a repository's cached index so it reads as unverified.
+func age(t *testing.T, s *RepoStore, name string, d time.Duration) {
+	t.Helper()
+	path, err := s.indexFile(name)
+	require.NoError(t, err)
+	when := time.Now().Add(-d)
+	require.NoError(t, os.Chtimes(path, when, when))
+}
+
+// Resolution reads the cache and never refetches, so a cache nobody has
+// refreshed keeps answering "latest" with a version that stopped being it. Say
+// so, or an install deploys the stale answer with nothing on screen to suggest
+// there is a newer chart.
+func TestResolveWarnsOnceTheCachedIndexGoesUnverified(t *testing.T) {
+	body := "apiVersion: v1\nentries:\n  demo:\n    - {name: demo, version: 0.1.0, urls: [\"d.tgz\"]}\n"
+	up := true
+	srv := newIndexServer(t, &body, &up)
+
+	var warnings []string
+	s := newTestStore(t)
+	s.Warnf = func(format string, a ...any) { warnings = append(warnings, fmt.Sprintf(format, a...)) }
+	require.NoError(t, s.Add("eldara", srv.URL))
+
+	// Just fetched: nothing to say.
+	_, _, err := s.Resolve("eldara/demo", "")
+	require.NoError(t, err)
+	require.Empty(t, warnings)
+
+	age(t, s, "eldara", 3*24*time.Hour)
+
+	// Twice: an apply resolves every release in the manifest against the same
+	// repository, and one warning per release would bury the plan it precedes.
+	for range 2 {
+		_, _, err = s.Resolve("eldara/demo", "")
+		require.NoError(t, err)
+	}
+	require.Len(t, warnings, 1)
+	require.Contains(t, warnings[0], "'eldara'")
+	require.Contains(t, warnings[0], "3 days old")
+	require.Contains(t, warnings[0], "charts repo update")
+}
+
+// A repository that publishes rarely serves the same bytes for weeks. Update
+// writes nothing in that case, so unless it records the check some other way,
+// the operator who refreshes daily is the one who gets nagged.
+func TestUpdateMarksAnUnchangedIndexAsVerified(t *testing.T) {
+	body := "apiVersion: v1\nentries:\n  demo:\n    - {name: demo, version: 0.1.0, urls: [\"d.tgz\"]}\n"
+	up := true
+	srv := newIndexServer(t, &body, &up)
+
+	var warnings []string
+	s := newTestStore(t)
+	s.Warnf = func(format string, a ...any) { warnings = append(warnings, fmt.Sprintf(format, a...)) }
+	require.NoError(t, s.Add("eldara", srv.URL))
+	age(t, s, "eldara", 3*24*time.Hour)
+
+	_, unchanged, err := s.Update("eldara")
+	require.NoError(t, err)
+	require.Equal(t, []string{"eldara"}, unchanged)
+
+	_, _, err = s.Resolve("eldara/demo", "")
+	require.NoError(t, err)
+	require.Empty(t, warnings, "an index just confirmed current is not stale")
 }

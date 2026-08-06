@@ -33,6 +33,12 @@ const maxIndexSize = 16 << 20 // 16 MiB
 // can be buffered and hashed before any of it reaches the archive parser.
 const maxChartArchiveSize = 20 << 20 // 20 MiB
 
+// staleAfter is how long a cached index may go unverified before reads of it
+// warn. Every path that resolves a chart — install, upgrade, template, search —
+// reads the cache and none of them refetches, so an unrefreshed cache answers
+// "latest" with whatever was newest when it was written, silently and for good.
+const staleAfter = 24 * time.Hour
+
 // AllowPlaintextEnv is the environment variable a host program may honour to set
 // AllowPlaintext. The name lives here so the refusal message and whatever reads
 // it cannot drift, but this package never reads the environment itself: whether
@@ -66,6 +72,11 @@ type RepoStore struct {
 	// wires it to AllowPlaintextEnv so an existing plaintext setup keeps working
 	// with one deliberate, greppable opt-out rather than none.
 	AllowPlaintext bool
+
+	// warnedStale records the repositories already reported as unverified, so an
+	// apply resolving ten releases from one repository says it once rather than
+	// ten times.
+	warnedStale map[string]bool
 }
 
 // NewRepoStore returns a store rooted at the standard charts state directory.
@@ -267,6 +278,12 @@ func (s *RepoStore) Update(name string) (changed, unchanged []string, err error)
 		// payload means nothing new — report it as already up-to-date.
 		existing, _ := os.ReadFile(path)
 		if existing != nil && bytes.Equal(existing, idx) {
+			// The cache's mtime records when it was last *verified*, not last
+			// changed, because that is the question staleness asks. Skipping the
+			// touch would leave a repository that publishes rarely looking
+			// abandoned however often its index is confirmed current.
+			now := time.Now()
+			_ = os.Chtimes(path, now, now)
 			unchanged = append(unchanged, r.Name)
 			continue
 		}
@@ -297,11 +314,37 @@ func (s *RepoStore) LoadIndex(name string) (*Index, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.warnStale(path, name)
 	var idx Index
 	if err := yaml.Unmarshal(data, &idx); err != nil {
 		return nil, fmt.Errorf("parse index for '%s': %w", name, err)
 	}
 	return &idx, nil
+}
+
+// warnStale reports a cached index that has not been verified for staleAfter.
+// Resolution never refetches, so the alternative to saying so is an install that
+// quietly deploys the version that stopped being the latest days ago.
+func (s *RepoStore) warnStale(path, name string) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	age := time.Since(fi.ModTime())
+	if age < staleAfter || s.warnedStale[name] {
+		return
+	}
+	if s.warnedStale == nil {
+		s.warnedStale = map[string]bool{}
+	}
+	s.warnedStale[name] = true
+	days := int(age / (24 * time.Hour))
+	unit := "days"
+	if days == 1 {
+		unit = "day"
+	}
+	s.warnf("cached index for '%s' is %d %s old; run `swarmcli charts repo update` to pick up newer chart versions\n",
+		name, days, unit)
 }
 
 // Indexes returns the cached index of every configured repository, keyed by
