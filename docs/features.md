@@ -20,7 +20,33 @@ inside one of the service's running tasks.
 
 If the service has multiple replicas, a picker dialog lists each running
 task ("Replica N — hostname"). Use the arrow keys to choose, `Enter` to
-confirm, `q` to cancel. Single-replica services skip the picker.
+confirm, `Esc` to cancel. Single-replica services skip the picker.
+
+### Working in the shell
+
+The shell takes over your terminal for the session — it is not drawn inside
+the SwarmCLI TUI. Your terminal's own scrollback, text selection and copy
+therefore work as they always do: scroll up with the mouse wheel (or your
+terminal's scrollback keys, e.g. `Shift+PageUp`), select across more than a
+screenful of output, and copy normally. Full-screen programs in the container
+(`vim`, `htop`, `less`) work too, because keystrokes pass straight through.
+
+A one-line header, black on green, marks the start of the session and then
+scrolls away with the output like any other line:
+
+```
+<<SWC-Shell>> Service: <stack>/<service> | Host: <node>        ctrl+] exit
+```
+
+To leave the shell:
+
+- **`Ctrl+]`** detaches immediately and returns to the TUI. Use this when a
+  program is in the foreground or the shell is unresponsive.
+- **`Ctrl+D`**, or typing **`exit`**, quits the remote shell the usual way,
+  which also returns you to the TUI.
+
+Every other key — `Ctrl+C`, `Ctrl+Z`, arrows, tab — goes to the remote shell
+unchanged.
 
 ### What happens when you press `x`
 
@@ -49,8 +75,8 @@ SwarmCLI:
 SWARMCLI_SHELL_CMD=/usr/bin/zsh swarmcli
 ```
 
-Once attached, the TUI propagates terminal resizes to the remote PTY via
-control messages; window-resize handling is automatic.
+Once attached, SwarmCLI propagates terminal resizes to the remote PTY
+automatically as you resize your window.
 
 ### Failure modes
 
