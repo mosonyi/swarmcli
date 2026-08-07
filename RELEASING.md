@@ -126,14 +126,20 @@ gh release view v1.14.0 --repo Eldara-Tech/swarmcli
 
 curl -sSLO https://github.com/Eldara-Tech/swarmcli/releases/download/v1.14.0/swarmcli-oss_Linux_x86_64.tar.gz
 tar xzf swarmcli-oss_Linux_x86_64.tar.gz && ./swarmcli version
-# 1.14.0 (oss build)
+# 1.14.0 (oss build, chart engine 1.14.0)
 
 docker buildx imagetools inspect eldaratech/swarmcli:v1.14.0-oss
 ```
 
-`(oss build)` is the check that matters: it is stamped from the build rather
-than from anything at runtime, so it is what tells the two artefacts apart. A
-bare version string with no build marker means the ldflag did not take.
+Both halves of that line are checks. `(oss build)` is stamped from the build
+rather than from anything at runtime, so it is what tells the two artefacts
+apart; a bare version string with no build marker means the ldflag did not take.
+
+`chart engine unstamped` is a **failed release**, not a cosmetic problem. The
+engine version is what `CheckCompat` compares a chart's declared
+`swarmcliVersion` floor against, and an unstamped engine reports
+`CompatUnknown` — so every chart deploys with its floor unchecked, and nothing
+else about such a release looks wrong.
 
 After the merged tag lands, verify the consumer rather than the log — query the
 registry for every tag the release claims and compare digests, because

@@ -3,6 +3,8 @@
 
 package cli
 
+import "github.com/Eldara-Tech/swarmcli/charts"
+
 const topUsage = `swarmcli — keyboard-driven Docker Swarm manager
 
 Run with no arguments to launch the interactive TUI.
@@ -43,14 +45,29 @@ var buildEdition string
 func SetEdition(e string) { buildEdition = e }
 
 // versionLine renders `swarmcli version`.
+//
+// The chart engine is reported beside the binary's own version because the two
+// can legitimately differ and only one of them governs chart compatibility: the
+// engine is this module's code, so a build that embeds swarmcli as a dependency
+// carries whichever engine it pinned, regardless of its own tag.
+//
+// `unstamped` rather than silence when the ldflag did not take. An unstamped
+// engine makes CheckCompat report CompatUnknown, so every chart's declared
+// swarmcliVersion floor is admitted unchecked — a release that has done that
+// looks entirely normal otherwise, and this is the one place it is visible.
 func versionLine(version string) string {
+	engine := charts.EngineVersion()
+	if engine == "" {
+		engine = "unstamped"
+	}
+
 	switch buildEdition {
 	case "ce":
-		return version + " (oss build)"
+		return version + " (oss build, chart engine " + engine + ")"
 	case "be":
-		return version + " (business build)"
+		return version + " (business build, chart engine " + engine + ")"
 	default:
-		return version
+		return version + " (chart engine " + engine + ")"
 	}
 }
 
