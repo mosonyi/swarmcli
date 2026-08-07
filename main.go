@@ -24,6 +24,10 @@ var (
 func init() {
 	app.SetVersion(version)
 	app.SetEdition(edition)
+	// Distinct from app.SetEdition, which drives a label that follows live
+	// licence state; this one names the build and never changes. See
+	// cli.SetEdition and docs/editions.md.
+	cli.SetEdition(edition)
 	app.Init()
 	// Log version info for debugging
 	swarmlog.L().Infof("swarmcli version=%s edition=%s commit=%s date=%s", version, edition, commit, date)

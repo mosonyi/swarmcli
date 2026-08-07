@@ -34,6 +34,26 @@ func TestDispatchVersion(t *testing.T) {
 	require.Equal(t, "1.2.3", strings.TrimSpace(o))
 }
 
+// One tag publishes two artefacts under this command name, and the version
+// string is the same for both — so `version` has to say which build it is. The
+// unset case is the one that matters most: a main that has not been taught to
+// set this must print the bare version rather than claim to be the OSS build.
+func TestDispatchVersion_NamesTheBuild(t *testing.T) {
+	orig := buildEdition
+	defer func() { buildEdition = orig }()
+
+	for _, tc := range []struct{ edition, want string }{
+		{"", "1.2.3"},
+		{"ce", "1.2.3 (oss build)"},
+		{"be", "1.2.3 (business build)"},
+		{"nonsense", "1.2.3"},
+	} {
+		buildEdition = tc.edition
+		o, _ := capture(t, func() { Dispatch([]string{"version"}, "1.2.3") })
+		require.Equal(t, tc.want, strings.TrimSpace(o), "edition %q", tc.edition)
+	}
+}
+
 func TestDispatchUnknownCommand(t *testing.T) {
 	var code int
 	capture(t, func() { code = Dispatch([]string{"frobnicate"}, "dev") })

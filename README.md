@@ -55,6 +55,12 @@ brew install swarmcli
 swarmcli
 ```
 
+`swarmcli` is the full build: everything below, plus Business Edition's
+features, which stay inert until a licence verifies. For the wholly Apache-2.0
+build, install `swarmcli-oss` instead — same executable name, same commands. See
+[docs/editions.md](docs/editions.md), and `swarmcli version` to check which one
+you have.
+
 ## Features
 
 - **Real-time Observability**: Live monitoring of Services, Tasks, Nodes, and Containers.
@@ -133,11 +139,16 @@ commercial superset that adds:
 - Interactive shell into a running service task.
 - Reveal-secret for debugging.
 
-Installs via `brew install Eldara-Tech/tap/swarmcli-be`,
-`scoop install swarmcli-be`, or `docker pull eldaratech/swarmcli-be`. The
-binary on disk is named `swarmcli` (BE is a strict superset of CE — same
-binary name, expanded feature set), so existing scripts and aliases
-continue to work.
+The binary on disk is named `swarmcli` (BE is a strict superset of CE — same
+binary name, expanded feature set), so existing scripts and aliases continue to
+work.
+
+It is not a separate download. The `swarmcli` archives, image, cask and Scoop
+manifest published from this repository's releases *are* the Business Edition
+build, carrying the licensed code inert; a licence turns it on. The wholly
+Apache-2.0 build ships beside it as `swarmcli-oss`. Which one you have is
+[docs/editions.md](docs/editions.md), and `swarmcli version` answers it
+directly.
 
 Documentation, install channels, and license sign-up are at the BE release
 repo: [Eldara-Tech/swarmcli-be-releases](https://github.com/Eldara-Tech/swarmcli-be-releases).
@@ -258,8 +269,16 @@ Pushing a `v*` tag triggers the [release workflow](.github/workflows/release.yml
 1. Injects the tag into the binary via GoReleaser ldflags (`-X main.version=1.5.0`)
 2. Builds for Linux, macOS, Windows, and FreeBSD (multiple architectures)
 3. Publishes a GitHub release with auto-generated changelog
-4. Pushes multi-arch Docker images to Docker Hub
+4. Pushes a multi-arch Docker image to Docker Hub
 5. Updates the [Homebrew tap](https://github.com/Eldara-Tech/homebrew-tap) and [Scoop bucket](https://github.com/Eldara-Tech/scoop-bucket)
+
+A tag here publishes the **`-oss` half** of a release — `swarmcli-oss_*`
+archives, `checksums-oss.txt`, `eldaratech/swarmcli:<tag>-oss`, and the
+`swarmcli-oss` cask and manifest. The unsuffixed names and `:latest` belong to
+the Business Edition build, which is tagged in a second repository at the same
+version and published into this same GitHub release. [RELEASING.md](RELEASING.md)
+is the procedure; [docs/editions.md](docs/editions.md) is what the two artefacts
+are.
 
 The in-app `Version:` header reads from the injected value. Local builds without GoReleaser show `dev`.
 
