@@ -12,7 +12,7 @@ import (
 )
 
 // mu guards enabled: it is written from the Bubble Tea update goroutine
-// (ApplyLicenseState on startup / license / swarm change) and read from
+// (an extension build re-evaluating feature state) and read from
 // tea.Cmd goroutines (feature-gated data loaders), so unsynchronized access
 // would be a concurrent map read/write.
 var (
