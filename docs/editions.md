@@ -47,13 +47,19 @@ nothing at runtime can change it:
 
 ```console
 $ swarmcli version
-1.14.0 (oss build)
+1.14.0 (oss build, chart engine 1.14.0)
 ```
 
 `(business build)` is the merged artefact — **whether or not a licence
 verified**. That is exactly what distinguishes "this binary has no licensed
 code" from "this binary has no licence", and neither the edition label nor the
 absence of features answers that alone.
+
+The chart engine is reported beside it because the two can legitimately differ:
+the engine is this module's code, so a build that embeds swarmcli as a
+dependency carries whichever engine it pinned rather than its own tag. `chart
+engine unstamped` means the build's ldflag did not take, and every chart's
+declared `swarmcliVersion` floor is being admitted unchecked.
 
 **The startup log line**, for a binary you cannot re-run:
 

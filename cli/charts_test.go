@@ -31,7 +31,18 @@ func TestDispatchVersion(t *testing.T) {
 	var code int
 	o, _ := capture(t, func() { code = Dispatch([]string{"version"}, "1.2.3") })
 	require.Equal(t, 0, code)
-	require.Equal(t, "1.2.3", strings.TrimSpace(o))
+	require.Contains(t, o, "1.2.3")
+}
+
+// An unstamped engine admits every chart's declared floor unchecked, and a
+// release that has done that looks entirely normal otherwise. Saying so on the
+// version line is the only place it surfaces, so it must not degrade to silence.
+func TestDispatchVersion_UnstampedEngineSaysSo(t *testing.T) {
+	var code int
+	o, _ := capture(t, func() { code = Dispatch([]string{"version"}, "1.2.3") })
+	require.Equal(t, 0, code)
+	require.Contains(t, o, "chart engine unstamped",
+		"tests run unstamped, so this is what a build whose ldflag did not take prints")
 }
 
 // One tag publishes two artefacts under this command name, and the version
@@ -43,10 +54,10 @@ func TestDispatchVersion_NamesTheBuild(t *testing.T) {
 	defer func() { buildEdition = orig }()
 
 	for _, tc := range []struct{ edition, want string }{
-		{"", "1.2.3"},
-		{"ce", "1.2.3 (oss build)"},
-		{"be", "1.2.3 (business build)"},
-		{"nonsense", "1.2.3"},
+		{"", "1.2.3 (chart engine unstamped)"},
+		{"ce", "1.2.3 (oss build, chart engine unstamped)"},
+		{"be", "1.2.3 (business build, chart engine unstamped)"},
+		{"nonsense", "1.2.3 (chart engine unstamped)"},
 	} {
 		buildEdition = tc.edition
 		o, _ := capture(t, func() { Dispatch([]string{"version"}, "1.2.3") })
