@@ -1,0 +1,48 @@
+<!--
+SPDX-License-Identifier: Apache-2.0
+Copyright © 2026 Eldara Tech
+-->
+
+# SwarmCLI — Documentation
+
+These pages cover installing, licensing and operating SwarmCLI, including its
+Business Edition features. For TUI navigation, key bindings, search, contexts
+and the chart commands, start at the [README](../README.md); for what the two
+published artefacts are, see [Editions](editions.md).
+
+Business Edition is not a separate program — it is the same binary with
+features a licence unlocks. On top of the Community Edition it adds:
+
+- **`:bootstrap`** — one-command deploy of an mTLS-fronted RBAC proxy and a
+  per-node agent stack onto your existing Swarm.
+- **Per-user RBAC** — identity by client certificate, role-based gating of
+  destructive and exec endpoints.
+- **Interactive shell into running services** (`x` on a service).
+- **Reveal-secret** for debugging (`x` on a secret).
+- **Volume management across all swarm nodes** — list, create, delete, prune,
+  and browse files inside volumes.
+
+## Contents
+
+- [Editions](editions.md) — the two artefacts one tag publishes, and which one you have.
+- [Installation](installation.md) — install channels, first run, edition check.
+- [License](license.md) — acquiring a key, activation paths, grace period, tiers.
+- [Bootstrap](bootstrap.md) — `:bootstrap` end-to-end: what gets deployed and how.
+- [Migration](migration.md) — moving an existing stack to application-layer mTLS (`:bootstrap --migrate`).
+- [RBAC](rbac.md) — managing users, roles, onboarding, and revocation.
+- [Features](features.md) — shell and reveal-secret in detail.
+- [Volumes](volumes.md) — listing across nodes, create/delete/prune, in-volume file browser.
+- [Configuration](configuration.md) — BE environment variables and on-disk paths.
+- [Troubleshooting](troubleshooting.md) — common errors and fixes.
+
+For install commands see [Installation](installation.md), or the
+[repository README](../README.md) for a quickstart.
+
+## Reporting issues
+
+Bugs and feature requests for either edition belong in this repository's
+[issue tracker](https://github.com/Eldara-Tech/swarmcli/issues). **Security
+vulnerabilities do not** — see [SECURITY.md](../SECURITY.md) and email
+hello@eldara.io rather than opening a public issue.
+- [swarmcli-agent](https://github.com/Eldara-Tech/swarmcli-agent) — per-node agent and agent-manager (deployed by `:bootstrap`).
+- [swarmcli.io](https://swarmcli.io) — product home and license sign-up.

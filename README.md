@@ -150,8 +150,12 @@ Apache-2.0 build ships beside it as `swarmcli-oss`. Which one you have is
 [docs/editions.md](docs/editions.md), and `swarmcli version` answers it
 directly.
 
-Documentation, install channels, and license sign-up are at the BE release
-repo: [Eldara-Tech/swarmcli-be-releases](https://github.com/Eldara-Tech/swarmcli-be-releases).
+Documentation lives in [`docs/`](docs/) — [installation](docs/installation.md),
+[license](docs/license.md), [bootstrap](docs/bootstrap.md),
+[RBAC](docs/rbac.md), [features](docs/features.md), [volumes](docs/volumes.md),
+[configuration](docs/configuration.md) and
+[troubleshooting](docs/troubleshooting.md). Licence sign-up is at
+[swarmcli.io/be](https://swarmcli.io/be).
 
 ## Installation
 
