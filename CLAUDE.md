@@ -147,6 +147,14 @@ tree (`service-health`, `volumes-all-nodes`) are shared vocabulary the seam
 cannot work without; the tier→entitlement mapping that consumes them is not
 here, and must not arrive.
 
+**`docs/` is the end-user documentation for both editions**, and that is
+deliberate rather than a lapse: those pages describe behaviour, CLI surface and
+operator workflow, which is the public half of the line above. They are also the
+place the line is most easily crossed — a page explaining *how* a feature works
+rather than what it does is the failure mode. When adding one, the test is
+whether an operator needs the sentence to use the product, or whether it only
+explains our implementation to them.
+
 ## Integration Test Infrastructure
 
 - Tests in `integration-tests/` use `//go:build integration` tag
