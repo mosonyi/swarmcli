@@ -41,6 +41,9 @@ jobs:
               - 'Dockerfile'
               - 'Dockerfile.release'
               - '.github/workflows/ci.yml'
+              # The build job runs it, so a change that weakens the guard has to
+              # run the guard.
+              - 'scripts/check-oss-artefact.sh'
 
   fmt:
     needs: [changes]
@@ -138,6 +141,14 @@ jobs:
 
       - name: Build CLI
         run: go build -v -o swarmcli .
+
+      # The same gate .goreleaser.yml runs on each published binary, run here on
+      # every change so it is not a check that only ever fires against a tag —
+      # by which point the tag cannot be moved without a human. It reads the
+      # module graph Go stamped into the binary, so it catches a private module
+      # arriving through a dependency as well as through an import.
+      - name: The build carries nothing private
+        run: ./scripts/check-oss-artefact.sh swarmcli
 
       - name: Build Docker Image
         run: docker build -t swarmcli-dev .

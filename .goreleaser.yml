@@ -16,6 +16,12 @@ env:
   - CGO_ENABLED=0
 
 builds:
+  # Every build carries the same post hook: check-oss-artefact.sh runs on each
+  # of the binaries actually being published, rather than on a stand-in built
+  # somewhere else. What it asserts is what the -oss name claims — the main
+  # module is this repository and nothing private is linked. ci.yml runs the
+  # same script on every change, so it is not a gate that only ever fires on a
+  # tag.
   - id: linux
     goos:
       - linux
@@ -36,6 +42,9 @@ builds:
       - -X main.date={{.Date}}
       - -X github.com/Eldara-Tech/swarmcli/charts.engineVersion={{.Version}}
     main: .
+    hooks:
+      post:
+        - ./scripts/check-oss-artefact.sh "{{ .Path }}"
 
   - id: osx
     goos:
@@ -52,6 +61,9 @@ builds:
       - -X main.date={{.Date}}
       - -X github.com/Eldara-Tech/swarmcli/charts.engineVersion={{.Version}}
     main: .
+    hooks:
+      post:
+        - ./scripts/check-oss-artefact.sh "{{ .Path }}"
 
   - id: windows
     goos:
@@ -69,6 +81,9 @@ builds:
       - -X main.date={{.Date}}
       - -X github.com/Eldara-Tech/swarmcli/charts.engineVersion={{.Version}}
     main: .
+    hooks:
+      post:
+        - ./scripts/check-oss-artefact.sh "{{ .Path }}"
 
   - id: freebsd
     goos:
@@ -85,11 +100,28 @@ builds:
       - -X main.date={{.Date}}
       - -X github.com/Eldara-Tech/swarmcli/charts.engineVersion={{.Version}}
     main: .
+    hooks:
+      post:
+        - ./scripts/check-oss-artefact.sh "{{ .Path }}"
 
 archives:
-  - id: default
+  # swarmcli-oss, not swarmcli. The plain name belongs to the merged artefact,
+  # which is built from the private swarmcli-be wrapper and published into this
+  # repository's releases — so both pipelines write into the same GitHub release,
+  # and leaving the plain name here would have them overwrite each other's
+  # archives with whichever finished last. The two produce identically-named
+  # assets today, ten for ten.
+  #
+  # The binary *inside* is still `swarmcli`, and `project_name` is deliberately
+  # untouched: the four builds below declare no `binary:` field, so it defaults
+  # to the project name, and universal_binaries reads it too. Renaming the
+  # project would rename the executable and break the Homebrew cask's
+  # `binary "swarmcli"`, Scoop's `bin`, swarmcli-charts' `tar xzf … swarmcli`,
+  # and every documented invocation. What tells the artefacts apart is what the
+  # build says about itself — see docs/editions.md.
+  - id: oss
     name_template: >-
-      {{ .ProjectName }}_
+      {{ .ProjectName }}-oss_
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
@@ -110,8 +142,15 @@ universal_binaries:
     replace: true
     name_template: "{{ .ProjectName }}"
 
+# One word longer, for the same reason the archives are. A release carries two
+# sets of artefacts, and a single `checksums.txt` would be the one file in which
+# the two pipelines silently disagree — the second run to finish replacing the
+# first's manifest, leaving half the release unverified by the file that claims
+# to cover it. The merged pipeline writes `checksums-merged.txt`; neither side
+# takes the unqualified name, so no checksum file in a release is ambiguous
+# about which artefacts it verified.
 checksum:
-  name_template: 'checksums.txt'
+  name_template: 'checksums-oss.txt'
 
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
@@ -121,11 +160,13 @@ changelog:
 
 # Homebrew tap (cask)
 homebrew_casks:
-  - name: swarmcli
+  # `swarmcli-oss`, not `swarmcli`: the plain cask is written by the merged
+  # pipeline. Both install an executable called `swarmcli`, so they conflict.
+  - name: swarmcli-oss
     # Don't update the public tap for prereleases (-rc) or snapshots; GA only.
     skip_upload: "auto"
     ids:
-      - default
+      - oss
     binaries:
       - swarmcli
     repository:
@@ -134,12 +175,12 @@ homebrew_casks:
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Casks
     homepage: "https://swarmcli.io"
-    description: "Docker Swarm TUI management tool"
+    description: "Docker Swarm TUI management tool (Apache-2.0 build)"
     commit_author:
       name: Eldara Tech
       email: hello@eldara.io
     conflicts:
-      - cask: swarmcli-be
+      - cask: swarmcli
     # GoReleaser binaries are not Apple-notarized; strip the Gatekeeper
     # quarantine xattr on install so the CLI runs without a security prompt.
     hooks:
@@ -152,11 +193,11 @@ homebrew_casks:
 
 # Scoop bucket for Windows
 scoops:
-  - name: swarmcli
+  - name: swarmcli-oss
     # Don't update the public bucket for prereleases (-rc) or snapshots; GA only.
     skip_upload: "auto"
     ids:
-      - default
+      - oss
     repository:
       owner: Eldara-Tech
       name: scoop-bucket
@@ -180,9 +221,25 @@ dockers_v2:
       - linux/amd64
       - linux/arm64
     tags:
-      - "{{ .Tag }}"
-      # Only move :latest for stable releases — never on -rc/-beta tags.
-      - '{{ if not .Prerelease }}latest{{ end }}'
+      # -oss, and no moving tag at all.
+      #
+      # The unsuffixed tags and :latest belong to the merged artefact, which is
+      # built from the private swarmcli-be wrapper and pushed to this same
+      # Docker Hub repository. Two pipelines writing eldaratech/swarmcli:v1.14.0
+      # would leave an operator with whichever finished last. So a tag pushed
+      # here on its own no longer moves :latest — stated in RELEASING.md rather
+      # than discovered.
+      #
+      # `{{ .Tag }}` keeps the leading `v`, which is what every one of this
+      # image's 59 published tags uses and what swarmcli-charts' docs pin.
+      # swarmcli-cd uses bare semver instead, because its Helm chart defaults
+      # image.tag to appVersion; nothing here has that constraint.
+      #
+      # No moving :oss tag either. An Apache-2.0-only deployment pins a version,
+      # which is what an air-gapped or compliance-reviewed one does anyway, and a
+      # moving tag on the artefact whose whole point is being verifiable is a way
+      # to be surprised by what is running.
+      - "{{ .Tag }}-oss"
     labels:
       org.opencontainers.image.created: "{{ .Date }}"
       org.opencontainers.image.title: "{{ .ProjectName }}"

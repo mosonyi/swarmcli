@@ -10,9 +10,8 @@ import (
 
 // serviceHealthFeature gates the per-container HEALTH/PORTS enrichment. The base
 // build never enables it, so CE always shows the upsell footer hint; an
-// extension build enabling it (via the license reconciler) both lights up the
-// HEALTH column and suppresses the hint — mirroring the volumes
-// "volumes-all-nodes" pattern. Matches license.FeatureServiceHealth.
+// extension build enabling it both lights up the HEALTH column and suppresses
+// the hint — mirroring the volumes "volumes-all-nodes" pattern.
 const serviceHealthFeature = "service-health"
 
 // serviceHealthUpsellHint advertises the Business Edition capability in the

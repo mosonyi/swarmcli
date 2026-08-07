@@ -1,115 +1,141 @@
-# Release Process
+<!--
+SPDX-License-Identifier: Apache-2.0
+Copyright © 2026 Eldara Tech
+-->
 
-This project uses [GoReleaser](https://goreleaser.com/) to build and publish releases across multiple platforms, similar to k9s.
+# Release process
 
-## Supported Platforms
+Tagging is the whole trigger. `.github/workflows/release.yml` then drafts the
+notes from PR labels, publishes binary archives with GoReleaser, updates the
+Homebrew cask and the Scoop manifest, and pushes a multi-arch image to Docker
+Hub. Nothing is run by hand.
 
-The release process builds binaries for:
+**This repository publishes the `-oss` half of a release, not the whole of it.**
+Each release carries two artefacts ([docs/editions.md](docs/editions.md)):
 
-- **Linux**: amd64, arm64, arm (v7), 386
-- **macOS**: amd64 (Intel), arm64 (Apple Silicon)
-- **Windows**: amd64, arm64, 386
-- **FreeBSD**: amd64, arm64
+| Artefact | Tagged in | Publishes |
+|---|---|---|
+| `swarmcli_*`, `eldaratech/swarmcli:<tag>`, `:latest`, cask + manifest `swarmcli` | the private `swarmcli-be` wrapper | into **this** repository's releases, under `RELEASE_TOKEN` |
+| `swarmcli-oss_*`, `eldaratech/swarmcli:<tag>-oss`, cask + manifest `swarmcli-oss` | here | into this repository's releases |
 
-## How to Create a Release
+So a release needs **two tags, one in each repository, carrying the same version
+string** — and the public one first.
 
-### 1. Install GoReleaser
+- There is no trigger from this tag. A tag pushed here raises no event in
+  `swarmcli-be`, so nothing starts the merged build but a tag pushed there;
+  assuming otherwise produces a release that silently never built its default
+  artefact.
+- The order is not a preference. GoReleaser publishes into a release *named
+  after the tag it was invoked with*, so this tag creating the release first is
+  what gives the private run something to add to.
+- Nothing collides, and that is by construction rather than by luck: the
+  archives here are `swarmcli-oss_*`, the checksum file is `checksums-oss.txt`,
+  and the image tag carries an `-oss` suffix. The merged pipeline writes
+  `swarmcli_*`, `checksums-merged.txt` and the unsuffixed image tags, and it
+  refuses to run if this repository at the pinned tag has gone back to the plain
+  archive names.
+
+**A tag pushed here on its own no longer moves `:latest`,** and publishes no
+unsuffixed image tag at all. `:latest` is the merged artefact; two pipelines
+competing for it would leave an operator with whichever finished last.
+
+**`swarmcli-be` releases against a tag that must exist here.** Its release
+refuses to publish unless this repository already has a published release for
+the same version — including when this repository has no changes to ship, in
+which case tag the same commit as the previous release and say so in the notes.
+A BE-only patch (a compatibility-pin bump, say) still needs its counterpart
+here.
+
+## Prerequisites
+
+Repository secrets, none of which the tooling can set for itself:
+
+| Secret | |
+|---|---|
+| `DOCKERHUB_USERNAME` | Docker Hub account with push access to `eldaratech` |
+| `DOCKERHUB_TOKEN` | an access token for it, not the password |
+| `HOMEBREW_TAP_TOKEN` | `contents:write` on `Eldara-Tech/homebrew-tap` |
+| `SCOOP_BUCKET_TOKEN` | `contents:write` on `Eldara-Tech/scoop-bucket` |
+
+The GitHub release itself uses the job's own `GITHUB_TOKEN`.
+
+## Before tagging
+
+**Choose the version by hand.** release-drafter does not compute it — the
+workflow passes the pushed tag, which overrides `$RESOLVED_VERSION`. If any PR
+merged since the last GA carries `C1-breaking-change`, the tag MUST bump major:
+the changelog is type-only, with no dedicated "Breaking" section, so the label is
+the gate.
 
 ```bash
-# On macOS
-brew install goreleaser
-
-# On Linux
-go install github.com/goreleaser/goreleaser/v2@latest
+gh pr list --repo Eldara-Tech/swarmcli --state merged \
+  --label C1-breaking-change --search "merged:>=<last-GA-date>"
 ```
 
-### 2. Create and push a tag
+**Fill `.github/UPGRADE_NOTES.md`** for a breaking release, before tagging. The
+workflow prepends it as a "⚠️ Upgrade Notes" section at the top of the release
+body; it ships as an HTML-comment placeholder, which is treated as empty. Clear
+it back to the placeholder after the GA.
+
+**Rehearse.** This is the whole of it, and it takes about three minutes:
 
 ```bash
-git tag -a v0.1.0 -m "Release v0.1.0"
-git push origin v0.1.0
+goreleaser check
+goreleaser release --snapshot --clean --skip=docker
 ```
 
-### 3. Run GoReleaser locally
+Then read `dist/`: eleven `swarmcli-oss_*` archives plus `checksums-oss.txt`,
+`dist/homebrew/Casks/swarmcli-oss.rb` and `dist/scoop/swarmcli-oss.json`. The
+per-build hook runs `scripts/check-oss-artefact.sh` on every binary as it is
+produced, so a snapshot that completes has already proved the artefact claim.
+
+Confirm the executable inside an archive is still `swarmcli`, not
+`swarmcli-oss` — the Homebrew cask's `binary`, Scoop's `bin`, swarmcli-charts'
+`tar xzf … swarmcli` and every documented invocation depend on it:
 
 ```bash
-# Export GitHub token (create one at https://github.com/settings/tokens)
-export GITHUB_TOKEN="your_github_token"
-
-# Run GoReleaser
-goreleaser release --clean
+tar tzf dist/swarmcli-oss_Linux_x86_64.tar.gz
 ```
 
-This will:
-- Build binaries for all platforms
-- Create compressed archives (.tar.gz for Unix, .zip for Windows)
-- Generate checksums
-- Create a GitHub release with all artifacts
-- Generate a changelog from commit messages
+Know what the rehearsal omits: `--snapshot` skips GoReleaser's git-state
+validation entirely, so a dirty working tree passes the dry run and fails
+against a pushed tag.
 
-### 4. Find your release
-
-Go to: https://github.com/mosonyi/swarmcli/releases
-
-## Testing Locally
-
-You can test the release process locally without publishing:
+## Tagging
 
 ```bash
-# Install GoReleaser
-go install github.com/goreleaser/goreleaser/v2@latest
-
-# Test the build (snapshot mode)
-goreleaser release --snapshot --clean
-
-# Check the dist/ folder for built binaries
-ls -la dist/
+git tag -a v1.14.0 -m "Release v1.14.0"
+git push originToken v1.14.0
 ```
 
-## Version Information
+Then tag `swarmcli-be` with the same string. Keep the gap short: between the two
+the release has no default artefact and `:latest` still points at the previous
+version.
 
-Version information is embedded at build time using ldflags:
-- `version`: The git tag (e.g., v0.1.0)
-- `commit`: The git commit hash
-- `date`: The build date
+Release candidates are tagged the same way (`v1.14.0-rc1`). GoReleaser marks
+them prerelease automatically, and `skip_upload: auto` keeps an rc out of the
+Homebrew tap and the Scoop bucket.
 
-These can be accessed in the code via the variables in `main.go`.
+## Verifying
 
-## Changelog Format
-
-The changelog is automatically generated from commit messages. For best results, use conventional commit format:
-
-- `feat:` - New features
-- `fix:` - Bug fixes
-- `perf:` - Performance improvements
-- `docs:`, `test:`, `ci:`, `chore:` - Excluded from changelog
-
-Example:
 ```bash
-git commit -m "feat: add horizontal scrolling to logs view"
-git commit -m "fix: resolve alignment issue in nodes table"
+gh release view v1.14.0 --repo Eldara-Tech/swarmcli
+
+# The OSS half, before the merged one lands:
+#   11 archives + checksums-oss.txt, and no swarmcli_* asset yet.
+
+curl -sSLO https://github.com/Eldara-Tech/swarmcli/releases/download/v1.14.0/swarmcli-oss_Linux_x86_64.tar.gz
+tar xzf swarmcli-oss_Linux_x86_64.tar.gz && ./swarmcli version
+# 1.14.0 (oss build)
+
+docker buildx imagetools inspect eldaratech/swarmcli:v1.14.0-oss
 ```
 
-## Optional Enhancements
+`(oss build)` is the check that matters: it is stamped from the build rather
+than from anything at runtime, so it is what tells the two artefacts apart. A
+bare version string with no build marker means the ldflag did not take.
 
-The `.goreleaser.yml` includes commented sections for:
-
-### Homebrew Tap
-Automatically publish to a Homebrew tap for easy installation:
-```bash
-brew install mosonyi/tap/swarmcli
-```
-
-### Docker Images
-Automatically build and push Docker images to Docker Hub or GitHub Container Registry.
-
-Uncomment and configure these sections in `.goreleaser.yml` as needed.
-
-## File Sizes
-
-Release binaries are optimized with:
-- `-trimpath`: Remove file system paths from binary
-- `-s -w`: Strip debug information
-- `CGO_ENABLED=0`: Static binaries with no external dependencies
-
-This keeps binary sizes small and makes them portable across systems.
+After the merged tag lands, verify the consumer rather than the log — query the
+registry for every tag the release claims and compare digests, because
+`:latest`, the version tag and the `-oss` tag are published by two different
+pipelines and only one of them is in this repository.

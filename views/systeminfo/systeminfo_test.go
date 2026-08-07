@@ -284,7 +284,6 @@ func TestUpdate_LatestVersionMsg(t *testing.T) {
 
 // Regression: long version+latest combinations must render in the fixed
 // systeminfo height without lipgloss wrapping the value onto a new line.
-// See https://github.com/Eldara-Tech/swarmcli-be/issues/93.
 func TestView_VersionLineDoesNotWrap_LongVersions(t *testing.T) {
 	cases := []struct {
 		name    string

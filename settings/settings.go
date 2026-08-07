@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 )
 
-// Overridable for tests (mirrors the seams in swarmcli-be's nudge throttle).
+// Overridable for tests.
 var (
 	userHomeDirFn = os.UserHomeDir
 	readFileFn    = os.ReadFile

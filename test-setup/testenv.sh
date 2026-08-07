@@ -59,8 +59,8 @@ wait_for_manager() {
 # `docker swarm join`. Those joins are asynchronous: before this gate, `up`
 # returned as soon as the manager API was reachable, so `deploy` (worker image
 # distribution) and the integration tests frequently ran against an
-# effectively single-node swarm — the global agent landed on the manager only
-# and worker-placement tests had nothing to exercise. Blocking here makes the
+# effectively single-node swarm, so worker-placement tests had nothing to
+# exercise. Blocking here makes the
 # swarm match its declared topology so those tests are real, not skipped.
 #
 # Expected worker count is derived from the compose file (one per

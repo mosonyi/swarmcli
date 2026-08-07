@@ -38,7 +38,7 @@ cli/                       Arg-based CLI dispatch (cli.Dispatch): `charts`, `ver
 charts/                    Helm-like package manager (repos, chart rendering, releases) + declarative releases (releasefile.go, apply.go, outdated.go). charts.ChartSource (source.go) is the seam that resolves a chart ref — repo or local path — so release planning is testable without Docker, a network or a filesystem. charts.NewDockerBackend(ctxName) + NewEngineWith is the seam that targets a *specific* swarm: the default backend uses the ambient Docker context, the SDK client singleton and the shared snapshot cache, all three of which are process-global
 app/
   app.go                   Init(); triggers command autoload via _ "github.com/Eldara-Tech/swarmcli/commands" and view autoload via _ "github.com/Eldara-Tech/swarmcli/views" (view factory registry lives in views/view/registry.go)
-  hooks.go                 PreUpdateHook registration; StartupOverlay; RegisterShutdownHook / RunShutdownHooks (BE port-forward manager registers CloseAll here)
+  hooks.go                 PreUpdateHook registration; StartupOverlay; RegisterShutdownHook / RunShutdownHooks (extension builds register cleanup for long-lived resources here)
   model.go                 Central state: Model struct (viewport, currentView, viewStack, commandInput, searchInput, systemInfo)
   update.go                Main message router: navigation, resize, events, key dispatch
 views/
@@ -94,7 +94,7 @@ utils/log/
 
 ## Adding New Functionality
 
-**New command**: Create `commands/command/mycommand.go`, implement `registry.Command` (Name/Description/Execute), call `registry.Register()` in `init()`. Also implement `Spec() registry.CommandSpec` — declare every flag the command reads (`a.Has`/`a.Get`) plus `Usage`/`Examples`, or `:cmd --help` shows only a fallback and strict validation rejects the command's own flags. Aliases (`Aliaser`) inherit the primary's spec; do not add a spec to the alias. See `commands/command/docker/node/ls.go` for a zero-flag spec and `swarmcli-be/commands/pro/bootstrap.go` for the full worked example.
+**New command**: Create `commands/command/mycommand.go`, implement `registry.Command` (Name/Description/Execute), call `registry.Register()` in `init()`. Also implement `Spec() registry.CommandSpec` — declare every flag the command reads (`a.Has`/`a.Get`) plus `Usage`/`Examples`, or `:cmd --help` shows only a fallback and strict validation rejects the command's own flags. Aliases (`Aliaser`) inherit the primary's spec; do not add a spec to the alias. See `commands/command/docker/node/ls.go` for a zero-flag spec. No command in this repo declares a flag today, so for one that does, `registry/spec.go` documents `FlagSpec` field by field with examples — that type is the contract, and it is the reference an extension build writes against too.
 
 **New view**: Create `views/myview/`, implement `view.View` interface, and add a `register.go` whose `init()` calls `view.RegisterView(name, factory)`. Add its blank import to `views/autoload.go` so the package is loaded. See `views/nodes/register.go`.
 
@@ -113,7 +113,39 @@ utils/log/
 
 ## Pro Feature Boundary
 
-The OSS repo must not contain pro implementation details — no pro-specific logic, no descriptions of how pro features work internally. Generic extension points (registries, hooks, feature flags) are fine; naming specific pro features or describing their internals is not. When adding code that will be called by pro, keep it generic and document it as an extension point without referencing pro specifics.
+This repo is public. Business Edition's source is not, and the line between them
+is about **mechanism, not marketing**.
+
+**Public, and fine to write here.** What a BE feature *does*, its CLI surface,
+its flags, the operator workflow around it, and how it fails. Naming a BE
+feature is fine — `README.md` advertises several, and `app/updatenotice.go`
+ships an upsell string naming three. Generic extension points — registries,
+hooks, feature flags, the `docker` decorator seams — are the whole point of the
+two-repo model and belong here in full, including *what data* an extension may
+supply and *why the Swarm API cannot*.
+
+**Private. Must not appear in this repo, in any form, including comments and
+tests.**
+
+- The licence signature scheme, payload schema and any field of it.
+- Key custody and the verification implementation, and the dev-pubkey override
+  or any `swarmcli_devkeys` build surface.
+- The inter-component topology and `/v1/*` endpoint names — how the TUI, the
+  RBAC proxy and the per-node agents talk to each other.
+- Kernel-level mechanics behind a feature (namespace entry for port-forward).
+- mTLS bundle composition and overlay trust.
+- Threat-model reasoning: why a guard exists, and what it is defending against.
+- **Private symbol names, private file paths and private issue numbers.** This
+  one is independent of the rest: a comment saying "matches
+  `license.FeatureFoo`" or "see `swarmcli-be/commands/pro/x.go`" discloses BE's
+  internal layout *and* is unopenable by every contributor it is addressed to,
+  whether or not the mechanism behind it is secret.
+
+When adding code an extension will call, document it as an extension point and
+describe the contract, not the caller. The two feature-name constants in this
+tree (`service-health`, `volumes-all-nodes`) are shared vocabulary the seam
+cannot work without; the tier→entitlement mapping that consumes them is not
+here, and must not arrive.
 
 ## Integration Test Infrastructure
 
