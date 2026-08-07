@@ -1,0 +1,48 @@
+name: Bug report
+description: Report a problem with SwarmCLI
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report.
+
+        **Do not paste internal logs, configuration files, certificates, or
+        license material.** For anything security-sensitive, see the
+        [Security Policy](https://github.com/Eldara-Tech/swarmcli/blob/main/SECURITY.md)
+        and email hello@eldara.io instead.
+  - type: input
+    id: version
+    attributes:
+      label: SwarmCLI version
+      description: Output of `swarmcli version` — please include the build it names.
+      placeholder: 1.14.0 (business build, chart engine 1.14.0)
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS / platform
+      placeholder: macOS 15.4 (arm64) / Ubuntu 24.04 (amd64) / Windows 11
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do, in order?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What happened instead? Screenshots welcome (no secrets).
+    validations:
+      required: true
