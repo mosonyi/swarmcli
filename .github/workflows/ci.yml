@@ -165,9 +165,17 @@ jobs:
       # an ordinary one here. amd64 only, because what this catches is a base
       # image that cannot run the binary at all, and that is not architecture-
       # specific.
+      #
+      # Built here rather than reusing the binary from "Build CLI" above, and the
+      # difference is the whole point: that step leaves CGO on, so on a runner
+      # with gcc it links against glibc, and an Alpine base answers `exec
+      # /swarmcli: no such file or directory`. .goreleaser.yml sets
+      # CGO_ENABLED=0, so a probe that does not is not rehearsing the release —
+      # it is testing a binary the release never builds.
       - name: The release image builds and the binary runs in it
         run: |
-          mkdir -p linux/amd64 && cp swarmcli linux/amd64/swarmcli
+          mkdir -p linux/amd64
+          CGO_ENABLED=0 go build -o linux/amd64/swarmcli .
           docker build -f Dockerfile.release --build-arg TARGETPLATFORM=linux/amd64 -t swarmcli-release-probe .
           got=$(docker run --rm swarmcli-release-probe version)
           echo "$got"
