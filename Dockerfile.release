@@ -3,12 +3,20 @@
 # matters more than it used to: this image is now the artefact whose whole claim
 # is that you can check what is in it, and a moving base undercuts that.
 #
-# This is `docker:latest`, which is the **dind** image — verified: it carries the
-# same digest as `docker:dind`, while `docker:cli` is a different one. Nothing
-# here runs a daemon, so the CLI-only base would be smaller and smaller-surfaced;
-# that is a separate change, because it alters what the published image contains
-# and cannot be rehearsed without a Docker daemon.
-FROM docker:latest@sha256:e8faad5a8dc5279dff929afc5449f2791736912fff9f99351d742db2fad01b4c
+# `docker:29-cli`, not `docker:latest`. The latter resolves to the same digest as
+# `docker:dind` — it is the full Docker-in-Docker image, carrying dockerd,
+# containerd, runc, iptables and the storage drivers. None of that is ever
+# executed here: this image copies in one static binary, sets it as the
+# entrypoint, and the published `docker run` recipe mounts the host's daemon
+# socket. On the artefact whose whole claim is that you can check what is in it,
+# an unused container runtime is 71 MiB and a great deal of surface for nothing.
+#
+# Nothing is lost by narrowing, and that is checkable rather than hoped: the
+# official `dind` image is itself built `FROM docker:29-cli`, so the CLI variant
+# is a strict subset. It is where `ca-certificates` (chart repositories over
+# HTTPS), `openssh-client` (`ssh://` Docker contexts) and `git` are installed;
+# the daemon stack is what the dind layers add on top. See #548.
+FROM docker:29-cli@sha256:27a51d5ab1cd38d9eeaba7b415b8c07bc10c31e1cf1ec8d78f6413fcfab3f44f
 
 # dockers_v2 runs a single multi-platform buildx build and stages each
 # platform's binary under its $TARGETPLATFORM (e.g. linux/amd64/swarmcli).
