@@ -152,3 +152,45 @@ jobs:
 
       - name: Build Docker Image
         run: docker build -t swarmcli-dev .
+
+      # Dockerfile.release has been in this job's paths filter all along while
+      # the step above built the *other* Dockerfile, so nothing has ever built
+      # the file that produces the published image — and #548 was deferred out of
+      # #547 precisely because a base change "cannot be rehearsed without a
+      # Docker daemon". There is one here.
+      #
+      # goreleaser's dockers_v2 stages each platform's binary under its
+      # $TARGETPLATFORM before building, so that layout has to be faked for a
+      # plain `docker build`; TARGETPLATFORM is an automatic arg under buildx and
+      # an ordinary one here. amd64 only, because what this catches is a base
+      # image that cannot run the binary at all, and that is not architecture-
+      # specific.
+      #
+      # Built here rather than reusing the binary from "Build CLI" above, and the
+      # difference is the whole point: that step leaves CGO on, so on a runner
+      # with gcc it links against glibc, and an Alpine base answers `exec
+      # /swarmcli: no such file or directory`. .goreleaser.yml sets
+      # CGO_ENABLED=0, so a probe that does not is not rehearsing the release —
+      # it is testing a binary the release never builds.
+      - name: The release image builds and the binary runs in it
+        run: |
+          mkdir -p linux/amd64
+          CGO_ENABLED=0 go build -o linux/amd64/swarmcli .
+          docker build -f Dockerfile.release --build-arg TARGETPLATFORM=linux/amd64 -t swarmcli-release-probe .
+          got=$(docker run --rm swarmcli-release-probe version)
+          echo "$got"
+          # Positive control: a check that passes because it read nothing is the
+          # failure mode this step exists to avoid.
+          case "$got" in
+            *"chart engine"*) ;;
+            *) echo "::error::'swarmcli version' produced no recognisable output in the release image (got: ${got:-<nothing>})"; exit 1 ;;
+          esac
+          # The two things the base must still provide: TLS roots for chart
+          # repositories, and an ssh binary for `ssh://` Docker contexts. Both
+          # come from the base image, so a narrower one silently breaking either
+          # is exactly what this guards.
+          docker run --rm --entrypoint sh swarmcli-release-probe -c 'test -s /etc/ssl/certs/ca-certificates.crt && command -v ssh >/dev/null' || {
+            echo "::error::the release image lost ca-certificates or openssh-client — chart repositories over HTTPS and ssh:// contexts would fail at runtime, with nothing at build time to say so"
+            exit 1
+          }
+          echo "the release image runs, reports a chart engine, and keeps its TLS roots and ssh client"

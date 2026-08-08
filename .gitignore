@@ -14,6 +14,8 @@
 .devcontainer/shared/*
 
 dist/
+# the $TARGETPLATFORM staging directory a Dockerfile.release build needs
+linux/
 
 debug.log
 swarmcli
