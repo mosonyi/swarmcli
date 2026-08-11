@@ -13,7 +13,10 @@ import (
 	"github.com/Eldara-Tech/swarmcli/docker"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/docker/docker/api/types/swarm"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -446,11 +449,12 @@ func TestView_Normal(t *testing.T) {
 	m.Visible = true
 	m.viewport.Width = 80
 	m.viewport.Height = 24
-	out := m.View()
-	require.Contains(t, out, "Service: web")
-	require.Contains(t, out, "AutoScroll: on")
-	require.Contains(t, out, "wrap: on")
-	require.Contains(t, out, "Stopped: hidden")
+	out := ansi.Strip(m.View())
+	require.Contains(t, out, "Logs(web)[0]")
+	require.Contains(t, out, "Autoscroll:On")
+	require.Contains(t, out, "Wrap:On")
+	require.Contains(t, out, "Node:all")
+	require.Contains(t, out, "Stopped:Hidden")
 }
 
 func TestView_SearchMode(t *testing.T) {
@@ -460,8 +464,8 @@ func TestView_SearchMode(t *testing.T) {
 	m.viewport.Height = 24
 	m.mode = "search"
 	m.searchTerm = "test"
-	out := m.View()
-	require.Contains(t, out, "Search: test")
+	out := ansi.Strip(m.View())
+	require.Contains(t, out, "Search:test_")
 }
 
 func TestView_NodeFilter(t *testing.T) {
@@ -470,8 +474,134 @@ func TestView_NodeFilter(t *testing.T) {
 	m.viewport.Width = 80
 	m.viewport.Height = 24
 	m.setNodeFilter("worker1")
-	out := m.View()
-	require.Contains(t, out, "node: worker1")
+	out := ansi.Strip(m.View())
+	require.Contains(t, out, "Node:worker1")
+}
+
+// --- frame title / header ---
+
+func TestFrameTitle_ScopesAndCounts(t *testing.T) {
+	m := testModel()
+	m.ServiceEntry.StackName = "postgres-ha"
+	m.SetContent("one\ntwo\nthree")
+
+	require.Equal(t, "Logs(postgres-ha/web)[3]", ansi.Strip(m.FrameTitle()))
+
+	// A service in no stack keeps the scope to the service name.
+	m.ServiceEntry.StackName = ""
+	require.Equal(t, "Logs(web)[3]", ansi.Strip(m.FrameTitle()))
+}
+
+func TestFrameTitle_CountIsPostFilter(t *testing.T) {
+	m := hideStoppedModel()
+	m.mu.Lock()
+	m.lines = []string{"running line", "stopped line"}
+	m.lineTasks = []string{"task-run", "task-stop"}
+	m.lineNodes = []string{"n", "n"}
+	m.mu.Unlock()
+	m.viewport.SetContent(m.buildContent())
+
+	require.Equal(t, "Logs(web)[1]", ansi.Strip(m.FrameTitle()), "the hidden stopped line is not counted")
+
+	m.setHideStopped(false)
+	m.viewport.SetContent(m.buildContent())
+	require.Equal(t, "Logs(web)[2]", ansi.Strip(m.FrameTitle()))
+}
+
+func TestFrameTitle_ShowsTheAppFilter(t *testing.T) {
+	m := testModel()
+	m.SetContent("alpha\nbeta")
+	m.ApplySearchQuery("alp")
+
+	require.Equal(t, "Logs(web)[1] </alp>", ansi.Strip(m.FrameTitle()))
+}
+
+func TestFrameHeader_ReflectsEveryToggle(t *testing.T) {
+	trueColour(t)
+
+	m := testModel()
+	m.Visible = true
+	m.viewport.Width = 100
+
+	require.Equal(t,
+		[]string{"Autoscroll:On", "Wrap:On", "Node:all", "Stopped:Hidden"},
+		headerItems(m))
+
+	m.Update(key("s"))
+	m.Update(key("w"))
+	m.Update(key("t"))
+	m.setNodeFilter("worker1")
+
+	require.Equal(t,
+		[]string{"Autoscroll:Off", "Wrap:Off", "Node:worker1", "Stopped:Shown"},
+		headerItems(m))
+}
+
+func TestFrameHeader_ShowsSearchState(t *testing.T) {
+	m := testModel()
+	m.Visible = true
+	m.viewport.Width = 100
+	require.NotContains(t, ansi.Strip(m.FrameHeader()), "Search", "no search running, no item")
+
+	// Typing: the term so far, with a caret marking the field as live.
+	m.Update(key("ctrl+f"))
+	require.Contains(t, headerItems(m), "Search:_")
+	m.Update(key("e"))
+	require.Contains(t, headerItems(m), "Search:e_")
+
+	// Confirmed: the match counter the header used to spell out in prose.
+	m.mu.Lock()
+	m.lines = []string{"error one", "fine", "error two"}
+	m.lineNodes = []string{"", "", ""}
+	m.lineTasks = []string{"", "", ""}
+	m.mu.Unlock()
+	m.searchTerm = "error"
+	m.Update(key("enter"))
+	require.Contains(t, headerItems(m), "Search:error(1/2)")
+
+	m.Update(key("n"))
+	require.Contains(t, headerItems(m), "Search:error(2/2)")
+
+	// No matches, and a term long enough to be capped — an uncapped one would
+	// push the item past the row's width and lose it altogether.
+	m.searchTerm = "nothing-matches-at-all"
+	m.highlightContent()
+	require.Contains(t, headerItems(m), "Search:nothing-matches…(0)")
+}
+
+// TestFrameHeader_IsAlwaysOneRow — views/logs/update.go sizes the viewport to
+// what is left after the header, counting its rows. A header that wraps would
+// silently take rows off the log content.
+func TestFrameHeader_IsAlwaysOneRow(t *testing.T) {
+	trueColour(t)
+
+	m := testModel()
+	m.setNodeFilter("a-node-with-a-rather-long-hostname")
+	m.mode = "search"
+	m.searchTerm = strings.Repeat("x", 60)
+
+	for _, width := range []int{10, 20, 40, 80, 120, 200} {
+		m.viewport.Width = width
+		header := m.FrameHeader()
+		require.NotContains(t, header, "\n", "width %d", width)
+		require.LessOrEqual(t, lipgloss.Width(header), width, "width %d", width)
+	}
+}
+
+// headerItems is the frame header split back into its items, so a test names
+// the item it cares about instead of the spacing between them.
+func headerItems(m *Model) []string {
+	return strings.Fields(ansi.Strip(m.FrameHeader()))
+}
+
+// trueColour makes a test's assertions run against the styled header. The
+// default profile under `go test` is Ascii, where every style renders as plain
+// text — so nothing would exercise the ANSI-aware widths the row is built on.
+func trueColour(t *testing.T) {
+	t.Helper()
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
 }
 
 // --- buildContent tests ---

@@ -368,6 +368,7 @@ func (m *Model) buildContent() string {
 			filteredLines = append(filteredLines, line)
 		}
 	}
+	m.visibleCount = len(filteredLines)
 
 	// Join lines first
 	full := strings.Join(filteredLines, "\n")
