@@ -362,3 +362,24 @@ func TestFrameContentFillsTheFrame(t *testing.T) {
 	require.Len(t, rows, 37)
 	require.Contains(t, rows[len(rows)-1], "line-199")
 }
+
+// TestGrowingTheFrameLeavesNoBlankRows — the viewport kept the offset it had
+// across a resize, so "f" grew it into rows it then left blank until a keypress
+// pulled the offset back into range.
+func TestGrowingTheFrameLeavesNoBlankRows(t *testing.T) {
+	m := testModel()
+	m.SetFormat(FormatRaw)
+	var lines []string
+	for i := 0; i < 200; i++ {
+		lines = append(lines, fmt.Sprintf("line-%03d", i))
+	}
+	m.SetContent(strings.Join(lines, "\n"))
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
+	m.viewport.GotoBottom()
+
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	rows := strings.Split(m.FrameContent(), "\n")
+	require.Len(t, rows, 37)
+	require.Contains(t, rows[len(rows)-1], "line-199")
+}

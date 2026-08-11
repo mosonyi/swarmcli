@@ -212,6 +212,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		// reset viewport content so the internal content height updates
 		m.viewport.SetContent(m.buildContent())
+		// A resize changes how many lines fit, but not the offset the viewport
+		// scrolls from, so it keeps drawing the lines it drew before: growing
+		// leaves the rows it gained blank, shrinking cuts the newest lines off.
+		// Re-anchor while following, and otherwise only when the offset now sits
+		// past the end — a reader who scrolled up stays where they were.
+		if m.getFollow() || m.viewport.PastBottom() {
+			m.viewport.GotoBottom()
+		}
 		return nil
 
 	case tea.KeyMsg:

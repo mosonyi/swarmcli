@@ -4,6 +4,7 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/Eldara-Tech/swarmcli/ui"
 	"github.com/Eldara-Tech/swarmcli/views/commandinput"
 	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
+	inspectview "github.com/Eldara-Tech/swarmcli/views/inspect"
 	"github.com/Eldara-Tech/swarmcli/views/searchinput"
 	systeminfoview "github.com/Eldara-Tech/swarmcli/views/systeminfo"
 	"github.com/Eldara-Tech/swarmcli/views/unlockdialog"
@@ -163,6 +165,38 @@ func countRowsWith(out, marker string) int {
 		}
 	}
 	return n
+}
+
+// TestFullscreenFillsTheScreenWithARealViewport — the stub above rebuilds its
+// content for whatever height it is handed, so it cannot show what a real view
+// does: scroll a viewport that carries its offset across the resize. Pressing
+// "f" grew the viewport, which went on drawing the lines it drew before and
+// left the rows the toggle gained blank, until a keypress pulled the offset
+// back into range.
+func TestFullscreenFillsTheScreenWithARealViewport(t *testing.T) {
+	const width, height = 100, 40
+
+	var lines []string
+	for i := 0; i < 500; i++ {
+		lines = append(lines, fmt.Sprintf("line-%03d", i))
+	}
+	inspect := inspectview.New(width, height, inspectview.FormatRaw)
+	inspect.SetContent(strings.Join(lines, "\n"))
+
+	m := newLayoutTestModel(inspect)
+	m.updateForResize(tea.WindowSizeMsg{Width: width, Height: height})
+	for i := 0; i < 20; i++ { // page down to the end of the document
+		m.handleKey(tea.KeyMsg{Type: tea.KeyPgDown})
+	}
+
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+
+	out := m.View()
+	require.Equal(t, height, lipgloss.Height(out), "rendered rows")
+	// 40 rows less the fullscreen title line and the view's own header.
+	require.Equal(t, 38, countRowsWith(out, "line-"), "rows of content drawn")
+	rows := strings.Split(out, "\n")
+	require.Contains(t, rows[len(rows)-1], "line-499", "the last line should sit on the last row")
 }
 
 // TestFullscreenKeepsTheViewFooter — fullscreen used to drop the footer while

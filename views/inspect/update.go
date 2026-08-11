@@ -29,6 +29,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.viewport.Height = max(1, ui.ContentRows(msg.Height, ui.FramedChromeRows, m.FrameHeader(), m.FrameFooter()))
 		m.ready = true
 		m.updateViewport()
+		// A resize changes how many lines fit, but not the offset the viewport
+		// scrolls from, so a viewport that grew keeps drawing the lines it drew
+		// before and leaves the rows it gained blank.
+		if m.viewport.PastBottom() {
+			m.viewport.GotoBottom()
+		}
 		return nil
 
 	case tea.KeyMsg:
