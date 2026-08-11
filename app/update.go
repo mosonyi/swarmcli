@@ -11,6 +11,7 @@ import (
 	cmdpkg "github.com/Eldara-Tech/swarmcli/commands/command"
 	"github.com/Eldara-Tech/swarmcli/docker"
 	"github.com/Eldara-Tech/swarmcli/settings"
+	"github.com/Eldara-Tech/swarmcli/ui"
 	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
 	"github.com/Eldara-Tech/swarmcli/views/commandinput"
 	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
@@ -185,13 +186,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if !m.commandInput.Visible() {
 				cmd := m.commandInput.Show()
-				// After showing the command input, trigger a resize so the current view
-				// is passed a usable height reduced by 3 lines for the command frame.
-				adjHeight := m.viewport.Height - 3
-				if adjHeight < 0 {
-					adjHeight = 0
-				}
-				resizeCmd := handleViewResize(m.currentView, m.viewport.Width, adjHeight, false)
+				// Resize with the bar now open so the view is passed a height
+				// reduced by the rows it takes.
+				resizeCmd := m.resizeToTerminal()
 				return m, tea.Batch(cmd, resizeCmd)
 			}
 			return m, nil
@@ -238,11 +235,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if !m.searchInput.Visible() {
 				cmd := m.searchInput.Show()
-				adjHeight := m.viewport.Height - 3
-				if adjHeight < 0 {
-					adjHeight = 0
-				}
-				resizeCmd := handleViewResize(m.currentView, m.viewport.Width, adjHeight, false)
+				resizeCmd := m.resizeToTerminal()
 				return m, tea.Batch(cmd, resizeCmd)
 			}
 			return m, nil
@@ -259,7 +252,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// If visibility changed from true -> false, trigger resize to restore height
 			if prevVisible && !m.commandInput.Visible() {
 				// Command input just hid: restore the full usable viewport height.
-				resizeCmd := handleViewResize(m.currentView, m.viewport.Width, m.viewport.Height, false)
+				resizeCmd := m.resizeToTerminal()
 				return m, tea.Batch(cmd, resizeCmd)
 			}
 			return m, cmd
@@ -270,7 +263,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			prevVisible := m.searchInput.Visible()
 			cmd := m.searchInput.Update(msg)
 			if prevVisible && !m.searchInput.Visible() {
-				resizeCmd := handleViewResize(m.currentView, m.viewport.Width, m.viewport.Height, false)
+				resizeCmd := m.resizeToTerminal()
 				return m, tea.Batch(cmd, resizeCmd)
 			}
 			return m, cmd
@@ -409,6 +402,18 @@ func (m *Model) delegateToCurrentView(msg tea.Msg) tea.Cmd {
 	return tea.Batch(cmd, vpCmd)
 }
 
+// resizeToTerminal re-runs the layout for the current terminal size. Anything
+// that changes how much room the current view gets — toggling fullscreen,
+// opening or closing an input bar, navigating — goes through here rather than
+// adjusting a height by hand, so the layout mode and the input bar are only
+// ever accounted for in one place.
+func (m *Model) resizeToTerminal() tea.Cmd {
+	return m.updateForResize(tea.WindowSizeMsg{
+		Width:  m.terminalWidth,
+		Height: m.terminalHeight,
+	})
+}
+
 func (m *Model) updateForResize(msg tea.WindowSizeMsg) tea.Cmd {
 	var cmd tea.Cmd
 
@@ -420,30 +425,26 @@ func (m *Model) updateForResize(msg tea.WindowSizeMsg) tea.Cmd {
 
 	var usableWidth, usableHeight int
 	if isFullscreen {
-		// In fullscreen, use almost all space (just leave room for borders)
+		// Fullscreen draws no frame borders and no help/stack bars, so the
+		// whole terminal is usable.
 		usableWidth = msg.Width
-		usableHeight = msg.Height - 2 // Just for top/bottom borders
+		usableHeight = msg.Height
 	} else {
 		// Normal mode:
 		// - Width: subtract 4 for frame borders/padding
 		// - Height: pass full height, handleViewResize will subtract systeminfo header
 		usableWidth = msg.Width - 4
 		usableHeight = msg.Height
-		// If command input is visible, reserve 3 lines so the main view is
-		// reduced instead of moving the header. This keeps the header fixed
-		// at the top while space for the command box is deducted from the
-		// usableHeight passed to views.
-		if m.commandInput != nil && m.commandInput.Visible() {
-			usableHeight = usableHeight - 3
-			if usableHeight < 0 {
-				usableHeight = 0
-			}
-		}
-		if m.searchInput != nil && m.searchInput.Visible() {
-			usableHeight = usableHeight - 3
-			if usableHeight < 0 {
-				usableHeight = 0
-			}
+	}
+	// If an input bar is visible, reserve its lines so the main view is reduced
+	// instead of moving the header. This keeps the header fixed at the top
+	// while space for the bar is deducted from the usableHeight passed to
+	// views. View() reads the same reduced height, so it must not deduct again.
+	if (m.commandInput != nil && m.commandInput.Visible()) ||
+		(m.searchInput != nil && m.searchInput.Visible()) {
+		usableHeight = usableHeight - inputBarHeight
+		if usableHeight < 0 {
+			usableHeight = 0
 		}
 	}
 
@@ -458,14 +459,20 @@ func (m *Model) updateForResize(msg tea.WindowSizeMsg) tea.Cmd {
 	return cmd
 }
 
+// handleViewResize tells a view the height of the frame it has to fill. Views
+// size their content for the bordered frame, deducting ui.FramedChromeRows for
+// its borders.
 func handleViewResize(view view.View, width, height int, isFullscreen bool) tea.Cmd {
 	var adjustedHeight int
 	if isFullscreen {
-		// In fullscreen, subtract 1 for title line
-		adjustedHeight = height - 1
+		// Fullscreen spends ui.FullscreenChromeRows on a title line instead of
+		// those borders, so the frame it fills is that much taller than the
+		// terminal — otherwise the view holds back rows for borders that are
+		// never drawn and the bottom of the screen goes unused.
+		adjustedHeight = height + ui.FramedChromeRows - ui.FullscreenChromeRows
 	} else {
-		// Normal mode: subtract systeminfo height (6) + breadcrumb (1) = 7 lines total
-		adjustedHeight = height - 7
+		// Normal mode: subtract the help bar and the breadcrumb bar.
+		adjustedHeight = height - appChromeRows
 	}
 
 	var adjustedMsg = tea.WindowSizeMsg{
@@ -514,10 +521,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// If in fullscreen, exit fullscreen first
 		if m.fullscreen {
 			m.fullscreen = false
-			cmd := m.updateForResize(tea.WindowSizeMsg{
-				Width:  m.terminalWidth,
-				Height: m.terminalHeight,
-			})
+			cmd := m.resizeToTerminal()
 			return m, cmd
 		}
 
@@ -535,7 +539,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if fv, ok := m.currentView.(view.Filterable); ok {
 				fv.ClearSearchQuery()
 			}
-			resizeCmd := handleViewResize(m.currentView, m.viewport.Width, m.viewport.Height, false)
+			resizeCmd := m.resizeToTerminal()
 			return m, resizeCmd
 		}
 
@@ -617,10 +621,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		m.fullscreen = !m.fullscreen
-		cmd := m.updateForResize(tea.WindowSizeMsg{
-			Width:  m.terminalWidth,
-			Height: m.terminalHeight,
-		})
+		cmd := m.resizeToTerminal()
 		return m, cmd
 	}
 
@@ -652,7 +653,7 @@ func (m *Model) goBack() tea.Cmd {
 	enterCmd := m.currentView.OnEnter()
 
 	// Optionally notify the view about terminal size again
-	resizeCmd := handleViewResize(m.currentView, m.viewport.Width, m.viewport.Height, false)
+	resizeCmd := m.resizeToTerminal()
 
 	// Execute all lifecycle commands
 	return tea.Batch(exitCmd, enterCmd, resizeCmd)

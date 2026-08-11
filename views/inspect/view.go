@@ -38,16 +38,14 @@ func (m *Model) FrameHeader() string {
 
 func (m *Model) FrameFooter() string { return "" }
 
-func (m *Model) FrameContent() string {
-	header := m.FrameHeader()
-	width := m.viewport.Width
-	if width <= 0 {
-		width = 80
-	}
-	frame := ui.ComputeFrameDimensions(width, m.viewport.Height, width, m.height, header, "")
-	return ui.TrimOrPadContentToLines(m.viewport.View(), frame.DesiredContentLines)
-}
+// FrameContent returns the viewport as-is: it is already sized to the rows the
+// frame will draw.
+func (m *Model) FrameContent() string { return m.viewport.View() }
 
+// View renders the view on its own; the app composes it from the Frame* parts
+// instead. The box is drawn around the content rather than to a height, since
+// the viewport is already sized to the rows it should fill.
 func (m *Model) View() string {
-	return ui.RenderViewFrame(m.FrameTitle(), m.FrameHeader(), m.FrameContent(), m.FrameFooter(), m.viewport.Width, m.viewport.Height, false)
+	return ui.RenderFramedBox(m.FrameTitle(), m.FrameHeader(), m.FrameContent(), m.FrameFooter(),
+		m.viewport.Width+4)
 }

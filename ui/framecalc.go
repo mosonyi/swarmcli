@@ -7,7 +7,13 @@ import "strings"
 
 const (
 	horizontalPadding = 4
-	verticalPadding   = 2
+
+	// FramedChromeRows is what RenderViewFrame's bordered layout spends on the
+	// frame itself: the top border, which carries the title, and the bottom one.
+	FramedChromeRows = 2
+	// FullscreenChromeRows is what its borderless layout spends instead: a
+	// single centered title line.
+	FullscreenChromeRows = 1
 )
 
 // FrameSpec captures the calculated dimensions for a framed view.
@@ -45,23 +51,28 @@ func ComputeFrameDimensions(viewportWidth, viewportHeight, fallbackWidth, fallba
 		frameHeight = 20
 	}
 
-	headerLines := 0
-	if header != "" {
-		headerLines = len(strings.Split(header, "\n"))
-	}
-	footerLines := 0
-	if footer != "" {
-		footerLines = len(strings.Split(footer, "\n"))
-	}
-
-	desiredContentLines := frameHeight - verticalPadding - headerLines - footerLines
-	if desiredContentLines < 0 {
-		desiredContentLines = 0
-	}
-
 	return FrameSpec{
 		FrameWidth:          frameWidth,
 		FrameHeight:         frameHeight,
-		DesiredContentLines: desiredContentLines,
+		DesiredContentLines: ContentRows(frameHeight, FramedChromeRows, header, footer),
 	}
+}
+
+// ContentRows is the space left for content inside a frame of frameHeight rows
+// once the frame's own chrome (chromeRows) and the header and footer have taken
+// theirs. A view that renders a viewport should size that viewport to this, so
+// what the viewport scrolls is exactly what the frame draws.
+func ContentRows(frameHeight, chromeRows int, header, footer string) int {
+	rows := frameHeight - chromeRows - countRows(header) - countRows(footer)
+	if rows < 0 {
+		rows = 0
+	}
+	return rows
+}
+
+func countRows(s string) int {
+	if s == "" {
+		return 0
+	}
+	return len(strings.Split(s, "\n"))
 }

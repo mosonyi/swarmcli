@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Eldara-Tech/swarmcli/ui"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -21,7 +23,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case tea.WindowSizeMsg:
 		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height
+		// msg.Height is the frame's height; the viewport only gets what is left
+		// after the frame's own rows and the header, so that what it scrolls is
+		// exactly what the frame draws.
+		m.viewport.Height = max(1, ui.ContentRows(msg.Height, ui.FramedChromeRows, m.FrameHeader(), m.FrameFooter()))
 		m.ready = true
 		m.updateViewport()
 		return nil

@@ -202,7 +202,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 
 		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height
+		// msg.Height is the frame's height; the viewport only gets what is left
+		// after the frame's own rows and the header. Sizing it to the frame
+		// instead would park the newest lines below the cut — GotoBottom would
+		// anchor a window taller than the rows actually drawn.
+		m.viewport.Height = max(1, ui.ContentRows(msg.Height, ui.FramedChromeRows, m.FrameHeader(), m.FrameFooter()))
 		if !m.ready {
 			m.ready = true
 		}
