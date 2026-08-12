@@ -4,6 +4,7 @@
 package inspectview
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -50,7 +51,6 @@ func TestNew(t *testing.T) {
 	m := New(80, 24, FormatYAML)
 	require.Equal(t, FormatYAML, m.Format)
 	require.Equal(t, 80, m.width)
-	require.Equal(t, 24, m.height)
 }
 
 func TestName(t *testing.T) {
@@ -154,7 +154,10 @@ func TestUpdate_WindowSizeMsg(t *testing.T) {
 	m := testModel()
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	require.Equal(t, 120, m.viewport.Width)
-	require.Equal(t, 40, m.viewport.Height)
+	// The message carries the frame's height; the viewport gets the rows left
+	// after the two border rows and the one-line header.
+	require.Equal(t, 37, m.viewport.Height)
+	require.Len(t, strings.Split(m.FrameContent(), "\n"), 37)
 	require.True(t, m.ready)
 }
 
@@ -338,4 +341,45 @@ func TestApplySearchQuery_RawMode(t *testing.T) {
 	visible := m.visiblePlainLines()
 	require.Len(t, visible, 1)
 	require.Contains(t, visible[0], "two")
+}
+
+// TestFrameContentFillsTheFrame — the viewport used to be sized to the whole
+// frame while the frame drew three rows fewer, cutting off the bottom of the
+// document the viewport had scrolled to.
+func TestFrameContentFillsTheFrame(t *testing.T) {
+	m := testModel()
+	m.SetFormat(FormatRaw)
+	var lines []string
+	for i := 0; i < 200; i++ {
+		lines = append(lines, fmt.Sprintf("line-%03d", i))
+	}
+	m.SetContent(strings.Join(lines, "\n"))
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m.viewport.GotoBottom()
+
+	rows := strings.Split(m.FrameContent(), "\n")
+	// 40 rows of frame less its two borders and the one-line header.
+	require.Len(t, rows, 37)
+	require.Contains(t, rows[len(rows)-1], "line-199")
+}
+
+// TestGrowingTheFrameLeavesNoBlankRows — the viewport kept the offset it had
+// across a resize, so "f" grew it into rows it then left blank until a keypress
+// pulled the offset back into range.
+func TestGrowingTheFrameLeavesNoBlankRows(t *testing.T) {
+	m := testModel()
+	m.SetFormat(FormatRaw)
+	var lines []string
+	for i := 0; i < 200; i++ {
+		lines = append(lines, fmt.Sprintf("line-%03d", i))
+	}
+	m.SetContent(strings.Join(lines, "\n"))
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
+	m.viewport.GotoBottom()
+
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	rows := strings.Split(m.FrameContent(), "\n")
+	require.Len(t, rows, 37)
+	require.Contains(t, rows[len(rows)-1], "line-199")
 }

@@ -12,13 +12,31 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// appChromeRows is what the app draws around a normal-mode view: the system
+// info help bar above it and the breadcrumb stack bar below. Fullscreen drops
+// both. The resize math in update.go deducts the same rows.
+const appChromeRows = systeminfoview.Height + 1
+
+// inputBarHeight is the framed box the ":" command bar and the "/" search bar
+// are rendered into. Both modes reserve it while one of them is open.
+const inputBarHeight = 3
+
 func (m *Model) View() string {
-	// Fullscreen mode: show only the current view (no helpbar, no stackbar)
+	title := m.currentView.FrameTitle()
+	header := m.currentView.FrameHeader()
+	content := m.currentView.FrameContent()
+	footer := m.currentView.FrameFooter()
+	// m.viewport already has the input bar's rows deducted, if one is open.
+	inputBar := m.renderInputBar()
+
+	// Fullscreen mode: show only the current view (no helpbar, no stackbar).
+	// The input bar stays: it is the only feedback for what is being typed.
 	if m.fullscreen {
-		title := m.currentView.FrameTitle()
-		header := m.currentView.FrameHeader()
-		content := m.currentView.FrameContent()
-		out := ui.RenderViewFrame(title, header, content, "", m.terminalWidth, m.terminalHeight, true)
+		out := ui.RenderViewFrame(title, header, content, footer,
+			m.terminalWidth, m.viewport.Height, true)
+		if inputBar != "" {
+			out = lipgloss.JoinVertical(lipgloss.Left, inputBar, out)
+		}
 		return m.overlayStartup(m.overlayUnlock(m.overlayAppError(m.overlayUpdate(out))))
 	}
 
@@ -42,70 +60,35 @@ func (m *Model) View() string {
 		WithViewHelp(m.currentView.ShortHelpItems()).
 		View(systemInfo, hasError)
 
-	// Build the framed view from components
-	title := m.currentView.FrameTitle()
-	header := m.currentView.FrameHeader()
-	content := m.currentView.FrameContent()
-	footer := m.currentView.FrameFooter()
-	// Subtract help bar (systeminfoview.Height) and stack bar (1 line) from the
-	// viewport height so the frame fits between chrome elements.
-	frameHeight := m.viewport.Height - systeminfoview.Height - 1
-
-	if m.commandInput.Visible() {
-		// Reserve 3 lines for the command frame so the main view shrinks.
-		const cmdFrameHeight = 3
-		frameHeight -= cmdFrameHeight
-		if frameHeight < 1 {
-			frameHeight = 1
-		}
-		framedView := ui.RenderViewFrame(title, header, content, footer, m.viewport.Width, frameHeight, false)
-
-		frameWidth := m.viewport.Width + 4
-		cmdFrame := ui.RenderFramedBoxHeight("", "", m.commandInput.View(), "", frameWidth, cmdFrameHeight)
-
-		out := lipgloss.JoinVertical(
-			lipgloss.Left,
-			help,
-			cmdFrame,
-			framedView,
-			m.renderStackBar(),
-		)
-		return m.overlayStartup(m.overlayUnlock(m.overlayAppError(m.overlayUpdate(out))))
-	}
-
-	if m.searchInput.Visible() {
-		const searchFrameHeight = 3
-		frameHeight -= searchFrameHeight
-		if frameHeight < 1 {
-			frameHeight = 1
-		}
-		framedView := ui.RenderViewFrame(title, header, content, footer, m.viewport.Width, frameHeight, false)
-
-		frameWidth := m.viewport.Width + 4
-		searchFrame := ui.RenderFramedBoxHeight("", "", m.searchInput.View(), "", frameWidth, searchFrameHeight)
-
-		out := lipgloss.JoinVertical(
-			lipgloss.Left,
-			help,
-			searchFrame,
-			framedView,
-			m.renderStackBar(),
-		)
-		return m.overlayStartup(m.overlayUnlock(m.overlayAppError(m.overlayUpdate(out))))
-	}
-
+	// Subtract help bar and stack bar from the viewport height so the frame
+	// fits between the chrome elements.
+	frameHeight := m.viewport.Height - appChromeRows
 	if frameHeight < 1 {
 		frameHeight = 1
 	}
 	framedView := ui.RenderViewFrame(title, header, content, footer, m.viewport.Width, frameHeight, false)
 
-	out := lipgloss.JoinVertical(
-		lipgloss.Left,
-		help,
-		framedView,
-		m.renderStackBar(),
-	)
+	rows := []string{help}
+	if inputBar != "" {
+		rows = append(rows, inputBar)
+	}
+	rows = append(rows, framedView, m.renderStackBar())
+
+	out := lipgloss.JoinVertical(lipgloss.Left, rows...)
 	return m.overlayStartup(m.overlayUnlock(m.overlayAppError(m.overlayUpdate(out))))
+}
+
+// renderInputBar renders whichever of the ":" command bar and the "/" search
+// bar is open, or "" when neither is. They are mutually exclusive.
+func (m *Model) renderInputBar() string {
+	switch {
+	case m.commandInput.Visible():
+		return ui.RenderFramedBoxHeight("", "", m.commandInput.View(), "", m.terminalWidth, inputBarHeight)
+	case m.searchInput.Visible():
+		return ui.RenderFramedBoxHeight("", "", m.searchInput.View(), "", m.terminalWidth, inputBarHeight)
+	default:
+		return ""
+	}
 }
 
 // hidesGlobalKeys reports whether the current view suppresses the app-level

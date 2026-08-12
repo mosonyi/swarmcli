@@ -11,19 +11,26 @@ import (
 
 // RenderViewFrame composes a complete framed view from its parts.
 // It computes frame dimensions, trims/pads content to fit, and renders
-// the bordered frame. When fullscreen is true, only a centered title
-// line and raw content are returned (no borders).
+// the bordered frame. When fullscreen is true the borders are dropped and a
+// centered title line takes their place. Either way the result occupies
+// exactly `height` rows, as long as the chrome, header and footer fit in them.
 func RenderViewFrame(title, header, content, footer string, width, height int, fullscreen bool) string {
 	if fullscreen {
-		titleText := styleFrameTitle(title)
 		titleLine := lipgloss.NewStyle().
 			Width(width).
 			Align(lipgloss.Center).
-			Render(titleText)
+			Render(styleFrameTitle(title))
+
+		rows := []string{titleLine}
 		if header != "" {
-			return titleLine + "\n" + header + "\n" + content
+			rows = append(rows, header)
 		}
-		return titleLine + "\n" + content
+		rows = append(rows, TrimOrPadContentToLines(content,
+			ContentRows(height, FullscreenChromeRows, header, footer)))
+		if footer != "" {
+			rows = append(rows, footer)
+		}
+		return strings.Join(rows, "\n")
 	}
 
 	// Pad header, content, and footer uniformly so columns align inside the frame.

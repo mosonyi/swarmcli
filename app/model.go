@@ -137,7 +137,7 @@ func (m *Model) switchToView(name string, data any) tea.Cmd {
 	exitCmd := m.currentView.OnExit()
 
 	newView, loadCmd := factory(m.deps, m.viewport.Width, m.viewport.Height, data)
-	resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height, false)
+	resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height, m.fullscreen)
 
 	// Push current view onto stack
 	m.viewStack.Push(m.currentView)
@@ -159,7 +159,7 @@ func (m *Model) replaceView(name string, data any) tea.Cmd {
 	exitCmd := m.currentView.OnExit()
 
 	newView, loadCmd := factory(m.deps, m.viewport.Width, m.viewport.Height, data)
-	resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height, false)
+	resizeCmd := handleViewResize(newView, m.viewport.Width, m.viewport.Height, m.fullscreen)
 
 	m.currentView = newView
 	m.viewStack.Reset()

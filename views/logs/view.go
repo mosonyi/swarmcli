@@ -58,14 +58,8 @@ func (m *Model) FrameContent() string {
 		width = 80
 	}
 
-	headerRendered := m.FrameHeader()
-	frame := ui.ComputeFrameDimensions(
-		width, m.viewport.Height,
-		width, m.viewport.Height,
-		headerRendered, "",
-	)
-
-	viewportContent := ui.TrimOrPadContentToLines(m.viewport.View(), frame.DesiredContentLines)
+	// The viewport is already sized to the rows the frame will draw.
+	viewportContent := m.viewport.View()
 
 	if m.getNodeSelectVisible() && m.viewport.Height >= 5 {
 		availableHeight := m.viewport.Height
@@ -76,12 +70,15 @@ func (m *Model) FrameContent() string {
 	return viewportContent
 }
 
+// View renders the view on its own; the app composes it from the Frame* parts
+// instead. The box is drawn around the content rather than to a height, since
+// the viewport is already sized to the rows it should fill.
 func (m *Model) View() string {
 	if !m.Visible {
 		return ""
 	}
-	return ui.RenderViewFrame(m.FrameTitle(), m.FrameHeader(), m.FrameContent(), m.FrameFooter(),
-		m.viewport.Width, m.viewport.Height, false)
+	return ui.RenderFramedBox(m.FrameTitle(), m.FrameHeader(), m.FrameContent(), m.FrameFooter(),
+		m.viewport.Width+4)
 }
 
 // renderNodeSelectDialog renders the node selection popup

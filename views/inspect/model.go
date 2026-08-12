@@ -33,7 +33,6 @@ type Model struct {
 	searchMode bool
 	ready      bool
 	width      int
-	height     int
 
 	Format     Format // "yml" or "raw"
 	RawContent string
@@ -51,7 +50,6 @@ func New(width, height int, format Format) *Model {
 	return &Model{
 		viewport: vp,
 		width:    width,
-		height:   height,
 		Format:   format,
 	}
 }

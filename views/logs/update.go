@@ -202,12 +202,24 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 
 		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height
+		// msg.Height is the frame's height; the viewport only gets what is left
+		// after the frame's own rows and the header. Sizing it to the frame
+		// instead would park the newest lines below the cut — GotoBottom would
+		// anchor a window taller than the rows actually drawn.
+		m.viewport.Height = max(1, ui.ContentRows(msg.Height, ui.FramedChromeRows, m.FrameHeader(), m.FrameFooter()))
 		if !m.ready {
 			m.ready = true
 		}
 		// reset viewport content so the internal content height updates
 		m.viewport.SetContent(m.buildContent())
+		// A resize changes how many lines fit, but not the offset the viewport
+		// scrolls from, so it keeps drawing the lines it drew before: growing
+		// leaves the rows it gained blank, shrinking cuts the newest lines off.
+		// Re-anchor while following, and otherwise only when the offset now sits
+		// past the end — a reader who scrolled up stays where they were.
+		if m.getFollow() || m.viewport.PastBottom() {
+			m.viewport.GotoBottom()
+		}
 		return nil
 
 	case tea.KeyMsg:

@@ -5,7 +5,9 @@ package logsview
 
 import (
 	"errors"
+	"fmt"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/Eldara-Tech/swarmcli/docker"
@@ -264,7 +266,10 @@ func TestUpdate_WindowSizeMsg(t *testing.T) {
 	m := testModel()
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	require.Equal(t, 120, m.viewport.Width)
-	require.Equal(t, 40, m.viewport.Height)
+	// The message carries the frame's height; the viewport gets the rows left
+	// after the two border rows and the one-line header.
+	require.Equal(t, 37, m.viewport.Height)
+	require.Len(t, strings.Split(m.FrameContent(), "\n"), 37)
 	require.True(t, m.ready)
 }
 
@@ -826,4 +831,74 @@ func TestSetContent_ResetsTaskSlice(t *testing.T) {
 		require.Equal(t, "", id)
 	}
 	m.mu.Unlock()
+}
+
+// TestFollowShowsTheNewestLine — the viewport used to be sized to the whole
+// frame while the frame drew fewer rows than that, so AutoScroll parked the
+// newest lines in the rows that were cut off.
+func TestFollowShowsTheNewestLine(t *testing.T) {
+	m := testModel()
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	require.True(t, m.getFollow())
+
+	for i := 0; i < 500; i++ {
+		m.Update(LineMsg{Line: fmt.Sprintf("line-%03d", i)})
+	}
+
+	rows := strings.Split(m.FrameContent(), "\n")
+	// 40 rows of frame less its two borders and the one-line header.
+	require.Len(t, rows, 37)
+	require.Contains(t, rows[len(rows)-1], "line-499")
+}
+
+// TestResizeKeepsFollowOnTheNewestLine — the viewport kept the offset it had
+// across a resize, so "f" grew it into rows it then left blank, and leaving
+// fullscreen shrank it away from the newest lines. Both until the next line
+// arrived or a keypress clamped the offset.
+func TestResizeKeepsFollowOnTheNewestLine(t *testing.T) {
+	cases := []struct {
+		name           string
+		from, to, rows int
+	}{
+		{name: "growing into fullscreen", from: 24, to: 40, rows: 37},
+		{name: "shrinking back to normal", from: 40, to: 24, rows: 21},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel()
+			m.Update(tea.WindowSizeMsg{Width: 120, Height: tc.from})
+			for i := 0; i < 500; i++ {
+				m.Update(LineMsg{Line: fmt.Sprintf("line-%03d", i)})
+			}
+
+			m.Update(tea.WindowSizeMsg{Width: 120, Height: tc.to})
+
+			rows := strings.Split(m.FrameContent(), "\n")
+			require.Len(t, rows, tc.rows)
+			require.Contains(t, rows[len(rows)-1], "line-499")
+		})
+	}
+}
+
+// TestResizeWithFollowOffClampsWithoutJumping — a resize must not drag a reader
+// who scrolled up back to the newest line, but it must still pull in an offset
+// the taller viewport has left past the end.
+func TestResizeWithFollowOffClampsWithoutJumping(t *testing.T) {
+	m := testModel()
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
+	for i := 0; i < 500; i++ {
+		m.Update(LineMsg{Line: fmt.Sprintf("line-%03d", i)})
+	}
+	m.setFollow(false)
+
+	m.viewport.SetYOffset(100)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	require.Equal(t, 100, m.viewport.YOffset)
+
+	m.viewport.GotoBottom()
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 60})
+	rows := strings.Split(m.FrameContent(), "\n")
+	require.Len(t, rows, 57)
+	require.Contains(t, rows[len(rows)-1], "line-499")
 }
