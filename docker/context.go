@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -147,30 +148,65 @@ func UseContext(contextName string) error {
 	return nil
 }
 
+// ErrContextPinnedByEnv reports a switch that could not take effect because
+// DOCKER_CONTEXT names a different context. `docker context use` writes the
+// active context to ~/.docker/config.json, but the variable is resolved ahead
+// of it, so the switch would change nothing this process observes.
+var ErrContextPinnedByEnv = errors.New("DOCKER_CONTEXT pins the Docker context")
+
+// Seams for ValidateContext, so its switch/revert bookkeeping is testable
+// without a Docker daemon. probeContextFn is the half that needs one.
+var (
+	useContextFn     = UseContext
+	resetClientFn    = ResetClient
+	currentContextFn = GetCurrentContext
+	probeContextFn   = probeActiveContext
+)
+
 // ValidateContext checks if a context switch would succeed by attempting to connect
 func ValidateContext(ctx context.Context, contextName string) error {
+	// A switch cannot take effect while DOCKER_CONTEXT names something else,
+	// so report that instead of writing config.json and claiming success.
+	// Naming the same context is not a conflict — nothing has to move.
+	if env := os.Getenv("DOCKER_CONTEXT"); env != "" && env != contextName {
+		return fmt.Errorf("%w to '%s' — unset it to switch to '%s'", ErrContextPinnedByEnv, env, contextName)
+	}
+
 	// Save current context
-	currentCtx, err := GetCurrentContext()
+	currentCtx, err := currentContextFn()
 	if err != nil {
 		return fmt.Errorf("failed to get current context: %w", err)
 	}
 
 	// Try switching to the new context
-	if err := UseContext(contextName); err != nil {
+	if err := useContextFn(contextName); err != nil {
 		return err
 	}
+	// The client is a process-wide singleton built for the context we just
+	// left. Without dropping it, every check below would describe that
+	// context and pass whatever the new one is doing.
+	resetClientFn()
 
-	// Try to create a client and ping
+	if err := probeContextFn(ctx, contextName); err != nil {
+		// Switch back to original context, and drop the client built for the
+		// one being rejected.
+		_ = useContextFn(currentCtx)
+		resetClientFn()
+		return err
+	}
+	return nil
+}
+
+// probeActiveContext connects to whichever context is now active and reports
+// whether it is reachable and part of a usable swarm. contextName names it in
+// the error text only.
+func probeActiveContext(ctx context.Context, contextName string) error {
 	cli, err := GetClient()
 	if err != nil {
-		// Switch back to original context
-		_ = UseContext(currentCtx)
 		return fmt.Errorf("failed to connect to context %s: %w", contextName, err)
 	}
 	// Verify connection with ping
 	if _, err := cli.Ping(ctx); err != nil {
-		// Switch back to original context
-		_ = UseContext(currentCtx)
 		return fmt.Errorf("failed to ping context %s: %w", contextName, err)
 	}
 
@@ -182,14 +218,11 @@ func ValidateContext(ctx context.Context, contextName string) error {
 		if IsSwarmLockedErr(err) {
 			return nil
 		}
-		_ = UseContext(currentCtx)
 		return fmt.Errorf("failed to query info for context %s: %w", contextName, err)
 	}
 	if !isUsableSwarmState(info.Swarm.LocalNodeState) {
-		_ = UseContext(currentCtx)
 		return fmt.Errorf("context %s is not part of a Docker Swarm cluster", contextName)
 	}
-
 	return nil
 }
 
