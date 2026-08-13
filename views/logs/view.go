@@ -11,43 +11,79 @@ import (
 )
 
 func (m *Model) FrameTitle() string {
-	followStatus := "off"
-	if m.getFollow() {
-		followStatus = "on"
+	scope := m.ServiceEntry.ServiceName
+	if m.ServiceEntry.StackName != "" {
+		scope = m.ServiceEntry.StackName + "/" + scope
 	}
-	wrapStatus := "off"
-	if m.getWrap() {
-		wrapStatus = "on"
-	}
-	nodeFilter := m.getNodeFilter()
-	filterStatus := "all nodes"
-	if nodeFilter != "" {
-		filterStatus = fmt.Sprintf("node: %s", nodeFilter)
-	}
-	stoppedStatus := "hidden"
-	if !m.getHideStopped() {
-		stoppedStatus = "shown"
-	}
-	return fmt.Sprintf(
-		"Service: %s • AutoScroll: %s • wrap: %s • Filter: %s • Stopped: %s",
-		m.ServiceEntry.ServiceName,
-		followStatus,
-		wrapStatus,
-		filterStatus,
-		stoppedStatus,
-	)
+	return ui.ScopedTitleFiltered("Logs", scope, m.getVisibleCount(), m.getFilterQuery())
 }
 
+// FrameHeader renders the view's options as a status row, so what each toggle
+// is doing reads at a glance rather than out of a sentence in the title. It is
+// also the only place they appear in fullscreen, where the helpbar that names
+// the keys is not drawn.
 func (m *Model) FrameHeader() string {
-	header := "Logs"
-	if m.mode == "search" {
-		header = fmt.Sprintf("Logs — Search: %s", m.searchTerm)
-	} else if m.searchTerm != "" && len(m.searchMatches) > 0 {
-		matchCount := len(m.searchMatches)
-		currentMatch := m.searchIndex + 1
-		header = fmt.Sprintf("Logs — Found %d matches (viewing %d/%d) • Press 'ctrl+f' to search, 'n'/'N' to navigate", matchCount, currentMatch, matchCount)
+	node := "all"
+	if filter := m.getNodeFilter(); filter != "" {
+		node = filter
 	}
-	return ui.FrameHeaderStyle.Render(header)
+	// "Hidden" is the engaged state: hiding stopped tasks is what the toggle
+	// does, and it is the default.
+	stopped := ui.Toggle{Label: "Stopped", Value: "Shown", Tone: ui.ToggleOff}
+	if m.getHideStopped() {
+		stopped = ui.Toggle{Label: "Stopped", Value: "Hidden", Tone: ui.ToggleOn}
+	}
+
+	items := []ui.Toggle{
+		onOffToggle("Autoscroll", m.getFollow()),
+		onOffToggle("Wrap", m.getWrap()),
+		{Label: "Node", Value: node, Tone: ui.ToggleInfo},
+		stopped,
+	}
+	if search, ok := m.searchToggle(); ok {
+		items = append(items, search)
+	}
+	return ui.ToggleRow(items, m.viewport.Width)
+}
+
+func onOffToggle(label string, on bool) ui.Toggle {
+	if on {
+		return ui.Toggle{Label: label, Value: "On", Tone: ui.ToggleOn}
+	}
+	return ui.Toggle{Label: label, Value: "Off", Tone: ui.ToggleOff}
+}
+
+// maxSearchTermRunes caps the search term shown in the row. An uncapped term
+// pushes the item past the row's width, and ToggleRow drops from the right —
+// losing the very feedback the item exists to give.
+const maxSearchTermRunes = 16
+
+// searchToggle reports the "ctrl+f" search as a row item: the term while it is
+// being typed, then the match counter. It is absent when no search is running.
+// The app-level "/" filter is not here — it rides in the title, as in every
+// other view.
+func (m *Model) searchToggle() (ui.Toggle, bool) {
+	term := m.searchTerm
+	if r := []rune(term); len(r) > maxSearchTermRunes {
+		term = string(r[:maxSearchTermRunes-1]) + "…"
+	}
+
+	switch {
+	case m.mode == "search":
+		// The trailing caret marks the field as live: the term is empty for as
+		// long as it takes to type the first character.
+		return ui.Toggle{Label: "Search", Value: term + "_", Tone: ui.ToggleInfo}, true
+	case m.searchTerm == "":
+		return ui.Toggle{}, false
+	case len(m.searchMatches) == 0:
+		return ui.Toggle{Label: "Search", Value: fmt.Sprintf("%s(0)", term), Tone: ui.ToggleOff}, true
+	default:
+		return ui.Toggle{
+			Label: "Search",
+			Value: fmt.Sprintf("%s(%d/%d)", term, m.searchIndex+1, len(m.searchMatches)),
+			Tone:  ui.ToggleInfo,
+		}, true
+	}
 }
 
 func (m *Model) FrameFooter() string { return "" }

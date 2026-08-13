@@ -41,6 +41,29 @@ func TestRenderViewFrame_OccupiesExactlyHeight(t *testing.T) {
 	}
 }
 
+// TestRenderViewFrame_LongTitleKeepsTheHeight — the fullscreen title line is
+// centred in a fixed width, which wraps an over-long title onto further rows
+// and pushes the frame past the height it was given.
+func TestRenderViewFrame_LongTitleKeepsTheHeight(t *testing.T) {
+	title := strings.Repeat("Logs(a-long-stack/a-long-service)", 3)
+
+	fullscreen := RenderViewFrame(title, "hdr", "body", "ftr", 40, 8, true)
+	require.Equal(t, 8, lipgloss.Height(fullscreen))
+	for i, row := range strings.Split(fullscreen, "\n") {
+		require.LessOrEqual(t, lipgloss.Width(row), 40, "fullscreen row %d", i)
+	}
+
+	// The bordered layout draws to width+4; every row of the box, the title's
+	// top border included, has to be that same width.
+	framed := RenderViewFrame(title, "hdr", "body", "ftr", 40, 8, false)
+	require.Equal(t, 8, lipgloss.Height(framed))
+	rows := strings.Split(framed, "\n")
+	bottom := lipgloss.Width(rows[len(rows)-1])
+	for i, row := range rows {
+		require.Equal(t, bottom, lipgloss.Width(row), "framed row %d", i)
+	}
+}
+
 // TestRenderViewFrame_FullscreenKeepsHeaderAndFooter — fullscreen dropped the
 // footer while the caller had already reserved its rows.
 func TestRenderViewFrame_FullscreenKeepsHeaderAndFooter(t *testing.T) {

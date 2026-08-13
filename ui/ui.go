@@ -43,6 +43,18 @@ func styleFrameTitle(title string) string {
 	return FrameTitleStyle.Render(title)
 }
 
+// fitTitle truncates a title to the width the frame has for it. Neither layout
+// survives a title that overhangs: the bordered one clamps its padding at zero
+// and draws a top line wider than the rest of the box, and the fullscreen one
+// centres the title in a fixed width, which wraps it onto rows the frame never
+// budgeted for.
+func fitTitle(title string, width int) string {
+	if width < 1 || lipgloss.Width(title) <= width {
+		return title
+	}
+	return ansi.Truncate(title, width, "…")
+}
+
 // RenderFramedBox draws a bordered frame with title, optional header, and content.
 // If width <= 0, defaults to content width + padding.
 // ANSI sequences in content are preserved.
@@ -82,6 +94,8 @@ func RenderFramedBox(title, header, content, footer string, width int) string {
 			borderStyle.Render("┐"),
 		)
 	} else {
+		titleStyled = fitTitle(titleStyled, borderWidth)
+
 		// Top border with centered title
 		leftPad := (borderWidth - lipgloss.Width(titleStyled)) / 2
 		if leftPad < 0 {

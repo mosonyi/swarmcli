@@ -30,6 +30,10 @@ type Model struct {
 	lineTasks     []string // full task ID for each line (parallel to lines), "" if unparseable
 	MaxLines      int
 	ready         bool
+	// visibleCount is how many lines passed the filters the last time content
+	// was built. Cached there rather than counted in FrameTitle, which runs on
+	// every render over a buffer of up to MaxLines.
+	visibleCount int
 
 	ServiceEntry docker.ServiceEntry
 
@@ -147,6 +151,12 @@ func (m *Model) getWrap() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.wrap
+}
+
+func (m *Model) getVisibleCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.visibleCount
 }
 
 func (m *Model) getHideStopped() bool {

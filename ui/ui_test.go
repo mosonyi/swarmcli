@@ -44,6 +44,20 @@ func TestTruncateANSIAfter_WidthAware(t *testing.T) {
 	require.Equal(t, "", TruncateANSIAfter("hi", 10))
 }
 
+func TestRenderFramedBox_TruncatesAnOverlongTitle(t *testing.T) {
+	trueColour(t)
+
+	const w = 40
+	box := RenderFramedBox(strings.Repeat("Logs(a-very-long-stack/service)", 3), "", "line", "", w)
+
+	lines := strings.Split(box, "\n")
+	require.Greater(t, len(lines), 2)
+	for i, line := range lines {
+		require.Equal(t, w, lipgloss.Width(line), "line %d must not overhang the box", i)
+	}
+	require.Contains(t, lines[0], "…", "the cut is marked")
+}
+
 // Regression for issue #369: the centered overlay must keep its left border on
 // the same display column for every row, even when the background log lines
 // contain wide characters at differing positions. The old rune-counting

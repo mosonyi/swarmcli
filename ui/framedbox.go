@@ -19,7 +19,7 @@ func RenderViewFrame(title, header, content, footer string, width, height int, f
 		titleLine := lipgloss.NewStyle().
 			Width(width).
 			Align(lipgloss.Center).
-			Render(styleFrameTitle(title))
+			Render(fitTitle(styleFrameTitle(title), width))
 
 		rows := []string{titleLine}
 		if header != "" {
