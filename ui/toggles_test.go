@@ -33,45 +33,42 @@ func sampleToggles() []Toggle {
 	}
 }
 
-func TestToggleRow_SpreadsToWidth(t *testing.T) {
+func TestToggleRow_CentersTheBlock(t *testing.T) {
 	trueColour(t)
 
-	row := ToggleRow(sampleToggles(), 100)
+	const width = 100
+	stripped := ansi.Strip(ToggleRow(sampleToggles(), width))
 
-	require.Equal(t, 100, lipgloss.Width(row), "row should end flush with the right edge")
-	stripped := ansi.Strip(row)
+	// The items keep their own gap and the slack stays outside them: on a wide
+	// terminal a spread row puts the first and last item on opposite edges.
 	require.Regexp(t,
-		`^Autoscroll:On +Wrap:Off +Node:worker-1 +Stopped:Hidden$`,
+		`^ +Autoscroll:On {3}Wrap:Off {3}Node:worker-1 {3}Stopped:Hidden$`,
+		stripped)
+
+	left := len(stripped) - len(strings.TrimLeft(stripped, " "))
+	right := width - len(stripped)
+	require.LessOrEqual(t, abs(left-right), 1, "block is centred: %d left, %d right", left, right)
+}
+
+func TestToggleRow_TightensGapsBeforeDropping(t *testing.T) {
+	trueColour(t)
+
+	// 48 columns of items: too narrow for the full gap, wide enough to keep
+	// every item at a tighter one. An item dropped here would be information
+	// lost to spacing.
+	stripped := ansi.Strip(ToggleRow(sampleToggles(), 52))
+
+	require.NotContains(t, stripped, "…")
+	require.Regexp(t,
+		`^ *Autoscroll:On +Wrap:Off +Node:worker-1 +Stopped:Hidden$`,
 		stripped)
 }
 
-func TestToggleRow_GapsAreEven(t *testing.T) {
-	trueColour(t)
-
-	// The slack is shared out rather than parked in one gap: no two gaps may
-	// differ by more than the one-space remainder.
-	stripped := ansi.Strip(ToggleRow(sampleToggles(), 100))
-
-	var gaps []int
-	run := 0
-	for _, r := range stripped {
-		if r == ' ' {
-			run++
-			continue
-		}
-		if run > 0 {
-			gaps = append(gaps, run)
-			run = 0
-		}
+func abs(n int) int {
+	if n < 0 {
+		return -n
 	}
-	require.Len(t, gaps, 3)
-
-	widest, narrowest := gaps[0], gaps[0]
-	for _, g := range gaps {
-		widest = max(widest, g)
-		narrowest = min(narrowest, g)
-	}
-	require.LessOrEqual(t, widest-narrowest, 1)
+	return n
 }
 
 func TestToggleRow_IsAlwaysOneLine(t *testing.T) {

@@ -37,14 +37,21 @@ type Toggle struct {
 	Tone  ToggleTone
 }
 
-// ToggleRow renders items as "Label:Value" spread evenly across width, so a
-// view's options read at a glance instead of hiding in prose. The result is
-// always a single line no wider than width: the row is a frame header, and a
-// header that grows a second line silently shrinks the content the frame draws.
+// toggleGap is the space between items once they all fit. The slack is not
+// handed to the gaps beyond it: on a wide terminal that pushes the items to
+// opposite edges, where they read as four unrelated labels rather than as one
+// status row. It matches the help bar's column gap.
+const toggleGap = 3
+
+// ToggleRow renders items as "Label:Value", gapped by toggleGap and centred in
+// width, so a view's options read at a glance instead of hiding in prose. The
+// result is always a single line no wider than width: the row is a frame
+// header, and a header that grows a second line silently shrinks the content
+// the frame draws.
 //
-// When the items do not fit they are dropped from the right and the cut is
-// marked with "…", rather than truncated mid-item — a value cut to "Hid" reads
-// as a state rather than as missing text.
+// A narrowing terminal closes the gaps first and only then drops items, from
+// the right, marking the cut with "…" rather than truncating mid-item — a value
+// cut to "Hid" reads as a state rather than as missing text.
 func ToggleRow(items []Toggle, width int) string {
 	if len(items) == 0 {
 		return ""
@@ -60,16 +67,20 @@ func ToggleRow(items []Toggle, width int) string {
 		total += lipgloss.Width(rendered[i])
 	}
 
-	// Everything fits: hand the slack to the gaps between items.
-	if total+len(rendered)-1 <= width {
-		return spreadRow(rendered, width, total)
+	// Everything fits at a one-space gap: take the widest gap width affords.
+	if gaps := len(rendered) - 1; total+gaps <= width {
+		gap := toggleGap
+		if gaps > 0 {
+			gap = min(toggleGap, (width-total)/gaps)
+		}
+		return centerRow(strings.Join(rendered, strings.Repeat(" ", gap)), width)
 	}
 
 	for len(rendered) > 1 {
 		rendered = rendered[:len(rendered)-1]
 		line := strings.Join(rendered, " ") + " …"
 		if lipgloss.Width(line) <= width {
-			return line
+			return centerRow(line, width)
 		}
 	}
 	return ansi.Truncate(rendered[0], width, "…")
@@ -87,27 +98,13 @@ func renderToggle(item Toggle) string {
 	return titleLabelStyle.Render(item.Label+":") + value.Render(item.Value)
 }
 
-// spreadRow distributes width-total spaces across the gaps between items, the
-// remainder going to the leftmost gaps, so the row ends flush with the right
-// edge. total is the summed width of items.
-func spreadRow(items []string, width, total int) string {
-	gaps := len(items) - 1
-	if gaps == 0 {
-		return items[0]
+// centerRow pads a row so it sits in the middle of width, under the centred
+// frame title it belongs to. There is no trailing padding: the frame pads every
+// line it draws to its own width.
+func centerRow(row string, width int) string {
+	pad := (width - lipgloss.Width(row)) / 2
+	if pad <= 0 {
+		return row
 	}
-
-	slack := width - total
-	var b strings.Builder
-	for i, item := range items {
-		b.WriteString(item)
-		if i == gaps {
-			break
-		}
-		gap := slack / gaps
-		if i < slack%gaps {
-			gap++
-		}
-		b.WriteString(strings.Repeat(" ", gap))
-	}
-	return b.String()
+	return strings.Repeat(" ", pad) + row
 }
