@@ -276,7 +276,7 @@ Pushing a `v*` tag triggers the [release workflow](.github/workflows/release.yml
 4. Pushes a multi-arch Docker image to Docker Hub
 5. Updates the [Homebrew tap](https://github.com/Eldara-Tech/homebrew-tap) and [Scoop bucket](https://github.com/Eldara-Tech/scoop-bucket)
 
-A tag here publishes the **`-oss` half** of a release — `swarmcli-oss_*`
+A tag here publishes the **`oss` half** of a release — `swarmcli_*_oss`
 archives, `checksums-oss.txt`, `eldaratech/swarmcli:<tag>-oss`, and the
 `swarmcli-oss` cask and manifest. The unsuffixed names and `:latest` belong to
 the Business Edition build, which is tagged in a second repository at the same

@@ -105,12 +105,28 @@ builds:
         - ./scripts/check-oss-artefact.sh "{{ .Path }}"
 
 archives:
-  # swarmcli-oss, not swarmcli. The plain name belongs to the merged artefact,
-  # which is built from the private swarmcli-be wrapper and published into this
-  # repository's releases — so both pipelines write into the same GitHub release,
-  # and leaving the plain name here would have them overwrite each other's
-  # archives with whichever finished last. The two produce identically-named
-  # assets today, ten for ten.
+  # `_oss` at the end, not `swarmcli-oss` at the front. The plain name belongs to
+  # the merged artefact, which is built from the private swarmcli-be wrapper and
+  # published into this repository's releases — so both pipelines write into the
+  # same GitHub release, and leaving the plain name here would have them
+  # overwrite each other's archives with whichever finished last. The two
+  # produce identically-named assets today, ten for ten.
+  #
+  # Where the qualifier sits decides what a release page shows first. GitHub
+  # renders assets sorted by lower(name) in codepoint order — upload order and
+  # which pipeline finished last do not enter into it — so a `swarmcli-oss_`
+  # prefix put all eleven Apache-2.0 archives above every merged one (`-` is
+  # 0x2D, `_` is 0x5F). The releases *index* shows only the first ten assets of
+  # a release behind "Show all N assets", which meant the default artefact was
+  # not on that page at all. As a suffix, `.` (0x2E) precedes `_` (0x5F), so
+  # each merged archive sorts immediately above its -oss twin and the first
+  # artefact row is the default build. Verified by upload rather than reasoned
+  # about: probe assets list `probe_Linux_x86_64.tar.gz` before
+  # `probe_Linux_x86_64_oss.tar.gz` whatever order they are uploaded in.
+  #
+  # A prefixed `swarmcli_oss_` would NOT do this: `o` sorts after `l` but before
+  # `w`, landing the whole -oss set between the merged Linux and Windows
+  # archives.
   #
   # The binary *inside* is still `swarmcli`, and `project_name` is deliberately
   # untouched: the four builds below declare no `binary:` field, so it defaults
@@ -121,12 +137,12 @@ archives:
   # build says about itself — see docs/editions.md.
   - id: oss
     name_template: >-
-      {{ .ProjectName }}-oss_
+      {{ .ProjectName }}_
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
-      {{- if .Arm }}v{{ .Arm }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}_oss
     format_overrides:
       - goos: windows
         formats:
