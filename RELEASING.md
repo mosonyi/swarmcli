@@ -10,13 +10,13 @@ notes from PR labels, publishes binary archives with GoReleaser, updates the
 Homebrew cask and the Scoop manifest, and pushes a multi-arch image to Docker
 Hub. Nothing is run by hand.
 
-**This repository publishes the `-oss` half of a release, not the whole of it.**
+**This repository publishes the `oss` half of a release, not the whole of it.**
 Each release carries two artefacts ([docs/editions.md](docs/editions.md)):
 
 | Artefact | Tagged in | Publishes |
 |---|---|---|
 | `swarmcli_*`, `eldaratech/swarmcli:<tag>`, `:latest`, cask + manifest `swarmcli` | the private `swarmcli-be` wrapper | into **this** repository's releases, under `RELEASE_TOKEN` |
-| `swarmcli-oss_*`, `eldaratech/swarmcli:<tag>-oss`, cask + manifest `swarmcli-oss` | here | into this repository's releases |
+| `swarmcli_*_oss`, `eldaratech/swarmcli:<tag>-oss`, cask + manifest `swarmcli-oss` | here | into this repository's releases |
 
 So a release needs **two tags, one in each repository, carrying the same version
 string** — and the public one first.
@@ -29,11 +29,17 @@ string** — and the public one first.
   after the tag it was invoked with*, so this tag creating the release first is
   what gives the private run something to add to.
 - Nothing collides, and that is by construction rather than by luck: the
-  archives here are `swarmcli-oss_*`, the checksum file is `checksums-oss.txt`,
+  archives here are `swarmcli_*_oss`, the checksum file is `checksums-oss.txt`,
   and the image tag carries an `-oss` suffix. The merged pipeline writes
   `swarmcli_*`, `checksums-merged.txt` and the unsuffixed image tags, and it
   refuses to run if this repository at the pinned tag has gone back to the plain
   archive names.
+- The qualifier is a **suffix** on the archives, and moving it to the front
+  would be a regression rather than a tidy-up. GitHub renders a release's assets
+  sorted by lower(name) in codepoint order, so `swarmcli-oss_…` put all eleven
+  archives from this repository above every artefact of the default build, and
+  the releases index — ten assets per release, then "Show all N" — showed none
+  of the default build at all. `.goreleaser.yml` carries the arithmetic.
 
 **A tag pushed here on its own no longer moves `:latest`,** and publishes no
 unsuffixed image tag at all. `:latest` is the merged artefact; two pipelines
@@ -84,7 +90,7 @@ goreleaser check
 goreleaser release --snapshot --clean --skip=docker
 ```
 
-Then read `dist/`: eleven `swarmcli-oss_*` archives plus `checksums-oss.txt`,
+Then read `dist/`: eleven `swarmcli_*_oss` archives plus `checksums-oss.txt`,
 `dist/homebrew/Casks/swarmcli-oss.rb` and `dist/scoop/swarmcli-oss.json`. The
 per-build hook runs `scripts/check-oss-artefact.sh` on every binary as it is
 produced, so a snapshot that completes has already proved the artefact claim.
@@ -94,7 +100,7 @@ Confirm the executable inside an archive is still `swarmcli`, not
 `tar xzf … swarmcli` and every documented invocation depend on it:
 
 ```bash
-tar tzf dist/swarmcli-oss_Linux_x86_64.tar.gz
+tar tzf dist/swarmcli_Linux_x86_64_oss.tar.gz
 ```
 
 Know what the rehearsal omits: `--snapshot` skips GoReleaser's git-state
@@ -122,10 +128,10 @@ Homebrew tap and the Scoop bucket.
 gh release view v1.14.0 --repo Eldara-Tech/swarmcli
 
 # The OSS half, before the merged one lands:
-#   11 archives + checksums-oss.txt, and no swarmcli_* asset yet.
+#   11 archives, every one of them ending _oss, plus checksums-oss.txt.
 
-curl -sSLO https://github.com/Eldara-Tech/swarmcli/releases/download/v1.14.0/swarmcli-oss_Linux_x86_64.tar.gz
-tar xzf swarmcli-oss_Linux_x86_64.tar.gz && ./swarmcli version
+curl -sSLO https://github.com/Eldara-Tech/swarmcli/releases/download/v1.14.0/swarmcli_Linux_x86_64_oss.tar.gz
+tar xzf swarmcli_Linux_x86_64_oss.tar.gz && ./swarmcli version
 # 1.14.0 (oss build, chart engine 1.14.0)
 
 docker buildx imagetools inspect eldaratech/swarmcli:v1.14.0-oss
