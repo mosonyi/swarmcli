@@ -12,7 +12,7 @@ a licence. This page is what each of them is.
 | | Built from | Contains | Licence |
 |---|---|---|---|
 | `swarmcli_*` archives, `eldaratech/swarmcli:<tag>`, `:latest`, the `swarmcli` Homebrew cask and Scoop manifest | a private build wrapper around this repository | this repository, plus licensed code that is **inert** without a licence | this repository's code is Apache-2.0; the licensed code is proprietary |
-| `swarmcli-oss_*` archives, `eldaratech/swarmcli:<tag>-oss`, the `swarmcli-oss` cask and manifest | this repository, and nothing else | this repository, and nothing else | wholly Apache-2.0 |
+| `swarmcli_*_oss` archives, `eldaratech/swarmcli:<tag>-oss`, the `swarmcli-oss` cask and manifest | this repository, and nothing else | this repository, and nothing else | wholly Apache-2.0 |
 
 The command inside both archives is `swarmcli`. Every invocation in these docs,
 every script, alias and CI job is identical for the two, deliberately: the
@@ -89,7 +89,7 @@ key, and what each feature does.
 
 ```bash
 # The archive, from any release:
-curl -sSLO https://github.com/Eldara-Tech/swarmcli/releases/download/v1.14.0/swarmcli-oss_Linux_x86_64.tar.gz
+curl -sSLO https://github.com/Eldara-Tech/swarmcli/releases/download/v1.14.0/swarmcli_Linux_x86_64_oss.tar.gz
 
 # The image:
 docker pull eldaratech/swarmcli:v1.14.0-oss
