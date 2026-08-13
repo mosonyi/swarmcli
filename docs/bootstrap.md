@@ -118,10 +118,13 @@ three cert files above.
 4.  Wait for the run to complete. The view reports success or the
     underlying error.
 
-5.  Switch to the new context:
-      :contexts  →  select "<original>-managed"
+5.  Nothing to do. The summary stays on screen while SwarmCLI waits for
+    the rbac-proxy it just deployed to answer, then switches to the new
+    context by itself and reloads the cluster through it.
 
-    SwarmCLI is now talking through the proxy with the admin client cert.
+    Esc stops the wait and leaves you on the original context; you can
+    switch later with :contexts. See "After bootstrap" for the cases
+    where the switch does not happen on its own.
 ```
 
 To skip the interactive prompt, pass `--port`:
@@ -191,10 +194,25 @@ The new context is also visible via:
 docker context ls
 ```
 
-Switch to it from the TUI with `:contexts`. SwarmCLI picks up the managed
-context's client certificate automatically — no environment variables to
-set. From then on, every Docker API call goes through the rbac-proxy and
-is authenticated as `admin`.
+SwarmCLI switches to it for you. A freshly deployed proxy is not reachable
+the moment the stack is deployed, so the success screen stays up while the
+new context is polled, and the switch happens once it answers — normally a
+few seconds. From then on every Docker API call goes through the rbac-proxy
+and is authenticated as `admin`; the client certificate is picked up from
+the context, with no environment variables to set.
+
+The switch does not happen on its own in three cases, each of which says so
+on the success screen and leaves you where you were:
+
+- **`DOCKER_CONTEXT` is set.** That variable takes precedence over the
+  active context, so switching would have no effect on the running session.
+  Unset it and use `:contexts`, or restart with the managed context named.
+- **The proxy never answers.** Something is wrong with the deployment or
+  the host is not reachable from your workstation — see
+  [Troubleshooting](troubleshooting.md#bootstrap).
+- **You pressed Esc** during the wait.
+
+`:contexts` remains the way to switch by hand, at any time.
 
 To add additional users with their own certificates and roles, see
 [`rbac.md`](rbac.md).

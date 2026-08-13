@@ -74,6 +74,16 @@ down (the four commands in
 re-run with `:bootstrap --host <reachable-host>` to bake the right value
 into the cert SAN and the context endpoint.
 
+**Bootstrap succeeds but does not switch to the managed context.**
+The success screen says which of the three reasons applies. If it names
+`DOCKER_CONTEXT`, that variable takes precedence over the active context, so
+`docker context use` — and therefore the switch — would not affect the running
+session; unset it and use `:contexts`. If it reports that the proxy did not
+answer, the deployment or the proxy host's reachability is the real problem —
+work through *"the new managed context cannot connect"* and *"port-in-use"*
+above. If you pressed Esc, the wait was cancelled on purpose. In every case
+`:contexts` still switches by hand.
+
 **`:bootstrap --check` reports `agent-manager: false` but `agent: true`.**
 The agent-manager service is not running on a manager. Inspect with
 `docker service ps swarmcli-infra_agent-manager` and look at the latest
