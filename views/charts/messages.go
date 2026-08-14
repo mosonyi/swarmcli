@@ -21,8 +21,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// PollInterval matches the other resource views.
-const PollInterval = 5 * time.Second
+// PollInterval matches the other resource views. It is a var, not a const, so
+// tests can shrink it: a tea.Tick cmd invoked synchronously blocks for the full
+// interval, and a test that runs one to see what it scheduled would otherwise
+// sit here for five seconds.
+var PollInterval = 5 * time.Second
 
 // loadTimeout bounds one read of the release records. The whole read is a
 // single Docker config listing plus cached snapshot reads, so this is a

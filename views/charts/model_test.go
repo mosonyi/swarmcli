@@ -155,6 +155,15 @@ func loadReleases(t *testing.T, m *Model, all map[string][]charts.Release, svcs 
 	m.Update(loaded)
 }
 
+// fastPoll shrinks the poll interval for a test that executes a returned tick
+// cmd. tea.Tick sleeps, so running one at the real interval stalls the suite.
+func fastPoll(t *testing.T) {
+	t.Helper()
+	original := PollInterval
+	PollInterval = time.Millisecond
+	t.Cleanup(func() { PollInterval = original })
+}
+
 func names(m *Model) []string {
 	out := make([]string, 0, len(m.list.Filtered))
 	for _, r := range m.list.Filtered {
@@ -472,6 +481,91 @@ func TestUnparseableCreatedRendersADash(t *testing.T) {
 
 	require.True(t, m.list.Filtered[0].Created.IsZero())
 	require.Equal(t, "—", formatCreated(m.list.Filtered[0].Created))
+}
+
+// A tick must schedule exactly one successor, or the ticker multiplies and the
+// poll rate doubles on every beat.
+func TestTickAlwaysSchedulesExactlyOneSuccessor(t *testing.T) {
+	fastPoll(t)
+	m := testModel()
+	loadReleases(t, m, map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}, nil)
+
+	// Ready and visible: a poll plus exactly one re-arm.
+	require.Equal(t, 1, countTicks(m.Update(TickMsg(time.Now()))))
+
+	// A poll that found nothing new re-arms the ticker and nothing else.
+	require.Equal(t, 1, countTicks(m.Update(PollRetryMsg{})))
+
+	// Hidden: still exactly one, or the ticker dies while off screen.
+	m.SetVisible(false)
+	require.Equal(t, 1, countTicks(m.Update(TickMsg(time.Now()))))
+}
+
+// countTicks runs a cmd — flattening a tea.Batch — and counts how many of the
+// messages it produces are TickMsg. More than one means the ticker multiplies
+// and the poll rate doubles on every beat.
+func countTicks(cmd tea.Cmd) int {
+	if cmd == nil {
+		return 0
+	}
+	n := 0
+	var walk func(tea.Cmd)
+	walk = func(c tea.Cmd) {
+		if c == nil {
+			return
+		}
+		switch msg := c().(type) {
+		case tea.BatchMsg:
+			for _, sub := range msg {
+				walk(sub)
+			}
+		case TickMsg:
+			n++
+		}
+	}
+	walk(cmd)
+	return n
+}
+
+// While the view is off screen or showing an error, the ticker keeps beating
+// but must not poll: the data would be thrown away, and an error dialog would
+// be fighting a refresh behind it.
+func TestTickDoesNotPollWhenHiddenOrErrored(t *testing.T) {
+	fastPoll(t)
+	m := testModel()
+	loadReleases(t, m, map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}, nil)
+
+	m.ops = &mockOps{allRevisionsFn: func(_ context.Context) (map[string][]charts.Release, error) {
+		t.Error("the view must not poll while hidden or errored")
+		return nil, nil
+	}}
+
+	m.SetVisible(false)
+	runCmd(m.Update(TickMsg(time.Now())))
+
+	m.SetVisible(true)
+	m.errorDialogActive = true
+	runCmd(m.Update(TickMsg(time.Now())))
+}
+
+func TestResizeKeepsTheViewportAnchoredOnFirstSize(t *testing.T) {
+	m := testModel()
+	loadReleases(t, m, map[string][]charts.Release{
+		"a": deployed("a", "c", "1.0.0"),
+		"b": deployed("b", "c", "1.0.0"),
+	}, nil)
+
+	m.list.Viewport.YOffset = 7
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	require.Equal(t, 0, m.list.Viewport.YOffset, "the first resize anchors to the top")
+	require.Equal(t, 100, m.width)
+
+	// Later resizes only re-anchor while the cursor is at the top, so a
+	// scrolled list is not yanked back under the operator.
+	m.Update(key("down"))
+	m.list.Viewport.YOffset = 5
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	require.Equal(t, 5, m.list.Viewport.YOffset)
 }
 
 func TestCursorSurvivesAReloadThatReordersNothing(t *testing.T) {
