@@ -14,7 +14,10 @@ const ViewName = "charts"
 // readOnlyHint is always on screen. The view deliberately cannot change a
 // release, and an operator should learn where that lives without having to
 // press a key and be told no.
-const readOnlyHint = "Read-only · manage releases with `swarmcli charts install|upgrade|rollback|uninstall`"
+// It is kept short enough to survive an 80-column frame: the full command list
+// overflowed the border and read as a truncated sentence, and `?` carries the
+// verbs anyway.
+const readOnlyHint = "Read-only · change releases with `swarmcli charts` (? for how)"
 
 func l() *swarmlog.SwarmLogger {
 	return swarmlog.L().With("views", "charts")

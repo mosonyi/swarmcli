@@ -29,7 +29,8 @@ func formatCreated(t time.Time) string {
 }
 
 // buildColumns declares the release table columns for the shared content-aware
-// layout. NAME and CHART flex; the rest size to content.
+// layout. NAME and CHART flex — they give up width first on a narrow terminal
+// and scroll when truncated — while the trailing column is the one that grows.
 //
 // STATUS and HEALTH are both present on purpose: the first is the record we
 // wrote when we deployed, the second is what the swarm is doing now.
@@ -40,16 +41,22 @@ func (m *Model) buildColumns() []filterlist.Column[releaseItem] {
 		{Label: "STATUS", MinWidth: 6, Cell: func(r releaseItem) string { return displayOrDash(r.status()) }},
 		{Label: "HEALTH", MinWidth: 6, Cell: func(r releaseItem) string { return r.healthLabel() }},
 		{Label: "CHART", MinWidth: 5, Flex: true, Cell: func(r releaseItem) string { return r.chartRef() }},
-		{Label: "UPDATED", MinWidth: 16, Cell: func(r releaseItem) string { return formatCreated(r.Created) }},
-		{Label: "UPD", MinWidth: 3, Cell: m.updCell},
+		// Next to CHART, because it is the version that chart could be at.
+		{Label: "LATEST", MinWidth: 6, Cell: m.updCell},
+		// Grow, not Flex: the leftover on a wide terminal lands after the last
+		// cell, where it reads as margin, instead of being split between NAME and
+		// CHART and opening a void in the middle of every row. Its floor equals
+		// the timestamp it renders, so it never gives width back either.
+		{Label: "UPDATED", MinWidth: 16, Grow: true, Cell: func(r releaseItem) string { return formatCreated(r.Created) }},
 	}
 }
 
-// updCell distinguishes the two reasons a release has no newer version, which
-// an empty cell would run together: nothing newer is published, versus this
-// machine has no cached index to compare against. The second is "?" rather
-// than a footer line because it is a per-row fact and the footer is already
-// carrying the counts, the convergence reason and the read-only hint.
+// updCell fills the LATEST column, distinguishing the two reasons a release has
+// no newer version, which an empty cell would run together: nothing newer is
+// published, versus this machine has no cached index to compare against. The
+// second is "?" rather than a footer line because it is a per-row fact and the
+// footer is already carrying the counts, the convergence reason and the
+// read-only hint.
 func (m *Model) updCell(r releaseItem) string {
 	if r.Latest != "" {
 		return r.Latest
@@ -75,7 +82,7 @@ func (m *Model) sortColumnIndex() int {
 	case SortByChart:
 		return 4
 	case SortByUpdated:
-		return 5
+		return 6
 	}
 	return 0
 }

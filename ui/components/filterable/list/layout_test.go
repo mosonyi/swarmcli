@@ -110,3 +110,53 @@ func TestScrollWindow_RuneAware(t *testing.T) {
 	// Windowed content still truncates with an ellipsis when more remains.
 	require.Equal(t, "bcde…", ScrollWindow("abcdefgh", 1, 5))
 }
+
+// growCols separates the two elasticities: NAME gives up width when squeezed
+// and scrolls when truncated, while the trailing column takes the leftover.
+func growCols() []Column[row] {
+	return []Column[row]{
+		{Label: "NAME", MinWidth: 4, Flex: true, Cell: func(r row) string { return r.a }},
+		{Label: "KIND", MinWidth: 4, Cell: func(r row) string { return r.b }},
+		{Label: "LABELS", MinWidth: 6, Grow: true, Cell: func(r row) string { return r.c }},
+	}
+}
+
+// Slack goes to the Grow column, so the columns before it stay put however wide
+// the terminal gets. A table of short values is where that matters: growing a
+// middle column opens a void in the middle of every row.
+func TestLayoutWidths_GrowAbsorbsSlackNotFlex(t *testing.T) {
+	items := []row{{a: "short", b: "kind", c: "x=1"}}
+
+	narrow := LayoutWidths(growCols(), items, 60, -1)
+	wide := LayoutWidths(growCols(), items, 200, -1)
+
+	require.Equal(t, narrow[0], wide[0], "the flex column must not absorb slack")
+	require.Equal(t, narrow[1], wide[1])
+	require.Greater(t, wide[2], narrow[2], "the grow column takes it instead")
+	require.Equal(t, 200, sum(wide), "and the row still spans the width")
+}
+
+// A view that declares no Grow keeps the behaviour it had before Grow existed,
+// so adding the field changed nothing for the views already using Flex.
+func TestLayoutWidths_FlexStillAbsorbsWhenNoGrowDeclared(t *testing.T) {
+	items := []row{{a: "short", b: "kind", c: "x=1"}}
+
+	narrow := LayoutWidths(testCols(), items, 60, -1)
+	wide := LayoutWidths(testCols(), items, 200, -1)
+
+	require.Greater(t, wide[0], narrow[0], "the flex columns still share the slack")
+	require.Greater(t, wide[2], narrow[2])
+	require.Equal(t, 200, sum(wide))
+}
+
+// Grow is about width the table does not need; it must not rescue a column from
+// shrinking when the terminal is too narrow for the content.
+func TestLayoutWidths_GrowColumnStillShrinksWhenNarrow(t *testing.T) {
+	items := []row{{a: "a-fairly-long-name-here", b: "kind", c: "team=platform,env=prod"}}
+
+	w := LayoutWidths(growCols(), items, 40, -1)
+	require.LessOrEqual(t, sum(w), 40)
+	for i, c := range growCols() {
+		require.GreaterOrEqual(t, w[i]-ColGap, displayWidth(c.Label), "column %d must still fit its label", i)
+	}
+}

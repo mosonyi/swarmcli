@@ -202,6 +202,6 @@ func TestUpdColumnShowsTheNewerVersion(t *testing.T) {
 	require.Empty(t, byName["local"].Latest, "a chart in no index has nothing to be outdated against")
 
 	out := m.View()
-	require.Contains(t, out, "UPD")
+	require.Contains(t, out, "LATEST", "the header names the column")
 	require.Contains(t, out, "2.0.0")
 }

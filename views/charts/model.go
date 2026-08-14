@@ -60,7 +60,7 @@ type Model struct {
 	childIndex int
 
 	// haveIndexes reports whether any cached repository index backed the last
-	// read. Without one the UPD column is empty for every release, which must
+	// read. Without one the LATEST column is empty for every release, which must
 	// not be mistaken for "everything is up to date".
 	haveIndexes bool
 

@@ -21,7 +21,7 @@ func GetChartsHelpContent() []helpview.HelpCategory {
 			},
 		},
 		{
-			Title: "The UPD column",
+			Title: "The LATEST column",
 			Items: []helpview.HelpItem{
 				{Keys: "0.2.0", Description: "A newer chart version is published in a cached repository index"},
 				{Keys: "—", Description: "Nothing newer, or the chart is in no index (a local chart)"},
@@ -51,7 +51,7 @@ func GetChartsHelpContent() []helpview.HelpCategory {
 				{Keys: "<ctrl+d>", Description: "Show the `charts uninstall` command for this release"},
 				{Keys: "install", Description: "swarmcli charts install <release> <repo/chart>"},
 				{Keys: "apply", Description: "swarmcli charts apply -f swarmcli-release.yaml"},
-				{Keys: "repo update", Description: "swarmcli charts repo update  (populates the UPD column)"},
+				{Keys: "repo update", Description: "swarmcli charts repo update  (populates the LATEST column)"},
 			},
 		},
 		{

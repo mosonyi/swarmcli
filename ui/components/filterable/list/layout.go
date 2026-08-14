@@ -14,10 +14,26 @@ import (
 // derive widths, the header, and each row from the same set so they can never
 // drift out of alignment.
 type Column[T any] struct {
-	Label    string         // header label; also the no-truncate width floor
-	MinWidth int            // declared content floor (excludes the inter-column gap)
-	Flex     bool           // absorbs leftover slack; horizontally scrolls when truncated on a selected row
-	Cell     func(T) string // extracts the plain cell text (the closure may capture model state)
+	Label    string // header label; also the no-truncate width floor
+	MinWidth int    // declared content floor (excludes the inter-column gap)
+	// Flex marks a column as elastic downwards: it gives up width first when the
+	// terminal is too narrow, and horizontally scrolls when truncated on a
+	// selected row.
+	Flex bool
+	// Grow marks the column that absorbs leftover width when the terminal is
+	// wider than the content needs.
+	//
+	// It is separate from Flex because the two are not the same property, and a
+	// table of short values makes that obvious: flexing NAME so a long one can
+	// scroll on an 80-column terminal also hands it half the slack on a
+	// 200-column one, opening a void in the middle of every row. Declaring Grow
+	// on the trailing column instead puts the leftover after the last cell,
+	// where it reads as margin.
+	//
+	// When no column declares Grow the Flex columns absorb the slack, which is
+	// what every view did before Grow existed.
+	Grow bool
+	Cell func(T) string // extracts the plain cell text (the closure may capture model state)
 }
 
 // ColGap is the guaranteed minimum space between adjacent columns, baked into
@@ -88,6 +104,8 @@ func LayoutWidths[T any](cols []Column[T], items []T, totalWidth, sortCol int) [
 	content := make([]int, n)
 	floors := make([]int, n)
 	flex := make([]bool, n)
+	grow := make([]bool, n)
+	anyGrow := false
 	sum := 0
 	for i, c := range cols {
 		// Floor: the header label is never truncated by the renderer, so a column
@@ -115,6 +133,8 @@ func LayoutWidths[T any](cols []Column[T], items []T, totalWidth, sortCol int) [
 		floors[i] = fl
 		content[i] = w
 		flex[i] = c.Flex
+		grow[i] = c.Grow
+		anyGrow = anyGrow || c.Grow
 		sum += w
 	}
 
@@ -128,8 +148,13 @@ func LayoutWidths[T any](cols []Column[T], items []T, totalWidth, sortCol int) [
 	need := sum + ColGap*n
 	switch {
 	case need < totalWidth:
-		// Hand the leftover to flex columns (first flex column via the remainder).
-		distributeSlack(content, flex, totalWidth-need)
+		// Hand the leftover to the Grow columns, falling back to the Flex ones
+		// for a view that declares none — see Column.Grow.
+		absorb := grow
+		if !anyGrow {
+			absorb = flex
+		}
+		distributeSlack(content, absorb, totalWidth-need)
 	case need > totalWidth:
 		shrinkColumns(content, floors, flex, need-totalWidth)
 	}

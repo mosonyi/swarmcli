@@ -44,7 +44,7 @@ type SpinnerTickMsg time.Time
 type ReleasesLoadedMsg struct {
 	Releases []releaseItem
 	// HaveIndexes reports whether there were cached repository indexes to
-	// compare versions against. Without them the UPD column is empty for every
+	// compare versions against. Without them the LATEST column is empty for every
 	// release, which must not read as "everything is up to date".
 	HaveIndexes bool
 	Err         error

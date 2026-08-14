@@ -77,6 +77,44 @@ func TestResetScrollOnCursorMove(t *testing.T) {
 		"scroll offset must reset when the cursor moves")
 }
 
+// Widening the terminal must not push the columns apart.
+//
+// Release names and chart refs are short, so flexing them meant a 200-column
+// terminal handed each half the leftover and opened a void in the middle of
+// every row. Only the trailing column grows, so every column up to it sits at
+// the same place whatever the width.
+func TestWideTerminalDoesNotSpreadTheColumns(t *testing.T) {
+	// Short values on purpose: that is when growing a middle column shows as a
+	// void. Both widths are wider than the natural content, so nothing shrinks
+	// and any difference is growth.
+	short := map[string][]charts.Release{
+		"openclaw": deployed("openclaw", "openclaw", "0.1.0"),
+		"whoami":   deployed("whoami", "whoami", "0.1.9"),
+	}
+	positions := func(width int) map[string]int {
+		m := testModel()
+		m.list.Viewport.Width = width
+		loadReleases(t, m, short, nil)
+		header := m.list.RenderHeader()
+		out := map[string]int{}
+		for _, col := range []string{"REV", "STATUS", "HEALTH", "CHART", "LATEST"} {
+			out[col] = columnOf(t, header, col)
+		}
+		return out
+	}
+
+	narrow := positions(100)
+	wide := positions(240)
+	require.Equal(t, narrow, wide,
+		"a wider terminal must add margin after the last column, not between the others")
+
+	// And the row still spans the frame, so the selection highlight does too.
+	m := testModel()
+	m.list.Viewport.Width = 240
+	loadReleases(t, m, short, nil)
+	require.Equal(t, 240, lipgloss.Width(m.list.RenderRow(m.list.Filtered[0], true)))
+}
+
 // The sort arrow must land on the column the sort field names, or the header
 // tells the operator something false.
 func TestSortIndicatorTracksTheSortField(t *testing.T) {
