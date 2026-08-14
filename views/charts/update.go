@@ -83,10 +83,15 @@ func (m *Model) sortColumnIndex() int {
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case SpinnerTickMsg:
-		m.spinner++
-		if m.state == stateLoading {
-			m.list.Viewport.SetContent(m.list.View())
+		// Only while there is a spinner to animate. An unconditional re-arm
+		// keeps an 80ms wakeup chain alive for the life of the process, and
+		// the app builds a fresh model on every navigation here, so each
+		// visit would leave another one running.
+		if m.state != stateLoading {
+			return nil
 		}
+		m.spinner++
+		m.list.Viewport.SetContent(m.list.View())
 		return spinnerTickCmd()
 
 	case tea.WindowSizeMsg:
@@ -107,13 +112,21 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.handleReleasesLoaded(msg)
 
 	case TickMsg:
-		if m.visible && m.state == stateReady && !m.errorDialogActive {
-			return tea.Batch(m.checkReleasesCmd(m.lastSnapshot), tickCmd())
+		m.tickScheduled = false
+		// stateError is deliberately allowed through: one unreadable release
+		// record fails the whole listing, so a view that stopped polling on
+		// the first failure would stay blank until the operator navigated out
+		// and back in. stateLoading is not, because a load is already in
+		// flight.
+		if m.visible && !m.errorDialogActive && m.state != stateLoading {
+			// No re-arm here — the poll's result does it, so two polls can
+			// never be in flight at once.
+			return m.checkReleasesCmd(m.lastSnapshot)
 		}
-		return tickCmd()
+		return m.armTick()
 
 	case PollRetryMsg:
-		return tickCmd()
+		return m.armTick()
 
 	case tea.KeyMsg:
 		if m.errorDialogActive {
@@ -143,12 +156,17 @@ func (m *Model) handleReleasesLoaded(msg ReleasesLoadedMsg) tea.Cmd {
 		if m.state == stateReady && len(m.list.Items) > 0 {
 			l().Warnf("ChartsView: background refresh failed: %v", msg.Err)
 			m.showToast("Refresh failed (will retry)")
-			return nil
+			// Cleared here too: a failed load consumes the request just as a
+			// successful one does, and leaving it set would snap the cursor to
+			// the top on some later, unrelated poll.
+			m.resetCursorOnNextLoad = false
+			return m.armTick()
 		}
 		m.state = stateError
 		m.err = msg.Err
 		m.errorDialogActive = true
-		return nil
+		m.resetCursorOnNextLoad = false
+		return m.armTick()
 	}
 
 	selectedName := ""
@@ -185,9 +203,29 @@ func (m *Model) handleReleasesLoaded(msg ReleasesLoadedMsg) tea.Cmd {
 
 	m.applyPendingSelect()
 	m.clampChild()
+	m.pruneExpanded()
 	m.state = stateReady
+	m.err = nil
 	m.list.Viewport.SetContent(m.list.View())
-	return nil
+	return m.armTick()
+}
+
+// pruneExpanded drops expansion state for releases that are no longer listed,
+// so an uninstalled release that is later reinstalled does not come back
+// already open, and the map does not grow for the life of the view.
+func (m *Model) pruneExpanded() {
+	if len(m.expanded) == 0 {
+		return
+	}
+	live := make(map[string]struct{}, len(m.list.Items))
+	for _, it := range m.list.Items {
+		live[it.Name] = struct{}{}
+	}
+	for name := range m.expanded {
+		if _, ok := live[name]; !ok {
+			delete(m.expanded, name)
+		}
+	}
 }
 
 // applyPendingSelect honours a cross-link's requested release once there is a
@@ -407,21 +445,48 @@ func (m *Model) moveUp() {
 	}
 }
 
+// movePage advances the cursor by one screenful of RENDERED LINES.
+//
+// Counting items instead would page past several screens whenever a release is
+// expanded — one item can be twenty lines — and counting the viewport height
+// instead of the content region would overshoot by the frame, header and
+// footer rows on every press.
 func (m *Model) movePage(dir int) {
-	page := m.list.Viewport.Height
-	if page < 1 {
-		page = 10
+	if len(m.list.Filtered) == 0 {
+		return
 	}
-	m.list.Cursor += dir * page
-	if m.list.Cursor < 0 {
-		m.list.Cursor = 0
+	budget := m.contentLines()
+	i := m.list.Cursor
+	// The row the cursor is on occupies the screen too, so an expanded release
+	// under the cursor shortens the page rather than being travelled over for
+	// free.
+	used := m.itemLineCount(m.list.Filtered[i])
+	for {
+		next := i + dir
+		if next < 0 || next >= len(m.list.Filtered) {
+			break
+		}
+		used += m.itemLineCount(m.list.Filtered[next])
+		if used > budget {
+			break
+		}
+		i = next
 	}
-	if m.list.Cursor >= len(m.list.Filtered) {
-		m.list.Cursor = len(m.list.Filtered) - 1
+	// Always move at least one row, so a release taller than the screen does
+	// not make the key do nothing at all.
+	if i == m.list.Cursor {
+		i = m.list.Cursor + dir
 	}
-	if m.list.Cursor < 0 {
-		m.list.Cursor = 0
+	if i < 0 {
+		i = 0
 	}
+	if i >= len(m.list.Filtered) {
+		i = len(m.list.Filtered) - 1
+	}
+	if i < 0 {
+		i = 0
+	}
+	m.list.Cursor = i
 	m.childIndex = noChild
 	m.list.ResetColumnScroll()
 	m.list.Viewport.SetContent(m.list.View())

@@ -485,67 +485,127 @@ func TestUnparseableCreatedRendersADash(t *testing.T) {
 
 // A tick must schedule exactly one successor, or the ticker multiplies and the
 // poll rate doubles on every beat.
-func TestTickAlwaysSchedulesExactlyOneSuccessor(t *testing.T) {
-	fastPoll(t)
-	m := testModel()
-	loadReleases(t, m, map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}, nil)
-
-	// Ready and visible: a poll plus exactly one re-arm.
-	require.Equal(t, 1, countTicks(m.Update(TickMsg(time.Now()))))
-
-	// A poll that found nothing new re-arms the ticker and nothing else.
-	require.Equal(t, 1, countTicks(m.Update(PollRetryMsg{})))
-
-	// Hidden: still exactly one, or the ticker dies while off screen.
-	m.SetVisible(false)
-	require.Equal(t, 1, countTicks(m.Update(TickMsg(time.Now()))))
-}
-
-// countTicks runs a cmd — flattening a tea.Batch — and counts how many of the
-// messages it produces are TickMsg. More than one means the ticker multiplies
-// and the poll rate doubles on every beat.
-func countTicks(cmd tea.Cmd) int {
-	if cmd == nil {
-		return 0
-	}
-	n := 0
-	var walk func(tea.Cmd)
-	walk = func(c tea.Cmd) {
+// drive models the bubbletea runtime for one round: run each pending command,
+// flattening tea.Batch — whose inner commands the runtime runs, not the caller
+// — feed every resulting message back into Update, and return the commands
+// that came out. It reports how many TickMsgs fired during the round.
+//
+// Flattening is the whole reason this exists. Asserting on the command Update
+// returns cannot see past a batch, so a test written that way passes whatever
+// the batch contains.
+func drive(m *Model, pending []tea.Cmd) (next []tea.Cmd, ticks int) {
+	var run func(c tea.Cmd)
+	run = func(c tea.Cmd) {
 		if c == nil {
 			return
 		}
-		switch msg := c().(type) {
-		case tea.BatchMsg:
-			for _, sub := range msg {
-				walk(sub)
+		msg := c()
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			for _, sub := range batch {
+				run(sub)
 			}
-		case TickMsg:
-			n++
+			return
+		}
+		if _, ok := msg.(TickMsg); ok {
+			ticks++
+		}
+		if cmd := m.Update(msg); cmd != nil {
+			next = append(next, cmd)
 		}
 	}
-	walk(cmd)
-	return n
+	for _, c := range pending {
+		run(c)
+	}
+	return next, ticks
 }
 
-// While the view is off screen or showing an error, the ticker keeps beating
-// but must not poll: the data would be thrown away, and an error dialog would
-// be fighting a refresh behind it.
-func TestTickDoesNotPollWhenHiddenOrErrored(t *testing.T) {
+// The poll loop must be a loop, not a tree. A tick that starts a poll and
+// re-arms, while the poll's result re-arms too, yields two successors per beat
+// — and each of those does the same, so an idle view climbs into thousands of
+// concurrent reads within a minute.
+func TestPollLoopDoesNotMultiply(t *testing.T) {
+	fastPoll(t)
+	m := testModel()
+	// Steady state: the poll finds exactly what is loaded, so it reports no
+	// change. That is what a browser left open does all day.
+	all := map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}
+	loadReleases(t, m, all, nil)
+
+	sawRetry := false
+	m.ops = &mockOps{allRevisionsFn: func(_ context.Context) (map[string][]charts.Release, error) {
+		sawRetry = true
+		return all, nil
+	}}
+
+	// The model already armed a tick when the load landed; this is that one.
+	pending := []tea.Cmd{tickCmd()}
+	for round := 0; round < 12; round++ {
+		var ticks int
+		pending, ticks = drive(m, pending)
+		require.LessOrEqual(t, len(pending), 1,
+			"round %d: %d commands in flight — the loop has branched", round, len(pending))
+		require.LessOrEqual(t, ticks, 1, "round %d fired %d ticks", round, ticks)
+		time.Sleep(2 * time.Millisecond)
+	}
+	require.True(t, sawRetry, "the fixture must actually poll, or this proves nothing")
+	require.Len(t, pending, 1, "and the loop must still be alive at the end")
+}
+
+// While the view is off screen or showing an error dialog, the ticker keeps
+// beating but must not poll: the data would be thrown away, and a refresh
+// would be fighting the dialog in front of it.
+func TestTickDoesNotPollWhenHiddenOrDialogIsUp(t *testing.T) {
 	fastPoll(t)
 	m := testModel()
 	loadReleases(t, m, map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}, nil)
 
 	m.ops = &mockOps{allRevisionsFn: func(_ context.Context) (map[string][]charts.Release, error) {
-		t.Error("the view must not poll while hidden or errored")
+		t.Error("the view must not poll while hidden or showing a dialog")
 		return nil, nil
 	}}
 
-	m.SetVisible(false)
-	runCmd(m.Update(TickMsg(time.Now())))
+	for _, hide := range []func(){
+		func() { m.SetVisible(false); m.errorDialogActive = false },
+		func() { m.SetVisible(true); m.errorDialogActive = true },
+	} {
+		hide()
+		m.tickScheduled = true // the chain the model is already running
+		pending := []tea.Cmd{tickCmd()}
+		for round := 0; round < 3; round++ {
+			pending, _ = drive(m, pending)
+			require.Len(t, pending, 1, "the ticker must stay alive so it can resume")
+			time.Sleep(2 * time.Millisecond)
+		}
+	}
+}
 
-	m.SetVisible(true)
-	m.errorDialogActive = true
-	runCmd(m.Update(TickMsg(time.Now())))
+// One unreadable release record fails the whole listing. A view that stopped
+// polling on the first failure would stay blank until the operator navigated
+// out and back in.
+func TestPollingResumesAfterAFailedFirstLoad(t *testing.T) {
+	fastPoll(t)
+	m := testModel()
+
+	m.Update(ReleasesLoadedMsg{Err: errors.New("docker unreachable")})
+	require.Equal(t, stateError, m.state)
+	require.True(t, m.errorDialogActive)
+
+	// The operator dismisses the dialog; the daemon comes back.
+	m.Update(key("esc"))
+	all := map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}
+	m.ops = &mockOps{allRevisionsFn: func(_ context.Context) (map[string][]charts.Release, error) {
+		return all, nil
+	}}
+
+	pending := []tea.Cmd{tickCmd()}
+	for round := 0; round < 4 && m.state != stateReady; round++ {
+		pending, _ = drive(m, pending)
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	require.Equal(t, stateReady, m.state, "the view must recover on its own")
+	require.Equal(t, []string{"app"}, names(m))
+	require.NoError(t, m.err)
 }
 
 func TestResizeKeepsTheViewportAnchoredOnFirstSize(t *testing.T) {

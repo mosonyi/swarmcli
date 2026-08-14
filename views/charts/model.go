@@ -73,6 +73,11 @@ type Model struct {
 	// confirm, only blocked actions to explain.
 	confirmDialog *confirmdialog.Model
 
+	// tickScheduled guards the poll ticker. Exactly one tick may be
+	// outstanding: every place that re-arms is a chain, and two chains do not
+	// merely double the poll rate, they each double again on every beat.
+	tickScheduled bool
+
 	spinner int
 
 	toastMessage string
@@ -132,7 +137,22 @@ func New(width, height int) *Model {
 func (m *Model) Name() string { return ViewName }
 
 func (m *Model) Init() tea.Cmd {
-	return tea.Batch(tickCmd(), spinnerTickCmd(), m.loadReleasesCmd())
+	return tea.Batch(m.armTick(), spinnerTickCmd(), m.loadReleasesCmd())
+}
+
+// armTick schedules the next poll, unless one is already scheduled.
+//
+// The guard is the whole point. A tick that both starts a poll and re-arms,
+// while the poll's result re-arms too, produces two successors per beat — and
+// each of those does the same, so an idle view climbs to thousands of
+// concurrent reads within a minute. Re-arming only after the poll's result has
+// the further benefit that two polls can never overlap.
+func (m *Model) armTick() tea.Cmd {
+	if m.tickScheduled {
+		return nil
+	}
+	m.tickScheduled = true
+	return tickCmd()
 }
 
 // HasActiveFilter reports whether a filter query is active.
@@ -206,8 +226,12 @@ func (m *Model) OnEnter() tea.Cmd {
 		m.resetCursorOnNextLoad = true
 		m.list.Cursor = 0
 		m.list.Viewport.YOffset = 0
+		// The child selection belongs to whichever release the cursor was on.
+		// Leaving it set while the cursor moves to the top highlights nothing
+		// on screen and swallows the operator's next esc.
+		m.childIndex = noChild
 	}
-	return m.loadReleasesCmd()
+	return tea.Batch(m.loadReleasesCmd(), m.armTick())
 }
 
 func (m *Model) OnExit() tea.Cmd {

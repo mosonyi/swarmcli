@@ -44,19 +44,15 @@ func (m *Model) buildMainContent() string {
 		width = m.width
 	}
 
-	frame := ui.ComputeFrameDimensions(
-		m.list.Viewport.Width, m.list.Viewport.Height,
-		m.width, m.height, m.FrameHeader(), m.FrameFooter(),
-	)
+	lines := m.contentLines()
+	m.adjustOffsetForChild(lines)
 
-	m.adjustOffsetForChild(frame.DesiredContentLines)
-
-	content := m.list.VisibleContent(frame.DesiredContentLines)
+	content := m.list.VisibleContent(lines)
 	switch {
 	case m.state == stateLoading && len(m.list.Items) == 0:
-		content = padTo([]string{"Loading..."}, frame.DesiredContentLines)
+		content = padTo([]string{"Loading..."}, lines)
 	case m.state == stateReady && len(m.list.Items) == 0:
-		content = padTo(emptyStateLines, frame.DesiredContentLines)
+		content = padTo(emptyStateLines, lines)
 	}
 
 	if m.errorDialogActive {
@@ -66,6 +62,20 @@ func (m *Model) buildMainContent() string {
 		content = ui.OverlayCentered(content, m.confirmDialog.View(), width, 0)
 	}
 	return content
+}
+
+// contentLines is how many rows the list itself gets, once the frame, the
+// column header and the footer have taken theirs. Both the renderer and
+// paging read it, so a page is exactly what a screen shows.
+func (m *Model) contentLines() int {
+	frame := ui.ComputeFrameDimensions(
+		m.list.Viewport.Width, m.list.Viewport.Height,
+		m.width, m.height, m.FrameHeader(), m.FrameFooter(),
+	)
+	if frame.DesiredContentLines < 1 {
+		return 1
+	}
+	return frame.DesiredContentLines
 }
 
 // adjustOffsetForChild keeps the selected child on screen.

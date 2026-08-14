@@ -4,6 +4,7 @@
 package chartsview
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -12,8 +13,18 @@ import (
 	servicesview "github.com/Eldara-Tech/swarmcli/views/services"
 	"github.com/Eldara-Tech/swarmcli/views/view"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
 )
+
+// columnOf is the display column at which needle starts in line, so an
+// alignment assertion compares rendered columns rather than byte offsets.
+func columnOf(t *testing.T, line, needle string) int {
+	t.Helper()
+	i := strings.Index(line, needle)
+	require.GreaterOrEqual(t, i, 0, "%q not found in %q", needle, line)
+	return lipgloss.Width(line[:i])
+}
 
 // twoRevs is a release upgraded once, with one service running.
 func twoRevs(t *testing.T, m *Model) {
@@ -312,6 +323,64 @@ func TestChildLineIndexesMatchTheRenderedLines(t *testing.T) {
 	require.Equal(t, 1+len(lines), m.itemLineCount(sel))
 }
 
+// A page is a screenful of rendered lines. Counting items would skip several
+// screens whenever a release is expanded, because one item can be many lines.
+func TestPageDownCountsRenderedLinesNotItems(t *testing.T) {
+	m := sized(testModel(), 120, 20)
+
+	all := map[string][]charts.Release{}
+	svcs := map[string][]charts.ServiceState{}
+	for i := 0; i < 40; i++ {
+		n := fmt.Sprintf("r%02d", i)
+		all[n] = deployed(n, "c", "1.0.0")
+		svcs[n] = []charts.ServiceState{converged(n + "_web")}
+	}
+	loadReleases(t, m, all, svcs)
+
+	// Collapsed: a page moves roughly one screenful of rows.
+	budget := m.contentLines()
+	m.Update(key("pgdown"))
+	collapsed := m.list.Cursor
+	require.Positive(t, collapsed)
+	require.LessOrEqual(t, collapsed, budget)
+	require.Less(t, collapsed, len(m.list.Filtered)-1,
+		"the fixture must not let the page reach the end, or nothing is compared")
+
+	// Expand the first release; it now occupies several lines, so the same
+	// key must not travel as far through the list.
+	m.list.Cursor = 0
+	m.childIndex = noChild
+	m.Update(key("enter"))
+	require.Greater(t, m.itemLineCount(m.list.Filtered[0]), 1)
+
+	m.Update(key("pgdown"))
+	require.Less(t, m.list.Cursor, collapsed,
+		"an expanded release consumes part of the page")
+
+	used := 0
+	for i := 0; i < m.list.Cursor; i++ {
+		used += m.itemLineCount(m.list.Filtered[i])
+	}
+	require.LessOrEqual(t, used, budget, "a page must not overshoot the screen")
+}
+
+func TestPageAlwaysMovesAtLeastOneRow(t *testing.T) {
+	// A viewport so short that a single expanded release exceeds a whole page.
+	m := sized(testModel(), 120, 8)
+	loadReleases(t, m, map[string][]charts.Release{
+		"a": deployed("a", "c", "1.0.0"),
+		"b": deployed("b", "c", "1.0.0"),
+	}, map[string][]charts.ServiceState{
+		"b": {converged("s1"), converged("s2"), converged("s3"), converged("s4")},
+	})
+	m.Update(key("down"))
+	m.Update(key("enter")) // expand "b", taller than the page
+	m.list.Cursor = 0
+
+	m.Update(key("pgdown"))
+	require.Equal(t, 1, m.list.Cursor, "the key must not become a no-op")
+}
+
 func TestExpansionSaysWhenThereAreNoServices(t *testing.T) {
 	m := sized(testModel(), 120, 24)
 	loadReleases(t, m, map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}, nil)
@@ -319,7 +388,8 @@ func TestExpansionSaysWhenThereAreNoServices(t *testing.T) {
 	require.Contains(t, m.View(), "(no services)")
 }
 
-// A release with no owner stamp reads as unowned rather than as a blank cell.
+// A release with no owner stamp reads as unowned rather than as a blank cell,
+// and the dash must be in the OWNER column — not merely somewhere in the block.
 func TestRevisionRowShowsTheOwnerStamp(t *testing.T) {
 	m := sized(testModel(), 120, 24)
 	owned := rev("app", 1, charts.StatusDeployed, "c", "1.0.0")
@@ -335,6 +405,41 @@ func TestRevisionRowShowsTheOwnerStamp(t *testing.T) {
 	m.Update(key("esc"))
 	m.Update(key("down"))
 	m.Update(key("enter"))
-	block, _ := expansionBlock(m.list.Filtered[m.list.Cursor], noChild)
-	require.Contains(t, strings.Join(block, "\n"), "—")
+
+	sel, _ := m.selected()
+	require.Equal(t, "plain", sel.Name)
+	block, childLines := expansionBlock(sel, noChild)
+	require.Equal(t,
+		columnOf(t, block[0], "OWNER"),
+		columnOf(t, block[childLines[0]], "—"),
+		"the unowned dash must sit under the OWNER header")
+}
+
+// Every cell in the child blocks is padded to a display width, but the em-dash
+// displayOrDash emits for an empty optional field is three bytes wide. Byte
+// padding therefore shifts every later cell left of its own header.
+func TestChildRowsAlignWithTheirHeadersDespiteMultibyteCells(t *testing.T) {
+	m := sized(testModel(), 140, 24)
+	loadReleases(t, m,
+		map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")},
+		// No Mode and no Replicas: two em-dashes before STATUS.
+		map[string][]charts.ServiceState{"app": {{Name: "app_web", Status: "running"}}})
+	m.Update(key("enter"))
+
+	sel, _ := m.selected()
+	block, childLines := expansionBlock(sel, noChild)
+
+	svcHeader := ""
+	for _, line := range block {
+		if strings.Contains(line, "SERVICE") {
+			svcHeader = line
+		}
+	}
+	require.NotEmpty(t, svcHeader)
+	svcRow := block[childLines[len(sel.Revisions)]]
+
+	require.Equal(t,
+		columnOf(t, svcHeader, "STATUS"),
+		columnOf(t, svcRow, "running"),
+		"STATUS must start at the same column as the value under it")
 }

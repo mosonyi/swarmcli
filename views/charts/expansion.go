@@ -4,8 +4,8 @@
 package chartsview
 
 import (
-	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/Eldara-Tech/swarmcli/charts"
 
@@ -57,10 +57,40 @@ var (
 	childSelectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("24")).Bold(true)
 )
 
-const (
-	revisionFormat = "    %-4s %-11s %-26s %-17s %s"
-	serviceFormat  = "    %-26s %-12s %-10s %s"
+// Child blocks are laid out at fixed widths rather than through the
+// content-aware column layout, which sizes the release row above them.
+var (
+	revisionCols = []int{4, 11, 26, 17, 30}
+	serviceCols  = []int{26, 12, 10, 0}
 )
+
+// childLine joins cells at fixed widths, padding by DISPLAY COLUMNS.
+//
+// fmt's "%-12s" pads by bytes, and these cells carry multi-byte runes as a
+// matter of course — displayOrDash emits an em-dash for every empty optional
+// field, which is three bytes and one column. Padding that by bytes shifts
+// every later cell two columns left of its header.
+func childLine(cells []string, widths []int) string {
+	var b strings.Builder
+	b.WriteString("    ")
+	for i, cell := range cells {
+		w := 0
+		if i < len(widths) {
+			w = widths[i]
+		}
+		if w == 0 { // last column: no padding, no truncation
+			b.WriteString(cell)
+			break
+		}
+		cell = truncate(cell, w)
+		b.WriteString(cell)
+		for pad := w - lipgloss.Width(cell); pad > 0; pad-- {
+			b.WriteByte(' ')
+		}
+		b.WriteByte(' ')
+	}
+	return b.String()
+}
 
 // expansionBlock renders an expanded release's child lines and reports, for
 // each selectable child, which line it landed on.
@@ -68,9 +98,9 @@ const (
 // The two are returned together on purpose: the scroll math needs a child's
 // line index, and deriving it separately from a second count of headers and
 // rows is how the two silently drift apart.
-func expansionBlock(it releaseItem, selectedChild int) (lines []string, childLine []int) {
+func expansionBlock(it releaseItem, selectedChild int) (lines []string, childLines []int) {
 	rows := it.children()
-	childLine = make([]int, len(rows))
+	childLines = make([]int, len(rows))
 
 	line := func(s string) { lines = append(lines, s) }
 	style := func(idx int, s string) string {
@@ -80,34 +110,36 @@ func expansionBlock(it releaseItem, selectedChild int) (lines []string, childLin
 		return childStyle.Render(s)
 	}
 
-	line(childHeaderStyle.Render(fmt.Sprintf(revisionFormat, "REV", "STATUS", "CHART", "UPDATED", "OWNER")))
+	line(childHeaderStyle.Render(childLine(
+		[]string{"REV", "STATUS", "CHART", "UPDATED", "OWNER"}, revisionCols)))
 	for n, rev := range it.Revisions {
-		childLine[n] = len(lines)
-		line(style(n, fmt.Sprintf(revisionFormat,
+		childLines[n] = len(lines)
+		line(style(n, childLine([]string{
 			strconv.Itoa(rev.Revision),
-			truncate(rev.Status, 11),
-			truncate(rev.Chart.Name+"-"+rev.Chart.Version, 26),
+			rev.Status,
+			rev.Chart.Name + "-" + rev.Chart.Version,
 			formatCreated(parseCreated(rev.Created)),
-			truncate(displayOrDash(rev.Owner), 30),
-		)))
+			displayOrDash(rev.Owner),
+		}, revisionCols)))
 	}
 
-	line(childHeaderStyle.Render(fmt.Sprintf(serviceFormat, "SERVICE", "MODE", "REPLICAS", "STATUS")))
+	line(childHeaderStyle.Render(childLine(
+		[]string{"SERVICE", "MODE", "REPLICAS", "STATUS"}, serviceCols)))
 	if len(it.Services) == 0 {
 		line(childStyle.Render("    (no services)"))
-		return lines, childLine
+		return lines, childLines
 	}
 	for n, svc := range it.Services {
 		idx := len(it.Revisions) + n
-		childLine[idx] = len(lines)
-		line(style(idx, fmt.Sprintf(serviceFormat,
-			truncate(svc.Name, 26),
-			truncate(displayOrDash(svc.Mode), 12),
-			truncate(displayOrDash(svc.Replicas), 10),
+		childLines[idx] = len(lines)
+		line(style(idx, childLine([]string{
+			svc.Name,
+			displayOrDash(svc.Mode),
+			displayOrDash(svc.Replicas),
 			displayOrDash(svc.Status),
-		)))
+		}, serviceCols)))
 	}
-	return lines, childLine
+	return lines, childLines
 }
 
 // truncate shortens s to max display columns, with an ellipsis when it had to
