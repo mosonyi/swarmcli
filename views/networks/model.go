@@ -238,7 +238,7 @@ func (m *Model) ClearSearchQuery() {
 
 func (m *Model) Init() tea.Cmd {
 	l().Info("NetworksView: Init() called - starting ticker and loading networks")
-	return tea.Batch(tickCmd(), m.spinnerTickCmd(), m.loadNetworksCmd())
+	return tea.Batch(m.spinnerTickCmd(), m.loadNetworksCmd())
 }
 
 func (m *Model) spinnerTickCmd() tea.Cmd {
@@ -332,7 +332,10 @@ func (m *Model) OnEnter() tea.Cmd {
 	m.resetCursorOnNextLoad = true
 	m.networksList.Cursor = 0
 	m.networksList.Viewport.YOffset = 0
-	return m.LoadNetworks()
+	// The tick is armed here, not in Init or the factory: OnEnter is the only
+	// hook that runs both on first entry and on every return from a drill-down,
+	// and a chain cannot survive a navigation (see the TickMsg handler).
+	return tea.Batch(m.LoadNetworks(), tickCmd())
 }
 
 func (m *Model) OnExit() tea.Cmd {

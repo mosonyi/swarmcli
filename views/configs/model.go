@@ -183,7 +183,7 @@ func (m *Model) ClearSearchQuery() {
 
 func (m *Model) Init() tea.Cmd {
 	l().Info("ConfigsView: Init() called - starting ticker and loading configs")
-	return tea.Batch(tickCmd(), m.spinnerTickCmd(), m.loadConfigsCmd())
+	return tea.Batch(m.spinnerTickCmd(), m.loadConfigsCmd())
 }
 
 func (m *Model) spinnerTickCmd() tea.Cmd {
@@ -250,7 +250,10 @@ func (m *Model) addConfig(cfg docker.ConfigWithDecodedData) {
 func (m *Model) OnEnter() tea.Cmd {
 	m.visible = true
 	l().Info("ConfigsView: OnEnter() - view is now visible")
-	return m.loadConfigsCmd()
+	// The tick is armed here, not in Init or the factory: OnEnter is the only
+	// hook that runs both on first entry and on every return from a drill-down,
+	// and a chain cannot survive a navigation (see the TickMsg handler).
+	return tea.Batch(m.loadConfigsCmd(), tickCmd())
 }
 
 func (m *Model) OnExit() tea.Cmd {

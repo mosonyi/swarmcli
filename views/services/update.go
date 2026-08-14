@@ -62,8 +62,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		m.SetContent(msg)
 		m.Visible = true
-		// Continue polling and refresh tasks for any expanded services
-		return tea.Batch(tickCmd(), m.refreshExpandedTasksCmd(m.expandedServices))
+		// No re-arm: only a tick arms a tick, so a load issued by OnEnter or the
+		// factory cannot start a second, parallel chain.
+		return m.refreshExpandedTasksCmd(m.expandedServices)
 
 	case TickMsg:
 		l().Infof("ServicesView: Received TickMsg, visible=%v", m.Visible)
@@ -76,13 +77,18 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return tea.Batch(
 				m.checkServicesCmd(m.lastSnapshot, m.filterType, m.nodeID, m.stackName),
 				m.refreshExpandedTasksCmd(m.expandedServices),
+				tickCmd(),
 			)
 		}
 		// Continue polling even if not visible
 		return tickCmd()
 
 	case PollRetryMsg:
-		return tickCmd()
+		// Deliberately no re-arm. The TickMsg handler above always schedules
+		// the next tick, so re-arming here as well gives one beat two
+		// successors — and each of those does the same, so the poll rate does
+		// not merely double, it doubles again on every beat.
+		return nil
 
 	case TasksLoadedMsg:
 		// Store loaded tasks - view will automatically re-render

@@ -23,7 +23,11 @@ type TickMsg time.Time
 // should schedule the next tick.
 type PollRetryMsg struct{}
 
-const PollInterval = 2 * time.Second
+// PollInterval is how often the view re-reads its resource. It is a var, not a
+// const, so tests can shrink it: a tea.Tick cmd invoked synchronously blocks
+// for the full interval, so a test that runs one to see what it scheduled would
+// otherwise sit here for the whole period.
+var PollInterval = 2 * time.Second
 
 const userActionTimeout = 15 * time.Second
 

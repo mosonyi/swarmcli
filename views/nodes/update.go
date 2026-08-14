@@ -216,19 +216,25 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 
 		m.Visible = true
-		return tickCmd()
+		// No re-arm: only a tick arms a tick, so a load issued by OnEnter or the
+		// factory cannot start a second, parallel chain.
+		return nil
 
 	case TickMsg:
 		l().Infof("NodesView: Received TickMsg, visible=%v", m.Visible)
 		// Check for changes (this will return either a Msg or PollRetryMsg)
 		if m.Visible {
-			return m.checkNodesCmd(m.lastSnapshot)
+			return tea.Batch(m.checkNodesCmd(m.lastSnapshot), tickCmd())
 		}
 		// Continue polling even if not visible
 		return tickCmd()
 
 	case PollRetryMsg:
-		return tickCmd()
+		// Deliberately no re-arm. The TickMsg handler above always schedules
+		// the next tick, so re-arming here as well gives one beat two
+		// successors — and each of those does the same, so the poll rate does
+		// not merely double, it doubles again on every beat.
+		return nil
 
 	case tea.WindowSizeMsg:
 		m.List.Viewport.Width = msg.Width

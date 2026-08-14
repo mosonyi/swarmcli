@@ -88,3 +88,59 @@ func TestPollLoopDoesNotMultiply(t *testing.T) {
 	require.True(t, polled, "the fixture must actually poll, or this proves nothing")
 	require.Len(t, pending, 1, "and the loop must still be alive at the end")
 }
+
+// countChains runs a command — flattening tea.Batch, whose members the runtime
+// runs rather than the caller — and counts the ticks it schedules. Each
+// scheduled tick is one live poll chain, because a tick re-arms itself.
+func countChains(m *Model, cmd tea.Cmd) int {
+	chains := 0
+	var run func(c tea.Cmd, depth int)
+	run = func(c tea.Cmd, depth int) {
+		if c == nil || depth > 2 {
+			return
+		}
+		msg := c()
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			for _, sub := range batch {
+				run(sub, depth)
+			}
+			return
+		}
+		if _, isTick := msg.(TickMsg); isTick {
+			chains++
+			return
+		}
+		if _, isSpinner := msg.(SpinnerTickMsg); isSpinner {
+			return
+		}
+		run(m.Update(msg), depth+1)
+	}
+	run(cmd, 0)
+	return chains
+}
+
+// Entering a view must start exactly one poll chain. switchToView batches the
+// factory's command AND OnEnter, so a view arming in both ran two chains for
+// its whole life, polling the daemon at twice the intended rate.
+func TestEnteringTheViewArmsExactlyOneChain(t *testing.T) {
+	original := PollInterval
+	PollInterval = time.Millisecond
+	t.Cleanup(func() { PollInterval = original })
+
+	m := testModel()
+	require.Equal(t, 1, countChains(m, tea.Batch(m.Init(), m.OnEnter())),
+		"the factory and OnEnter must not each start a chain")
+}
+
+// A chain cannot survive a navigation: every view declares its own TickMsg
+// type, so a tick belonging to a view that is no longer current is delivered to
+// a different view and dropped. Returning must therefore re-arm, or the view
+// comes back permanently stale. goBack calls OnEnter and nothing else.
+func TestReturningToTheViewRestartsPolling(t *testing.T) {
+	original := PollInterval
+	PollInterval = time.Millisecond
+	t.Cleanup(func() { PollInterval = original })
+
+	m := testModel()
+	require.Equal(t, 1, countChains(m, m.OnEnter()))
+}

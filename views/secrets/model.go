@@ -203,7 +203,7 @@ func (m *Model) ClearSearchQuery() {
 
 func (m *Model) Init() tea.Cmd {
 	l().Info("SecretsView: Init() called - starting ticker and loading secrets")
-	return tea.Batch(tickCmd(), m.spinnerTickCmd(), m.loadSecretsCmd())
+	return tea.Batch(m.spinnerTickCmd(), m.loadSecretsCmd())
 }
 
 func (m *Model) spinnerTickCmd() tea.Cmd {
@@ -267,7 +267,10 @@ func (m *Model) addSecret(sec docker.SecretWithDecodedData) {
 func (m *Model) OnEnter() tea.Cmd {
 	m.visible = true
 	l().Info("SecretsView: OnEnter() - view is now visible")
-	return m.loadSecretsCmd()
+	// The tick is armed here, not in Init or the factory: OnEnter is the only
+	// hook that runs both on first entry and on every return from a drill-down,
+	// and a chain cannot survive a navigation (see the TickMsg handler).
+	return tea.Batch(m.loadSecretsCmd(), tickCmd())
 }
 
 func (m *Model) OnExit() tea.Cmd {

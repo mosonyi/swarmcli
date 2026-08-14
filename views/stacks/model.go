@@ -194,7 +194,7 @@ func New(width, height int) *Model {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return tickCmd()
+	return nil
 }
 
 func tickCmd() tea.Cmd {
@@ -332,10 +332,13 @@ func (m *Model) checkStacksCmd(lastHash uint64, nodeID string) tea.Cmd {
 // OnEnter re-arms the animation tick when a deploy is still running, so
 // navigating away and back does not leave a frozen spinner in the footer.
 func (m *Model) OnEnter() tea.Cmd {
+	// The tick is armed here, not in Init or the factory: OnEnter is the only
+	// hook that runs both on first entry and on every return from a drill-down,
+	// and a chain cannot survive a navigation (see the TickMsg handler).
 	if m.deploying {
-		return tea.Batch(m.LoadStacksCmd(m.nodeID), m.spinnerTickCmd())
+		return tea.Batch(m.LoadStacksCmd(m.nodeID), m.spinnerTickCmd(), tickCmd())
 	}
-	return m.LoadStacksCmd(m.nodeID)
+	return tea.Batch(m.LoadStacksCmd(m.nodeID), tickCmd())
 }
 func (m *Model) OnExit() tea.Cmd { return nil }
 

@@ -101,7 +101,7 @@ func New(width, height int) *Model {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return tickCmd()
+	return nil
 }
 
 func tickCmd() tea.Cmd {
@@ -190,7 +190,11 @@ func (m *Model) checkNodesCmd(lastHash uint64) tea.Cmd {
 }
 
 func (m *Model) OnEnter() tea.Cmd {
-	return nil
+	m.Visible = true
+	// The tick is armed here, not in Init or the factory: OnEnter is the only
+	// hook that runs both on first entry and on every return from a drill-down,
+	// and a chain cannot survive a navigation (see the TickMsg handler).
+	return tea.Batch(m.LoadNodesCmd(), tickCmd())
 }
 
 func (m *Model) OnExit() tea.Cmd {

@@ -123,7 +123,7 @@ func New(width, height int) *Model {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return tickCmd()
+	return nil
 }
 
 func tickCmd() tea.Cmd {
@@ -154,6 +154,10 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 }
 
 func (m *Model) OnEnter() tea.Cmd {
+	m.Visible = true
+	// The tick is armed here, not in Init or the factory: OnEnter is the only
+	// hook that runs both on first entry and on every return from a drill-down,
+	// and a chain cannot survive a navigation (see the TickMsg handler).
 	return tickCmd()
 }
 

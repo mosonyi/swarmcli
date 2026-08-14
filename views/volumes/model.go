@@ -116,7 +116,7 @@ func (m *Model) Name() string { return ViewName }
 
 func (m *Model) Init() tea.Cmd {
 	l().Info("VolumesView: Init() called - starting ticker and loading volumes")
-	return tea.Batch(tickCmd(), m.spinnerTickCmd(), m.loadVolumesCmd())
+	return tea.Batch(m.spinnerTickCmd(), m.loadVolumesCmd())
 }
 
 func (m *Model) spinnerTickCmd() tea.Cmd {
@@ -202,7 +202,10 @@ func (m *Model) OnEnter() tea.Cmd {
 	m.resetCursorOnNextLoad = true
 	m.volumesList.Cursor = 0
 	m.volumesList.Viewport.YOffset = 0
-	return m.loadVolumesCmd()
+	// The tick is armed here, not in Init or the factory: OnEnter is the only
+	// hook that runs both on first entry and on every return from a drill-down,
+	// and a chain cannot survive a navigation (see the TickMsg handler).
+	return tea.Batch(m.loadVolumesCmd(), tickCmd())
 }
 
 func (m *Model) OnExit() tea.Cmd {
