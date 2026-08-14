@@ -24,6 +24,10 @@ import (
 type mockOps struct {
 	allRevisionsFn  func(ctx context.Context) (map[string][]charts.Release, error)
 	serviceStatesFn func(ctx context.Context, release string) []charts.ServiceState
+	// indexes is the cached repository state, keyed by chart name → newest
+	// version. Nil means no index at all, which is a different answer from an
+	// index in which nothing is newer.
+	indexes map[string]string
 }
 
 func (m *mockOps) AllRevisions(ctx context.Context) (map[string][]charts.Release, error) {
@@ -35,6 +39,26 @@ func (m *mockOps) ServiceStates(ctx context.Context, release string) []charts.Se
 		return nil
 	}
 	return m.serviceStatesFn(ctx, release)
+}
+
+// Outdated mirrors charts.Outdated's contract closely enough for the view:
+// only a strictly newer version is reported, and a chart in no index is not.
+func (m *mockOps) Outdated(rels []charts.Release) ([]charts.OutdatedEntry, bool) {
+	if m.indexes == nil {
+		return nil, false
+	}
+	var out []charts.OutdatedEntry
+	for _, r := range rels {
+		latest, ok := m.indexes[r.Chart.Name]
+		if !ok || latest == r.Chart.Version {
+			continue
+		}
+		out = append(out, charts.OutdatedEntry{
+			Release: r.Name, Chart: r.Chart.Name,
+			Installed: r.Chart.Version, Latest: latest,
+		})
+	}
+	return out, true
 }
 
 func noopOps() *mockOps {
@@ -108,13 +132,20 @@ func converged(name string) charts.ServiceState {
 }
 
 // loadReleases drives a completed read into the model, skipping the async load.
-func loadReleases(t *testing.T, m *Model, all map[string][]charts.Release, svcs map[string][]charts.ServiceState) {
+// The optional index maps chart name → newest published version; omitting it
+// means this machine has no cached repository index at all.
+func loadReleases(t *testing.T, m *Model, all map[string][]charts.Release, svcs map[string][]charts.ServiceState, indexes ...map[string]string) {
 	t.Helper()
+	var index map[string]string
+	if len(indexes) > 0 {
+		index = indexes[0]
+	}
 	m.ops = &mockOps{
 		allRevisionsFn: func(_ context.Context) (map[string][]charts.Release, error) { return all, nil },
 		serviceStatesFn: func(_ context.Context, release string) []charts.ServiceState {
 			return svcs[release]
 		},
+		indexes: index,
 	}
 	msg := runCmd(m.loadReleasesCmd())
 	loaded, ok := msg.(ReleasesLoadedMsg)

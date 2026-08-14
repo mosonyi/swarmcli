@@ -5,6 +5,7 @@ package chartsview
 
 import (
 	"context"
+	"sync"
 
 	"github.com/Eldara-Tech/swarmcli/charts"
 )
@@ -26,6 +27,10 @@ type releaseOps interface {
 	// the shared Docker snapshot cache, so calling it once per release costs
 	// one snapshot and N in-memory filters.
 	ServiceStates(ctx context.Context, release string) []charts.ServiceState
+	// Outdated joins the installed releases against the cached repository
+	// indexes. haveIndexes reports whether there was anything to compare
+	// against, so the view can say "no indexes" rather than "up to date".
+	Outdated(rels []charts.Release) (entries []charts.OutdatedEntry, haveIndexes bool)
 }
 
 // engineOps binds releaseOps to the ambient release engine.
@@ -34,14 +39,70 @@ type releaseOps interface {
 // snapshot cache, both of which the TUI's context switcher already resets, so
 // the view follows the active context with no extra wiring. Pinning a context
 // name would bypass that cache and re-snapshot on every read.
-type engineOps struct{ engine *charts.Engine }
+type engineOps struct {
+	engine *charts.Engine
 
-func newEngineOps() releaseOps { return engineOps{engine: charts.NewEngine()} }
+	// indexes are the cached repository indexes, read once per view. Loading
+	// them is disk I/O and YAML parsing, and the poll runs every few seconds,
+	// so re-reading them on every tick would be pure waste. The cost is that a
+	// `charts repo update` in another terminal shows up the next time the view
+	// is opened, which is also what the column claims: it compares against
+	// what this machine has cached.
+	once        sync.Once
+	indexes     map[string]*charts.Index
+	haveIndexes bool
+}
 
-func (o engineOps) AllRevisions(ctx context.Context) (map[string][]charts.Release, error) {
+func newEngineOps() releaseOps { return &engineOps{engine: charts.NewEngine()} }
+
+func (o *engineOps) AllRevisions(ctx context.Context) (map[string][]charts.Release, error) {
 	return o.engine.AllRevisions(ctx)
 }
 
-func (o engineOps) ServiceStates(ctx context.Context, release string) []charts.ServiceState {
+func (o *engineOps) ServiceStates(ctx context.Context, release string) []charts.ServiceState {
 	return o.engine.Backend.StackServices(ctx, release)
+}
+
+func (o *engineOps) Outdated(rels []charts.Release) ([]charts.OutdatedEntry, bool) {
+	o.once.Do(o.loadIndexes)
+	if !o.haveIndexes {
+		return nil, false
+	}
+	return charts.Outdated(rels, o.indexes), true
+}
+
+// loadIndexes reads the cached repository indexes and nothing else.
+//
+// RefreshNever is the point: this is a browser, and a view that polls must not
+// reach the network behind the operator's back. The store's own timeouts would
+// not save it either — none of RepoStore's methods take a context, so a fetch
+// here could not be cancelled when the view is closed.
+func (o *engineOps) loadIndexes() {
+	store, err := newRepoStore()
+	if err != nil {
+		l().Warnf("ChartsView: no chart repository state: %v", err)
+		return
+	}
+	indexes, err := store.Indexes()
+	if err != nil {
+		l().Warnf("ChartsView: could not read the cached repository indexes: %v", err)
+		return
+	}
+	o.indexes = indexes
+	o.haveIndexes = len(indexes) > 0
+}
+
+// newRepoStore builds the offline-only repository store this view reads.
+//
+// It is a function of its own so the policy is assertable: RefreshNever is the
+// load-bearing line here, and every other policy would let a poll running
+// every few seconds fetch an index over the network on its own initiative.
+func newRepoStore() (*charts.RepoStore, error) {
+	store, err := charts.NewRepoStore()
+	if err != nil {
+		return nil, err
+	}
+	store.Refresh = charts.RefreshNever
+	store.Warnf = func(format string, a ...any) { l().Warnf(format, a...) }
+	return store, nil
 }

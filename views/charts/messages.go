@@ -40,7 +40,11 @@ type SpinnerTickMsg time.Time
 // ReleasesLoadedMsg carries a completed read of the release records.
 type ReleasesLoadedMsg struct {
 	Releases []releaseItem
-	Err      error
+	// HaveIndexes reports whether there were cached repository indexes to
+	// compare versions against. Without them the UPD column is empty for every
+	// release, which must not read as "everything is up to date".
+	HaveIndexes bool
+	Err         error
 }
 
 // spinnerTickInterval is a var, not a const, so tests can shrink it: a tea.Tick
@@ -58,11 +62,11 @@ func spinnerTickCmd() tea.Cmd {
 func (m *Model) loadReleasesCmd() tea.Cmd {
 	ops := m.ops
 	return func() tea.Msg {
-		items, err := readReleases(ops)
+		items, haveIndexes, err := readReleases(ops)
 		if err != nil {
 			return ReleasesLoadedMsg{Err: err}
 		}
-		return ReleasesLoadedMsg{Releases: items}
+		return ReleasesLoadedMsg{Releases: items, HaveIndexes: haveIndexes}
 	}
 }
 
@@ -70,7 +74,7 @@ func (m *Model) loadReleasesCmd() tea.Cmd {
 func (m *Model) checkReleasesCmd(lastHash uint64) tea.Cmd {
 	ops := m.ops
 	return func() tea.Msg {
-		items, err := readReleases(ops)
+		items, haveIndexes, err := readReleases(ops)
 		if err != nil {
 			return ReleasesLoadedMsg{Err: err}
 		}
@@ -80,21 +84,22 @@ func (m *Model) checkReleasesCmd(lastHash uint64) tea.Cmd {
 			return PollRetryMsg{}
 		}
 		if newHash != lastHash {
-			return ReleasesLoadedMsg{Releases: items}
+			return ReleasesLoadedMsg{Releases: items, HaveIndexes: haveIndexes}
 		}
 		return PollRetryMsg{}
 	}
 }
 
 // readReleases builds the rows: one config listing for every record, then one
-// cached-snapshot read per release for the live half.
-func readReleases(ops releaseOps) ([]releaseItem, error) {
+// cached-snapshot read per release for the live half, then an offline join
+// against the cached repository indexes.
+func readReleases(ops releaseOps) ([]releaseItem, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
 	defer cancel()
 
 	all, err := ops.AllRevisions(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read chart releases: %w", err)
+		return nil, false, fmt.Errorf("failed to read chart releases: %w", err)
 	}
 
 	items := make([]releaseItem, 0, len(all))
@@ -120,7 +125,20 @@ func readReleases(ops releaseOps) ([]releaseItem, error) {
 		})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
-	return items, nil
+
+	currents := make([]charts.Release, 0, len(items))
+	for _, it := range items {
+		currents = append(currents, it.current())
+	}
+	entries, haveIndexes := ops.Outdated(currents)
+	latest := make(map[string]string, len(entries))
+	for _, e := range entries {
+		latest[e.Release] = e.Latest
+	}
+	for i := range items {
+		items[i].Latest = latest[items[i].Name]
+	}
+	return items, haveIndexes, nil
 }
 
 // parseCreated returns the zero time for a record whose timestamp is missing or
@@ -149,6 +167,7 @@ func stableReleases(items []releaseItem) []stableRelease {
 			Chart:    it.chartRef(),
 			Created:  it.Created,
 			Phase:    string(it.Health.Phase),
+			Latest:   it.Latest,
 		}
 		for _, svc := range it.Services {
 			s.Services = append(s.Services, stableService{
@@ -167,6 +186,7 @@ type stableRelease struct {
 	Chart    string
 	Created  time.Time
 	Phase    string
+	Latest   string
 	Services []stableService
 }
 

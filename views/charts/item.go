@@ -31,6 +31,12 @@ type releaseItem struct {
 
 	// Services backs the health rollup.
 	Services []charts.ServiceState
+
+	// Latest is the newest version of this chart in a cached repository index,
+	// when that is newer than what is installed. Empty otherwise, which covers
+	// both "already current" and "this chart is in no index" — a local chart
+	// has nothing to be outdated against.
+	Latest string
 }
 
 func (i releaseItem) FilterValue() string { return i.Name }

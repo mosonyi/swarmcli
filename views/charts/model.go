@@ -53,6 +53,11 @@ type Model struct {
 	// cursor, or noChild when the release row itself is selected.
 	childIndex int
 
+	// haveIndexes reports whether any cached repository index backed the last
+	// read. Without one the UPD column is empty for every release, which must
+	// not be mistaken for "everything is up to date".
+	haveIndexes bool
+
 	state state
 	err   error
 

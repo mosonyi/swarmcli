@@ -40,6 +40,7 @@ func (m *Model) buildColumns() []filterlist.Column[releaseItem] {
 		{Label: "HEALTH", MinWidth: 6, Cell: func(r releaseItem) string { return r.healthLabel() }},
 		{Label: "CHART", MinWidth: 5, Flex: true, Cell: func(r releaseItem) string { return r.chartRef() }},
 		{Label: "UPDATED", MinWidth: 16, Cell: func(r releaseItem) string { return formatCreated(r.Created) }},
+		{Label: "UPD", MinWidth: 3, Cell: func(r releaseItem) string { return displayOrDash(r.Latest) }},
 	}
 }
 
@@ -132,6 +133,8 @@ func (m *Model) handleReleasesLoaded(msg ReleasesLoadedMsg) tea.Cmd {
 			selectedName = sel.Name
 		}
 	}
+
+	m.haveIndexes = msg.HaveIndexes
 
 	if h, err := hash.Compute(stableReleases(msg.Releases)); err == nil {
 		m.lastSnapshot = h

@@ -143,7 +143,22 @@ func (m *Model) renderFooter() string {
 	if reason := m.selectedReason(); reason != "" {
 		base += "\n" + ui.StatusBarStyle.Render(reason)
 	}
+	if note := m.indexNote(); note != "" {
+		base += "\n" + ui.StatusBarStyle.Render(note)
+	}
 	return base
+}
+
+// noIndexNote explains an empty UPD column, which otherwise reads as "nothing
+// is outdated" when the real answer is "this machine has nothing to compare
+// against".
+const noIndexNote = "⚠ No cached repository indexes — run `swarmcli charts repo update` to populate UPD"
+
+func (m *Model) indexNote() string {
+	if m.state != stateReady || m.haveIndexes || len(m.list.Items) == 0 {
+		return ""
+	}
+	return noIndexNote
 }
 
 // selectedReason is why the selected release is not converged. Convergence

@@ -123,9 +123,58 @@ func TestFooterHasNoReasonWhenConverged(t *testing.T) {
 	m := sized(testModel(), 120, 24)
 	loadReleases(t, m,
 		map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")},
-		map[string][]charts.ServiceState{"app": {converged("app_web")}})
+		map[string][]charts.ServiceState{"app": {converged("app_web")}},
+		map[string]string{"c": "1.0.0"})
 
 	require.Empty(t, m.selectedReason())
 	require.Equal(t, 1, strings.Count(m.renderFooter(), "\n")+1,
-		"a converged release adds no second footer line")
+		"a converged release with nothing to report adds no further footer lines")
+}
+
+// An empty UPD column has two very different causes, and the footer must
+// distinguish them: nothing newer exists, versus nothing to compare against.
+func TestNoCachedIndexesIsSaidOutLoud(t *testing.T) {
+	m := sized(testModel(), 140, 24)
+	loadReleases(t, m, map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}, nil)
+
+	require.False(t, m.haveIndexes)
+	require.Contains(t, m.renderFooter(), "No cached repository indexes")
+	require.Contains(t, m.renderFooter(), "charts repo update")
+
+	loadReleases(t, m,
+		map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}, nil,
+		map[string]string{"c": "1.0.0"})
+	require.True(t, m.haveIndexes)
+	require.NotContains(t, m.renderFooter(), "No cached repository indexes")
+}
+
+// With no releases at all the empty state already tells the whole story; a
+// missing-index warning on top of it is noise.
+func TestNoIndexNoteIsSuppressedOnAnEmptyList(t *testing.T) {
+	m := sized(testModel(), 120, 24)
+	loadReleases(t, m, nil, nil)
+	require.NotContains(t, m.renderFooter(), "No cached repository indexes")
+}
+
+func TestUpdColumnShowsTheNewerVersion(t *testing.T) {
+	m := sized(testModel(), 150, 24)
+	loadReleases(t, m,
+		map[string][]charts.Release{
+			"stale":   deployed("stale", "c", "1.0.0"),
+			"current": deployed("current", "c2", "3.0.0"),
+			"local":   deployed("local", "unpublished", "0.1.0"),
+		}, nil,
+		map[string]string{"c": "2.0.0", "c2": "3.0.0"})
+
+	byName := map[string]releaseItem{}
+	for _, it := range m.list.Filtered {
+		byName[it.Name] = it
+	}
+	require.Equal(t, "2.0.0", byName["stale"].Latest)
+	require.Empty(t, byName["current"].Latest, "already newest")
+	require.Empty(t, byName["local"].Latest, "a chart in no index has nothing to be outdated against")
+
+	out := m.View()
+	require.Contains(t, out, "UPD")
+	require.Contains(t, out, "2.0.0")
 }
