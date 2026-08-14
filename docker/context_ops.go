@@ -19,8 +19,7 @@ type ContextOps interface {
 	CreateContext(name, dockerHost string) error
 	CreateContextWithTLS(name, dockerHost, tlsPath string, skipTLSVerify bool) error
 	CreateContextWithCertFiles(name, description, dockerHost, caFile, certFile, keyFile string, skipTLSVerify bool) error
-	UpdateContextDescription(name, description string) error
-	UpdateContextWithCertFiles(name, description, dockerHost, caFile, certFile, keyFile string, skipTLSVerify bool) error
+	UpdateContextEndpoint(name, description, dockerHost string) error
 }
 
 type defaultContextOps struct{}
@@ -61,9 +60,6 @@ func (defaultContextOps) CreateContextWithTLS(name, dockerHost, tlsPath string, 
 func (defaultContextOps) CreateContextWithCertFiles(name, description, dockerHost, caFile, certFile, keyFile string, skipTLSVerify bool) error {
 	return CreateContextWithCertFiles(name, description, dockerHost, caFile, certFile, keyFile, skipTLSVerify)
 }
-func (defaultContextOps) UpdateContextDescription(name, description string) error {
-	return UpdateContextDescription(name, description)
-}
-func (defaultContextOps) UpdateContextWithCertFiles(name, description, dockerHost, caFile, certFile, keyFile string, skipTLSVerify bool) error {
-	return UpdateContextWithCertFiles(name, description, dockerHost, caFile, certFile, keyFile, skipTLSVerify)
+func (defaultContextOps) UpdateContextEndpoint(name, description, dockerHost string) error {
+	return UpdateContextEndpoint(name, description, dockerHost)
 }

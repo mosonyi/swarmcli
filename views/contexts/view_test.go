@@ -156,6 +156,25 @@ func TestView_CreateDialog_TLSEnabled(t *testing.T) {
 	require.Contains(t, out, "TLS")
 }
 
+func TestRenderEditDialog_ShowsBothFields(t *testing.T) {
+	m := testModel()
+	loadContexts(m, fakeContexts("ctx1"))
+	m.Update(key("e"))
+
+	out := ansi.Strip(m.renderEditDialog())
+	require.Contains(t, out, "ctx1")
+	require.Contains(t, out, "desc-ctx1")
+	require.Contains(t, out, "tcp://ctx1:2375")
+
+	widest := 0
+	for _, line := range strings.Split(out, "\n") {
+		if w := lipgloss.Width(line); w > widest {
+			widest = w
+		}
+	}
+	require.LessOrEqual(t, widest, 80, "the edit dialog must fit an 80-column terminal:\n%s", out)
+}
+
 // --- #525: the browse hint, and the width it is laid out around ---
 
 func TestRenderCreateDialog_ShowsBrowseHintOnFocusedCertField(t *testing.T) {
