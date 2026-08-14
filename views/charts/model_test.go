@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Eldara-Tech/swarmcli/charts"
+	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
 	inspectview "github.com/Eldara-Tech/swarmcli/views/inspect"
 	servicesview "github.com/Eldara-Tech/swarmcli/views/services"
 	"github.com/Eldara-Tech/swarmcli/views/view"
@@ -488,3 +489,7 @@ func TestCursorSurvivesAReloadThatReordersNothing(t *testing.T) {
 	require.Equal(t, "b", m.list.Filtered[m.list.Cursor].Name,
 		"a background refresh must not move the operator's selection")
 }
+
+// dismiss is the confirm dialog's own result message, which the app loop
+// delivers back to the view after an esc.
+func dismiss() confirmdialog.ResultMsg { return confirmdialog.ResultMsg{} }

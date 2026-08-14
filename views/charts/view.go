@@ -62,6 +62,8 @@ func (m *Model) buildMainContent() string {
 	if m.errorDialogActive {
 		errorDialog := errordialog.Render(fmt.Sprintf("%v", m.err))
 		content = ui.OverlayCentered(content, errorDialog, width, 0)
+	} else if m.confirmDialog.Visible {
+		content = ui.OverlayCentered(content, m.confirmDialog.View(), width, 0)
 	}
 	return content
 }
@@ -143,22 +145,7 @@ func (m *Model) renderFooter() string {
 	if reason := m.selectedReason(); reason != "" {
 		base += "\n" + ui.StatusBarStyle.Render(reason)
 	}
-	if note := m.indexNote(); note != "" {
-		base += "\n" + ui.StatusBarStyle.Render(note)
-	}
-	return base
-}
-
-// noIndexNote explains an empty UPD column, which otherwise reads as "nothing
-// is outdated" when the real answer is "this machine has nothing to compare
-// against".
-const noIndexNote = "⚠ No cached repository indexes — run `swarmcli charts repo update` to populate UPD"
-
-func (m *Model) indexNote() string {
-	if m.state != stateReady || m.haveIndexes || len(m.list.Items) == 0 {
-		return ""
-	}
-	return noIndexNote
+	return base + "\n" + ui.StatusBarStyle.Render(readOnlyHint)
 }
 
 // selectedReason is why the selected release is not converged. Convergence

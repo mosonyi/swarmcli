@@ -13,6 +13,7 @@ import (
 	"github.com/Eldara-Tech/swarmcli/core/primitives/hash"
 	"github.com/Eldara-Tech/swarmcli/ui"
 	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
 	helpview "github.com/Eldara-Tech/swarmcli/views/help"
 	servicesview "github.com/Eldara-Tech/swarmcli/views/services"
 	"github.com/Eldara-Tech/swarmcli/views/view"
@@ -40,8 +41,23 @@ func (m *Model) buildColumns() []filterlist.Column[releaseItem] {
 		{Label: "HEALTH", MinWidth: 6, Cell: func(r releaseItem) string { return r.healthLabel() }},
 		{Label: "CHART", MinWidth: 5, Flex: true, Cell: func(r releaseItem) string { return r.chartRef() }},
 		{Label: "UPDATED", MinWidth: 16, Cell: func(r releaseItem) string { return formatCreated(r.Created) }},
-		{Label: "UPD", MinWidth: 3, Cell: func(r releaseItem) string { return displayOrDash(r.Latest) }},
+		{Label: "UPD", MinWidth: 3, Cell: m.updCell},
 	}
+}
+
+// updCell distinguishes the two reasons a release has no newer version, which
+// an empty cell would run together: nothing newer is published, versus this
+// machine has no cached index to compare against. The second is "?" rather
+// than a footer line because it is a per-row fact and the footer is already
+// carrying the counts, the convergence reason and the read-only hint.
+func (m *Model) updCell(r releaseItem) string {
+	if r.Latest != "" {
+		return r.Latest
+	}
+	if !m.haveIndexes {
+		return "?"
+	}
+	return "—"
 }
 
 // sortColumnIndex maps the active sort field to its column index for the header
@@ -106,7 +122,15 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			return nil
 		}
+		if m.confirmDialog.Visible {
+			return m.confirmDialog.Update(msg)
+		}
 		return m.handleNormalKeys(msg)
+
+	case confirmdialog.ResultMsg:
+		m.confirmDialog.Visible = false
+		m.confirmDialog.InfoMode = false
+		return nil
 	}
 	return nil
 }
@@ -159,10 +183,38 @@ func (m *Model) handleReleasesLoaded(msg ReleasesLoadedMsg) tea.Cmd {
 		}
 	}
 
+	m.applyPendingSelect()
 	m.clampChild()
 	m.state = stateReady
 	m.list.Viewport.SetContent(m.list.View())
 	return nil
+}
+
+// applyPendingSelect honours a cross-link's requested release once there is a
+// list to select it in.
+//
+// It selects and expands rather than filtering: the "/" filter belongs to the
+// app's search bar, and setting a query the operator never typed would leave
+// the list narrowed with nothing on screen saying why.
+func (m *Model) applyPendingSelect() {
+	if m.pendingSelect == "" {
+		return
+	}
+	for i, r := range m.list.Filtered {
+		if r.Name == m.pendingSelect {
+			m.list.Cursor = i
+			m.expanded[r.Name] = true
+			m.childIndex = noChild
+			m.pendingSelect = ""
+			return
+		}
+	}
+	// Not found. Give up only once there was a real list to look in — the
+	// first read can land empty — because retrying forever would fight the
+	// operator's cursor on every poll.
+	if len(m.list.Filtered) > 0 {
+		m.pendingSelect = ""
+	}
 }
 
 // clampChild keeps the child selection inside the release under the cursor. A
@@ -237,6 +289,18 @@ func (m *Model) handleNormalKeys(msg tea.KeyMsg) tea.Cmd {
 	case "s":
 		if sel, ok := m.selected(); ok {
 			return servicesForStackCmd(sel.Name, "")
+		}
+	case "u":
+		if sel, ok := m.selected(); ok {
+			m.showBlocked(upgradeAction(sel.Name))
+		}
+	case "r":
+		if sel, ok := m.selected(); ok {
+			m.showBlocked(rollbackAction(sel.Name, sel.revision()))
+		}
+	case "ctrl+d":
+		if sel, ok := m.selected(); ok {
+			m.showBlocked(uninstallAction(sel.Name))
 		}
 	}
 	return nil

@@ -243,6 +243,32 @@ func TestKey_CtrlD_StackDeleteIntent(t *testing.T) {
 	require.Contains(t, m.confirmDialog.Message, "charts uninstall")
 }
 
+// "g" is the way into the charts browser from a stack the operator is already
+// looking at. It reuses the same ownership lookup the delete guard makes.
+func TestKey_G_JumpsToTheOwningChartRelease(t *testing.T) {
+	m := testModel()
+	loadStacks(m, fakeStacks("whoami"))
+
+	// The lookup is async: nothing navigates until the result arrives.
+	require.NotNil(t, m.Update(key("g")))
+
+	msg := runCmd(m.Update(ChartJumpMsg{StackName: "whoami", ChartRelease: "whoami"}))
+	nav, ok := msg.(view.NavigateToMsg)
+	require.True(t, ok, "expected navigation, got %T", msg)
+	require.Equal(t, view.NameCharts, nav.ViewName)
+	require.Equal(t, map[string]any{"release": "whoami"}, nav.Payload)
+}
+
+// A stack nothing owns must say so rather than opening an empty browser.
+func TestKey_G_SaysWhenAStackIsNotChartManaged(t *testing.T) {
+	m := testModel()
+	loadStacks(m, fakeStacks("plain"))
+
+	require.Nil(t, m.Update(ChartJumpMsg{StackName: "plain"}), "no navigation")
+	require.Contains(t, m.toastMessage, "not managed by a chart release")
+	require.Contains(t, m.toastMessage, "plain")
+}
+
 func TestKey_P_TogglesExpand(t *testing.T) {
 	m := testModel()
 	loadStacks(m, fakeStacks("s1"))

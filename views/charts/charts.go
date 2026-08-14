@@ -11,6 +11,11 @@ import swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
 
 const ViewName = "charts"
 
+// readOnlyHint is always on screen. The view deliberately cannot change a
+// release, and an operator should learn where that lives without having to
+// press a key and be told no.
+const readOnlyHint = "Read-only · manage releases with `swarmcli charts install|upgrade|rollback|uninstall`"
+
 func l() *swarmlog.SwarmLogger {
 	return swarmlog.L().With("views", "charts")
 }

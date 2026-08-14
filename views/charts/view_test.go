@@ -87,7 +87,8 @@ func TestFilteredToNothingIsNotTheEmptyState(t *testing.T) {
 	m.ApplySearchQuery("nothing-matches-this")
 
 	out := m.View()
-	require.NotContains(t, out, "swarmcli charts install")
+	require.NotContains(t, out, "No chart releases found",
+		"there are releases; the filter simply matched none of them")
 	require.Contains(t, out, "No releases")
 }
 
@@ -127,33 +128,59 @@ func TestFooterHasNoReasonWhenConverged(t *testing.T) {
 		map[string]string{"c": "1.0.0"})
 
 	require.Empty(t, m.selectedReason())
-	require.Equal(t, 1, strings.Count(m.renderFooter(), "\n")+1,
-		"a converged release with nothing to report adds no further footer lines")
+	footer := m.renderFooter()
+	require.Equal(t, 2, strings.Count(footer, "\n")+1,
+		"counts plus the read-only hint, and nothing else to report")
+	require.Contains(t, footer, readOnlyHint)
 }
 
-// An empty UPD column has two very different causes, and the footer must
-// distinguish them: nothing newer exists, versus nothing to compare against.
-func TestNoCachedIndexesIsSaidOutLoud(t *testing.T) {
+// The boundary is stated before an operator presses a key and is told no.
+func TestReadOnlyHintIsAlwaysOnScreen(t *testing.T) {
 	m := sized(testModel(), 140, 24)
-	loadReleases(t, m, map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}, nil)
+	require.Contains(t, m.View(), "Read-only", "even while loading")
 
+	loadReleases(t, m, map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}, nil)
+	require.Contains(t, m.View(), "Read-only")
+
+	loadReleases(t, m, nil, nil)
+	require.Contains(t, m.View(), "Read-only", "even with nothing installed")
+}
+
+// "nothing newer" and "nothing to compare against" are different answers, and
+// one empty cell for both would let the second read as the first.
+func TestUpdCellDistinguishesUnknownFromCurrent(t *testing.T) {
+	m := sized(testModel(), 150, 24)
+
+	loadReleases(t, m, map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}, nil)
 	require.False(t, m.haveIndexes)
-	require.Contains(t, m.renderFooter(), "No cached repository indexes")
-	require.Contains(t, m.renderFooter(), "charts repo update")
+	require.Equal(t, "?", m.updCell(m.list.Filtered[0]), "no index cached")
 
 	loadReleases(t, m,
 		map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}, nil,
 		map[string]string{"c": "1.0.0"})
 	require.True(t, m.haveIndexes)
-	require.NotContains(t, m.renderFooter(), "No cached repository indexes")
+	require.Equal(t, "—", m.updCell(m.list.Filtered[0]), "index cached, nothing newer")
+
+	loadReleases(t, m,
+		map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}, nil,
+		map[string]string{"c": "2.0.0"})
+	require.Equal(t, "2.0.0", m.updCell(m.list.Filtered[0]))
 }
 
-// With no releases at all the empty state already tells the whole story; a
-// missing-index warning on top of it is noise.
-func TestNoIndexNoteIsSuppressedOnAnEmptyList(t *testing.T) {
-	m := sized(testModel(), 120, 24)
-	loadReleases(t, m, nil, nil)
-	require.NotContains(t, m.renderFooter(), "No cached repository indexes")
+// The footer carries the counts, the convergence reason and the read-only
+// hint. A fourth line squeezes the content area enough to clip a dialog on a
+// short terminal, so the missing-index signal lives in the column instead.
+func TestFooterStaysWithinThreeLines(t *testing.T) {
+	m := sized(testModel(), 140, 24)
+	loadReleases(t, m,
+		map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")},
+		map[string][]charts.ServiceState{"app": {{
+			Name: "app_web", Running: 2, Desired: 3, NewestTaskAge: time.Hour,
+		}}})
+
+	require.NotEmpty(t, m.selectedReason(), "the fixture must produce a reason line")
+	require.False(t, m.haveIndexes, "and have the missing-index condition too")
+	require.LessOrEqual(t, strings.Count(m.renderFooter(), "\n")+1, 3)
 }
 
 func TestUpdColumnShowsTheNewerVersion(t *testing.T) {

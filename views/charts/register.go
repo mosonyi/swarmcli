@@ -17,7 +17,16 @@ func init() {
 // factory builds the view. It takes no docker.Deps: the release engine is this
 // view's data source, and it is reached through the releaseOps seam instead
 // (see ops.go for why that cannot live on Deps).
-func factory(_ docker.Deps, w, h int, _ any) (view.View, tea.Cmd) {
+//
+// An optional {"release": name} payload arrives from a cross-link — the stacks
+// view's jump to the release that owns a stack — and selects that release once
+// the first read lands.
+func factory(_ docker.Deps, w, h int, payload any) (view.View, tea.Cmd) {
 	m := New(w, h)
+	if data, ok := payload.(map[string]any); ok {
+		if name, ok := data["release"].(string); ok && name != "" {
+			m.pendingSelect = name
+		}
+	}
 	return m, m.Init()
 }

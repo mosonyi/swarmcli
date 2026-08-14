@@ -8,6 +8,7 @@ import (
 	"time"
 
 	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
 	"github.com/Eldara-Tech/swarmcli/views/helpbar"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -46,6 +47,11 @@ type Model struct {
 
 	resetCursorOnNextLoad bool
 
+	// pendingSelect is a release a cross-link asked for, applied once the first
+	// read lands — the view is empty when the factory runs, so there is nothing
+	// to select yet.
+	pendingSelect string
+
 	// expanded tracks which releases show their revisions and services inline,
 	// keyed by release name so a background reload cannot collapse them.
 	expanded map[string]bool
@@ -62,6 +68,10 @@ type Model struct {
 	err   error
 
 	errorDialogActive bool
+
+	// confirmDialog is only ever used in InfoMode: this view has nothing to
+	// confirm, only blocked actions to explain.
+	confirmDialog *confirmdialog.Model
 
 	spinner int
 
@@ -84,6 +94,7 @@ func New(width, height int) *Model {
 		sortAscending: true,
 		expanded:      map[string]bool{},
 		childIndex:    noChild,
+		confirmDialog: confirmdialog.New(width, height),
 	}
 
 	cols := m.buildColumns()
@@ -128,7 +139,7 @@ func (m *Model) Init() tea.Cmd {
 func (m *Model) HasActiveFilter() bool { return m.list.Query != "" }
 
 // CapturesInput reports whether the view is currently capturing all input.
-func (m *Model) CapturesInput() bool { return m.errorDialogActive }
+func (m *Model) CapturesInput() bool { return m.errorDialogActive || m.confirmDialog.Visible }
 
 // ApplySearchQuery sets the filter query on the release list (app-level "/").
 func (m *Model) ApplySearchQuery(query string) {
@@ -182,13 +193,20 @@ func (m *Model) SetSize(width, height int) {
 	m.list.Viewport.Width = width
 	m.list.Viewport.Height = height
 	m.list.SetOuterSize(width, height)
+	m.confirmDialog.Width = width
+	m.confirmDialog.Height = height
 }
 
 func (m *Model) OnEnter() tea.Cmd {
 	m.visible = true
-	m.resetCursorOnNextLoad = true
-	m.list.Cursor = 0
-	m.list.Viewport.YOffset = 0
+	// A cross-link's requested release outranks the usual jump to the top:
+	// the app calls OnEnter after the factory, so resetting here would undo
+	// the selection the payload asked for.
+	if m.pendingSelect == "" {
+		m.resetCursorOnNextLoad = true
+		m.list.Cursor = 0
+		m.list.Viewport.YOffset = 0
+	}
 	return m.loadReleasesCmd()
 }
 
