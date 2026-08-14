@@ -30,6 +30,60 @@ type ContextInfo struct {
 	Error       string
 }
 
+// DefaultContextName is Docker's built-in context.
+const DefaultContextName = "default"
+
+// ErrDefaultContextImmutable reports an update aimed at the built-in context.
+// `default` is a name the context store reserves and refuses to write
+// (docker/cli cli/context/store.ValidateContextName), so such an update can
+// only fail.
+var ErrDefaultContextImmutable = errors.New(
+	"the default context cannot be edited — create a context to point at another host")
+
+// dockerEndpointName is the key Docker files a context's Docker endpoint
+// under, both in `docker context inspect` output and as the directory holding
+// that endpoint's TLS material inside the context store.
+const dockerEndpointName = "docker"
+
+// The names the context store writes its copies of the TLS material under
+// (docker/cli cli/context/tlsdata.go).
+const (
+	tlsCAFile   = "ca.pem"
+	tlsCertFile = "cert.pem"
+	tlsKeyFile  = "key.pem"
+)
+
+// ContextEndpoint is a context's stored Docker endpoint. The cert fields point
+// at the context store's own copies of the TLS material: the store keeps the
+// bytes rather than the paths a context was created from, so those copies are
+// the only reference an update can re-supply. They are empty for a context
+// with no TLS material, such as an ssh:// endpoint.
+type ContextEndpoint struct {
+	Host          string
+	SkipTLSVerify bool
+	CAFile        string
+	CertFile      string
+	KeyFile       string
+}
+
+// HasTLS reports whether the endpoint carries a complete set of TLS material.
+func (e ContextEndpoint) HasTLS() bool {
+	return e.CAFile != "" && e.CertFile != "" && e.KeyFile != ""
+}
+
+// contextEndpointInspect is the subset of `docker context inspect` describing
+// the Docker endpoint and where the context store keeps its TLS material.
+type contextEndpointInspect struct {
+	Endpoints map[string]struct {
+		Host          string `json:"Host"`
+		SkipTLSVerify bool   `json:"SkipTLSVerify"`
+	} `json:"Endpoints"`
+	TLSMaterial map[string][]string `json:"TLSMaterial"`
+	Storage     struct {
+		TLSPath string `json:"TLSPath"`
+	} `json:"Storage"`
+}
+
 // contextListItem represents a single context from docker context ls --format json
 type contextListItem struct {
 	Name           string `json:"Name"`
@@ -236,6 +290,43 @@ func InspectContext(contextName string) (string, error) {
 	return string(output), nil
 }
 
+// InspectContextEndpoint returns the Docker endpoint stored for a context.
+func InspectContextEndpoint(contextName string) (ContextEndpoint, error) {
+	inspectJSON, err := InspectContext(contextName)
+	if err != nil {
+		return ContextEndpoint{}, err
+	}
+	return parseContextEndpoint(contextName, inspectJSON)
+}
+
+// parseContextEndpoint reads a single context out of `docker context inspect`
+// output, resolving its TLS material to paths inside the context store.
+func parseContextEndpoint(contextName, inspectJSON string) (ContextEndpoint, error) {
+	var inspected []contextEndpointInspect
+	if err := json.Unmarshal([]byte(inspectJSON), &inspected); err != nil {
+		return ContextEndpoint{}, fmt.Errorf("failed to parse inspect output for context '%s': %w", contextName, err)
+	}
+	if len(inspected) == 0 {
+		return ContextEndpoint{}, fmt.Errorf("context '%s' was not found", contextName)
+	}
+
+	meta := inspected[0].Endpoints[dockerEndpointName]
+	endpoint := ContextEndpoint{Host: meta.Host, SkipTLSVerify: meta.SkipTLSVerify}
+
+	tlsDir := filepath.Join(inspected[0].Storage.TLSPath, dockerEndpointName)
+	for _, file := range inspected[0].TLSMaterial[dockerEndpointName] {
+		switch file {
+		case tlsCAFile:
+			endpoint.CAFile = filepath.Join(tlsDir, file)
+		case tlsCertFile:
+			endpoint.CertFile = filepath.Join(tlsDir, file)
+		case tlsKeyFile:
+			endpoint.KeyFile = filepath.Join(tlsDir, file)
+		}
+	}
+	return endpoint, nil
+}
+
 // ExportContext exports a Docker context to a tar file in /tmp
 func ExportContext(contextName string) (string, error) {
 	filePath := fmt.Sprintf("/tmp/%s.tar", filepath.Base(contextName))
@@ -395,82 +486,69 @@ func CreateContextWithCertFiles(name, description, dockerHost, caFile, certFile,
 	return nil
 }
 
-// UpdateContextDescription updates only the description of a Docker context
-func UpdateContextDescription(name, description string) error {
+// UpdateContextEndpoint updates a Docker context's description and host. An
+// empty value leaves that field as it is.
+//
+// Changing the host carries the context's existing TLS material forward.
+// `docker context update` does not merge: it replaces the whole endpoint and
+// resets the stored TLS material to exactly what --docker names, so a bare
+// host= would delete a TLS context's certificates (docker/cli
+// cli/command/context/update.go).
+//
+// Docker ignores an empty --description, so a description cannot be cleared
+// this way. A caller that lets a user empty the field must say so rather than
+// report a success that changed nothing.
+func UpdateContextEndpoint(name, description, dockerHost string) error {
 	if name == "" {
 		return fmt.Errorf("context name is required")
 	}
-
-	args := []string{"context", "update", name}
-
-	// Add description (even if empty, to allow clearing)
-	args = append(args, "--description", description)
-
-	cmd := exec.Command("docker", args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		// Include Docker's error message if available
-		if len(output) > 0 {
-			// Clean up Docker's error message
-			errMsg := strings.TrimSpace(string(output))
-			errMsg = strings.ReplaceAll(errMsg, "\n", " ")
-			return fmt.Errorf("%s", errMsg)
-		}
-		return fmt.Errorf("failed to update context %s: %w", name, err)
+	if name == DefaultContextName {
+		return ErrDefaultContextImmutable
 	}
 
-	return nil
+	// Only a host change replaces the endpoint, so only then is the stored
+	// material at stake — and worth an inspect.
+	var endpoint ContextEndpoint
+	if dockerHost != "" {
+		var err error
+		endpoint, err = InspectContextEndpoint(name)
+		if err != nil {
+			return err
+		}
+	}
+
+	return runContextUpdate(name, updateContextArgs(name, description, dockerHost, endpoint))
 }
 
-// UpdateContextWithCertFiles updates a Docker context with specific certificate file paths
-func UpdateContextWithCertFiles(name, description, dockerHost, caFile, certFile, keyFile string, skipTLSVerify bool) error {
-	if name == "" {
-		return fmt.Errorf("context name is required")
-	}
-
-	// Validate certificate files
-	if err := validateTLSFiles(caFile, certFile, keyFile); err != nil {
-		return err
-	}
-
+// updateContextArgs builds the argv for `docker context update`. endpoint
+// supplies the TLS material to re-state alongside a new host; it is ignored
+// when the host is unchanged, because then no --docker is passed and Docker
+// leaves the endpoint alone.
+func updateContextArgs(name, description, dockerHost string, endpoint ContextEndpoint) []string {
 	args := []string{"context", "update", name}
 
-	// Add description if provided (even if empty, to allow clearing)
 	if description != "" {
 		args = append(args, "--description", description)
 	}
-
-	// Build docker endpoint configuration if host or certs provided
-	if dockerHost != "" || caFile != "" {
-		dockerConfig := ""
-
-		// Add host if provided
-		if dockerHost != "" {
-			dockerConfig = "host=" + dockerHost
-		}
-
-		// Add TLS options with individual cert files
-		if caFile != "" && certFile != "" && keyFile != "" {
-			if dockerConfig != "" {
-				dockerConfig += ","
-			}
-			dockerConfig += "ca=" + caFile
-			dockerConfig += ",cert=" + certFile
-			dockerConfig += ",key=" + keyFile
-		}
-
-		if skipTLSVerify {
-			if dockerConfig != "" {
-				dockerConfig += ","
-			}
-			dockerConfig += "skip-tls-verify=true"
-		}
-
-		if dockerConfig != "" {
-			args = append(args, "--docker", dockerConfig)
-		}
+	if dockerHost == "" {
+		return args
 	}
 
+	dockerConfig := "host=" + dockerHost
+	if endpoint.HasTLS() {
+		dockerConfig += ",ca=" + endpoint.CAFile
+		dockerConfig += ",cert=" + endpoint.CertFile
+		dockerConfig += ",key=" + endpoint.KeyFile
+	}
+	if endpoint.SkipTLSVerify {
+		dockerConfig += ",skip-tls-verify=true"
+	}
+	return append(args, "--docker", dockerConfig)
+}
+
+// runContextUpdate runs `docker context update`, preferring Docker's own error
+// text over the exit status.
+func runContextUpdate(name string, args []string) error {
 	cmd := exec.Command("docker", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {

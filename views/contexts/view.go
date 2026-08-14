@@ -312,12 +312,13 @@ func (m *Model) renderCreateDialog() string {
 	return dialog.BorderStyle.Render(content)
 }
 
-// renderEditDialog renders the edit context dialog (description only)
+// renderEditDialog renders the edit context dialog (description and host)
 func (m *Model) renderEditDialog() string {
 	var lines []string
 	lines = append(lines, dialog.TitleStyle.Render(" Edit Context: "+m.editContextName+" "))
 	lines = append(lines, dialog.ItemStyle.Render(""))
 	lines = append(lines, dialog.ItemStyle.Render(m.editDescInput.View()))
+	lines = append(lines, dialog.ItemStyle.Render(m.editHostInput.View()))
 
 	// Show error message if present
 	errorMsg := m.GetError()
@@ -338,8 +339,9 @@ func (m *Model) renderEditDialog() string {
 			dialog.KeyStyle.Render("<Enter>"),
 			dialog.KeyStyle.Render("<Esc>"))
 	} else {
-		helpText = fmt.Sprintf(" %s Update • %s Cancel",
+		helpText = fmt.Sprintf(" %s Update • %s Navigate • %s Cancel",
 			dialog.KeyStyle.Render("<Enter>"),
+			dialog.KeyStyle.Render("<Tab/↑/↓>"),
 			dialog.KeyStyle.Render("<Esc>"))
 	}
 	lines = append(lines, dialog.HelpStyle.Render(helpText))

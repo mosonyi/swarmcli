@@ -70,8 +70,11 @@ type ContextCreatedMsg struct {
 
 type ContextUpdatedMsg struct {
 	ContextName string
-	Success     bool
-	Error       error
+	// Reconnect reports that the active context's endpoint moved, so the
+	// cached Docker client and snapshot have to be rebuilt.
+	Reconnect bool
+	Success   bool
+	Error     error
 }
 
 // ContextChangedNotification is sent to notify the app that the Docker context has changed
@@ -287,13 +290,17 @@ func (m *Model) createContextWithCertFilesCmd(name, description, dockerHost, caF
 	}
 }
 
-// updateContextDescriptionCmd updates only the description of an existing Docker context
-func (m *Model) updateContextDescriptionCmd(name, description string) tea.Cmd {
+// updateContextEndpointCmd updates an existing Docker context's description
+// and, when dockerHost is set, its endpoint. isCurrent says whether the
+// context is the active one, which decides whether a moved endpoint has to be
+// reconnected to.
+func (m *Model) updateContextEndpointCmd(name, description, dockerHost string, isCurrent bool) tea.Cmd {
 	contextOps := m.deps.Contexts
 	return func() tea.Msg {
-		err := contextOps.UpdateContextDescription(name, description)
+		err := contextOps.UpdateContextEndpoint(name, description, dockerHost)
 		return ContextUpdatedMsg{
 			ContextName: name,
+			Reconnect:   err == nil && isCurrent && dockerHost != "",
 			Success:     err == nil,
 			Error:       err,
 		}
