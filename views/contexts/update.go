@@ -6,6 +6,7 @@ package contexts
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Eldara-Tech/swarmcli/docker"
 	"github.com/Eldara-Tech/swarmcli/ui/dialog"
 	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
 	helpview "github.com/Eldara-Tech/swarmcli/views/help"
@@ -238,15 +239,22 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		// Success - close edit dialog and clear fields
-		m.editDialogActive = false
-		m.editContextName = ""
-		m.editDescInput.Blur()
-		m.editDescInput.SetValue("")
+		m.closeEditDialog()
 		m.SetError("")
 		m.SetSuccess("Updated context: " + msg.ContextName)
 		// Refresh the list to show the updated context
 		m.SetLoading(true)
-		return m.loadContextsCmd()
+		if !msg.Reconnect {
+			return m.loadContextsCmd()
+		}
+		// The active context's endpoint moved, so the cached client and
+		// snapshot describe a daemon we are no longer pointing at. This is the
+		// path a switch takes. No PreviousContext: there is nothing to roll
+		// back to, since the context we would return to is the one that moved.
+		return tea.Batch(
+			m.loadContextsCmd(),
+			func() tea.Msg { return ContextChangedNotification{} },
+		)
 
 	case confirmdialog.ResultMsg:
 		if msg.Confirmed {
@@ -534,25 +542,53 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					return nil
 				}
 
-				// Get description value
 				description := strings.TrimSpace(m.editDescInput.Value())
+				host := strings.TrimSpace(m.editHostInput.Value())
 
-				// Update only the description (no host or cert changes)
-				return m.updateContextDescriptionCmd(m.editContextName, description)
+				if host == "" {
+					m.SetError("Host is required")
+					return nil
+				}
+				// Docker ignores an empty --description, so accepting this
+				// would report an update that never happened.
+				if description == "" && m.editContextDesc != "" {
+					m.SetError("Docker cannot clear a description — recreate the context to remove it")
+					return nil
+				}
+				if description == m.editContextDesc && host == m.editContextHost {
+					m.closeEditDialog()
+					m.SetError("")
+					return nil
+				}
+
+				m.SetError("")
+				m.SetSuccess("")
+				// The endpoint only has to be replaced when the host moved.
+				if host == m.editContextHost {
+					host = ""
+				}
+				return m.updateContextEndpointCmd(m.editContextName, description, host, m.editContextCurrent)
+
+			case "tab", "shift+tab", "up", "down":
+				m.editInputFocus = 1 - m.editInputFocus
+				m.updateEditFocus()
+				return nil
 
 			case "esc":
 				// Cancel edit dialog
-				m.editDialogActive = false
-				m.editContextName = ""
-				m.editDescInput.Blur()
-				m.editDescInput.SetValue("")
+				m.closeEditDialog()
 				m.SetError("")
 				return nil
 
 			default:
-				// Update the description textinput
+				// Update the focused textinput
 				var cmd tea.Cmd
-				m.editDescInput, cmd = m.editDescInput.Update(msg)
+				switch m.editInputFocus {
+				case 0:
+					m.editDescInput, cmd = m.editDescInput.Update(msg)
+				case 1:
+					m.editHostInput, cmd = m.editHostInput.Update(msg)
+				}
 				return cmd
 			}
 		}
@@ -784,16 +820,29 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return LoadFilesCmd(homeDir)
 
 		case "e":
-			// Edit selected context (description only)
+			// Edit selected context (description and host)
 			ctx, ok := m.GetSelectedContext()
 			if !ok {
 				return nil
 			}
-			// Open edit dialog with current description
+			// Docker reserves the name, so an update can only fail — say why
+			// up front instead of opening a form that cannot be saved.
+			if ctx.Name == docker.DefaultContextName {
+				m.SetError(docker.ErrDefaultContextImmutable.Error())
+				m.SetSuccess("")
+				m.errorDialogActive = true
+				return nil
+			}
+			// Open edit dialog with the current values
 			m.editDialogActive = true
 			m.editContextName = ctx.Name
-			m.editDescInput.Focus()
+			m.editContextDesc = ctx.Description
+			m.editContextHost = ctx.DockerHost
+			m.editContextCurrent = ctx.Current
+			m.editInputFocus = 0
 			m.editDescInput.SetValue(ctx.Description)
+			m.editHostInput.SetValue(ctx.DockerHost)
+			m.updateEditFocus()
 			m.SetError("")
 			m.SetSuccess("")
 			return textinput.Blink
