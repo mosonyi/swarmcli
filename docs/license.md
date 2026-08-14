@@ -37,29 +37,36 @@ Get a key (including a free trial) at [swarmcli.io/be](https://swarmcli.io/be).
 
 ## Activation
 
-Input paths are checked in this order:
+The active key is the one stored on the connected swarm, as a Docker
+Config named `swarmcli-license` (see
+[Per-swarm storage](#per-swarm-storage)). That is the only place swarmcli
+loads a key from, so that every component agrees on which license is in
+force no matter which machine the TUI runs on.
 
-1. The `SWARMCLI_LICENSE` environment variable.
-2. A Docker Config named `swarmcli-license` on the connected swarm (the
-   recommended place; see [Per-swarm storage](#per-swarm-storage)).
-3. The file `~/.config/swarmcli/license.key`.
-4. The interactive startup prompt.
+Two *portable* sources let you carry a key to a swarm without re-issuing
+it: the `SWARMCLI_LICENSE` environment variable and the file
+`~/.config/swarmcli/license.key`. Neither is activated on its own. When
+one is present the `:license` view lists it with the keystroke that
+installs it into the connected swarm, and the source is preserved
+afterwards so you can install the same key on further swarms.
 
-If a higher-priority path yields a key, lower paths are **not** consulted.
-If all are absent, swarmcli shows the startup prompt.
+So there are three ways to activate a key, all of which end with it
+stored on the swarm:
 
-You can also set or replace the active key from inside the TUI: open
-`:license` and press `s` to paste a new key, or `c` to clear the current
-one. A key set this way is written to `~/.config/swarmcli/license.key`.
-To install a key directly into the connected swarm (recommended for
-deployed environments), use `:license install <path-to-license.key>`
-from the command bar — see [`:license` subcommands](#license-subcommands).
+1. Paste it into the license prompt (see below) or into `:license` `s`.
+2. `:license install <path-to-license.key>` from the command bar — see
+   [`:license` subcommands](#license-subcommands).
+3. Press the listed key on the `:license` view to install from
+   `$SWARMCLI_LICENSE` or from `~/.config/swarmcli/license.key`.
 
-### Startup prompt
+All of them require a Docker context pointing at a swarm manager, and all
+of them validate the key before storing it.
 
-The prompt appears whenever no usable key is available — i.e. there's no
-key, the key is invalid, or the key is past its grace period. You see one
-of:
+### The license prompt
+
+The prompt appears when you ask for a Business Edition feature and no
+usable key is available — i.e. there's no key, the key is invalid, or the
+key is past its grace period. You see one of:
 
 ```
 No Business Edition license found.
@@ -102,14 +109,17 @@ Switch context (:contexts) or contact support to rebind.
 License key:
 ```
 
-Pressing **Enter** with no input drops you into Community Edition mode for
-this session. Pasting a valid key activates BE and saves the key to
-`~/.config/swarmcli/license.key`.
+Pressing **Enter** with no input dismisses the prompt and leaves you in
+Community Edition. Pasting a valid key activates Business Edition and
+stores the key on the connected swarm, replacing whatever was installed
+there before — so renewing an expiring license is a single paste, with no
+uninstall step.
 
-There is no flag to skip the prompt non-interactively — set
-`SWARMCLI_LICENSE` instead, or pre-place the file. Piping an empty line
-to stdin will still bypass the prompt, but the TUI itself requires a
-real terminal.
+If the key verifies but cannot be stored — the Docker context isn't a
+swarm manager, or the daemon isn't reachable — the prompt says
+`License Not Installed` and names the reason. Business Edition stays off
+until the key reaches the swarm: connect to a manager (`:contexts`) and
+paste it again.
 
 ### `:license` view
 
@@ -128,13 +138,17 @@ Inside the TUI, `:license` shows current state:
 
 The view also shows:
 
-- `Source: environment variable | swarm config (swarmcli-license) | file (~/.config/swarmcli/license.key)` — where the active key was loaded from.
+- `Source: swarm config (swarmcli-license)` — where the active key was loaded from.
 - `Binding: Bound to <id> | Unbound (portable across swarms) | Expected/Observed mismatch` — the current binding state.
 
 Key bindings inside the view:
 
-- `s` — set a new license key (interactive paste, written to `~/.config/swarmcli/license.key`).
-- `c` — clear the current key (with confirmation; clears env, swarm config, **and** file).
+- `s` — set a new license key (interactive paste, stored on the connected swarm, replacing any key already installed there).
+- `c` — clear the current key (with confirmation). Removes the swarm-stored key only; `$SWARMCLI_LICENSE` and `~/.config/swarmcli/license.key` are left alone so the key stays portable to other swarms.
+
+When a portable source is present, the view also lists it under
+**Available Local Sources** with the keystroke that installs it into this
+swarm.
 
 ### `:license` subcommands
 
@@ -142,13 +156,30 @@ Key bindings inside the view:
 |---|---|
 | `:license` | Open the license view (default). |
 | `:license install <file>` | Install the token in `<file>` into this swarm's Docker Config (`swarmcli-license`). The token is validated before it is stored. Requires a Docker context pointing at a swarm manager. |
-| `:license uninstall` | Remove the swarm-stored license. Does not touch the env var or the file fallback — if a file or env var is still set, the license stays active from that source. |
+| `:license export <file> [--force]` | Write the swarm-stored token back out to `<file>` (mode `0600`), so you can install the same key on further swarms without re-issuing it. Refuses to overwrite an existing file unless `--force` is passed. |
+| `:license uninstall` | Remove the swarm-stored license, dropping the swarm back to Community Edition. `$SWARMCLI_LICENSE` and `~/.config/swarmcli/license.key` are left in place so the key stays portable, but neither reactivates on its own. |
 | `:license cluster-id` | Print the current swarm's cluster id (useful when contacting support to get a bound license issued). Works with no license loaded. |
 
-`:license install` refuses to overwrite an existing managed config — run
-`:license uninstall` first. It also won't touch a `swarmcli-license`
-Config that swarmcli didn't create, so a user-created Config of the same
-name is never silently overwritten.
+`:license install` won't touch a `swarmcli-license` Config that swarmcli
+didn't create, so a user-created Config of the same name is never
+silently overwritten.
+
+### Renewing a license
+
+Install the new key the same way you installed the first one — paste it
+into `:license` `s`, or run `:license install <new-file>`. It replaces
+the installed key in place; there is no uninstall step, and it works
+whether the old key is still valid, in its grace period, or long expired.
+
+The new key is verified before the old one is removed, so a key that
+doesn't verify (or is bound to a different swarm) leaves the installed
+one untouched. Between the two there is a sub-second window in which no
+license is installed; a Business Edition request landing exactly inside
+it is refused once and succeeds on retry.
+
+`:license uninstall` remains available for going back to Community
+Edition, and stays the way to clear a `swarmcli-license` Config before
+handing a swarm to someone else.
 
 ## Per-swarm binding
 
@@ -186,8 +217,8 @@ preserves the cluster id, so the original license keeps working.
 
 ## Per-swarm storage
 
-The license can be stored as a Docker Config (`swarmcli-license`) on the
-swarm itself. This is the recommended deployment pattern:
+The license is stored as a Docker Config (`swarmcli-license`) on the swarm
+itself. That is what makes the following true:
 
 - The license is part of the swarm's Raft state. It's not sitting in a
   file on operator laptops.
