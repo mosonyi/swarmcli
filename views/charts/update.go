@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Eldara-Tech/swarmcli/charts"
 	"github.com/Eldara-Tech/swarmcli/core/primitives/hash"
 	"github.com/Eldara-Tech/swarmcli/ui"
 	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
@@ -155,9 +156,27 @@ func (m *Model) handleReleasesLoaded(msg ReleasesLoadedMsg) tea.Cmd {
 		}
 	}
 
+	m.clampChild()
 	m.state = stateReady
 	m.list.Viewport.SetContent(m.list.View())
 	return nil
+}
+
+// clampChild keeps the child selection inside the release under the cursor. A
+// reload can land on a release with fewer revisions than the last one had, and
+// a filter or sort can move the cursor to a different release entirely.
+func (m *Model) clampChild() {
+	if m.childIndex == noChild {
+		return
+	}
+	sel, ok := m.selected()
+	if !ok || !m.expanded[sel.Name] {
+		m.childIndex = noChild
+		return
+	}
+	if n := len(sel.children()); m.childIndex >= n {
+		m.childIndex = n - 1
+	}
 }
 
 func (m *Model) handleNormalKeys(msg tea.KeyMsg) tea.Cmd {
@@ -185,43 +204,140 @@ func (m *Model) handleNormalKeys(msg tea.KeyMsg) tea.Cmd {
 		m.list.ScrollRight()
 		m.list.Viewport.SetContent(m.list.View())
 	case "up", "k":
-		if m.list.Cursor > 0 {
-			m.list.Cursor--
-			m.list.ResetColumnScroll()
-			m.list.Viewport.SetContent(m.list.View())
-		}
+		m.moveUp()
 	case "down", "j":
-		if m.list.Cursor < len(m.list.Filtered)-1 {
-			m.list.Cursor++
-			m.list.ResetColumnScroll()
-			m.list.Viewport.SetContent(m.list.View())
-		}
+		m.moveDown()
 	case "pgup":
 		m.movePage(-1)
 	case "pgdown":
 		m.movePage(1)
+	case "esc":
+		// Only reached because IsRowExpanded told the app to forward it.
+		m.collapseOneLevel()
+	case "enter":
+		return m.handleEnter()
 	case "i":
-		if sel, ok := m.selected(); ok {
-			return m.inspectRevisionCmd(sel.Name, sel.current())
+		if rev, ok := m.selectedRevision(); ok {
+			sel, _ := m.selected()
+			return m.inspectRevisionCmd(sel.Name, rev)
 		}
 	case "v":
-		if sel, ok := m.selected(); ok {
-			return m.inspectValuesCmd(sel.Name, sel.current())
+		if rev, ok := m.selectedRevision(); ok {
+			sel, _ := m.selected()
+			return m.inspectValuesCmd(sel.Name, rev)
+		}
+	case "d":
+		if child, ok := m.selectedChild(); ok && child.kind == childRevision {
+			sel, _ := m.selected()
+			return m.diffRevisionCmd(sel.Name, child)
 		}
 	case "s":
 		if sel, ok := m.selected(); ok {
-			// A release deploys a stack named after itself, so the services
-			// view's existing stack scope is the right drill-down.
-			name := sel.Name
-			return func() tea.Msg {
-				return view.NavigateToMsg{
-					ViewName: servicesview.ViewName,
-					Payload:  map[string]any{"stackName": name},
-				}
-			}
+			return servicesForStackCmd(sel.Name, "")
 		}
 	}
 	return nil
+}
+
+// selectedRevision is the revision `i` and `v` act on: the one under the cursor
+// when a revision child is selected, otherwise the release's current revision.
+func (m *Model) selectedRevision() (charts.Release, bool) {
+	sel, ok := m.selected()
+	if !ok {
+		return charts.Release{}, false
+	}
+	if child, isChild := m.selectedChild(); isChild {
+		if child.kind != childRevision {
+			return charts.Release{}, false
+		}
+		return child.rev, true
+	}
+	return sel.current(), true
+}
+
+// handleEnter expands or collapses the release, unless a service child is
+// selected — from there it drills into that service.
+func (m *Model) handleEnter() tea.Cmd {
+	sel, ok := m.selected()
+	if !ok {
+		return nil
+	}
+	if child, isChild := m.selectedChild(); isChild {
+		if child.kind == childService {
+			return servicesForStackCmd(sel.Name, child.svc.Name)
+		}
+		return nil
+	}
+	m.expanded[sel.Name] = !m.expanded[sel.Name]
+	m.childIndex = noChild
+	m.list.Viewport.SetContent(m.list.View())
+	return nil
+}
+
+// servicesForStackCmd opens the services view scoped to the release's stack. A
+// release deploys a stack named after itself, so the services view's existing
+// stack scope is the right drill-down, and scale, restart and logs stay in the
+// view that owns them.
+func servicesForStackCmd(release, selectService string) tea.Cmd {
+	payload := map[string]any{"stackName": release}
+	if selectService != "" {
+		payload["selectServiceName"] = selectService
+	}
+	return func() tea.Msg {
+		return view.NavigateToMsg{ViewName: servicesview.ViewName, Payload: payload}
+	}
+}
+
+// collapseOneLevel walks esc back out: from a child to the release row, then
+// from an expanded release to a collapsed one.
+func (m *Model) collapseOneLevel() {
+	if m.childIndex != noChild {
+		m.childIndex = noChild
+		m.list.Viewport.SetContent(m.list.View())
+		return
+	}
+	if sel, ok := m.selected(); ok {
+		delete(m.expanded, sel.Name)
+		m.list.Viewport.SetContent(m.list.View())
+	}
+}
+
+// moveDown steps into an expanded release's children before moving on to the
+// next release.
+func (m *Model) moveDown() {
+	if sel, ok := m.selected(); ok && m.expanded[sel.Name] {
+		if n := len(sel.children()); m.childIndex < n-1 {
+			m.childIndex++
+			m.list.Viewport.SetContent(m.list.View())
+			return
+		}
+	}
+	if m.list.Cursor < len(m.list.Filtered)-1 {
+		m.list.Cursor++
+		m.childIndex = noChild
+		m.list.ResetColumnScroll()
+		m.list.Viewport.SetContent(m.list.View())
+	}
+}
+
+// moveUp is moveDown's mirror: out of the children to the release row, then to
+// the previous release — landing on its last child when it is expanded, so the
+// two directions traverse the same sequence of rows.
+func (m *Model) moveUp() {
+	if m.childIndex != noChild {
+		m.childIndex--
+		m.list.Viewport.SetContent(m.list.View())
+		return
+	}
+	if m.list.Cursor > 0 {
+		m.list.Cursor--
+		m.childIndex = noChild
+		if sel, ok := m.selected(); ok && m.expanded[sel.Name] {
+			m.childIndex = len(sel.children()) - 1
+		}
+		m.list.ResetColumnScroll()
+		m.list.Viewport.SetContent(m.list.View())
+	}
 }
 
 func (m *Model) movePage(dir int) {
@@ -239,6 +355,7 @@ func (m *Model) movePage(dir int) {
 	if m.list.Cursor < 0 {
 		m.list.Cursor = 0
 	}
+	m.childIndex = noChild
 	m.list.ResetColumnScroll()
 	m.list.Viewport.SetContent(m.list.View())
 }
@@ -332,16 +449,29 @@ func (m *Model) applySorting() {
 			}
 		}
 	}
+	m.clampChild()
 	m.list.Viewport.SetContent(m.list.View())
 }
 
 func (m *Model) setRenderItem() {
 	m.list.RenderItem = func(item releaseItem, selected bool, _ int) string {
 		row := m.list.RenderRow(item, selected)
-		if selected {
-			return ui.ListSelectedStyle.Render(row)
+		// The release row loses its highlight while a child is selected, so
+		// exactly one line on screen reads as the cursor.
+		if selected && m.childIndex == noChild {
+			row = ui.ListSelectedStyle.Render(row)
+		} else {
+			row = ui.ListItemStyle.Render(row)
 		}
-		return ui.ListItemStyle.Render(row)
+		if !m.expanded[item.Name] {
+			return row
+		}
+		child := noChild
+		if selected {
+			child = m.childIndex
+		}
+		lines, _ := expansionBlock(item, child)
+		return row + "\n" + strings.Join(lines, "\n")
 	}
 	m.list.Viewport.SetContent(m.list.View())
 }

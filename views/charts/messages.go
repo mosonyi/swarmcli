@@ -7,10 +7,12 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Eldara-Tech/swarmcli/charts"
 	"github.com/Eldara-Tech/swarmcli/core/primitives/hash"
+	"github.com/Eldara-Tech/swarmcli/utils/textdiff"
 	inspectview "github.com/Eldara-Tech/swarmcli/views/inspect"
 	"github.com/Eldara-Tech/swarmcli/views/view"
 
@@ -183,6 +185,36 @@ func (m *Model) inspectRevisionCmd(release string, rev charts.Release) tea.Cmd {
 				"title":  fmt.Sprintf("Release: %s (rev %d) — manifest", release, rev.Revision),
 				"json":   rev.Manifest,
 				"format": inspectview.FormatYAML,
+			},
+		}
+	}
+}
+
+// diffRevisionCmd shows what a revision changed against the one below it.
+//
+// Both manifests are already in hand — every revision record stores the
+// document it deployed — so this needs no chart, no re-render and no network,
+// which is what `charts diff upgrade` cannot say.
+func (m *Model) diffRevisionCmd(release string, child childRow) tea.Cmd {
+	return func() tea.Msg {
+		cur := child.rev
+		prev := child.prev
+		title := fmt.Sprintf("Release: %s — rev %d → rev %d", release, prev.Revision, cur.Revision)
+		if prev.Revision == 0 {
+			title = fmt.Sprintf("Release: %s — rev %d (first revision)", release, cur.Revision)
+		}
+		out := textdiff.Lines(prev.Manifest, cur.Manifest)
+		if strings.TrimSpace(out) == "" {
+			out = "# No changes."
+		}
+		return view.NavigateToMsg{
+			ViewName: inspectview.ViewName,
+			Payload: map[string]any{
+				"title": title,
+				"json":  out,
+				// Raw: a diff is not a YAML document, and the tree view would
+				// refuse it or, worse, parse away the +/- prefixes.
+				"format": inspectview.FormatRaw,
 			},
 		}
 	}

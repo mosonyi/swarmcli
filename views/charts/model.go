@@ -46,6 +46,13 @@ type Model struct {
 
 	resetCursorOnNextLoad bool
 
+	// expanded tracks which releases show their revisions and services inline,
+	// keyed by release name so a background reload cannot collapse them.
+	expanded map[string]bool
+	// childIndex is the selected child within the expanded release under the
+	// cursor, or noChild when the release row itself is selected.
+	childIndex int
+
 	state state
 	err   error
 
@@ -70,6 +77,8 @@ func New(width, height int) *Model {
 		visible:       true,
 		sortField:     SortByName,
 		sortAscending: true,
+		expanded:      map[string]bool{},
+		childIndex:    noChild,
 	}
 
 	cols := m.buildColumns()
@@ -120,6 +129,7 @@ func (m *Model) CapturesInput() bool { return m.errorDialogActive }
 func (m *Model) ApplySearchQuery(query string) {
 	m.list.Query = query
 	m.list.ApplyFilter()
+	m.childIndex = noChild
 	m.applySorting()
 }
 
@@ -128,6 +138,7 @@ func (m *Model) ClearSearchQuery() {
 	m.list.Query = ""
 	m.list.ApplyFilter()
 	m.list.Cursor = 0
+	m.childIndex = noChild
 	m.list.Viewport.GotoTop()
 	m.applySorting()
 }
@@ -135,8 +146,10 @@ func (m *Model) ClearSearchQuery() {
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "↑/↓", Desc: "Navigate"},
+		{Key: "enter", Desc: "Expand"},
 		{Key: "i", Desc: "Manifest"},
 		{Key: "v", Desc: "Values"},
+		{Key: "d", Desc: "Diff"},
 		{Key: "s", Desc: "Services"},
 		{Key: "/", Desc: "Filter"},
 		{Key: "?", Desc: "Help"},
@@ -187,4 +200,36 @@ func (m *Model) selected() (releaseItem, bool) {
 		return releaseItem{}, false
 	}
 	return m.list.Filtered[m.list.Cursor], true
+}
+
+// isExpanded reports whether the release under the cursor shows its children.
+func (m *Model) isExpanded() bool {
+	sel, ok := m.selected()
+	return ok && m.expanded[sel.Name]
+}
+
+// selectedChild returns the child row under the cursor, if one is selected.
+func (m *Model) selectedChild() (childRow, bool) {
+	if m.childIndex == noChild {
+		return childRow{}, false
+	}
+	sel, ok := m.selected()
+	if !ok || !m.expanded[sel.Name] {
+		return childRow{}, false
+	}
+	rows := sel.children()
+	if m.childIndex < 0 || m.childIndex >= len(rows) {
+		return childRow{}, false
+	}
+	return rows[m.childIndex], true
+}
+
+// IsRowExpanded tells the app that esc has somewhere to go inside this view:
+// back to the release row from a child, then collapsing the release. Without
+// it the app's esc chain would pop straight out of the view.
+//
+// Deliberately not routed through CapturesInput, which the ":" handler also
+// consults and which would disable the command bar while a row is expanded.
+func (m *Model) IsRowExpanded() bool {
+	return m.childIndex != noChild || m.isExpanded()
 }

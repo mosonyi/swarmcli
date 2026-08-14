@@ -49,6 +49,8 @@ func (m *Model) buildMainContent() string {
 		m.width, m.height, m.FrameHeader(), m.FrameFooter(),
 	)
 
+	m.adjustOffsetForChild(frame.DesiredContentLines)
+
 	content := m.list.VisibleContent(frame.DesiredContentLines)
 	switch {
 	case m.state == stateLoading && len(m.list.Items) == 0:
@@ -62,6 +64,62 @@ func (m *Model) buildMainContent() string {
 		content = ui.OverlayCentered(content, errorDialog, width, 0)
 	}
 	return content
+}
+
+// adjustOffsetForChild keeps the selected child on screen.
+//
+// VisibleContent's own scrolling treats an expanded release as a single cursor
+// unit, so a release taller than the viewport is shown from its first line and
+// a child further down falls off the bottom. While a child is selected the
+// view therefore takes the offset over itself, exactly as the services view
+// does for its inline task rows.
+func (m *Model) adjustOffsetForChild(visibleLines int) {
+	if m.childIndex == noChild {
+		m.list.SkipOffsetAdjustment = false
+		return
+	}
+	sel, ok := m.selected()
+	if !ok || !m.expanded[sel.Name] {
+		m.list.SkipOffsetAdjustment = false
+		return
+	}
+	_, childLine := expansionBlock(sel, m.childIndex)
+	if m.childIndex >= len(childLine) {
+		m.list.SkipOffsetAdjustment = false
+		return
+	}
+	m.list.SkipOffsetAdjustment = true
+
+	// Lines above the selected release, then its own row, then the child's
+	// line within the expansion block.
+	offset := 0
+	for i := 0; i < m.list.Cursor && i < len(m.list.Filtered); i++ {
+		offset += m.itemLineCount(m.list.Filtered[i])
+	}
+	offset += 1 + childLine[m.childIndex]
+
+	if visibleLines < 1 {
+		visibleLines = 1
+	}
+	if offset < m.list.Viewport.YOffset {
+		m.list.Viewport.YOffset = offset
+	} else if offset >= m.list.Viewport.YOffset+visibleLines {
+		m.list.Viewport.YOffset = offset - visibleLines + 1
+		if m.list.Viewport.YOffset < 0 {
+			m.list.Viewport.YOffset = 0
+		}
+	}
+}
+
+// itemLineCount is how many rendered lines an item occupies. It counts the
+// expansion through the same function that renders it, so the two cannot
+// disagree about how tall a release is.
+func (m *Model) itemLineCount(it releaseItem) int {
+	if !m.expanded[it.Name] {
+		return 1
+	}
+	lines, _ := expansionBlock(it, noChild)
+	return 1 + len(lines)
 }
 
 // padTo renders lines into exactly n rows, so the frame does not collapse.
