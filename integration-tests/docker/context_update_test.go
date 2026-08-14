@@ -194,7 +194,7 @@ func writePEM(t *testing.T, path string, block *pem.Block) {
 	if err != nil {
 		t.Fatalf("creating %s: %v", path, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	if err := pem.Encode(file, block); err != nil {
 		t.Fatalf("writing %s: %v", path, err)
 	}
