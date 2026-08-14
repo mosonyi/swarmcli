@@ -17,7 +17,11 @@ import (
 	"github.com/docker/docker/api/types/swarm"
 )
 
-const PollInterval = 5 * time.Second
+// PollInterval is how often the view re-reads its resource. It is a var, not a
+// const, so tests can shrink it: a tea.Tick cmd invoked synchronously blocks
+// for the full interval, so a test that runs one to see what it scheduled would
+// otherwise sit here for five seconds.
+var PollInterval = 5 * time.Second
 
 type TickMsg time.Time
 

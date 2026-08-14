@@ -1,0 +1,87 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright © 2026 Eldara Tech
+
+package volumesview
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/Eldara-Tech/swarmcli/docker"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/stretchr/testify/require"
+)
+
+// drivePoll models the bubbletea runtime for one round: run each pending
+// command, flattening tea.Batch — whose members the runtime runs, not the
+// caller — feed every resulting message back into Update, and return the
+// commands that came out.
+//
+// Flattening is the point. Asserting on the command Update returns cannot see
+// past a batch, nor see a successor that arrives one message later, so a test
+// written that way passes whatever the loop actually does.
+func drivePoll(m *Model, pending []tea.Cmd) []tea.Cmd {
+	var next []tea.Cmd
+	var run func(c tea.Cmd)
+	run = func(c tea.Cmd) {
+		if c == nil {
+			return
+		}
+		msg := c()
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			for _, sub := range batch {
+				run(sub)
+			}
+			return
+		}
+		if _, isSpinner := msg.(SpinnerTickMsg); isSpinner {
+			return // not part of the poll loop
+		}
+		if cmd := m.Update(msg); cmd != nil {
+			next = append(next, cmd)
+		}
+	}
+	for _, c := range pending {
+		run(c)
+	}
+	return next
+}
+
+// The poll loop must be a loop, not a tree.
+//
+// A tick that starts a poll and re-arms the ticker, while the poll's "nothing
+// changed" result re-arms it too, yields two successors per beat — and each of
+// those does the same. An idle view left open climbs into thousands of
+// concurrent Docker reads within a minute.
+func TestPollLoopDoesNotMultiply(t *testing.T) {
+	original := PollInterval
+	PollInterval = time.Millisecond
+	t.Cleanup(func() { PollInterval = original })
+
+	// Steady state: the poll finds exactly what is already loaded, so it
+	// reports no change. That is what a view left open does all day.
+	vols := []docker.VolumeInfo{{Name: "v1", Driver: "local"}}
+	polled := false
+	m := testModel(func(m *Model) {
+		m.deps = docker.Deps{Volumes: &mockVolumeOps{
+			listVolumesFn: func(_ context.Context) ([]docker.VolumeInfo, error) {
+				polled = true
+				return vols, nil
+			},
+		}}
+	})
+	m.Update(VolumesLoadedMsg{Volumes: toVolumeItems(vols)})
+	require.Equal(t, stateReady, m.state)
+
+	pending := []tea.Cmd{tickCmd()}
+	for round := 0; round < 12; round++ {
+		pending = drivePoll(m, pending)
+		require.LessOrEqual(t, len(pending), 1,
+			"round %d: %d commands in flight — the loop has branched", round, len(pending))
+		time.Sleep(2 * time.Millisecond)
+	}
+	require.True(t, polled, "the fixture must actually poll, or this proves nothing")
+	require.Len(t, pending, 1, "and the loop must still be alive at the end")
+}
