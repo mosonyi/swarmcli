@@ -5,6 +5,7 @@ package commands
 
 import (
 	_ "github.com/Eldara-Tech/swarmcli/commands/command"
+	_ "github.com/Eldara-Tech/swarmcli/commands/command/charts"
 	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker"
 	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker/config"
 	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker/network"
