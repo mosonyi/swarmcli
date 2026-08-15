@@ -5,9 +5,9 @@ package chartsview
 
 import (
 	"strconv"
-	"strings"
 
 	"github.com/Eldara-Tech/swarmcli/charts"
+	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -57,39 +57,51 @@ var (
 	childSelectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("24")).Bold(true)
 )
 
-// Child blocks are laid out at fixed widths rather than through the
-// content-aware column layout, which sizes the release row above them.
-var (
-	revisionCols = []int{4, 11, 26, 17, 30}
-	serviceCols  = []int{26, 12, 10, 0}
-)
+// childIndent is the space the child block is inset by, so the expansion reads
+// as belonging to the release above it.
+const childIndent = "    "
 
-// childLine joins cells at fixed widths, padding by DISPLAY COLUMNS.
+// revisionColumns and serviceColumns describe the two child blocks.
 //
-// fmt's "%-12s" pads by bytes, and these cells carry multi-byte runes as a
-// matter of course — displayOrDash emits an em-dash for every empty optional
-// field, which is three bytes and one column. Padding that by bytes shifts
-// every later cell two columns left of its header.
-func childLine(cells []string, widths []int) string {
-	var b strings.Builder
-	b.WriteString("    ")
-	for i, cell := range cells {
-		w := 0
-		if i < len(widths) {
-			w = widths[i]
-		}
-		if w == 0 { // last column: no padding, no truncation
-			b.WriteString(cell)
-			break
-		}
-		cell = truncate(cell, w)
-		b.WriteString(cell)
-		for pad := w - lipgloss.Width(cell); pad > 0; pad-- {
-			b.WriteByte(' ')
-		}
-		b.WriteByte(' ')
+// They go through the same content-aware layout as the release row rather than
+// carrying hardcoded widths. Fixed widths overflowed a narrow frame — the OWNER
+// stamp ran into the border and was cut mid-word by the frame rather than
+// truncated — and they padded by bytes, so an em-dash shifted every later cell
+// two columns off its header.
+func revisionColumns() []filterlist.Column[charts.Release] {
+	return []filterlist.Column[charts.Release]{
+		{Label: "REV", MinWidth: 3, Cell: func(r charts.Release) string { return strconv.Itoa(r.Revision) }},
+		{Label: "STATUS", MinWidth: 6, Cell: func(r charts.Release) string { return displayOrDash(r.Status) }},
+		{Label: "CHART", MinWidth: 5, Flex: true, Cell: func(r charts.Release) string {
+			return r.Chart.Name + "-" + r.Chart.Version
+		}},
+		{Label: "UPDATED", MinWidth: 16, Cell: func(r charts.Release) string { return formatCreated(parseCreated(r.Created)) }},
+		{Label: "OWNER", MinWidth: 5, Flex: true, Grow: true, Cell: func(r charts.Release) string {
+			return displayOrDash(r.Owner)
+		}},
 	}
-	return b.String()
+}
+
+func serviceColumns() []filterlist.Column[charts.ServiceState] {
+	return []filterlist.Column[charts.ServiceState]{
+		{Label: "SERVICE", MinWidth: 7, Flex: true, Cell: func(s charts.ServiceState) string { return s.Name }},
+		{Label: "MODE", MinWidth: 4, Cell: func(s charts.ServiceState) string { return displayOrDash(s.Mode) }},
+		{Label: "REPLICAS", MinWidth: 8, Cell: func(s charts.ServiceState) string { return displayOrDash(s.Replicas) }},
+		{Label: "STATUS", MinWidth: 6, Flex: true, Grow: true, Cell: func(s charts.ServiceState) string {
+			return displayOrDash(s.Status)
+		}},
+	}
+}
+
+// childWidth is the width a child row has to work with: the frame's content
+// area less the indent. Zero or less means "unknown", and the block falls back
+// to its natural size rather than collapsing to nothing.
+func childWidth(total int) int {
+	w := total - len(childIndent)
+	if w < 20 {
+		return 0
+	}
+	return w
 }
 
 // expansionBlock renders an expanded release's child lines and reports, for
@@ -98,7 +110,7 @@ func childLine(cells []string, widths []int) string {
 // The two are returned together on purpose: the scroll math needs a child's
 // line index, and deriving it separately from a second count of headers and
 // rows is how the two silently drift apart.
-func expansionBlock(it releaseItem, selectedChild int) (lines []string, childLines []int) {
+func expansionBlock(it releaseItem, selectedChild, width int) (lines []string, childLines []int) {
 	rows := it.children()
 	childLines = make([]int, len(rows))
 
@@ -110,51 +122,49 @@ func expansionBlock(it releaseItem, selectedChild int) (lines []string, childLin
 		return childStyle.Render(s)
 	}
 
-	line(childHeaderStyle.Render(childLine(
-		[]string{"REV", "STATUS", "CHART", "UPDATED", "OWNER"}, revisionCols)))
+	w := childWidth(width)
+	revCols := revisionColumns()
+	revWidths := layoutOrNatural(revCols, it.Revisions, w)
+	line(childHeaderStyle.Render(childIndent + headerRow(revCols, revWidths)))
 	for n, rev := range it.Revisions {
 		childLines[n] = len(lines)
-		line(style(n, childLine([]string{
-			strconv.Itoa(rev.Revision),
-			rev.Status,
-			rev.Chart.Name + "-" + rev.Chart.Version,
-			formatCreated(parseCreated(rev.Created)),
-			displayOrDash(rev.Owner),
-		}, revisionCols)))
+		line(style(n, childIndent+filterlist.RenderRow(revCols, revWidths, rev, 0, false)))
 	}
 
-	line(childHeaderStyle.Render(childLine(
-		[]string{"SERVICE", "MODE", "REPLICAS", "STATUS"}, serviceCols)))
+	svcCols := serviceColumns()
+	svcWidths := layoutOrNatural(svcCols, it.Services, w)
+	line(childHeaderStyle.Render(childIndent + headerRow(svcCols, svcWidths)))
 	if len(it.Services) == 0 {
-		line(childStyle.Render("    (no services)"))
+		line(childStyle.Render(childIndent + "(no services)"))
 		return lines, childLines
 	}
 	for n, svc := range it.Services {
 		idx := len(it.Revisions) + n
 		childLines[idx] = len(lines)
-		line(style(idx, childLine([]string{
-			svc.Name,
-			displayOrDash(svc.Mode),
-			displayOrDash(svc.Replicas),
-			displayOrDash(svc.Status),
-		}, serviceCols)))
+		line(style(idx, childIndent+filterlist.RenderRow(svcCols, svcWidths, svc, 0, false)))
 	}
 	return lines, childLines
 }
 
-// truncate shortens s to max display columns, with an ellipsis when it had to
-// cut. Child blocks are laid out at fixed widths rather than through the
-// content-aware column layout, which sizes the release row above them.
-func truncate(s string, max int) string {
-	if max <= 0 {
-		return ""
+// headerRow renders the column labels through the very same RenderRow the data
+// rows use, by swapping each Cell for its own Label. Alignment between a child
+// header and its rows is then true by construction rather than by two pieces of
+// formatting code agreeing.
+func headerRow[T any](cols []filterlist.Column[T], widths []int) string {
+	hdr := make([]filterlist.Column[T], len(cols))
+	for i, c := range cols {
+		label := c.Label
+		hdr[i] = filterlist.Column[T]{Label: c.Label, MinWidth: c.MinWidth, Cell: func(T) string { return label }}
 	}
-	r := []rune(s)
-	if len(r) <= max {
-		return s
+	var zero T
+	return filterlist.RenderRow(hdr, widths, zero, 0, false)
+}
+
+// layoutOrNatural sizes the child columns to the width available, or to their
+// content when the width is unknown.
+func layoutOrNatural[T any](cols []filterlist.Column[T], items []T, width int) []int {
+	if width <= 0 {
+		width = filterlist.NaturalWidth(cols, items, -1)
 	}
-	if max <= 3 {
-		return string(r[:max])
-	}
-	return string(r[:max-3]) + "..."
+	return filterlist.LayoutWidths(cols, items, width, -1)
 }

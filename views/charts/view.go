@@ -64,6 +64,15 @@ func (m *Model) buildMainContent() string {
 	return content
 }
 
+// contentWidth is the horizontal room a row has, which the child blocks size
+// themselves to. Zero when the view has not been sized yet.
+func (m *Model) contentWidth() int {
+	if m.list.Viewport.Width > 0 {
+		return m.list.Viewport.Width
+	}
+	return m.width
+}
+
 // contentLines is how many rows the list itself gets, once the frame, the
 // column header and the footer have taken theirs. Both the renderer and
 // paging read it, so a page is exactly what a screen shows.
@@ -95,7 +104,7 @@ func (m *Model) adjustOffsetForChild(visibleLines int) {
 		m.list.SkipOffsetAdjustment = false
 		return
 	}
-	_, childLine := expansionBlock(sel, m.childIndex)
+	_, childLine := expansionBlock(sel, m.childIndex, m.contentWidth())
 	if m.childIndex >= len(childLine) {
 		m.list.SkipOffsetAdjustment = false
 		return
@@ -130,7 +139,7 @@ func (m *Model) itemLineCount(it releaseItem) int {
 	if !m.expanded[it.Name] {
 		return 1
 	}
-	lines, _ := expansionBlock(it, noChild)
+	lines, _ := expansionBlock(it, noChild, m.contentWidth())
 	return 1 + len(lines)
 }
 

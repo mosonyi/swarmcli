@@ -306,7 +306,7 @@ func TestChildLineIndexesMatchTheRenderedLines(t *testing.T) {
 	require.True(t, ok)
 
 	rows := sel.children()
-	lines, childLine := expansionBlock(sel, noChild)
+	lines, childLine := expansionBlock(sel, noChild, m.contentWidth())
 	require.Len(t, childLine, len(rows))
 
 	for i, row := range rows {
@@ -408,7 +408,7 @@ func TestRevisionRowShowsTheOwnerStamp(t *testing.T) {
 
 	sel, _ := m.selected()
 	require.Equal(t, "plain", sel.Name)
-	block, childLines := expansionBlock(sel, noChild)
+	block, childLines := expansionBlock(sel, noChild, m.contentWidth())
 	require.Equal(t,
 		columnOf(t, block[0], "OWNER"),
 		columnOf(t, block[childLines[0]], "—"),
@@ -427,7 +427,7 @@ func TestChildRowsAlignWithTheirHeadersDespiteMultibyteCells(t *testing.T) {
 	m.Update(key("enter"))
 
 	sel, _ := m.selected()
-	block, childLines := expansionBlock(sel, noChild)
+	block, childLines := expansionBlock(sel, noChild, m.contentWidth())
 
 	svcHeader := ""
 	for _, line := range block {
@@ -442,4 +442,44 @@ func TestChildRowsAlignWithTheirHeadersDespiteMultibyteCells(t *testing.T) {
 		columnOf(t, svcHeader, "STATUS"),
 		columnOf(t, svcRow, "running"),
 		"STATUS must start at the same column as the value under it")
+}
+
+// The child block must fit the frame it is drawn in.
+//
+// It used to be laid out at fixed widths, so on a narrow terminal it ran past
+// the border and the OWNER stamp was cut mid-word by the frame rather than
+// truncated — and since the DETAIL and OWNER columns are dropped at those
+// widths, expanding the release was the only way left to read it.
+func TestChildBlockFitsTheFrameAtEveryWidth(t *testing.T) {
+	for _, w := range []int{200, 120, 90, 70, 60} {
+		m := sized(testModel(), w, 12)
+		owned := rev("app", 1, charts.StatusDeployed, "chartname", "1.0.0")
+		owned.Owner = "apply/prod-swarm:release/app"
+		loadReleases(t, m, map[string][]charts.Release{"app": {owned}},
+			map[string][]charts.ServiceState{"app": {converged("app_web")}})
+		m.Update(key("enter"))
+
+		block, _ := expansionBlock(m.list.Filtered[0], noChild, m.contentWidth())
+		for i, line := range block {
+			require.LessOrEqual(t, lipgloss.Width(line), w,
+				"width %d: child line %d overflows the frame", w, i)
+		}
+		require.Contains(t, m.View(), "OWNER", "width %d: the header survives", w)
+	}
+}
+
+// At the widths where OWNER is not a column of its own, expanding a release is
+// how you read the stamp — so it has to be legible there, not clipped.
+func TestOwnerIsReadableByExpandingWhenTheColumnIsGone(t *testing.T) {
+	m := sized(testModel(), 90, 12)
+	owned := rev("app", 1, charts.StatusDeployed, "chartname", "1.0.0")
+	owned.Owner = "apply/prod-swarm:release/app"
+	loadReleases(t, m, map[string][]charts.Release{"app": {owned}},
+		map[string][]charts.ServiceState{"app": {converged("app_web")}})
+
+	require.False(t, m.hasDetailColumn(), "90 columns drops the optional columns")
+	require.NotContains(t, m.View(), "apply/prod-swarm:release/app", "not on the release row")
+
+	m.Update(key("enter"))
+	require.Contains(t, m.View(), "apply/prod-swarm:release/app", "but the expansion shows it in full")
 }

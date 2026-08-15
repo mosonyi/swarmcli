@@ -678,7 +678,7 @@ func (m *Model) setRenderItem() {
 		if selected {
 			child = m.childIndex
 		}
-		lines, _ := expansionBlock(item, child)
+		lines, _ := expansionBlock(item, child, m.contentWidth())
 		return row + "\n" + strings.Join(lines, "\n")
 	}
 	m.list.Viewport.SetContent(m.list.View())
