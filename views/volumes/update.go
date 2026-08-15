@@ -25,22 +25,29 @@ func formatCreated(t time.Time) string {
 }
 
 // buildColumns declares the volumes table columns for the shared content-aware
-// layout. NAME, MOUNT POINT, and HOST flex (absorb slack and horizontally
-// scroll when truncated on the selected row); the rest size to content.
+// layout. NAME and MOUNT POINT flex (give up width first on a narrow terminal
+// and horizontally scroll when truncated on the selected row); the rest size to
+// content.
+//
+// MOUNT POINT is last, and is the column that grows. A mount path is by far the
+// longest and least-scanned value a volume has, so it is both the natural place
+// to spend a wide terminal's leftover width and the one that can be truncated
+// without losing the row's identity. It used to sit in the middle, where the
+// slack it absorbed opened a gap between it and CREATED.
 func (m *Model) buildColumns() []filterlist.Column[volumeItem] {
 	return []filterlist.Column[volumeItem]{
 		{Label: "NAME", MinWidth: 4, Flex: true, Cell: func(v volumeItem) string { return v.Name }},
 		{Label: "STACK", MinWidth: 5, Cell: func(v volumeItem) string { return displayOrDash(v.Stack) }},
 		{Label: "DRIVER", MinWidth: 6, Cell: func(v volumeItem) string { return v.Driver }},
-		{Label: "MOUNT POINT", MinWidth: 10, Flex: true, Cell: func(v volumeItem) string { return v.Mountpoint }},
 		{Label: "CREATED", MinWidth: 16, Cell: func(v volumeItem) string { return formatCreated(v.Created) }},
-		{Label: "HOST", MinWidth: 4, Flex: true, Cell: func(v volumeItem) string { return displayOrDash(v.Host) }},
+		{Label: "HOST", MinWidth: 4, Cell: func(v volumeItem) string { return displayOrDash(v.Host) }},
+		{Label: "MOUNT POINT", MinWidth: 10, Flex: true, Grow: true, Cell: func(v volumeItem) string { return v.Mountpoint }},
 	}
 }
 
 // sortColumnIndex maps the active sort field to its column index for the header
-// sort arrow. The mapping is not 1:1 because MOUNT POINT (column 3) is
-// unsortable, so CREATED and HOST sit one column past their sort-field ordinal.
+// sort arrow. The mapping is 1:1 up to HOST; MOUNT POINT trails the sortable
+// columns and has no sort field of its own.
 func (m *Model) sortColumnIndex() int {
 	switch m.sortField {
 	case SortByName:
@@ -50,9 +57,9 @@ func (m *Model) sortColumnIndex() int {
 	case SortByDriver:
 		return 2
 	case SortByCreated:
-		return 4
+		return 3
 	case SortByHost:
-		return 5
+		return 4
 	}
 	return 0
 }
