@@ -160,3 +160,27 @@ func TestLayoutWidths_GrowColumnStillShrinksWhenNarrow(t *testing.T) {
 		require.GreaterOrEqual(t, w[i]-ColGap, displayWidth(c.Label), "column %d must still fit its label", i)
 	}
 }
+
+// NaturalWidth must be the width at which LayoutWidths neither stretches nor
+// squeezes, or a view asking "have I room to spare?" gets a wrong answer.
+func TestNaturalWidth_IsTheNoStretchNoSqueezeWidth(t *testing.T) {
+	items := []row{{a: "some-name", b: "kind", c: "team=platform"}}
+
+	for _, cols := range [][]Column[row]{testCols(), growCols()} {
+		natural := NaturalWidth(cols, items, -1)
+		require.Equal(t, natural, sum(LayoutWidths(cols, items, natural, -1)),
+			"at the natural width the layout is an identity")
+
+		// One cell narrower and something must give; one wider and the slack
+		// has to land somewhere.
+		require.Equal(t, natural-1, sum(LayoutWidths(cols, items, natural-1, -1)))
+		require.Equal(t, natural+10, sum(LayoutWidths(cols, items, natural+10, -1)))
+	}
+}
+
+// The sort indicator widens its column, so a view must get the same answer the
+// layout will act on.
+func TestNaturalWidth_AccountsForTheSortIndicator(t *testing.T) {
+	items := []row{{a: "x", b: "y", c: "z"}}
+	require.Greater(t, NaturalWidth(testCols(), items, 0), NaturalWidth(testCols(), items, -1))
+}

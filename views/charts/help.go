@@ -21,6 +21,17 @@ func GetChartsHelpContent() []helpview.HelpCategory {
 			},
 		},
 		{
+			// The set is responsive, so an operator on a narrow terminal does
+			// not go looking for a column that is not there.
+			Title: "Columns",
+			Items: []helpview.HelpItem{
+				{Keys: "STATUS", Description: "The recorded state of the release: what we wrote when we deployed"},
+				{Keys: "HEALTH", Description: "What the swarm is doing now: converged, progressing or wedged"},
+				{Keys: "DETAIL", Description: "Why it is not converged, or what it runs. Shown when the terminal has room"},
+				{Keys: "OWNER", Description: "The `charts apply` manifest that installed it. Shown on a wide terminal"},
+			},
+		},
+		{
 			Title: "The LATEST column",
 			Items: []helpview.HelpItem{
 				{Keys: "0.2.0", Description: "A newer chart version is published in a cached repository index"},

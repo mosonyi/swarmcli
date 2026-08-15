@@ -106,22 +106,34 @@ func TestFooterShowsCountsAndFilterFragment(t *testing.T) {
 }
 
 // The reason is the whole point of the health column: the column says something
-// is wrong, the footer says what.
-func TestFooterCarriesTheConvergenceReason(t *testing.T) {
-	m := sized(testModel(), 120, 24)
-	loadReleases(t, m,
-		map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")},
-		map[string][]charts.ServiceState{"app": {{
-			Name: "app_web", Running: 2, Desired: 3, NewestTaskAge: time.Hour,
-		}}})
+// is wrong, this says what. Where it lives depends on the width — the DETAIL
+// column when there is room, the footer when there is not — but it is always on
+// screen, and never twice.
+func TestTheConvergenceReasonIsOnScreenExactlyOnce(t *testing.T) {
+	const reason = "2/3 tasks running"
+	load := func(m *Model) {
+		loadReleases(t, m,
+			map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")},
+			map[string][]charts.ServiceState{"app": {{
+				Name: "app_web", Running: 2, Desired: 3, NewestTaskAge: time.Hour,
+			}}})
+	}
 
-	footer := m.renderFooter()
-	require.Contains(t, footer, "2/3 tasks running")
-	require.Contains(t, footer, "app_web")
+	wide := sized(testModel(), 160, 24)
+	load(wide)
+	require.True(t, wide.hasDetailColumn(), "160 columns has room to spare")
+	require.Equal(t, 1, strings.Count(wide.View(), reason), "the DETAIL column carries it")
+	require.Empty(t, wide.selectedReason(), "so the footer must not repeat it")
+
+	narrow := sized(testModel(), 90, 24)
+	load(narrow)
+	require.False(t, narrow.hasDetailColumn(), "90 columns has none")
+	require.Equal(t, 1, strings.Count(narrow.View(), reason), "the footer carries it instead")
+	require.Contains(t, narrow.renderFooter(), "app_web")
 }
 
 func TestFooterHasNoReasonWhenConverged(t *testing.T) {
-	m := sized(testModel(), 120, 24)
+	m := sized(testModel(), 90, 24)
 	loadReleases(t, m,
 		map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")},
 		map[string][]charts.ServiceState{"app": {converged("app_web")}},
@@ -171,7 +183,8 @@ func TestUpdCellDistinguishesUnknownFromCurrent(t *testing.T) {
 // hint. A fourth line squeezes the content area enough to clip a dialog on a
 // short terminal, so the missing-index signal lives in the column instead.
 func TestFooterStaysWithinThreeLines(t *testing.T) {
-	m := sized(testModel(), 140, 24)
+	// Narrow enough that the footer, not the DETAIL column, carries the reason.
+	m := sized(testModel(), 90, 24)
 	loadReleases(t, m,
 		map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")},
 		map[string][]charts.ServiceState{"app": {{

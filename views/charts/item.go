@@ -4,6 +4,7 @@
 package chartsview
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/Eldara-Tech/swarmcli/charts"
@@ -98,4 +99,26 @@ func (i releaseItem) healthRank() int {
 	default:
 		return 2
 	}
+}
+
+// detail is the trailing column: why the release is not converged, or what it
+// is running when it is. It is the one genuinely long, variable-length field a
+// release has, so it is what a wide terminal should spend its width on.
+func (i releaseItem) detail() string {
+	if !i.HasHealth {
+		return "—"
+	}
+	if i.Health.Reason != "" {
+		return i.Health.Reason
+	}
+	running, desired := 0, 0
+	for _, s := range i.Services {
+		running += s.Running + s.Completed
+		desired += s.Desired
+	}
+	svc := "services"
+	if len(i.Services) == 1 {
+		svc = "service"
+	}
+	return fmt.Sprintf("%d %s · %d/%d tasks running", len(i.Services), svc, running, desired)
 }

@@ -87,6 +87,47 @@ func ColumnDefs[T any](cols []Column[T]) []ColumnDef {
 	return defs
 }
 
+// NaturalWidth is the width the table wants: every column at its content size,
+// plus the gaps, with nothing stretched or squeezed. LayoutWidths returns
+// exactly this when totalWidth equals it.
+//
+// A view uses it to decide whether a terminal has room to spare — for an extra
+// column it only shows when there is genuine surplus, rather than one that
+// squeezes every other column to fit.
+func NaturalWidth[T any](cols []Column[T], items []T, sortCol int) int {
+	n := len(cols)
+	if n == 0 {
+		return 0
+	}
+	sum := 0
+	for i, c := range cols {
+		sum += naturalColWidth(c, items, i == sortCol)
+	}
+	return sum + 1 + ColGap*n // +1 for column 0's leading space
+}
+
+// naturalColWidth is one column's content size: the widest of its label (plus
+// the sort indicator when active), its declared minimum, and any cell.
+func naturalColWidth[T any](c Column[T], items []T, sorted bool) int {
+	fl := displayWidth(c.Label)
+	if sorted {
+		fl += 2 // " ▲"/" ▼"
+	}
+	if fl < c.MinWidth {
+		fl = c.MinWidth
+	}
+	if fl < 3 {
+		fl = 3
+	}
+	w := fl
+	for _, it := range items {
+		if cw := displayWidth(c.Cell(it)); cw > w {
+			w = cw
+		}
+	}
+	return w
+}
+
 // LayoutWidths sizes columns to their content so wide terminals no longer
 // truncate while space sits empty, and guarantees at least one space between
 // columns. sortCol is the index of the active sort column (-1 for none) so its

@@ -213,6 +213,7 @@ func (m *Model) SetSize(width, height int) {
 	m.list.Viewport.Width = width
 	m.list.Viewport.Height = height
 	m.list.SetOuterSize(width, height)
+	m.refreshColumns()
 	m.confirmDialog.Width = width
 	m.confirmDialog.Height = height
 }

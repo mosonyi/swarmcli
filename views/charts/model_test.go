@@ -240,8 +240,8 @@ func TestHealthSurfacesAWedgedRollout(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, charts.PhaseWedged, sel.Health.Phase)
 	require.Equal(t, "wedged", sel.healthLabel())
-	require.Contains(t, m.selectedReason(), "rollback paused",
-		"the footer must say why, not just that something is wrong")
+	require.Contains(t, m.View(), "rollback paused",
+		"the view must say why, not just that something is wrong")
 	require.Equal(t, charts.StatusDeployed, sel.status(),
 		"the stored record still reads deployed — that divergence is the point")
 }

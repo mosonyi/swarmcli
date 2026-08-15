@@ -162,6 +162,12 @@ func (m *Model) renderFooter() string {
 // writes that sentence for display, and it is the whole value of the HEALTH
 // column — the column says something is wrong, this says what.
 func (m *Model) selectedReason() string {
+	// The DETAIL column carries it for every row when the terminal is wide
+	// enough; repeating the selected row's copy in the footer would be the same
+	// sentence twice on the same screen.
+	if m.hasDetailColumn() {
+		return ""
+	}
 	sel, ok := m.selected()
 	if !ok || !sel.HasHealth || sel.Health.Reason == "" {
 		return ""

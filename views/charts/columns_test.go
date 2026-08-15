@@ -5,6 +5,7 @@ package chartsview
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Eldara-Tech/swarmcli/charts"
 
@@ -92,8 +93,7 @@ func TestWideTerminalDoesNotSpreadTheColumns(t *testing.T) {
 		"whoami":   deployed("whoami", "whoami", "0.1.9"),
 	}
 	positions := func(width int) map[string]int {
-		m := testModel()
-		m.list.Viewport.Width = width
+		m := sized(testModel(), width, 24)
 		loadReleases(t, m, short, nil)
 		header := m.list.RenderHeader()
 		out := map[string]int{}
@@ -103,16 +103,81 @@ func TestWideTerminalDoesNotSpreadTheColumns(t *testing.T) {
 		return out
 	}
 
-	narrow := positions(100)
+	// Both widths carry the same column set (short values, so DETAIL and OWNER
+	// are affordable at each), and the columns before the growing one must not
+	// drift apart between them.
+	narrow := positions(150)
 	wide := positions(240)
 	require.Equal(t, narrow, wide,
-		"a wider terminal must add margin after the last column, not between the others")
+		"a wider terminal must feed the growing column, not spread the others")
 
 	// And the row still spans the frame, so the selection highlight does too.
-	m := testModel()
-	m.list.Viewport.Width = 240
+	m := sized(testModel(), 240, 24)
 	loadReleases(t, m, short, nil)
-	require.Equal(t, 240, lipgloss.Width(m.list.RenderRow(m.list.Filtered[0], true)))
+	require.Equal(t, 240, lipgloss.Width(m.list.RenderRow(m.list.Filtered[0], true)),
+		"and the row still spans the frame, so the selection highlight does too")
+}
+
+// Surplus width buys information, not air.
+//
+// Two earlier attempts were wrong in opposite directions: sharing the slack
+// between NAME and CHART opened voids in the middle of every row, and giving it
+// to no one left half a wide terminal dead. The column set is responsive
+// instead — each tier of width adds a column that has something to say.
+func TestWiderTerminalsAddColumnsRatherThanPadding(t *testing.T) {
+	labels := func(width int) []string {
+		m := sized(testModel(), width, 24)
+		loadReleases(t, m,
+			map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")},
+			map[string][]charts.ServiceState{"app": {converged("app_web")}})
+		out := make([]string, 0, len(m.list.Columns))
+		for _, c := range m.list.Columns {
+			out = append(out, c.Label)
+		}
+		return out
+	}
+
+	base := []string{"NAME", "REV", "STATUS", "HEALTH", "CHART", "LATEST", "UPDATED"}
+	require.Equal(t, base, labels(80), "a narrow terminal shows the compact set")
+	require.Equal(t, append(append([]string{}, base...), "DETAIL"), labels(120))
+	require.Equal(t, append(append([]string{}, base...), "OWNER", "DETAIL"), labels(190))
+}
+
+// The extra column must be earned, never taken from the others: adding DETAIL
+// by squeezing NAME and CHART would trade a readable name for a truncated
+// explanation.
+func TestTheDetailColumnNeverSqueezesTheOthers(t *testing.T) {
+	long := map[string][]charts.Release{
+		"a-release-with-a-really-quite-long-name": deployed("a-release-with-a-really-quite-long-name", "some-long-chart-name", "1.2.3"),
+	}
+
+	withoutDetail := sized(testModel(), 100, 24)
+	loadReleases(t, withoutDetail, long, nil)
+	require.False(t, withoutDetail.hasDetailColumn(),
+		"the long name eats the surplus, so DETAIL must stand down")
+
+	// Widen until it is affordable; the name must still be intact.
+	withDetail := sized(testModel(), 190, 24)
+	loadReleases(t, withDetail, long, nil)
+	require.True(t, withDetail.hasDetailColumn())
+	require.Contains(t, withDetail.View(), "a-release-with-a-really-quite-long-name",
+		"DETAIL was added out of surplus, not out of NAME")
+}
+
+// DETAIL is the one column allowed to give way, so a terminal between the tiers
+// truncates the explanation rather than the identity.
+func TestOnlyDetailTruncatesWhenSpaceIsTight(t *testing.T) {
+	m := sized(testModel(), 118, 24)
+	loadReleases(t, m,
+		map[string][]charts.Release{"app": deployed("app", "chartname", "1.0.0")},
+		map[string][]charts.ServiceState{"app": {{
+			Name: "app_web", Running: 1, Desired: 4, NewestTaskAge: time.Hour,
+		}}})
+	require.True(t, m.hasDetailColumn())
+
+	out := m.View()
+	require.Contains(t, out, "chartname-1.0.0", "the chart ref is intact")
+	require.Contains(t, out, "app", "the name is intact")
 }
 
 // The sort arrow must land on the column the sort field names, or the header

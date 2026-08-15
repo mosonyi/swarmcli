@@ -28,26 +28,91 @@ func formatCreated(t time.Time) string {
 	return t.Format("2006-01-02 15:04")
 }
 
-// buildColumns declares the release table columns for the shared content-aware
-// layout. NAME and CHART flex — they give up width first on a narrow terminal
-// and scroll when truncated — while the trailing column is the one that grows.
+// minDetailWidth is the surplus, over what the other columns need, below which
+// DETAIL is not worth showing: narrower than this it would win its width by
+// truncating NAME and CHART, and a truncated explanation next to a truncated
+// name is worse than no explanation.
+const minDetailWidth = 28
+
+// minOwnerWidth is the extra surplus, on top of DETAIL's, that buys the OWNER
+// column. Owner stamps are long ("apply/prod-swarm:release/hello"), so a
+// terminal that cannot spare this much is better off without it.
+const minOwnerWidth = 32
+
+// buildColumns declares the release table for the shared content-aware layout.
 //
-// STATUS and HEALTH are both present on purpose: the first is the record we
-// wrote when we deployed, the second is what the swarm is doing now.
+// The set is responsive. A terminal with surplus width gets a DETAIL column,
+// which carries the one genuinely long, variable-length thing a release has to
+// say, and which absorbs all the leftover — so the table fills the width with
+// information rather than with air, and no column is stretched away from its
+// neighbour. A terminal without that surplus gets the compact set instead.
 func (m *Model) buildColumns() []filterlist.Column[releaseItem] {
+	base := m.baseColumns(false)
+	width := m.list.Viewport.Width
+	if width <= 0 {
+		width = m.width
+	}
+	if width <= 0 {
+		return base
+	}
+	surplus := width - filterlist.NaturalWidth(base, m.list.Items, m.sortColumnIndex())
+	if surplus < minDetailWidth {
+		return base
+	}
+
+	cols := m.baseColumns(true)
+	// A second tier: with room for both, the owner stamp says whether a release
+	// is managed by `charts apply` or was installed by hand, which is the next
+	// most useful thing after why it is not converged.
+	if surplus >= minDetailWidth+minOwnerWidth {
+		cols = append(cols, filterlist.Column[releaseItem]{
+			Label: "OWNER", MinWidth: 5,
+			Cell: func(r releaseItem) string { return displayOrDash(r.current().Owner) },
+		})
+	}
+	return append(cols, filterlist.Column[releaseItem]{
+		Label: "DETAIL", MinWidth: 6,
+		// Both: it takes every spare cell, and it is the only column allowed to
+		// truncate, so a narrowing terminal eats into the explanation rather
+		// than into the release's name.
+		Flex: true, Grow: true,
+		Cell: func(r releaseItem) string { return r.detail() },
+	})
+}
+
+// baseColumns is the set every width shows. withDetail moves the elasticity to
+// the DETAIL column that follows: without it, NAME and CHART give up width
+// first and scroll when truncated, and UPDATED soaks up any small surplus.
+func (m *Model) baseColumns(withDetail bool) []filterlist.Column[releaseItem] {
+	flex := !withDetail
 	return []filterlist.Column[releaseItem]{
-		{Label: "NAME", MinWidth: 4, Flex: true, Cell: func(r releaseItem) string { return r.Name }},
+		{Label: "NAME", MinWidth: 4, Flex: flex, Cell: func(r releaseItem) string { return r.Name }},
 		{Label: "REV", MinWidth: 3, Cell: func(r releaseItem) string { return strconv.Itoa(r.revision()) }},
 		{Label: "STATUS", MinWidth: 6, Cell: func(r releaseItem) string { return displayOrDash(r.status()) }},
 		{Label: "HEALTH", MinWidth: 6, Cell: func(r releaseItem) string { return r.healthLabel() }},
-		{Label: "CHART", MinWidth: 5, Flex: true, Cell: func(r releaseItem) string { return r.chartRef() }},
+		{Label: "CHART", MinWidth: 5, Flex: flex, Cell: func(r releaseItem) string { return r.chartRef() }},
 		// Next to CHART, because it is the version that chart could be at.
 		{Label: "LATEST", MinWidth: 6, Cell: m.updCell},
-		// Grow, not Flex: the leftover on a wide terminal lands after the last
-		// cell, where it reads as margin, instead of being split between NAME and
-		// CHART and opening a void in the middle of every row. Its floor equals
-		// the timestamp it renders, so it never gives width back either.
-		{Label: "UPDATED", MinWidth: 16, Grow: true, Cell: func(r releaseItem) string { return formatCreated(r.Created) }},
+		{Label: "UPDATED", MinWidth: 16, Grow: flex, Cell: func(r releaseItem) string { return formatCreated(r.Created) }},
+	}
+}
+
+// hasDetailColumn reports whether the current width earned the DETAIL column.
+// The footer carries the convergence reason only when it does not, so the same
+// sentence is never on screen twice.
+func (m *Model) hasDetailColumn() bool {
+	cols := m.list.Columns
+	return len(cols) > 0 && cols[len(cols)-1].Label == "DETAIL"
+}
+
+// refreshColumns rebuilds the column set and the header from it. Both the
+// terminal width and the widest cell decide whether DETAIL fits, so this runs
+// on a resize and on every load, not once at construction.
+func (m *Model) refreshColumns() {
+	cols := m.buildColumns()
+	m.list.Columns = cols
+	if m.list.Header != nil {
+		m.list.Header.Columns = filterlist.ColumnDefs(cols)
 	}
 }
 
@@ -107,6 +172,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.list.Viewport.Width = msg.Width
 		m.list.Viewport.Height = msg.Height
 		m.list.SetOuterSize(msg.Width, msg.Height)
+		m.refreshColumns()
 		if m.firstResize {
 			m.list.Viewport.YOffset = 0
 			m.firstResize = false
@@ -193,6 +259,9 @@ func (m *Model) handleReleasesLoaded(msg ReleasesLoadedMsg) tea.Cmd {
 
 	m.list.Items = msg.Releases
 	m.list.ApplyFilter()
+	// The widest cell decides whether DETAIL fits, so the column set is
+	// reconsidered whenever the data changes, not only on a resize.
+	m.refreshColumns()
 	m.applySorting()
 
 	if m.resetCursorOnNextLoad {
