@@ -17,6 +17,7 @@ func GetChartsHelpContent() []helpview.HelpCategory {
 				{Keys: "<v>", Description: "Show the stored values"},
 				{Keys: "<s>", Description: "Show the release's services"},
 				{Keys: "</>", Description: "Filter releases"},
+				{Keys: "<←/→>", Description: "Scroll a cell too wide for its column on the selected row"},
 				{Keys: "<?>", Description: "Open this help"},
 			},
 		},
@@ -28,7 +29,7 @@ func GetChartsHelpContent() []helpview.HelpCategory {
 				{Keys: "STATUS", Description: "The recorded state of the release: what we wrote when we deployed"},
 				{Keys: "HEALTH", Description: "What the swarm is doing now: converged, progressing or wedged"},
 				{Keys: "DETAIL", Description: "Why it is not converged, or what it runs. Shown when the terminal has room"},
-				{Keys: "OWNER", Description: "The `charts apply` manifest that installed it. Shown on a wide terminal"},
+				{Keys: "OWNER", Description: "What installed it: `apply/<owner>` a release file, `swarmcli-cd/<controller>/<app>` the controller. Shown on a wide terminal"},
 			},
 		},
 		{

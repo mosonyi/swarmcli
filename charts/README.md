@@ -122,7 +122,7 @@ and replaced it in 3.0 for the same reason. The `apply/` prefix keeps a manifest
 applied from the command line from colliding with a controller that happened to
 pick the same name. The controller is the other side of that: a library consumer
 passes its own id as `PlanOptions.Owner` and plans against it instead, so the
-releases it installed under `cd/<app>` read back as its own.
+releases it installed under its own `cd/…` ids read back as its own.
 
 `owner:` is optional and has **no default**. A derived one would either change
 between a laptop and a CI checkout (a path hash) or be shared by every repository

@@ -35,8 +35,10 @@ func formatCreated(t time.Time) string {
 const minDetailWidth = 28
 
 // minOwnerWidth is the extra surplus, on top of DETAIL's, that buys the OWNER
-// column. Owner stamps are long ("apply/prod-swarm:release/hello"), so a
-// terminal that cannot spare this much is better off without it.
+// column. Owner ids are long ("swarmcli-cd/default/hello"), so a terminal that
+// cannot spare this much is better off without it — and the margin over a
+// typical id is deliberate, since the column arrives beside DETAIL and taking
+// its width back off the explanation is what this gate exists to prevent.
 const minOwnerWidth = 32
 
 // buildColumns declares the release table for the shared content-aware layout.
@@ -61,20 +63,26 @@ func (m *Model) buildColumns() []filterlist.Column[releaseItem] {
 	}
 
 	cols := m.baseColumns(true)
-	// A second tier: with room for both, the owner stamp says whether a release
-	// is managed by `charts apply` or was installed by hand, which is the next
-	// most useful thing after why it is not converged.
+	// A second tier: with room for both, the owner says whether a release is
+	// managed by `charts apply` or by the controller, or was installed by hand,
+	// which is the next most useful thing after why it is not converged.
 	if surplus >= minDetailWidth+minOwnerWidth {
 		cols = append(cols, filterlist.Column[releaseItem]{
 			Label: "OWNER", MinWidth: 5,
-			Cell: func(r releaseItem) string { return displayOrDash(r.current().Owner) },
+			// Elastic, for two things that arrive together: an id wider than
+			// its cell can then be read with ←/→, and between OWNER and DETAIL
+			// a narrowing terminal eats into the owner and the explanation
+			// rather than into the release's identity — a long stamp used to
+			// take its width out of NAME and CHART instead.
+			Flex: true,
+			Cell: func(r releaseItem) string { return ownerCell(r.current().Owner, r.Name) },
 		})
 	}
 	return append(cols, filterlist.Column[releaseItem]{
 		Label: "DETAIL", MinWidth: 6,
-		// Both: it takes every spare cell, and it is the only column allowed to
-		// truncate, so a narrowing terminal eats into the explanation rather
-		// than into the release's name.
+		// Both: it takes every spare cell, and — with OWNER, the only other
+		// column allowed to truncate — a narrowing terminal eats into the
+		// explanation rather than into the release's name.
 		Flex: true, Grow: true,
 		Cell: func(r releaseItem) string { return r.detail() },
 	})

@@ -63,6 +63,40 @@ func TestArrowScrollMovesWindow(t *testing.T) {
 	require.NotEqual(t, before, after, "right arrow should shift the truncated cell window")
 }
 
+// The OWNER cell names the tool that installed the release, and drops the half
+// of the stamp that only repeats the row it is drawn on.
+func TestOwnerColumnNamesTheControllerAndDropsTheResourceHalf(t *testing.T) {
+	m := sized(testModel(), 200, 24)
+	owned := rev("whoami", 1, charts.StatusDeployed, "whoami", "0.1.9")
+	owned.Owner = "cd/default/whoami:release/whoami"
+	loadReleases(t, m, map[string][]charts.Release{"whoami": {owned}},
+		map[string][]charts.ServiceState{"whoami": {converged("whoami_web")}})
+
+	row := m.list.RenderItem(m.list.Filtered[0], false, 0)
+	require.Contains(t, row, "swarmcli-cd/default/whoami")
+	require.NotContains(t, row, ":release/whoami", "the resource half is the NAME column again")
+}
+
+// An owner wider than its column is reachable with ←/→, and stays reachable:
+// the arrow stops where the text ends instead of scrolling the cell off it.
+func TestArrowScrollReachesTheOwnerAndStopsAtItsEnd(t *testing.T) {
+	// Wide enough for the OWNER column, too narrow for this owner to fit in it.
+	m := sized(testModel(), 130, 24)
+	owned := rev("app", 1, charts.StatusDeployed, "c", "1.0.0")
+	owned.Owner = "cd/prod-cluster/eldara-renovate-and-friends:release/app"
+	loadReleases(t, m, map[string][]charts.Release{"app": {owned}},
+		map[string][]charts.ServiceState{"app": {converged("app_web")}})
+
+	require.NotContains(t, m.list.RenderItem(m.list.Filtered[0], true, 0), "and-friends",
+		"the owner must start out truncated, or this proves nothing")
+
+	for range 20 {
+		m.Update(key("right"))
+	}
+	require.Contains(t, m.list.RenderItem(m.list.Filtered[0], true, 0), "and-friends",
+		"the arrow reaches the end of the owner, and stops there rather than past it")
+}
+
 func TestResetScrollOnCursorMove(t *testing.T) {
 	m := testModel()
 	m.list.Viewport.Width = 70

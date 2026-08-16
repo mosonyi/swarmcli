@@ -77,7 +77,7 @@ func revisionColumns() []filterlist.Column[charts.Release] {
 		}},
 		{Label: "UPDATED", MinWidth: 16, Cell: func(r charts.Release) string { return formatCreated(parseCreated(r.Created)) }},
 		{Label: "OWNER", MinWidth: 5, Flex: true, Grow: true, Cell: func(r charts.Release) string {
-			return displayOrDash(r.Owner)
+			return ownerCell(r.Owner, r.Name)
 		}},
 	}
 }

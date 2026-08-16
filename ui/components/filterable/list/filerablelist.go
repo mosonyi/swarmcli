@@ -122,6 +122,43 @@ func (f *FilterableList[T]) ScrollLeft() {
 
 func (f *FilterableList[T]) ScrollRight() {
 	f.columnScroll += 5
+	if end := f.maxColumnScroll(); f.columnScroll > end {
+		f.columnScroll = end
+	}
+}
+
+// maxColumnScroll is the offset at which the widest overflowing flex cell on the
+// selected row ends exactly at its right edge.
+//
+// Without it the offset climbs for as long as the key is pressed, and once it
+// passes the end of the text the cells render blank — which reads as the data
+// disappearing rather than as the end of it, and takes as many presses back to
+// undo as it took to get there.
+func (f *FilterableList[T]) maxColumnScroll() int {
+	widths := f.ColWidths()
+	if f.Columns == nil || len(widths) != len(f.Columns) {
+		return 0
+	}
+	if f.Cursor < 0 || f.Cursor >= len(f.Filtered) {
+		return 0
+	}
+	item := f.Filtered[f.Cursor]
+	widest := 0
+	for i, c := range f.Columns {
+		if !c.Flex {
+			continue
+		}
+		// The cell width RenderRow lays this column out in: its share less the
+		// gap, and less column 0's leading space.
+		cw := widths[i] - ColGap
+		if i == 0 {
+			cw--
+		}
+		if over := displayWidth(c.Cell(item)) - cw; over > widest {
+			widest = over
+		}
+	}
+	return widest
 }
 
 func (f *FilterableList[T]) ResetColumnScroll() {

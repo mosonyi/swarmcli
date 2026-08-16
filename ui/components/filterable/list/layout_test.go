@@ -111,6 +111,33 @@ func TestScrollWindow_RuneAware(t *testing.T) {
 	require.Equal(t, "bcde…", ScrollWindow("abcdefgh", 1, 5))
 }
 
+// Scrolling right stops where the text does.
+//
+// The offset used to climb for as long as the key was pressed, and once it
+// passed the end of the string every flex cell on the row rendered blank —
+// which reads as the data disappearing rather than as the end of it, and takes
+// as many presses to undo as it took to cause.
+func TestScrollRightStopsAtTheEndOfTheText(t *testing.T) {
+	const name = "a-name-far-wider-than-its-column"
+	f := FilterableList[row]{
+		Columns:  testCols(),
+		Filtered: []row{{a: name, b: "kind", c: "x=1"}},
+		Header:   &HeaderConfig{Columns: ColumnDefs(testCols())},
+	}
+	f.SetOuterSize(40, 10)
+
+	for range 50 {
+		f.ScrollRight()
+	}
+
+	// Column 0 carries the leading space as well as the gap.
+	nameWidth := f.ColWidths()[0] - ColGap - 1
+	require.Equal(t, len(name)-nameWidth, f.columnScroll,
+		"the offset stops with the last window ending at the end of the text")
+	require.Contains(t, f.RenderRow(f.Filtered[0], true), "its-column",
+		"so the tail is on screen rather than scrolled past")
+}
+
 // growCols separates the two elasticities: NAME gives up width when squeezed
 // and scrolls when truncated, while the trailing column takes the leftover.
 func growCols() []Column[row] {

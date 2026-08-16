@@ -400,7 +400,7 @@ func TestRevisionRowShowsTheOwnerStamp(t *testing.T) {
 	}, nil)
 
 	m.Update(key("enter"))
-	require.Contains(t, m.View(), "apply/prod-swarm:release/app")
+	require.Contains(t, m.View(), "apply/prod-swarm")
 
 	m.Update(key("esc"))
 	m.Update(key("down"))
@@ -478,8 +478,8 @@ func TestOwnerIsReadableByExpandingWhenTheColumnIsGone(t *testing.T) {
 		map[string][]charts.ServiceState{"app": {converged("app_web")}})
 
 	require.False(t, m.hasDetailColumn(), "90 columns drops the optional columns")
-	require.NotContains(t, m.View(), "apply/prod-swarm:release/app", "not on the release row")
+	require.NotContains(t, m.View(), "apply/prod-swarm", "not on the release row")
 
 	m.Update(key("enter"))
-	require.Contains(t, m.View(), "apply/prod-swarm:release/app", "but the expansion shows it in full")
+	require.Contains(t, m.View(), "apply/prod-swarm", "but the expansion shows it in full")
 }
