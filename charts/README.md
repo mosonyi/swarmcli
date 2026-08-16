@@ -45,6 +45,47 @@ index, so it applies only to a `repo/chart` reference** — a local chart carrie
 version in its own `Chart.yaml`, and passing `--version` with one is an error
 rather than being silently ignored.
 
+### Every command
+
+The full command set, as `swarmcli charts --help` lists it. Run
+`swarmcli charts <command> --help` for a command's own options.
+
+<!-- BEGIN generated: charts commands -->
+```bash
+# Repository
+swarmcli charts repo add <name> <url>           # Add a chart repository and download its index
+swarmcli charts repo list                       # List configured repositories
+swarmcli charts repo update [name]              # Refresh repository indexes (all, or one)
+swarmcli charts repo remove <name>              # Remove a repository
+
+# Discovery
+swarmcli charts search [keyword]                # Search charts across repositories
+swarmcli charts show chart <repo/chart>         # Show chart metadata
+swarmcli charts show values <repo/chart>        # Show default values.yaml
+swarmcli charts show schema <repo/chart>        # Show values.schema.json
+
+# Authoring
+swarmcli charts lint <chart>                    # Check a chart without deploying it
+
+# Releases
+swarmcli charts template <release> <chart>      # Render manifest to stdout (no deploy)
+swarmcli charts install <release> <chart>       # Install a chart as a release
+swarmcli charts upgrade <release> <chart>       # Upgrade a release to a new revision
+swarmcli charts uninstall <release>             # Remove a release (keeps volumes)
+swarmcli charts rollback <release> <rev>        # Re-deploy the contents of a past revision
+swarmcli charts history <release>               # Show a release's revision history
+swarmcli charts prune [release]                 # Delete old revisions beyond --history-max
+swarmcli charts get values|manifest <release>   # Show stored values or rendered manifest
+swarmcli charts diff upgrade <release> <chart>  # Preview manifest changes before upgrading
+swarmcli charts list                            # List releases (alias: ls)
+swarmcli charts status <release>                # Show release status and services
+
+# GitOps
+swarmcli charts apply -f <file>                 # Converge the swarm to a declarative release file
+swarmcli charts outdated                        # Show releases with a newer chart version available
+```
+<!-- END generated -->
+
 ## Declarative releases (GitOps)
 
 The commands above are imperative, and release state lives in the swarm — so

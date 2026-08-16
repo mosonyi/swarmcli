@@ -34,6 +34,12 @@ jobs:
               - 'go.sum'
               - '.golangci.yml'
               - '.github/workflows/ci.yml'
+              # The charts command blocks in these two are generated from
+              # cli/commands.go and asserted by a test. Editing one by hand is
+              # exactly what that test exists to catch, so the test has to run
+              # on a PR that touches nothing else.
+              - 'README.md'
+              - 'charts/README.md'
             docker:
               - '**.go'
               - 'go.mod'
