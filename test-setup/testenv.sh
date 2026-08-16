@@ -174,8 +174,10 @@ cmd_test() {
   # Add JUnit file only if set
   [[ -n "$junit_file" ]] && args+=("--junitfile=$junit_file")
 
-  # Always include integration build tag
-  local go_test_cmd=("-tags=integration" "-v")
+  # Always include integration build tag. -timeout matches the locked-swarm and
+  # ssh-context CI jobs: these tests deploy several releases each, and go test's
+  # 10m default is a number nobody chose for them.
+  local go_test_cmd=("-tags=integration" "-v" "-timeout=15m")
 
   # views/stacks carries an integration-tagged test alongside its unit tests:
   # the view's internals are unexported, so covering the deploy seam against a

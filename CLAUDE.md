@@ -104,7 +104,7 @@ utils/log/
 go test ./cli -run TestGeneratedCommandBlocks -update
 ```
 
-`go test ./cli` fails if you forget; it also compares each row's flag list against what the handler and its callees actually read, so an allow-list cannot quietly drift from the code.
+`go test ./cli` fails if you forget; it also compares each row's flag list against what the handler and its callees actually read, so an allow-list cannot quietly drift from the code. It further requires `integration-tests/charts/charts_cli_test.go` to run the new command against the DinD swarm with every flag its row lists — a row the allow-list matches perfectly is still a row nothing has ever run.
 
 ## Environment Variables
 
