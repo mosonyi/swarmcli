@@ -16,40 +16,11 @@ import (
 	"github.com/Eldara-Tech/swarmcli/utils/textdiff"
 )
 
-const chartsUsage = `Usage: swarmcli charts <command> [options]
-
-Repository:
-  repo add <name> <url>      Add a chart repository and download its index
-  repo list                  List configured repositories
-  repo update [name]         Refresh repository indexes (all, or one)
-  repo remove <name>         Remove a repository
-
-Discovery:
-  search [keyword]           Search charts across repositories
-  show chart  <repo/chart>   Show chart metadata
-  show values <repo/chart>   Show default values.yaml
-  show schema <repo/chart>   Show values.schema.json
-
-Authoring:
-  lint <chart>                Check a chart without deploying it
-
-Releases:
-  template <release> <chart>  Render manifest to stdout (no deploy)
-  install  <release> <chart>  Install a chart as a release
-  upgrade  <release> <chart>  Upgrade a release to a new revision
-  uninstall <release>         Remove a release (keeps volumes)
-  rollback <release> <rev>    Re-deploy the contents of a past revision
-  history <release>           Show a release's revision history
-  prune [release]             Delete old revisions beyond --history-max
-  get values|manifest <rel>   Show stored values or rendered manifest
-  diff upgrade <rel> <chart>  Preview manifest changes before upgrading
-  list                        List releases
-  status <release>            Show release status and services
-
-GitOps:
-  apply -f <file>             Converge the swarm to a declarative release file
-  outdated                    Show releases with a newer chart version available
-
+// chartsUsageProse is everything in `charts --help` that is not the command
+// list: what a release file is, how waves and compatibility behave, and the
+// option reference. The command list itself is rendered from chartsCommands —
+// see renderCommands.
+const chartsUsageProse = `
 A release file pins each release to a chart version, so it is reproducible and an
 automated updater (e.g. Renovate) has something concrete to bump. apply installs
 what is missing, upgrades what changed, and skips what already matches. It never
@@ -139,54 +110,27 @@ cached index is used. --no-repo-update skips the network entirely, for which
 outdated reports against the cached indexes and says so.
 `
 
-// chartsMain dispatches `swarmcli charts ...`.
+// chartsMain dispatches `swarmcli charts ...` through chartsCommands.
 func chartsMain(args []string) int {
 	if len(args) == 0 {
-		out(chartsUsage)
+		out(chartsUsage())
 		return 0
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
 	case "-h", "--help", "help":
-		out(chartsUsage)
+		out(chartsUsage())
 		return 0
-	case "repo":
-		return chartsRepo(rest)
-	case "search":
-		return chartsSearch(rest)
-	case "show":
-		return chartsShow(rest)
-	case "lint":
-		return chartsLint(rest)
-	case "template":
-		return chartsTemplate(rest)
-	case "install":
-		return chartsInstall(rest)
-	case "upgrade":
-		return chartsUpgrade(rest)
-	case "uninstall":
-		return chartsUninstall(rest)
-	case "rollback":
-		return chartsRollback(rest)
-	case "history":
-		return chartsHistory(rest)
-	case "prune":
-		return chartsPrune(rest)
-	case "get":
-		return chartsGet(rest)
-	case "diff":
-		return chartsDiff(rest)
-	case "list", "ls":
-		return chartsList(rest)
-	case "status":
-		return chartsStatus(rest)
-	case "apply":
-		return chartsApply(rest)
-	case "outdated":
-		return chartsOutdated(rest)
-	default:
-		return usageErr(fmt.Sprintf("unknown charts command '%s'\n\n%s", sub, chartsUsage))
 	}
+	c, ok := lookupCommand(sub)
+	if !ok {
+		msg := fmt.Sprintf("unknown charts command '%s'", sub)
+		if s := suggestCommand(sub, commandNames()); s != "" {
+			msg += fmt.Sprintf(" — did you mean '%s'?", s)
+		}
+		return usageErr(fmt.Sprintf("%s\n\n%s", msg, chartsUsage()))
+	}
+	return c.Run(rest)
 }
 
 // newStore builds the repository store every charts subcommand resolves
