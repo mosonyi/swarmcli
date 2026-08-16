@@ -9,6 +9,7 @@ import (
 	"github.com/Eldara-Tech/swarmcli/ui/components/errordialog"
 	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
 	"github.com/Eldara-Tech/swarmcli/ui/components/sorting"
+	"github.com/Eldara-Tech/swarmcli/ui/dialog"
 	"strings"
 	"time"
 
@@ -233,7 +234,7 @@ func (m *Model) renderCreateNetworkDialog(width int) string {
 		body = append(body, focusMark(8)+" Manual container attachment: "+checkbox(m.createAttachable)+"  (space to toggle)")
 		if m.createDialogError != "" {
 			body = append(body, "")
-			body = append(body, lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Render(m.createDialogError))
+			body = append(body, lipgloss.NewStyle().Foreground(dialog.AccentError).Render(m.createDialogError))
 		}
 		body = append(body, "")
 		body = append(body, "Tab: next field   Enter: review   Esc: cancel")
@@ -241,11 +242,7 @@ func (m *Model) renderCreateNetworkDialog(width int) string {
 
 	content := strings.Join(body, "\n")
 
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("117")).
-		Padding(1, 2).
-		Width(maxW)
+	boxStyle := dialog.BorderStyle.Padding(1, 2).Width(maxW)
 
 	return boxStyle.Render(content)
 }

@@ -76,7 +76,7 @@ func (m *Model) View() string {
 	}
 
 	titleStyle := dialog.TitleStyle.Width(contentWidth)
-	messageStyle := dialog.ItemStyle.Padding(1, 2).Width(contentWidth)
+	messageStyle := dialog.MessageStyle.Width(contentWidth)
 
 	// Replicas display style
 	replicasStyle := lipgloss.NewStyle().
@@ -86,8 +86,8 @@ func (m *Model) View() string {
 		Width(contentWidth).
 		Padding(1, 0)
 
-	helpStyle := dialog.HelpStyle.Padding(0, 2).Width(contentWidth)
-	borderStyle := dialog.BorderStyle.BorderForeground(dialog.AccentPrimary).Width(contentWidth + 2)
+	helpStyle := dialog.HelpStyle.Width(contentWidth)
+	borderStyle := dialog.BorderStyle.Width(contentWidth + 2)
 
 	// Build content
 	var lines []string
