@@ -486,6 +486,19 @@ it with the values a real install would supply. A chart that declares no
 `swarmcliVersion` gets a warning, not an error: the field is optional, but a
 chart naming no floor leaves an operator on an old build nothing to act on.
 
+It also warns when a service's `environment:` block holds a credential inline —
+a key named like a password, secret, token, API key or credential, or a value
+carrying a PEM private key. Such a value is stored verbatim in both the release
+record and the service spec, and both are readable by anyone with Docker access,
+so the credential is disclosed to every operator who can run `docker service
+inspect`. Reference an external Docker secret instead and read it from
+`/run/secrets/<name>`, through the image's `*_FILE` variable or in the service's
+own command — a value that already does either is not flagged, nor is a `${VAR}`
+the deploy substitutes. It is a warning rather than a refusal because the engine
+cannot tell a credential from a value that merely reads like one, and it fires on
+the key even when the rendered value is empty: the key is what will carry the
+credential once an operator supplies one.
+
 `--for-version` asks **whether the chart's declared floor admits that version**.
 It cannot tell you the chart *runs* on it: this binary carries one engine's
 behaviour and cannot emulate another's, so it checks the claim's shape, not its
@@ -660,10 +673,12 @@ window are the protections.
   which is readable by anyone with Docker access — as are `charts get manifest`
   and the TUI config viewer, which read it back. Do **not** inline secret
   material in templates: reference Docker secrets as separate objects instead.
-  Nothing currently enforces that. A redaction pass is
-  [issue #465](https://github.com/Eldara-Tech/swarmcli/issues/465); treat this
-  as a limitation to design around rather than something the engine will catch
-  for you.
+  `charts lint` warns about the common shape of getting this wrong (see
+  [Linting a chart](#linting-a-chart)), but it is advice at authoring time, not a gate:
+  nothing refuses a deploy over it, and no read path redacts. The same material
+  is equally visible in the service spec to anyone who can run `docker service
+  inspect`, so treat the release record as no more secret than the stack it
+  records.
 - **Chart integrity** is only as good as the index: a repository that publishes
   no `digest` gets a warning, not a refusal (see [Integrity](#integrity)). Chart
   archives are capped at 20 MiB on the wire.
