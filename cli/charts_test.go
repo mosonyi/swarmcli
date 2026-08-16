@@ -337,16 +337,16 @@ func TestParseIntRejectsGarbage(t *testing.T) {
 
 func TestChartsApplyRequiresExactlyOneFile(t *testing.T) {
 	var code int
-	capture(t, func() { code = chartsApply(nil) })
+	capture(t, func() { code = chartsApply(cmd(t, "apply"), nil) })
 	require.Equal(t, 2, code, "no release file")
 
-	capture(t, func() { code = chartsApply([]string{"-f", "a.yaml", "-f", "b.yaml"}) })
+	capture(t, func() { code = chartsApply(cmd(t, "apply"), []string{"-f", "a.yaml", "-f", "b.yaml"}) })
 	require.Equal(t, 2, code, "two release files")
 }
 
 func TestChartsApplyMissingFile(t *testing.T) {
 	var code int
-	_, e := capture(t, func() { code = chartsApply([]string{"-f", filepath.Join(t.TempDir(), "nope.yaml")}) })
+	_, e := capture(t, func() { code = chartsApply(cmd(t, "apply"), []string{"-f", filepath.Join(t.TempDir(), "nope.yaml")}) })
 	require.Equal(t, 1, code)
 	require.Contains(t, e, "nope.yaml")
 }
@@ -359,7 +359,7 @@ func TestChartsApplyRejectsUnknownKey(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("releases:\n  - name: a\n    chart: r/c\n    verison: \"1\"\n"), 0o600))
 
 	var code int
-	_, e := capture(t, func() { code = chartsApply([]string{"-f", path}) })
+	_, e := capture(t, func() { code = chartsApply(cmd(t, "apply"), []string{"-f", path}) })
 	require.Equal(t, 1, code)
 	require.Contains(t, e, "verison")
 }
@@ -381,7 +381,7 @@ func TestChartsApplyRejectsUnsupportedFlags(t *testing.T) {
 	} {
 		t.Run(flag[0], func(t *testing.T) {
 			var code int
-			_, e := capture(t, func() { code = chartsApply(append([]string{"-f", path}, flag...)) })
+			_, e := capture(t, func() { code = chartsApply(cmd(t, "apply"), append([]string{"-f", path}, flag...)) })
 			require.Equal(t, 2, code)
 			require.Contains(t, e, flag[0])
 			require.Contains(t, e, "only source of truth")

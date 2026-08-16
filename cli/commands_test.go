@@ -10,6 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// cmd returns a command's row so a test can drive its handler exactly as
+// dispatch does, allow-list included.
+func cmd(t *testing.T, name string) chartsCmd {
+	t.Helper()
+	c, ok := lookupCommand(name)
+	require.True(t, ok, "no such command: %s", name)
+	return c
+}
+
 // The table is the source of truth for dispatch, the usage text and the
 // generated README blocks, so a malformed row degrades all three at once.
 func TestChartsCommands_RowsAreWellFormed(t *testing.T) {

@@ -31,8 +31,18 @@ type chartsCmd struct {
 	// `show values`) lists each of them here: they are one dispatch target but
 	// several things an operator can run.
 	Usage []cmdUsage
+	// Flags is the allow-list: every flag this command actually reads, in long
+	// form. A flag outside it is rejected rather than parsed and dropped —
+	// derived by reading the handler and everything it calls (newStore reads
+	// --no-repo-update, loadChart adds --version, prepare adds the values and
+	// compat flags), because the flag struct is shared and reading the handler
+	// alone understates what it honours.
+	Flags []string
+	// FlagHint, when set, is appended to a rejection so the operator is told
+	// what to do instead of what not to do.
+	FlagHint string
 	// Run is the handler. It receives the arguments after the command name.
-	Run func([]string) int
+	Run func(chartsCmd, []string) int
 }
 
 // cmdUsage is one rendered line: the arguments as an operator types them, and
@@ -65,6 +75,7 @@ var chartsCommands = []chartsCmd{
 		Name:  "search",
 		Group: "Discovery",
 		Usage: []cmdUsage{{"[keyword]", "Search charts across repositories"}},
+		Flags: []string{"--no-repo-update"},
 		Run:   chartsSearch,
 	},
 	{
@@ -75,42 +86,83 @@ var chartsCommands = []chartsCmd{
 			{"values <repo/chart>", "Show default values.yaml"},
 			{"schema <repo/chart>", "Show values.schema.json"},
 		},
-		Run: chartsShow,
+		Flags: []string{"--version", "--skip-compat-check", "--no-repo-update"},
+		Run:   chartsShow,
 	},
 	{
 		Name:  "lint",
 		Group: "Authoring",
 		Usage: []cmdUsage{{"<chart>", "Check a chart without deploying it"}},
+		Flags: []string{"--values", "--set", "--version", "--for-version", "--no-repo-update"},
 		Run:   chartsLint,
 	},
 	{
 		Name:  "template",
 		Group: "Releases",
 		Usage: []cmdUsage{{"<release> <chart>", "Render manifest to stdout (no deploy)"}},
-		Run:   chartsTemplate,
+		Flags: []string{
+			"--values",
+			"--set",
+			"--set-file",
+			"--version",
+			"--requirements",
+			"--skip-compat-check",
+			"--no-repo-update",
+		},
+		Run: chartsTemplate,
 	},
 	{
 		Name:  "install",
 		Group: "Releases",
 		Usage: []cmdUsage{{"<release> <chart>", "Install a chart as a release"}},
-		Run:   chartsInstall,
+		Flags: []string{
+			"--values",
+			"--set",
+			"--set-file",
+			"--version",
+			"--dry-run",
+			"--wait",
+			"--timeout",
+			"--history-max",
+			"--resolve-image",
+			"--skip-compat-check",
+			"--no-repo-update",
+		},
+		Run: chartsInstall,
 	},
 	{
 		Name:  "upgrade",
 		Group: "Releases",
 		Usage: []cmdUsage{{"<release> <chart>", "Upgrade a release to a new revision"}},
-		Run:   chartsUpgrade,
+		Flags: []string{
+			"--values",
+			"--set",
+			"--set-file",
+			"--version",
+			"--install",
+			"--reuse-values",
+			"--dry-run",
+			"--wait",
+			"--timeout",
+			"--history-max",
+			"--resolve-image",
+			"--skip-compat-check",
+			"--no-repo-update",
+		},
+		Run: chartsUpgrade,
 	},
 	{
 		Name:  "uninstall",
 		Group: "Releases",
 		Usage: []cmdUsage{{"<release>", "Remove a release (keeps volumes)"}},
+		Flags: []string{"--purge-volumes"},
 		Run:   chartsUninstall,
 	},
 	{
 		Name:  "rollback",
 		Group: "Releases",
 		Usage: []cmdUsage{{"<release> <rev>", "Re-deploy the contents of a past revision"}},
+		Flags: []string{"--wait", "--timeout", "--history-max"},
 		Run:   chartsRollback,
 	},
 	{
@@ -123,19 +175,30 @@ var chartsCommands = []chartsCmd{
 		Name:  "prune",
 		Group: "Releases",
 		Usage: []cmdUsage{{"[release]", "Delete old revisions beyond --history-max"}},
+		Flags: []string{"--history-max", "--dry-run"},
 		Run:   chartsPrune,
 	},
 	{
 		Name:  "get",
 		Group: "Releases",
 		Usage: []cmdUsage{{"values|manifest <release>", "Show stored values or rendered manifest"}},
+		Flags: []string{"--revision"},
 		Run:   chartsGet,
 	},
 	{
 		Name:  "diff",
 		Group: "Releases",
 		Usage: []cmdUsage{{"upgrade <release> <chart>", "Preview manifest changes before upgrading"}},
-		Run:   chartsDiff,
+		Flags: []string{
+			"--values",
+			"--set",
+			"--set-file",
+			"--version",
+			"--reuse-values",
+			"--skip-compat-check",
+			"--no-repo-update",
+		},
+		Run: chartsDiff,
 	},
 	{
 		Name:    "list",
@@ -154,12 +217,29 @@ var chartsCommands = []chartsCmd{
 		Name:  "apply",
 		Group: "GitOps",
 		Usage: []cmdUsage{{"-f <file>", "Converge the swarm to a declarative release file"}},
-		Run:   chartsApply,
+		// apply refuses what it does not honour rather than ignoring it. For a
+		// command whose entire contract is "the file is the only source of
+		// truth", quietly discarding --set or --version would be a correctness
+		// bug, not a cosmetic one.
+		FlagHint: "the release file is the only source of truth (set chart versions and values there)",
+		Flags: []string{
+			"--values",
+			"--dry-run",
+			"--diff",
+			"--wait",
+			"--timeout",
+			"--history-max",
+			"--resolve-image",
+			"--skip-compat-check",
+			"--no-repo-update",
+		},
+		Run: chartsApply,
 	},
 	{
 		Name:  "outdated",
 		Group: "GitOps",
 		Usage: []cmdUsage{{"", "Show releases with a newer chart version available"}},
+		Flags: []string{"--no-repo-update"},
 		Run:   chartsOutdated,
 	},
 }

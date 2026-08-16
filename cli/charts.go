@@ -130,7 +130,7 @@ func chartsMain(args []string) int {
 		}
 		return usageErr(fmt.Sprintf("%s\n\n%s", msg, chartsUsage()))
 	}
-	return c.Run(rest)
+	return c.Run(c, rest)
 }
 
 // newStore builds the repository store every charts subcommand resolves
@@ -180,7 +180,13 @@ func plaintextAllowed() bool {
 
 // --- repo ---
 
-func chartsRepo(args []string) int {
+func chartsRepo(c chartsCmd, args []string) int {
+	// repo takes no flags of its own, so this rejects any that turn up rather
+	// than letting them land among the sub-verb's positionals.
+	args, _, code := parse(c, args)
+	if code >= 0 {
+		return code
+	}
 	if len(args) == 0 {
 		return usageErr("charts repo requires a subcommand: add|list|update|remove")
 	}
@@ -255,10 +261,10 @@ func chartsRepo(args []string) int {
 
 // --- search ---
 
-func chartsSearch(args []string) int {
-	pos, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsSearch(c chartsCmd, args []string) int {
+	pos, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	keyword := ""
 	if len(pos) > 0 {
@@ -286,14 +292,14 @@ func chartsSearch(args []string) int {
 
 // --- show ---
 
-func chartsShow(args []string) int {
+func chartsShow(c chartsCmd, args []string) int {
 	if len(args) < 2 {
 		return usageErr("charts show <chart|values|schema> <repo/chart>")
 	}
 	what, ref := args[0], args[1]
-	pos, f, err := parseArgs(args[2:])
-	if err != nil {
-		return usageErr(err.Error())
+	pos, f, code := parse(c, args[2:])
+	if code >= 0 {
+		return code
 	}
 	_ = pos
 	ch, _, code := loadChart(ref, f)
@@ -360,10 +366,10 @@ func printChartMeta(ch *charts.Chart) {
 // --for-version lints against a chart-engine version other than this build's,
 // which answers "does this chart's declared floor admit X?". It cannot answer
 // "does this chart run on X" — only a real X can (see charts.CheckCompatAgainst).
-func chartsLint(args []string) int {
-	pos, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsLint(c chartsCmd, args []string) int {
+	pos, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 1 {
 		return usageErr("charts lint <chart>")
@@ -392,10 +398,10 @@ func chartsLint(args []string) int {
 	return 0
 }
 
-func chartsTemplate(args []string) int {
-	pos, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsTemplate(c chartsCmd, args []string) int {
+	pos, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 2 {
 		return usageErr("charts template <release> <repo/chart>")
@@ -423,10 +429,10 @@ func chartsTemplate(args []string) int {
 	return 0
 }
 
-func chartsInstall(args []string) int {
-	pos, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsInstall(c chartsCmd, args []string) int {
+	pos, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 2 {
 		return usageErr("charts install <release> <repo/chart>")
@@ -451,10 +457,10 @@ func chartsInstall(args []string) int {
 	return reportRelease(rel, manifest, f.dryRun)
 }
 
-func chartsUpgrade(args []string) int {
-	pos, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsUpgrade(c chartsCmd, args []string) int {
+	pos, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 2 {
 		return usageErr("charts upgrade <release> <repo/chart>")
@@ -504,10 +510,10 @@ func reportRelease(rel *charts.Release, manifest string, dryRun bool) int {
 	return 0
 }
 
-func chartsRollback(args []string) int {
-	pos, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsRollback(c chartsCmd, args []string) int {
+	pos, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 2 {
 		return usageErr("charts rollback <release> <revision>")
@@ -526,10 +532,10 @@ func chartsRollback(args []string) int {
 	return 0
 }
 
-func chartsHistory(args []string) int {
-	pos, _, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsHistory(c chartsCmd, args []string) int {
+	pos, _, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 1 {
 		return usageErr("charts history <release>")
@@ -546,10 +552,10 @@ func chartsHistory(args []string) int {
 	return 0
 }
 
-func chartsPrune(args []string) int {
-	pos, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsPrune(c chartsCmd, args []string) int {
+	pos, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) > 1 {
 		return usageErr("charts prune [release] [--history-max <n>] [--dry-run]")
@@ -558,6 +564,7 @@ func chartsPrune(args []string) int {
 	ctx := context.Background()
 
 	var results []charts.PruneResult
+	var err error
 	if len(pos) == 1 {
 		var res charts.PruneResult
 		res, err = e.Prune(ctx, pos[0], f.historyMax, f.dryRun)
@@ -599,14 +606,14 @@ func chartsPrune(args []string) int {
 	return 0
 }
 
-func chartsGet(args []string) int {
+func chartsGet(c chartsCmd, args []string) int {
 	if len(args) < 2 {
 		return usageErr("charts get <values|manifest> <release> [--revision N]")
 	}
 	what, release := args[0], args[1]
-	_, f, err := parseArgs(args[2:])
-	if err != nil {
-		return usageErr(err.Error())
+	_, f, code := parse(c, args[2:])
+	if code >= 0 {
+		return code
 	}
 	rel, err := charts.NewEngine().GetRevision(context.Background(), release, f.revision)
 	if err != nil {
@@ -627,16 +634,16 @@ func chartsGet(args []string) int {
 	return 0
 }
 
-func chartsDiff(args []string) int {
+func chartsDiff(c chartsCmd, args []string) int {
 	if len(args) < 1 {
 		return usageErr("charts diff upgrade <release> <repo/chart>")
 	}
 	if args[0] != "upgrade" {
 		return usageErr(fmt.Sprintf("unknown diff target '%s' (want upgrade)", args[0]))
 	}
-	pos, f, err := parseArgs(args[1:])
-	if err != nil {
-		return usageErr(err.Error())
+	pos, f, code := parse(c, args[1:])
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 2 {
 		return usageErr("charts diff upgrade <release> <repo/chart>")
@@ -736,10 +743,10 @@ func prepare(release, ref string, f flags, base map[string]any, pol compatPolicy
 
 // --- uninstall / list / status ---
 
-func chartsUninstall(args []string) int {
-	pos, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsUninstall(c chartsCmd, args []string) int {
+	pos, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 1 {
 		return usageErr("charts uninstall <release> [--purge-volumes]")
@@ -763,9 +770,9 @@ func chartsUninstall(args []string) int {
 	return 0
 }
 
-func chartsList(args []string) int {
-	if _, _, err := parseArgs(args); err != nil {
-		return usageErr(err.Error())
+func chartsList(c chartsCmd, args []string) int {
+	if _, _, code := parse(c, args); code >= 0 {
+		return code
 	}
 	rels, err := charts.NewEngine().List(context.Background())
 	if err != nil {
@@ -783,10 +790,10 @@ func chartsList(args []string) int {
 	return 0
 }
 
-func chartsStatus(args []string) int {
-	pos, _, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsStatus(c chartsCmd, args []string) int {
+	pos, _, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 1 {
 		return usageErr("charts status <release>")
