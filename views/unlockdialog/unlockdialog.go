@@ -8,9 +8,10 @@ package unlockdialog
 import (
 	"strings"
 
+	"github.com/Eldara-Tech/swarmcli/ui/dialog"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // ResultMsg is emitted when the dialog is dismissed. Confirmed is true when the
@@ -66,41 +67,18 @@ func (m *Model) View() string {
 
 	contentWidth := 65
 
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("63")).
-		Padding(0, 1).
-		Width(contentWidth)
-
-	messageStyle := lipgloss.NewStyle().
-		Padding(1, 2).
-		Width(contentWidth)
-
-	inputStyle := lipgloss.NewStyle().
-		Padding(0, 2).
-		Width(contentWidth)
-
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Padding(1, 2, 0, 2).
-		Width(contentWidth)
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("63")).
-		Bold(true)
-
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("63")).
-		Width(contentWidth + 2)
+	titleStyle := dialog.TitleStyle.Width(contentWidth)
+	messageStyle := dialog.ItemStyle.Padding(1, 2).Width(contentWidth)
+	inputStyle := dialog.ItemStyle.Padding(0, 2).Width(contentWidth)
+	helpStyle := dialog.HelpStyle.Padding(1, 2, 0, 2).Width(contentWidth)
+	borderStyle := dialog.BorderStyle.BorderForeground(dialog.AccentPrimary).Width(contentWidth + 2)
 
 	var lines []string
 	lines = append(lines, titleStyle.Render(" Unlock Swarm "))
 	lines = append(lines, messageStyle.Render("Enter the swarm unlock key to decrypt this cluster."))
 	lines = append(lines, inputStyle.Render(m.input.View()))
 
-	helpText := keyStyle.Render("<Enter>") + " Unlock • " + keyStyle.Render("<Esc>") + " Cancel"
+	helpText := dialog.KeyStyle.Render("<Enter>") + " Unlock • " + dialog.KeyStyle.Render("<Esc>") + " Cancel"
 	lines = append(lines, helpStyle.Render(helpText))
 
 	return borderStyle.Render(strings.Join(lines, "\n"))
