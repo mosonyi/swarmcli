@@ -91,11 +91,10 @@ func (m *Model) renderAvailabilityDialog() string {
 	contentWidth := 40
 
 	titleStyle := dialog.TitleStyle.Width(contentWidth)
-	// The wider padding and brighter selection this dialog has always used.
-	optionStyle := dialog.ItemStyle.Padding(0, 2).Width(contentWidth)
-	selectedStyle := dialog.SelectedStyle.Foreground(dialog.SelectedFg).Bold(true).Padding(0, 2).Width(contentWidth)
-	helpStyle := dialog.HelpStyle.Padding(0, 2).Width(contentWidth)
-	borderStyle := dialog.BorderStyle.BorderForeground(dialog.AccentPrimary).Width(contentWidth + 2)
+	optionStyle := dialog.ItemStyle.Width(contentWidth)
+	selectedStyle := dialog.SelectedStyle.Width(contentWidth)
+	helpStyle := dialog.HelpStyle.Width(contentWidth)
+	borderStyle := dialog.BorderStyle.Width(contentWidth + 2)
 
 	var lines []string
 	lines = append(lines, titleStyle.Render(" Set Node Availability "))

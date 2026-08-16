@@ -68,10 +68,10 @@ func (m *Model) View() string {
 	contentWidth := 65
 
 	titleStyle := dialog.TitleStyle.Width(contentWidth)
-	messageStyle := dialog.ItemStyle.Padding(1, 2).Width(contentWidth)
-	inputStyle := dialog.ItemStyle.Padding(0, 2).Width(contentWidth)
-	helpStyle := dialog.HelpStyle.Padding(1, 2, 0, 2).Width(contentWidth)
-	borderStyle := dialog.BorderStyle.BorderForeground(dialog.AccentPrimary).Width(contentWidth + 2)
+	messageStyle := dialog.MessageStyle.Width(contentWidth)
+	inputStyle := dialog.ItemStyle.Width(contentWidth)
+	helpStyle := dialog.HelpStyle.Width(contentWidth)
+	borderStyle := dialog.BorderStyle.Width(contentWidth + 2)
 
 	var lines []string
 	lines = append(lines, titleStyle.Render(" Unlock Swarm "))

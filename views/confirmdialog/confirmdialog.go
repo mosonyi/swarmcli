@@ -119,8 +119,8 @@ func (m *Model) View() string {
 		accent = dialog.AccentPrimary
 	}
 	titleStyle := dialog.TitleStyle.Background(accent).Width(contentWidth)
-	messageStyle := dialog.ItemStyle.Padding(1, 2).Width(contentWidth)
-	helpStyle := dialog.HelpStyle.Padding(0, 2).Width(contentWidth)
+	messageStyle := dialog.MessageStyle.Width(contentWidth)
+	helpStyle := dialog.HelpStyle.Width(contentWidth)
 	borderStyle := dialog.BorderStyle.BorderForeground(accent).Width(contentWidth + 2)
 
 	// Build content
@@ -136,7 +136,7 @@ func (m *Model) View() string {
 
 	// Add checkbox if label is provided (confirm or info mode; never error mode)
 	if m.CheckboxLabel != "" && !m.ErrorMode {
-		checkboxStyle := dialog.ItemStyle.Padding(0, 2).Width(contentWidth)
+		checkboxStyle := dialog.ItemStyle.Width(contentWidth)
 
 		checkMark := "[ ]"
 		if m.CheckboxChecked {
