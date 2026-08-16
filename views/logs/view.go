@@ -6,6 +6,7 @@ package logsview
 import (
 	"fmt"
 	"github.com/Eldara-Tech/swarmcli/ui"
+	"github.com/Eldara-Tech/swarmcli/ui/dialog"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -99,8 +100,8 @@ func (m *Model) FrameContent() string {
 
 	if m.getNodeSelectVisible() && m.viewport.Height >= 5 {
 		availableHeight := m.viewport.Height
-		dialog := m.renderNodeSelectDialog(availableHeight)
-		viewportContent = ui.OverlayCentered(viewportContent, dialog, width, 0)
+		popup := m.renderNodeSelectDialog(availableHeight)
+		viewportContent = ui.OverlayCentered(viewportContent, popup, width, 0)
 	}
 
 	return viewportContent
@@ -165,37 +166,12 @@ func (m *Model) renderNodeSelectDialog(availableHeight int) string {
 		contentWidth = titleWidth
 	}
 
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("63")).
-		Padding(0, 1).
-		Width(contentWidth)
-
-	itemStyle := lipgloss.NewStyle().
-		Padding(0, 1).
-		Width(contentWidth)
-
-	selectedStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("230")).
-		Background(lipgloss.Color("63")).
-		Bold(true).
-		Padding(0, 1).
-		Width(contentWidth)
-
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("117")).
-		Width(contentWidth + 2)
-
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Padding(0, 1).
-		Width(contentWidth)
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("63")).
-		Bold(true)
+	titleStyle := dialog.TitleStyle.Width(contentWidth)
+	itemStyle := dialog.ItemStyle.Width(contentWidth)
+	// A brighter selection than the shared one, which this dialog has always used.
+	selectedStyle := dialog.SelectedStyle.Foreground(dialog.SelectedFg).Bold(true).Width(contentWidth)
+	borderStyle := dialog.BorderStyle.Width(contentWidth + 2)
+	helpStyle := dialog.HelpStyle.Width(contentWidth)
 
 	// Build the content
 	var lines []string
@@ -275,9 +251,9 @@ func (m *Model) renderNodeSelectDialog(availableHeight int) string {
 
 	// Build help text with styled keys
 	helpText := fmt.Sprintf(" %s Navigate • %s Select • %s Cancel",
-		keyStyle.Render("<↑/↓/PgUp/PgDn>"),
-		keyStyle.Render("<Enter>"),
-		keyStyle.Render("<Esc>"))
+		dialog.KeyStyle.Render("<↑/↓/PgUp/PgDn>"),
+		dialog.KeyStyle.Render("<Enter>"),
+		dialog.KeyStyle.Render("<Esc>"))
 	lines = append(lines, helpStyle.Render(helpText))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
