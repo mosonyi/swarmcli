@@ -121,7 +121,7 @@ func (m *Model) View() string {
 	titleStyle := dialog.TitleStyle.Background(accent).Width(contentWidth)
 	messageStyle := dialog.MessageStyle.Width(contentWidth)
 	helpStyle := dialog.HelpStyle.Width(contentWidth)
-	borderStyle := dialog.BorderStyle.BorderForeground(accent).Width(contentWidth + 2)
+	borderStyle := dialog.BorderStyle.BorderForeground(accent).Width(contentWidth + dialog.BoxInsetColumns)
 
 	// Build content
 	var lines []string

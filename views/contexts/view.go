@@ -210,7 +210,7 @@ func (m *Model) renderImportDialog() string {
 
 	titleStyleWithWidth := dialog.TitleStyle.Width(contentWidth)
 	itemStyleWithWidth := dialog.ItemStyle.Width(contentWidth)
-	borderStyleWithWidth := dialog.BorderStyle.Width(contentWidth + 2)
+	borderStyleWithWidth := dialog.BorderStyle.Width(contentWidth + dialog.BoxInsetColumns)
 	helpStyleWithWidth := dialog.HelpStyle.Width(contentWidth)
 
 	var lines []string

@@ -94,7 +94,7 @@ func (m *Model) renderAvailabilityDialog() string {
 	optionStyle := dialog.ItemStyle.Width(contentWidth)
 	selectedStyle := dialog.SelectedStyle.Width(contentWidth)
 	helpStyle := dialog.HelpStyle.Width(contentWidth)
-	borderStyle := dialog.BorderStyle.Width(contentWidth + 2)
+	borderStyle := dialog.BorderStyle.Width(contentWidth + dialog.BoxInsetColumns)
 
 	var lines []string
 	lines = append(lines, titleStyle.Render(" Set Node Availability "))

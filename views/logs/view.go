@@ -115,7 +115,7 @@ func (m *Model) View() string {
 		return ""
 	}
 	return ui.RenderFramedBox(m.FrameTitle(), m.FrameHeader(), m.FrameContent(), m.FrameFooter(),
-		m.viewport.Width+4)
+		m.viewport.Width+ui.FrameChromeColumns)
 }
 
 // renderNodeSelectDialog renders the node selection popup
@@ -169,7 +169,7 @@ func (m *Model) renderNodeSelectDialog(availableHeight int) string {
 	titleStyle := dialog.TitleStyle.Width(contentWidth)
 	itemStyle := dialog.ItemStyle.Width(contentWidth)
 	selectedStyle := dialog.SelectedStyle.Width(contentWidth)
-	borderStyle := dialog.BorderStyle.Width(contentWidth + 2)
+	borderStyle := dialog.BorderStyle.Width(contentWidth + dialog.BoxInsetColumns)
 	helpStyle := dialog.HelpStyle.Width(contentWidth)
 
 	// Build the content

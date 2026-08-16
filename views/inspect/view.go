@@ -47,5 +47,5 @@ func (m *Model) FrameContent() string { return m.viewport.View() }
 // the viewport is already sized to the rows it should fill.
 func (m *Model) View() string {
 	return ui.RenderFramedBox(m.FrameTitle(), m.FrameHeader(), m.FrameContent(), m.FrameFooter(),
-		m.viewport.Width+4)
+		m.viewport.Width+ui.FrameChromeColumns)
 }

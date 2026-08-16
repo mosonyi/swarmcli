@@ -24,6 +24,13 @@ const (
 	HelpFg   = lipgloss.Color("240") // the key hints along the bottom
 )
 
+// BoxInsetColumns is how much wider a dialog's box is than the rows inside it.
+// Rows are rendered at the dialog's content width; the box is built as
+// BorderStyle.Width(contentWidth + BoxInsetColumns), which leaves a column of
+// space between each row and the border. lipgloss draws the border outside the
+// width it is given, so this is slack inside the frame, not the frame itself.
+const BoxInsetColumns = 2
+
 // Shared dialog styles used across views for consistent dialog rendering.
 var (
 	TitleStyle = lipgloss.NewStyle().
