@@ -168,8 +168,7 @@ func (m *Model) renderNodeSelectDialog(availableHeight int) string {
 
 	titleStyle := dialog.TitleStyle.Width(contentWidth)
 	itemStyle := dialog.ItemStyle.Width(contentWidth)
-	// A brighter selection than the shared one, which this dialog has always used.
-	selectedStyle := dialog.SelectedStyle.Foreground(dialog.SelectedFg).Bold(true).Width(contentWidth)
+	selectedStyle := dialog.SelectedStyle.Width(contentWidth)
 	borderStyle := dialog.BorderStyle.Width(contentWidth + 2)
 	helpStyle := dialog.HelpStyle.Width(contentWidth)
 

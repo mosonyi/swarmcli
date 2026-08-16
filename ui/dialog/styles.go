@@ -10,17 +10,18 @@ import "github.com/charmbracelet/lipgloss"
 // with a colour is readable, and there is one place to change it.
 const (
 	// An accent tints both a dialog's title bar and its border; it is what
-	// tells one kind of dialog from another at a glance.
+	// tells one kind of dialog from another at a glance, and the only thing a
+	// dialog should need to override. The view frame underneath has its own
+	// colour, ui.FrameBorderColor, which no dialog borrows — a modal that
+	// draws its frame in the frame's own colour stops reading as a layer.
 	AccentPrimary = lipgloss.Color("63")  // ordinary dialogs, selections, info
 	AccentWarning = lipgloss.Color("208") // confirmations that destroy something
 	AccentError   = lipgloss.Color("196") // errors
 	AccentEdit    = lipgloss.Color("214") // label add and remove
 
-	BorderColor = lipgloss.Color("117") // the default border, where no accent applies
-	BrightFg    = lipgloss.Color("15")  // text on an accent, and focused input
-	SelectedFg  = lipgloss.Color("230") // the brighter selection some lists use
-	MutedFg     = lipgloss.Color("250") // unselected rows
-	HelpFg      = lipgloss.Color("240") // the key hints along the bottom
+	BrightFg = lipgloss.Color("15")  // text on an accent, and focused input
+	MutedFg  = lipgloss.Color("250") // unselected rows
+	HelpFg   = lipgloss.Color("240") // the key hints along the bottom
 )
 
 // Shared dialog styles used across views for consistent dialog rendering.
@@ -33,10 +34,16 @@ var (
 
 	BorderStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(BorderColor)
+			BorderForeground(AccentPrimary)
 
 	ItemStyle = lipgloss.NewStyle().
 			Padding(0, 1)
+
+	// MessageStyle is for a block of prose rather than a row — the sentence a
+	// confirmation asks its question in. It is inset further than a row, and
+	// stands off the title above it.
+	MessageStyle = lipgloss.NewStyle().
+			Padding(1, 2)
 
 	SelectedStyle = lipgloss.NewStyle().
 			Foreground(BrightFg).
