@@ -16,40 +16,11 @@ import (
 	"github.com/Eldara-Tech/swarmcli/utils/textdiff"
 )
 
-const chartsUsage = `Usage: swarmcli charts <command> [options]
-
-Repository:
-  repo add <name> <url>      Add a chart repository and download its index
-  repo list                  List configured repositories
-  repo update [name]         Refresh repository indexes (all, or one)
-  repo remove <name>         Remove a repository
-
-Discovery:
-  search [keyword]           Search charts across repositories
-  show chart  <repo/chart>   Show chart metadata
-  show values <repo/chart>   Show default values.yaml
-  show schema <repo/chart>   Show values.schema.json
-
-Authoring:
-  lint <chart>                Check a chart without deploying it
-
-Releases:
-  template <release> <chart>  Render manifest to stdout (no deploy)
-  install  <release> <chart>  Install a chart as a release
-  upgrade  <release> <chart>  Upgrade a release to a new revision
-  uninstall <release>         Remove a release (keeps volumes)
-  rollback <release> <rev>    Re-deploy the contents of a past revision
-  history <release>           Show a release's revision history
-  prune [release]             Delete old revisions beyond --history-max
-  get values|manifest <rel>   Show stored values or rendered manifest
-  diff upgrade <rel> <chart>  Preview manifest changes before upgrading
-  list                        List releases
-  status <release>            Show release status and services
-
-GitOps:
-  apply -f <file>             Converge the swarm to a declarative release file
-  outdated                    Show releases with a newer chart version available
-
+// chartsUsageProse is everything in `charts --help` that is not the command
+// list: what a release file is, how waves and compatibility behave, and the
+// option reference. The command list itself is rendered from chartsCommands —
+// see renderCommands.
+const chartsUsageProse = `
 A release file pins each release to a chart version, so it is reproducible and an
 automated updater (e.g. Renovate) has something concrete to bump. apply installs
 what is missing, upgrades what changed, and skips what already matches. It never
@@ -89,34 +60,10 @@ failure names the version to upgrade to instead of surfacing as whatever error
 the missing feature happens to produce. install and upgrade ask first when run
 interactively; apply never does. template, diff and show only warn. Pass
 --skip-compat-check to try anyway. Charts declaring nothing are unaffected.
+`
 
-Common options:
-  -f, --values <file>   Values file (repeatable). For apply: the release file.
-      --set k=v         Override a value (repeatable)
-      --set-file k=path Set a value to a file's contents (repeatable). A chart
-                        references it as values/<k> from a config's file:, which
-                        is how an operator supplies a config the chart does not
-                        ship. See charts/README.md.
-      --version <ver>   Chart version, for a <repo>/<chart> reference (default: latest).
-                        Not valid with a local chart path — its Chart.yaml sets the version.
-      --dry-run         Render and validate without deploying
-      --requirements    template: emit rendered requirements.yaml, not the manifest
-      --wait            Wait for services to converge
-      --timeout <dur>   Wait timeout, e.g. 10m (default 5m)
-      --history-max <n> Max release revisions to retain
-      --resolve-image <mode>  always | changed | never — how the daemon resolves
-                        image tags to digests at deploy time (default: always)
-      --install         upgrade: install the release if absent
-      --reuse-values    upgrade/diff: layer overrides on previous values
-      --revision <n>    get: select a specific revision
-      --purge-volumes   uninstall: also remove the release's volumes
-      --diff            apply: show each changed release's manifest diff (implies --dry-run)
-      --no-repo-update  Resolve from the cached repository indexes and touch no
-                        network (also: SWARMCLI_CHARTS_NO_AUTO_UPDATE=1)
-      --skip-compat-check  Proceed despite a chart's unmet swarmcliVersion constraint
-      --for-version <ver>  lint: check the chart's swarmcliVersion against <ver>
-                        instead of this build's chart engine
-
+// chartsUsageTail is the prose that follows the option reference.
+const chartsUsageTail = `
 lint renders a chart and reports every problem it finds: a broken template,
 values that fail values.schema.json, a swarmcliVersion this build does not
 satisfy. It renders from the chart defaults, layering any -f/--set on top — a
@@ -126,10 +73,10 @@ other version — it cannot tell you the chart RUNS on that version, because thi
 binary carries only its own engine's behaviour. Rendering with a real binary of
 that version is the only thing that settles that.
 
-apply honours --wait, --timeout, --history-max and --resolve-image. It REJECTS --set,
---set-file, --version, --reuse-values, --install, --purge-volumes, --requirements and --revision rather
-than ignoring them: the release file is the only source of truth, so a value passed
-on the command line would be a lie.
+apply takes only the options that make sense for a file-driven converge, and
+REJECTS the rest rather than ignoring them: the release file is the only source
+of truth, so a value passed on the command line would be a lie. Run
+swarmcli charts apply --help for what it does take.
 
 Resolving a <repo>/<chart> reference refreshes that repository's index first, so
 install, upgrade, template, diff, show, lint and search see what the repository
@@ -139,54 +86,35 @@ cached index is used. --no-repo-update skips the network entirely, for which
 outdated reports against the cached indexes and says so.
 `
 
-// chartsMain dispatches `swarmcli charts ...`.
+// chartsMain dispatches `swarmcli charts ...` through chartsCommands.
 func chartsMain(args []string) int {
 	if len(args) == 0 {
-		out(chartsUsage)
+		out(chartsUsage())
 		return 0
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
 	case "-h", "--help", "help":
-		out(chartsUsage)
+		// `charts help <command>` is the same page as `charts <command> --help`,
+		// mirroring the TUI, where `:help <cmd>` and `:cmd --help` are one screen.
+		if len(rest) > 0 {
+			if c, ok := lookupCommand(rest[0]); ok {
+				out(commandHelp(c))
+				return 0
+			}
+		}
+		out(chartsUsage())
 		return 0
-	case "repo":
-		return chartsRepo(rest)
-	case "search":
-		return chartsSearch(rest)
-	case "show":
-		return chartsShow(rest)
-	case "lint":
-		return chartsLint(rest)
-	case "template":
-		return chartsTemplate(rest)
-	case "install":
-		return chartsInstall(rest)
-	case "upgrade":
-		return chartsUpgrade(rest)
-	case "uninstall":
-		return chartsUninstall(rest)
-	case "rollback":
-		return chartsRollback(rest)
-	case "history":
-		return chartsHistory(rest)
-	case "prune":
-		return chartsPrune(rest)
-	case "get":
-		return chartsGet(rest)
-	case "diff":
-		return chartsDiff(rest)
-	case "list", "ls":
-		return chartsList(rest)
-	case "status":
-		return chartsStatus(rest)
-	case "apply":
-		return chartsApply(rest)
-	case "outdated":
-		return chartsOutdated(rest)
-	default:
-		return usageErr(fmt.Sprintf("unknown charts command '%s'\n\n%s", sub, chartsUsage))
 	}
+	c, ok := lookupCommand(sub)
+	if !ok {
+		msg := fmt.Sprintf("unknown charts command '%s'", sub)
+		if s := suggestCommand(sub, commandNames()); s != "" {
+			msg += fmt.Sprintf(" — did you mean '%s'?", s)
+		}
+		return usageErr(fmt.Sprintf("%s\n\n%s", msg, chartsUsage()))
+	}
+	return c.Run(c, rest)
 }
 
 // newStore builds the repository store every charts subcommand resolves
@@ -236,7 +164,13 @@ func plaintextAllowed() bool {
 
 // --- repo ---
 
-func chartsRepo(args []string) int {
+func chartsRepo(c chartsCmd, args []string) int {
+	// repo takes no flags of its own, so this rejects any that turn up rather
+	// than letting them land among the sub-verb's positionals.
+	args, _, code := parse(c, args)
+	if code >= 0 {
+		return code
+	}
 	if len(args) == 0 {
 		return usageErr("charts repo requires a subcommand: add|list|update|remove")
 	}
@@ -311,10 +245,10 @@ func chartsRepo(args []string) int {
 
 // --- search ---
 
-func chartsSearch(args []string) int {
-	pos, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsSearch(c chartsCmd, args []string) int {
+	pos, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	keyword := ""
 	if len(pos) > 0 {
@@ -342,14 +276,14 @@ func chartsSearch(args []string) int {
 
 // --- show ---
 
-func chartsShow(args []string) int {
+func chartsShow(c chartsCmd, args []string) int {
 	if len(args) < 2 {
 		return usageErr("charts show <chart|values|schema> <repo/chart>")
 	}
 	what, ref := args[0], args[1]
-	pos, f, err := parseArgs(args[2:])
-	if err != nil {
-		return usageErr(err.Error())
+	pos, f, code := parse(c, args[2:])
+	if code >= 0 {
+		return code
 	}
 	_ = pos
 	ch, _, code := loadChart(ref, f)
@@ -416,10 +350,10 @@ func printChartMeta(ch *charts.Chart) {
 // --for-version lints against a chart-engine version other than this build's,
 // which answers "does this chart's declared floor admit X?". It cannot answer
 // "does this chart run on X" — only a real X can (see charts.CheckCompatAgainst).
-func chartsLint(args []string) int {
-	pos, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsLint(c chartsCmd, args []string) int {
+	pos, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 1 {
 		return usageErr("charts lint <chart>")
@@ -448,10 +382,10 @@ func chartsLint(args []string) int {
 	return 0
 }
 
-func chartsTemplate(args []string) int {
-	pos, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsTemplate(c chartsCmd, args []string) int {
+	pos, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 2 {
 		return usageErr("charts template <release> <repo/chart>")
@@ -479,10 +413,10 @@ func chartsTemplate(args []string) int {
 	return 0
 }
 
-func chartsInstall(args []string) int {
-	pos, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsInstall(c chartsCmd, args []string) int {
+	pos, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 2 {
 		return usageErr("charts install <release> <repo/chart>")
@@ -507,10 +441,10 @@ func chartsInstall(args []string) int {
 	return reportRelease(rel, manifest, f.dryRun)
 }
 
-func chartsUpgrade(args []string) int {
-	pos, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsUpgrade(c chartsCmd, args []string) int {
+	pos, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 2 {
 		return usageErr("charts upgrade <release> <repo/chart>")
@@ -560,10 +494,10 @@ func reportRelease(rel *charts.Release, manifest string, dryRun bool) int {
 	return 0
 }
 
-func chartsRollback(args []string) int {
-	pos, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsRollback(c chartsCmd, args []string) int {
+	pos, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 2 {
 		return usageErr("charts rollback <release> <revision>")
@@ -582,10 +516,10 @@ func chartsRollback(args []string) int {
 	return 0
 }
 
-func chartsHistory(args []string) int {
-	pos, _, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsHistory(c chartsCmd, args []string) int {
+	pos, _, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 1 {
 		return usageErr("charts history <release>")
@@ -602,10 +536,10 @@ func chartsHistory(args []string) int {
 	return 0
 }
 
-func chartsPrune(args []string) int {
-	pos, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsPrune(c chartsCmd, args []string) int {
+	pos, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) > 1 {
 		return usageErr("charts prune [release] [--history-max <n>] [--dry-run]")
@@ -614,6 +548,7 @@ func chartsPrune(args []string) int {
 	ctx := context.Background()
 
 	var results []charts.PruneResult
+	var err error
 	if len(pos) == 1 {
 		var res charts.PruneResult
 		res, err = e.Prune(ctx, pos[0], f.historyMax, f.dryRun)
@@ -655,14 +590,14 @@ func chartsPrune(args []string) int {
 	return 0
 }
 
-func chartsGet(args []string) int {
+func chartsGet(c chartsCmd, args []string) int {
 	if len(args) < 2 {
 		return usageErr("charts get <values|manifest> <release> [--revision N]")
 	}
 	what, release := args[0], args[1]
-	_, f, err := parseArgs(args[2:])
-	if err != nil {
-		return usageErr(err.Error())
+	_, f, code := parse(c, args[2:])
+	if code >= 0 {
+		return code
 	}
 	rel, err := charts.NewEngine().GetRevision(context.Background(), release, f.revision)
 	if err != nil {
@@ -683,16 +618,16 @@ func chartsGet(args []string) int {
 	return 0
 }
 
-func chartsDiff(args []string) int {
+func chartsDiff(c chartsCmd, args []string) int {
 	if len(args) < 1 {
 		return usageErr("charts diff upgrade <release> <repo/chart>")
 	}
 	if args[0] != "upgrade" {
 		return usageErr(fmt.Sprintf("unknown diff target '%s' (want upgrade)", args[0]))
 	}
-	pos, f, err := parseArgs(args[1:])
-	if err != nil {
-		return usageErr(err.Error())
+	pos, f, code := parse(c, args[1:])
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 2 {
 		return usageErr("charts diff upgrade <release> <repo/chart>")
@@ -792,10 +727,10 @@ func prepare(release, ref string, f flags, base map[string]any, pol compatPolicy
 
 // --- uninstall / list / status ---
 
-func chartsUninstall(args []string) int {
-	pos, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsUninstall(c chartsCmd, args []string) int {
+	pos, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 1 {
 		return usageErr("charts uninstall <release> [--purge-volumes]")
@@ -819,9 +754,9 @@ func chartsUninstall(args []string) int {
 	return 0
 }
 
-func chartsList(args []string) int {
-	if _, _, err := parseArgs(args); err != nil {
-		return usageErr(err.Error())
+func chartsList(c chartsCmd, args []string) int {
+	if _, _, code := parse(c, args); code >= 0 {
+		return code
 	}
 	rels, err := charts.NewEngine().List(context.Background())
 	if err != nil {
@@ -839,10 +774,10 @@ func chartsList(args []string) int {
 	return 0
 }
 
-func chartsStatus(args []string) int {
-	pos, _, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsStatus(c chartsCmd, args []string) int {
+	pos, _, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	if len(pos) != 1 {
 		return usageErr("charts status <release>")

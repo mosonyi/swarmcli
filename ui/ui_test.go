@@ -101,3 +101,48 @@ func TestOverlayCentered_AlignsWithWideChars(t *testing.T) {
 		require.Equal(t, leftCols[0], c, "dialog left border must be column-aligned on every row")
 	}
 }
+
+// TestRenderFramedBoxBordersEveryHeaderLine — the header was appended as a
+// single box line however many lines it had, so a two-line header put the
+// opening border on its first row and the closing one on its last.
+func TestRenderFramedBoxBordersEveryHeaderLine(t *testing.T) {
+	out := RenderFramedBox("Title", "NAME      STATE\nfiltered: web", "alpha\nbravo", "1-5 of 5", 40)
+
+	rows := strings.Split(out, "\n")
+	require.Greater(t, len(rows), 2)
+	for i, row := range rows[1 : len(rows)-1] {
+		require.Truef(t, strings.HasPrefix(row, "│"), "row %d does not open with a border: %q", i, row)
+		require.Truef(t, strings.HasSuffix(row, "│"), "row %d does not close with a border: %q", i, row)
+		require.Equalf(t, 40, lipgloss.Width(row), "row %d is not the frame's width: %q", i, row)
+	}
+}
+
+// TestRenderFramedBoxHeightFillsRequestedHeight — the pad loop recomputed the
+// gap it was closing while closing it, so it stopped around half way and the
+// box came out short of the height it was asked for.
+func TestRenderFramedBoxHeightFillsRequestedHeight(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		header, footer string
+		frameHeight    int
+	}{
+		{"no header or footer", "", "", 12},
+		{"header", "NAME      STATE", "", 12},
+		{"header and footer", "NAME      STATE", "1-5 of 5", 12},
+		{"two-line header", "NAME      STATE\nfiltered: web", "1-5 of 5", 12},
+		{"two-line header, tall frame", "NAME      STATE\nfiltered: web", "1-5 of 5", 24},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := RenderFramedBoxHeight("Title", tc.header, "alpha\nbravo", tc.footer, 40, tc.frameHeight)
+			require.Len(t, strings.Split(out, "\n"), tc.frameHeight)
+		})
+	}
+}
+
+// TestRenderFramedBoxHeightCannotShrinkBelowItsChrome — when the borders,
+// header and footer already fill the requested height there is nothing left to
+// give, and the box is as short as it can be rather than the height asked for.
+func TestRenderFramedBoxHeightCannotShrinkBelowItsChrome(t *testing.T) {
+	out := RenderFramedBoxHeight("Title", "one\ntwo\nthree", "footer\nsecond", "x", 40, 6)
+	require.Greater(t, len(strings.Split(out, "\n")), 6)
+}
