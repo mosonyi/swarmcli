@@ -1032,3 +1032,85 @@ func TestResizeWithFollowOffClampsWithoutJumping(t *testing.T) {
 	require.Len(t, rows, 57)
 	require.Contains(t, rows[len(rows)-1], "line-499")
 }
+
+// search returns the matches after typing term and pressing enter, the way a
+// user reaches them.
+func search(m *Model, term string) {
+	m.mode = "search"
+	for _, r := range term {
+		HandleKey(m, key(string(r)))
+	}
+	HandleKey(m, key("enter"))
+}
+
+// TestSearchCountsLinesThatArriveLater — the incremental update was guarded on
+// "no filter is switched on", and hide-stopped is on by default, so on a live
+// stream the counter froze at whatever the search found when it was entered
+// and n/N navigated a stale set (#586).
+func TestSearchCountsLinesThatArriveLater(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(m *Model)
+	}{
+		{"hide-stopped, the default", func(*Model) {}},
+		{"node filter", func(m *Model) { m.setNodeFilter("node-a") }},
+		{"slash filter", func(m *Model) { m.ApplySearchQuery("needle") }},
+		{"no filter at all", func(m *Model) { m.setHideStopped(false) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := hideStoppedModel()
+			m.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
+			tc.setup(m)
+
+			m.Update(LineMsg{Line: "node-a\x00task-run\x00first needle"})
+			search(m, "needle")
+			require.Len(t, m.searchMatches, 1)
+
+			for i := 0; i < 3; i++ {
+				m.Update(LineMsg{Line: "node-a\x00task-run\x00another needle"})
+			}
+			require.Equal(t, []int{0, 1, 2, 3}, m.searchMatches,
+				"matches in lines that arrived after the search must be counted")
+		})
+	}
+}
+
+// TestSearchMatchesAreVisibleIndices — a hidden line must not advance the index
+// the matches are numbered by, or n/N scrolls to the wrong row.
+func TestSearchMatchesAreVisibleIndices(t *testing.T) {
+	m := hideStoppedModel()
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
+
+	m.Update(LineMsg{Line: "node-a\x00task-run\x00needle one"})
+	m.Update(LineMsg{Line: "node-a\x00task-stop\x00needle hidden"})
+	m.Update(LineMsg{Line: "node-a\x00task-run\x00needle two"})
+	search(m, "needle")
+
+	// The shutdown task's line is filtered out, so the two visible matches are
+	// numbered 0 and 1 rather than 0 and 2.
+	require.Equal(t, []int{0, 1}, m.searchMatches)
+	require.Equal(t, 2, m.getVisibleCount())
+}
+
+// TestSearchSurvivesTheBufferWrapping — once MaxLines is reached every new line
+// drops one off the top, which used to discard the whole match set on each
+// line and leave the counter reading zero for the rest of the session.
+func TestSearchSurvivesTheBufferWrapping(t *testing.T) {
+	m := hideStoppedModel()
+	m.MaxLines = 4
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
+
+	m.Update(LineMsg{Line: "node-a\x00task-run\x00needle"})
+	search(m, "needle")
+	require.Len(t, m.searchMatches, 1)
+
+	// Six more lines through a four-line buffer: the first needle is long gone
+	// and the three that remain are the last three appended.
+	for i := 0; i < 3; i++ {
+		m.Update(LineMsg{Line: "node-a\x00task-run\x00filler"})
+	}
+	for i := 0; i < 3; i++ {
+		m.Update(LineMsg{Line: "node-a\x00task-run\x00needle"})
+	}
+	require.Equal(t, []int{1, 2, 3}, m.searchMatches)
+}
