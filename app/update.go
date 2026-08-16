@@ -431,9 +431,9 @@ func (m *Model) updateForResize(msg tea.WindowSizeMsg) tea.Cmd {
 		usableHeight = msg.Height
 	} else {
 		// Normal mode:
-		// - Width: subtract 4 for frame borders/padding
+		// - Width: subtract what the frame spends on itself
 		// - Height: pass full height, handleViewResize will subtract systeminfo header
-		usableWidth = msg.Width - 4
+		usableWidth = msg.Width - ui.FrameChromeColumns
 		usableHeight = msg.Height
 	}
 	// If an input bar is visible, reserve its lines so the main view is reduced

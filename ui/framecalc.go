@@ -6,7 +6,16 @@ package ui
 import "strings"
 
 const (
-	horizontalPadding = 4
+	// FrameChromeColumns is what a frame spends on itself horizontally: the two
+	// border columns, plus a column of padding inside each of them. Turning a
+	// content or viewport width into the width of the frame around it means
+	// adding this, and going the other way means subtracting it.
+	FrameChromeColumns = 4
+
+	// BorderColumns is the two vertical border glyphs alone, without the
+	// padding — the span between the corners of a frame of a given width is
+	// that width less this.
+	BorderColumns = 2
 
 	// FramedChromeRows is what RenderViewFrame's bordered layout spends on the
 	// frame itself: the top border, which carries the title, and the bottom one.
@@ -41,7 +50,7 @@ func ComputeFrameDimensions(viewportWidth, viewportHeight, fallbackWidth, fallba
 	if frameWidth <= 0 {
 		frameWidth = 80
 	}
-	frameWidth += horizontalPadding
+	frameWidth += FrameChromeColumns
 
 	frameHeight := viewportHeight
 	if frameHeight <= 0 {

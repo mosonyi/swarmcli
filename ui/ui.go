@@ -75,13 +75,13 @@ func RenderFramedBox(title, header, content, footer string, width int) string {
 		}
 	}
 	if width <= 0 {
-		width = contentWidth + 4 // padding left/right
+		width = contentWidth + FrameChromeColumns
 	}
 
 	titleStyled := styleFrameTitle(" " + title + " ")
 	headerStyled := FrameHeaderStyle.Render(header)
 
-	borderWidth := width - 2 // left/right borders
+	borderWidth := width - BorderColumns
 
 	// Border style
 	borderStyle := lipgloss.NewStyle().Foreground(FrameBorderColor)
@@ -121,12 +121,17 @@ func RenderFramedBox(title, header, content, footer string, width int) string {
 	// Box lines start with top border
 	boxLines := []string{topLine}
 
-	// Optional header
+	// Optional header. Bordered a line at a time, like the content below it:
+	// framing a multi-line header as one line put the opening border on its
+	// first row and the closing one on its last, and measured the whole string
+	// for padding.
 	if header != "" {
-		boxLines = append(boxLines, fmt.Sprintf("%s%s%s",
-			borderStyle.Render("│"),
-			padLine(headerStyled, borderWidth),
-			borderStyle.Render("│")))
+		for _, l := range strings.Split(headerStyled, "\n") {
+			boxLines = append(boxLines, fmt.Sprintf("%s%s%s",
+				borderStyle.Render("│"),
+				padLine(l, borderWidth),
+				borderStyle.Render("│")))
+		}
 	}
 
 	// Content
@@ -164,24 +169,11 @@ func RenderFramedBoxHeight(title, header, content, footer string, width, frameHe
 		return RenderFramedBox(title, header, content, footer, width)
 	}
 
-	// Count footer lines
-	footerLines := []string{}
-	if footer != "" {
-		footerLines = strings.Split(footer, "\n")
-	}
-
-	// Header occupies one line if present
-	headerLines := 0
-	if header != "" {
-		headerLines = 1
-	}
-
-	// Desired content lines inside the box (not counting borders/top/bottom)
-	// total box lines = 2 (top+bottom) + headerLines + contentLines + len(footerLines)
-	desiredContentLines := frameHeight - 2 - headerLines - len(footerLines)
-	if desiredContentLines < 0 {
-		desiredContentLines = 0
-	}
+	// The rows left for content once the frame, header and footer have taken
+	// theirs. ContentRows is the one place that budget is worked out; counting
+	// it again here is how the two came to disagree about a header of more
+	// than one line.
+	desiredContentLines := ContentRows(frameHeight, FramedChromeRows, header, footer)
 
 	// Current content lines
 	contentLines := strings.Split(content, "\n")
@@ -190,17 +182,15 @@ func RenderFramedBoxHeight(title, header, content, footer string, width, frameHe
 		contentLines = contentLines[:len(contentLines)-1]
 	}
 
-	// Pad or trim content lines to desired length
-	if len(contentLines) < desiredContentLines {
-		// Append empty lines
-		for i := 0; i < desiredContentLines-len(contentLines); i++ {
-			contentLines = append(contentLines, "")
-		}
-	} else if len(contentLines) > desiredContentLines {
+	// Pad or trim content lines to desired length. The bound is re-read each
+	// pass, so it has to be the length itself rather than a gap computed from
+	// it — a gap shrinks as the appends land, and the loop stops half way.
+	for len(contentLines) < desiredContentLines {
+		contentLines = append(contentLines, "")
+	}
+	if len(contentLines) > desiredContentLines {
 		contentLines = contentLines[:desiredContentLines]
 	}
-
-	// No debug logging
 
 	paddedContent := strings.Join(contentLines, "\n")
 	return RenderFramedBox(title, header, paddedContent, footer, width)
