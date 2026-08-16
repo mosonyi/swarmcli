@@ -103,19 +103,25 @@ func TestChartsMain_HelpPrintsUsage(t *testing.T) {
 	}
 }
 
-// The README blocks show commands as an operator types them; the usage text
-// shows them bare. Both come from the same rows.
-func TestRenderCommands_PrefixIsApplied(t *testing.T) {
-	block := renderCommands("swarmcli charts ")
-	require.Contains(t, block, "  swarmcli charts install <release> <chart>")
-	require.NotContains(t, renderCommands(""), "swarmcli charts install")
+// The README blocks show commands as an operator types them, commented and
+// copy-pasteable; the usage text shows them bare and indented. Both come from
+// the same rows.
+func TestRenderCommands_TwoStyles(t *testing.T) {
+	shell := renderCommandsShell()
+	require.Contains(t, shell, "swarmcli charts install <release> <chart>")
+	require.Contains(t, shell, "# Install a chart as a release")
+	require.Contains(t, shell, "# Releases")
+
+	usage := renderCommands()
+	require.NotContains(t, usage, "swarmcli charts install")
+	require.Contains(t, usage, "Releases:")
 }
 
 // A command with no arguments must not render trailing whitespace before its
 // summary column, and every line must align on one column across all groups.
 func TestRenderCommands_AlignsOneColumn(t *testing.T) {
 	var col int
-	for _, l := range strings.Split(strings.TrimRight(renderCommands(""), "\n"), "\n") {
+	for _, l := range strings.Split(strings.TrimRight(renderCommands(), "\n"), "\n") {
 		if !strings.HasPrefix(l, "  ") {
 			continue // group heading
 		}

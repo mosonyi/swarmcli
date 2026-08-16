@@ -78,38 +78,48 @@ A bare `swarmcli` launches the TUI, but a few commands run non-interactively
 when arguments are supplied: `swarmcli version`, `swarmcli help`, and the
 Helm-like chart package manager `swarmcli charts <command>`:
 
+<!-- BEGIN generated: charts commands -->
 ```bash
-# Repositories
-swarmcli charts repo add <name> <url>     # add a repo and download its index
-swarmcli charts repo list                 # list configured repos
-swarmcli charts repo update [name]        # refresh indexes (all, or one); install
-                                          # and friends now refresh on their own
-swarmcli charts repo remove <name>        # remove a repo
+# Repository
+swarmcli charts repo add <name> <url>           # Add a chart repository and download its index
+swarmcli charts repo list                       # List configured repositories
+swarmcli charts repo update [name]              # Refresh repository indexes (all, or one)
+swarmcli charts repo remove <name>              # Remove a repository
 
 # Discovery
-swarmcli charts search [keyword]          # search charts across repos
-swarmcli charts show chart  <repo/chart>  # chart metadata (also: values, schema)
+swarmcli charts search [keyword]                # Search charts across repositories
+swarmcli charts show chart <repo/chart>         # Show chart metadata
+swarmcli charts show values <repo/chart>        # Show default values.yaml
+swarmcli charts show schema <repo/chart>        # Show values.schema.json
 
 # Authoring
-swarmcli charts lint <chart>                      # check a chart without deploying it
+swarmcli charts lint <chart>                    # Check a chart without deploying it
 
 # Releases
-swarmcli charts template <release> <repo/chart>   # render manifest (no deploy)
-swarmcli charts install  <release> <repo/chart>   # install a chart as a release
-swarmcli charts upgrade  <release> <repo/chart>   # upgrade to a new revision
-swarmcli charts diff upgrade <release> <repo/chart>  # preview upgrade changes
-swarmcli charts rollback <release> <revision>     # re-deploy a past revision
-swarmcli charts uninstall <release>               # remove a release
-swarmcli charts history <release>                 # revision history
-swarmcli charts get values|manifest <release>     # stored values or rendered manifest
-swarmcli charts prune [release]                   # delete old revisions beyond --history-max
-swarmcli charts list                              # list releases
-swarmcli charts status <release>                  # release status and services
+swarmcli charts template <release> <chart>      # Render manifest to stdout (no deploy)
+swarmcli charts install <release> <chart>       # Install a chart as a release
+swarmcli charts upgrade <release> <chart>       # Upgrade a release to a new revision
+swarmcli charts uninstall <release>             # Remove a release (keeps volumes)
+swarmcli charts rollback <release> <rev>        # Re-deploy the contents of a past revision
+swarmcli charts history <release>               # Show a release's revision history
+swarmcli charts prune [release]                 # Delete old revisions beyond --history-max
+swarmcli charts get values|manifest <release>   # Show stored values or rendered manifest
+swarmcli charts diff upgrade <release> <chart>  # Preview manifest changes before upgrading
+swarmcli charts list                            # List releases (alias: ls)
+swarmcli charts status <release>                # Show release status and services
 
-# GitOps — converge the swarm to a file you commit
-swarmcli charts apply -f swarmcli-release.yaml    # install/upgrade/skip to match the file
+# GitOps
+swarmcli charts apply -f <file>                 # Converge the swarm to a declarative release file
+swarmcli charts outdated                        # Show releases with a newer chart version available
+```
+<!-- END generated -->
+
+Every command takes `--help`, which lists that command's own options —
+anything else it does not read is rejected rather than quietly ignored:
+
+```bash
+swarmcli charts install --help
 swarmcli charts apply -f swarmcli-release.yaml --diff   # preview, never deploys
-swarmcli charts outdated                          # releases with a newer chart available
 ```
 
 `apply` reads a release file pinning each release to a chart version, so the

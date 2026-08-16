@@ -293,10 +293,21 @@ func suggestCommand(input string, names []string) string {
 	return best
 }
 
-// renderCommands renders the grouped command list. prefix is what each line
-// starts with — empty for the usage text, "swarmcli charts " for the README
-// blocks, which show commands as an operator would type them.
-func renderCommands(prefix string) string {
+// renderCommands renders the grouped command list for the usage text.
+func renderCommands() string {
+	return renderList("", ":", "")
+}
+
+// renderCommandsShell renders the same list as the READMEs show it: commands as
+// an operator types them, with the summary as a trailing comment, inside a
+// shell fence.
+func renderCommandsShell() string {
+	return renderList("swarmcli charts ", "", "# ")
+}
+
+// renderList is the one renderer behind both. prefix starts each command line,
+// groupSuffix follows a group heading, and comment starts each summary.
+func renderList(prefix, groupSuffix, comment string) string {
 	type line struct{ left, summary string }
 
 	// One column width across every group, so the block reads as one table
@@ -340,11 +351,19 @@ func renderCommands(prefix string) string {
 		if b.Len() > 0 {
 			b.WriteString("\n")
 		}
-		b.WriteString(g + ":\n")
+		heading := g + groupSuffix
+		if comment != "" {
+			heading = comment + heading
+		}
+		b.WriteString(heading + "\n")
 		for ; count > 0; count-- {
 			l := lines[i]
 			i++
-			b.WriteString("  " + l.left + strings.Repeat(" ", width-len(l.left)+2) + l.summary + "\n")
+			indent := "  "
+			if comment != "" {
+				indent = "" // a shell block is copy-pasteable, so it is not indented
+			}
+			b.WriteString(indent + l.left + strings.Repeat(" ", width-len(l.left)+2) + comment + l.summary + "\n")
 		}
 	}
 	return b.String()
@@ -479,7 +498,7 @@ func commandHelp(c chartsCmd) string {
 // list, then the prose that explains the parts a list cannot.
 func chartsUsage() string {
 	return "Usage: swarmcli charts <command> [options]\n\n" +
-		renderCommands("") +
+		renderCommands() +
 		chartsUsageProse +
 		"\nOptions:\n" + renderOptions(nil) +
 		"\nNot every option applies to every command — `swarmcli charts <command> --help`\n" +
