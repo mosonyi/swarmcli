@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Eldara-Tech/swarmcli/ui/dialog"
+
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -263,27 +265,6 @@ func RenderColumnHeader(labels []string, colWidths []int) string {
 func RenderConfirmDialog(message string) string {
 	contentWidth := 60
 
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("63")).
-		Padding(0, 1)
-
-	itemStyle := lipgloss.NewStyle().
-		Padding(0, 1)
-
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("117"))
-
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Padding(0, 1)
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("63")).
-		Bold(true)
-
 	// Helper function to ensure exact width
 	ensureWidth := func(s string, width int) string {
 		currentWidth := lipgloss.Width(s)
@@ -294,51 +275,25 @@ func RenderConfirmDialog(message string) string {
 	}
 
 	var lines []string
-	lines = append(lines, ensureWidth(titleStyle.Render(" Confirmation "), contentWidth))
-	lines = append(lines, ensureWidth(itemStyle.Render(""), contentWidth))
-	lines = append(lines, ensureWidth(itemStyle.Render(message), contentWidth))
-	lines = append(lines, ensureWidth(itemStyle.Render(""), contentWidth))
+	lines = append(lines, ensureWidth(dialog.TitleStyle.Render(" Confirmation "), contentWidth))
+	lines = append(lines, ensureWidth(dialog.ItemStyle.Render(""), contentWidth))
+	lines = append(lines, ensureWidth(dialog.ItemStyle.Render(message), contentWidth))
+	lines = append(lines, ensureWidth(dialog.ItemStyle.Render(""), contentWidth))
 
 	helpText := fmt.Sprintf(" %s Yes • %s No",
-		keyStyle.Render("<y>"),
-		keyStyle.Render("<n>"))
-	lines = append(lines, ensureWidth(helpStyle.Render(helpText), contentWidth))
+		dialog.KeyStyle.Render("<y>"),
+		dialog.KeyStyle.Render("<n>"))
+	lines = append(lines, ensureWidth(dialog.HelpStyle.Render(helpText), contentWidth))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	return borderStyle.Render(content)
+	return dialog.BorderStyle.Render(content)
 }
 
 // RenderFileBrowserDialog renders a file browser dialog with common styling
 func RenderFileBrowserDialog(title, currentPath string, files []string, cursor int) string {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("63")).
-		Padding(0, 1)
-
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("117"))
-
-	itemStyle := lipgloss.NewStyle().
-		Padding(0, 1)
-
-	selectedStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("63")).
-		Padding(0, 1)
-
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Padding(0, 1)
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("63")).
-		Bold(true)
-
 	var lines []string
-	lines = append(lines, titleStyle.Render(fmt.Sprintf(" %s - Directory: %s ", title, currentPath)))
-	lines = append(lines, itemStyle.Render(""))
+	lines = append(lines, dialog.TitleStyle.Render(fmt.Sprintf(" %s - Directory: %s ", title, currentPath)))
+	lines = append(lines, dialog.ItemStyle.Render(""))
 
 	// Show files with cursor
 	maxVisible := 10
@@ -381,22 +336,22 @@ func RenderFileBrowserDialog(title, currentPath string, files []string, cursor i
 		}
 
 		if i == cursor {
-			lines = append(lines, selectedStyle.Render("→ "+displayName))
+			lines = append(lines, dialog.SelectedStyle.Render("→ "+displayName))
 		} else {
-			lines = append(lines, itemStyle.Render("  "+displayName))
+			lines = append(lines, dialog.ItemStyle.Render("  "+displayName))
 		}
 	}
 
-	lines = append(lines, itemStyle.Render(""))
+	lines = append(lines, dialog.ItemStyle.Render(""))
 	helpText := fmt.Sprintf(" %s Select/Navigate • %s / %s Move • %s Cancel",
-		keyStyle.Render("<Enter>"),
-		keyStyle.Render("<↑/↓>"),
-		keyStyle.Render("<PgUp/PgDn>"),
-		keyStyle.Render("<Esc>"))
-	lines = append(lines, helpStyle.Render(helpText))
+		dialog.KeyStyle.Render("<Enter>"),
+		dialog.KeyStyle.Render("<↑/↓>"),
+		dialog.KeyStyle.Render("<PgUp/PgDn>"),
+		dialog.KeyStyle.Render("<Esc>"))
+	lines = append(lines, dialog.HelpStyle.Render(helpText))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	return borderStyle.Render(content)
+	return dialog.BorderStyle.Render(content)
 }
 
 func OverlayCentered(base, overlay string, width, height int) string {

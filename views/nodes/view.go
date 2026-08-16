@@ -6,6 +6,7 @@ package nodesview
 import (
 	"fmt"
 	"github.com/Eldara-Tech/swarmcli/ui"
+	"github.com/Eldara-Tech/swarmcli/ui/dialog"
 	"sort"
 	"strings"
 
@@ -89,33 +90,11 @@ func (m *Model) renderAvailabilityDialog() string {
 	options := []string{"Active", "Pause", "Drain"}
 	contentWidth := 40
 
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("63")).
-		Padding(0, 1).
-		Width(contentWidth)
-
-	optionStyle := lipgloss.NewStyle().
-		Padding(0, 2).
-		Width(contentWidth)
-
-	selectedStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("230")).
-		Background(lipgloss.Color("63")).
-		Bold(true).
-		Padding(0, 2).
-		Width(contentWidth)
-
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Padding(0, 2).
-		Width(contentWidth)
-
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("63")).
-		Width(contentWidth + 2)
+	titleStyle := dialog.TitleStyle.Width(contentWidth)
+	optionStyle := dialog.ItemStyle.Width(contentWidth)
+	selectedStyle := dialog.SelectedStyle.Width(contentWidth)
+	helpStyle := dialog.HelpStyle.Width(contentWidth)
+	borderStyle := dialog.BorderStyle.Width(contentWidth + 2)
 
 	var lines []string
 	lines = append(lines, titleStyle.Render(" Set Node Availability "))
@@ -139,24 +118,17 @@ func (m *Model) renderAvailabilityDialog() string {
 
 // renderLabelInputDialog renders the label input dialog
 func (m *Model) renderLabelInputDialog() string {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("214")).
-		Padding(0, 1)
+	titleStyle := dialog.TitleStyle.Background(dialog.AccentEdit)
 
 	inputStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("15")).
+		Foreground(dialog.BrightFg).
 		Bold(true)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(dialog.HelpFg).
 		Italic(true)
 
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("214")).
-		Padding(1, 2)
+	borderStyle := dialog.BorderStyle.BorderForeground(dialog.AccentEdit).Padding(1, 2)
 
 	var lines []string
 	lines = append(lines, titleStyle.Render("Add Node Label"))
@@ -171,27 +143,20 @@ func (m *Model) renderLabelInputDialog() string {
 
 // renderLabelRemoveDialog renders the label removal dialog
 func (m *Model) renderLabelRemoveDialog() string {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("214")).
-		Padding(0, 1)
+	titleStyle := dialog.TitleStyle.Background(dialog.AccentEdit)
 
 	optionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("250"))
+		Foreground(dialog.MutedFg)
 
 	selectedStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("15")).
+		Foreground(dialog.BrightFg).
 		Bold(true)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(dialog.HelpFg).
 		Italic(true)
 
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("214")).
-		Padding(1, 2)
+	borderStyle := dialog.BorderStyle.BorderForeground(dialog.AccentEdit).Padding(1, 2)
 
 	var lines []string
 	lines = append(lines, titleStyle.Render("Remove Node Label"))

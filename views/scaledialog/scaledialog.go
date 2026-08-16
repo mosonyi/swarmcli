@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Eldara-Tech/swarmcli/ui/dialog"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -73,18 +75,8 @@ func (m *Model) View() string {
 		contentWidth = w
 	}
 
-	// Styled title
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("63")). // Blue for scale
-		Padding(0, 1).
-		Width(contentWidth)
-
-	// Message style
-	messageStyle := lipgloss.NewStyle().
-		Padding(1, 2).
-		Width(contentWidth)
+	titleStyle := dialog.TitleStyle.Width(contentWidth)
+	messageStyle := dialog.MessageStyle.Width(contentWidth)
 
 	// Replicas display style
 	replicasStyle := lipgloss.NewStyle().
@@ -94,21 +86,8 @@ func (m *Model) View() string {
 		Width(contentWidth).
 		Padding(1, 0)
 
-	// Help style
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Padding(0, 2).
-		Width(contentWidth)
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("63")).
-		Bold(true)
-
-	// Border style
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("63")).
-		Width(contentWidth + 2)
+	helpStyle := dialog.HelpStyle.Width(contentWidth)
+	borderStyle := dialog.BorderStyle.Width(contentWidth + 2)
 
 	// Build content
 	var lines []string
@@ -117,10 +96,10 @@ func (m *Model) View() string {
 	lines = append(lines, replicasStyle.Render(fmt.Sprintf("Replicas: %d", m.Replicas)))
 
 	helpText := fmt.Sprintf("%s Increase • %s Decrease • %s Apply • %s Cancel",
-		keyStyle.Render("<↑>"),
-		keyStyle.Render("<↓>"),
-		keyStyle.Render("<Enter>"),
-		keyStyle.Render("<Esc>"))
+		dialog.KeyStyle.Render("<↑>"),
+		dialog.KeyStyle.Render("<↓>"),
+		dialog.KeyStyle.Render("<Enter>"),
+		dialog.KeyStyle.Render("<Esc>"))
 	lines = append(lines, helpStyle.Render(helpText))
 
 	content := strings.Join(lines, "\n")
