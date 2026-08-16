@@ -6,48 +6,31 @@ package errordialog
 import (
 	"fmt"
 	"github.com/Eldara-Tech/swarmcli/ui"
+	"github.com/Eldara-Tech/swarmcli/ui/dialog"
 
 	"github.com/charmbracelet/lipgloss"
 )
 
 // Render renders an error dialog with the given error message
 func Render(errorMsg string) string {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("196")).
-		Padding(0, 1)
-
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("196"))
-
-	itemStyle := lipgloss.NewStyle().
-		Padding(0, 1)
-
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Padding(0, 1)
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("63")).
-		Bold(true)
+	titleStyle := dialog.TitleStyle.Background(dialog.AccentError)
+	borderStyle := dialog.BorderStyle.BorderForeground(dialog.AccentError)
 
 	var lines []string
 	lines = append(lines, titleStyle.Render(" Error "))
-	lines = append(lines, itemStyle.Render(""))
+	lines = append(lines, dialog.ItemStyle.Render(""))
 
 	maxWidth := 70
 	wrappedLines := ui.WrapText(errorMsg, maxWidth)
 	for _, line := range wrappedLines {
-		lines = append(lines, itemStyle.Render(line))
+		lines = append(lines, dialog.ItemStyle.Render(line))
 	}
 
-	lines = append(lines, itemStyle.Render(""))
+	lines = append(lines, dialog.ItemStyle.Render(""))
 	helpText := fmt.Sprintf("%s %s %s",
-		helpStyle.Render("Press"),
-		keyStyle.Render("<Enter>"),
-		helpStyle.Render("to close"))
+		dialog.HelpStyle.Render("Press"),
+		dialog.KeyStyle.Render("<Enter>"),
+		dialog.HelpStyle.Render("to close"))
 	lines = append(lines, helpText)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
