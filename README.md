@@ -211,10 +211,9 @@ $ LOG_LEVEL=debug SWARMCLI_ENV=dev go run .
 
 ### Environment variables
 
-- `SWARMCLI_ENV`: `dev` enables pretty debug logs (default is `prod`).
-- `LOG_LEVEL`: `debug`, `info`, `warn`, `error`, …
-- `SWARMCLI_DISABLE_VERSION_CHECK=true`: disables the startup request to `https://swarmcli.io/api/v1/version` that checks whether a newer release is available.
-- `SWARMCLI_CHARTS_ALLOW_PLAINTEXT=1`: allows chart repositories served over plain `http://`, which are refused by default (see [charts/README.md](charts/README.md#transport)).
+Every environment variable and on-disk path, for both editions, is documented in
+[docs/configuration.md](docs/configuration.md) — `SWARMCLI_ENV` and `LOG_LEVEL`
+above among them.
 
 On startup, SwarmCLI checks for a newer release by sending the current version and edition to `https://swarmcli.io/api/v1/version`. Set `SWARMCLI_DISABLE_VERSION_CHECK=true` to opt out.
 
