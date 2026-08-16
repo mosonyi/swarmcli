@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Eldara-Tech/swarmcli/ui/dialog"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/reflow/wordwrap"
@@ -111,38 +113,15 @@ func (m *Model) View() string {
 		contentWidth = maxWidth
 	}
 
-	// Styled title — color varies by mode
-	titleColor := lipgloss.Color("208") // Orange for warning/confirm
+	// The accent varies by mode, and tints the title and the border alike.
+	accent := dialog.AccentWarning
 	if m.InfoMode {
-		titleColor = lipgloss.Color("63") // Blue/purple for info
+		accent = dialog.AccentPrimary
 	}
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(titleColor).
-		Padding(0, 1).
-		Width(contentWidth)
-
-	// Message style
-	messageStyle := lipgloss.NewStyle().
-		Padding(1, 2).
-		Width(contentWidth)
-
-	// Help style
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Padding(0, 2).
-		Width(contentWidth)
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("63")).
-		Bold(true)
-
-	// Border style — matches title color
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(titleColor).
-		Width(contentWidth + 2)
+	titleStyle := dialog.TitleStyle.Background(accent).Width(contentWidth)
+	messageStyle := dialog.ItemStyle.Padding(1, 2).Width(contentWidth)
+	helpStyle := dialog.HelpStyle.Padding(0, 2).Width(contentWidth)
+	borderStyle := dialog.BorderStyle.BorderForeground(accent).Width(contentWidth + 2)
 
 	// Build content
 	var lines []string
@@ -157,16 +136,14 @@ func (m *Model) View() string {
 
 	// Add checkbox if label is provided (confirm or info mode; never error mode)
 	if m.CheckboxLabel != "" && !m.ErrorMode {
-		checkboxStyle := lipgloss.NewStyle().
-			Padding(0, 2).
-			Width(contentWidth)
+		checkboxStyle := dialog.ItemStyle.Padding(0, 2).Width(contentWidth)
 
 		checkMark := "[ ]"
 		if m.CheckboxChecked {
 			checkMark = "[✓]"
 		}
 		checkboxText := fmt.Sprintf("%s %s",
-			keyStyle.Render(checkMark),
+			dialog.KeyStyle.Render(checkMark),
 			m.CheckboxLabel)
 		lines = append(lines, checkboxStyle.Render(checkboxText))
 	}
@@ -175,19 +152,19 @@ func (m *Model) View() string {
 	switch {
 	case m.InfoMode && m.CheckboxLabel != "":
 		helpText = fmt.Sprintf("%s Toggle • %s Close",
-			keyStyle.Render("<Space>"),
-			keyStyle.Render("<Enter/Esc>"))
+			dialog.KeyStyle.Render("<Space>"),
+			dialog.KeyStyle.Render("<Enter/Esc>"))
 	case m.ErrorMode || m.InfoMode:
-		helpText = fmt.Sprintf("%s Close", keyStyle.Render("<Enter/Esc>"))
+		helpText = fmt.Sprintf("%s Close", dialog.KeyStyle.Render("<Enter/Esc>"))
 	case m.CheckboxLabel != "":
 		helpText = fmt.Sprintf("%s Yes • %s No • %s Toggle",
-			keyStyle.Render("<y>"),
-			keyStyle.Render("<n/Esc>"),
-			keyStyle.Render("<Space>"))
+			dialog.KeyStyle.Render("<y>"),
+			dialog.KeyStyle.Render("<n/Esc>"),
+			dialog.KeyStyle.Render("<Space>"))
 	default:
 		helpText = fmt.Sprintf("%s Yes • %s No",
-			keyStyle.Render("<y>"),
-			keyStyle.Render("<n/Esc>"))
+			dialog.KeyStyle.Render("<y>"),
+			dialog.KeyStyle.Render("<n/Esc>"))
 	}
 	lines = append(lines, helpStyle.Render(helpText))
 
