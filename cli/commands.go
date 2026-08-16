@@ -350,8 +350,140 @@ func renderCommands(prefix string) string {
 	return b.String()
 }
 
+// flagDoc describes one option: the value it takes, if any, and what it does.
+// The order here is the order the option reference renders in.
+type flagDoc struct {
+	Name  string
+	Short string
+	Value string
+	Desc  string
+}
+
+// flagDocs is the option reference. Every flag a row lists has an entry, and
+// per-command help renders the subset that command accepts — so what an option
+// does is written once, not once per command that takes it.
+var flagDocs = []flagDoc{
+	{Name: "--values", Short: "-f", Value: "<file>", Desc: "Values file (repeatable). For apply: the release file."},
+	{Name: "--set", Value: "k=v", Desc: "Override a value (repeatable)"},
+	{Name: "--set-file", Value: "k=path", Desc: "Set a value to a file's contents (repeatable). A chart references it as values/<k> from a config's file:, which is how an operator supplies a config the chart does not ship. See charts/README.md."},
+	{Name: "--version", Value: "<ver>", Desc: "Chart version, for a <repo>/<chart> reference (default: latest). Not valid with a local chart path — its Chart.yaml sets the version."},
+	{Name: "--dry-run", Desc: "Render and validate without deploying"},
+	{Name: "--requirements", Desc: "Emit the rendered requirements.yaml, not the manifest"},
+	{Name: "--wait", Desc: "Wait for services to converge"},
+	{Name: "--timeout", Value: "<dur>", Desc: "Wait timeout, e.g. 10m (default 5m)"},
+	{Name: "--history-max", Value: "<n>", Desc: "Max release revisions to retain"},
+	{Name: "--resolve-image", Value: "<mode>", Desc: "always | changed | never — how the daemon resolves image tags to digests at deploy time (default: always)"},
+	{Name: "--install", Desc: "Install the release if it is absent"},
+	{Name: "--reuse-values", Desc: "Layer overrides on the previous release's values"},
+	{Name: "--revision", Value: "<n>", Desc: "Select a specific revision"},
+	{Name: "--purge-volumes", Desc: "Also remove the release's volumes"},
+	{Name: "--diff", Desc: "Show each changed release's manifest diff (implies --dry-run)"},
+	{Name: "--no-repo-update", Desc: "Resolve from the cached repository indexes and touch no network (also: SWARMCLI_CHARTS_NO_AUTO_UPDATE=1)"},
+	{Name: "--skip-compat-check", Desc: "Proceed despite a chart's unmet swarmcliVersion constraint"},
+	{Name: "--for-version", Value: "<ver>", Desc: "Check the chart's swarmcliVersion against <ver> instead of this build's chart engine"},
+}
+
+// renderOptions renders the option reference for the given flags, or all of
+// them when names is nil (the top-level usage text).
+func renderOptions(names []string) string {
+	want := map[string]bool{}
+	for _, n := range names {
+		want[n] = true
+	}
+
+	type row struct{ left, desc string }
+	var rows []row
+	width := 0
+	for _, d := range flagDocs {
+		if names != nil && !want[d.Name] {
+			continue
+		}
+		left := "    " + d.Name
+		if d.Short != "" {
+			left = d.Short + ", " + d.Name
+		}
+		if d.Value != "" {
+			left += " " + d.Value
+		}
+		rows = append(rows, row{left, d.Desc})
+		if len(left) > width {
+			width = len(left)
+		}
+	}
+
+	var b strings.Builder
+	for _, r := range rows {
+		indent := width + 4
+		for i, line := range wrapText(r.desc, 78-indent) {
+			if i == 0 {
+				b.WriteString("  " + r.left + strings.Repeat(" ", width-len(r.left)+2) + line + "\n")
+				continue
+			}
+			b.WriteString(strings.Repeat(" ", indent) + line + "\n")
+		}
+	}
+	return b.String()
+}
+
+// wrapText breaks text into lines of at most width columns, on spaces.
+func wrapText(text string, width int) []string {
+	if width < 20 {
+		width = 20
+	}
+	var lines []string
+	line := ""
+	for _, w := range strings.Fields(text) {
+		switch {
+		case line == "":
+			line = w
+		case len(line)+1+len(w) <= width:
+			line += " " + w
+		default:
+			lines = append(lines, line)
+			line = w
+		}
+	}
+	if line != "" {
+		lines = append(lines, line)
+	}
+	return lines
+}
+
+// commandHelp renders `swarmcli charts <command> --help`: what the command
+// takes, and the options it honours — which is the list that decides whether an
+// invocation is accepted, so an operator never has to infer it from a global
+// reference that covers every command at once.
+func commandHelp(c chartsCmd) string {
+	var b strings.Builder
+	b.WriteString("Usage:\n")
+	for _, u := range c.Usage {
+		b.WriteString(strings.TrimRight("  swarmcli charts "+c.Name+" "+u.Args, " ") + "\n")
+	}
+	if len(c.Aliases) > 0 {
+		b.WriteString("\nAlias: " + strings.Join(c.Aliases, ", ") + "\n")
+	}
+	b.WriteString("\n")
+	for _, u := range c.Usage {
+		b.WriteString("  " + u.Summary + "\n")
+	}
+	if len(c.Flags) == 0 {
+		b.WriteString("\nThis command takes no options.\n")
+		return b.String()
+	}
+	b.WriteString("\nOptions:\n")
+	b.WriteString(renderOptions(c.Flags))
+	return b.String()
+}
+
 // chartsUsage is the full `swarmcli charts --help` text: the generated command
 // list, then the prose that explains the parts a list cannot.
 func chartsUsage() string {
-	return "Usage: swarmcli charts <command> [options]\n\n" + renderCommands("") + chartsUsageProse
+	return "Usage: swarmcli charts <command> [options]\n\n" +
+		renderCommands("") +
+		chartsUsageProse +
+		"\nOptions:\n" + renderOptions(nil) +
+		"\nNot every option applies to every command — `swarmcli charts <command> --help`\n" +
+		"lists what that command takes, and anything else is rejected rather than\n" +
+		"quietly ignored.\n" +
+		chartsUsageTail
 }

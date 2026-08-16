@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -82,11 +83,20 @@ func (f flags) reject(c chartsCmd) error {
 	return nil
 }
 
+// errHelp reports that --help was passed. It travels as an error because the
+// parser is the only place that knows a "--help" token is a flag rather than
+// the value of the flag before it.
+var errHelp = errors.New("help requested")
+
 // parse is the prelude every charts subcommand shares: split the arguments,
 // reject a flag this command does not honour, and turn either failure into an
 // exit code. A returned code >= 0 is the command's result.
 func parse(c chartsCmd, args []string) ([]string, flags, int) {
 	pos, f, err := parseArgs(args)
+	if errors.Is(err, errHelp) {
+		out(commandHelp(c))
+		return nil, f, 0
+	}
 	if err != nil {
 		return nil, f, usageErr(err.Error())
 	}
@@ -135,6 +145,8 @@ func parseArgs(args []string) ([]string, flags, error) {
 		}
 
 		switch name {
+		case "-h", "--help":
+			return nil, f, errHelp
 		case "-f", "--values":
 			v, err := next()
 			if err != nil {

@@ -60,34 +60,10 @@ failure names the version to upgrade to instead of surfacing as whatever error
 the missing feature happens to produce. install and upgrade ask first when run
 interactively; apply never does. template, diff and show only warn. Pass
 --skip-compat-check to try anyway. Charts declaring nothing are unaffected.
+`
 
-Common options:
-  -f, --values <file>   Values file (repeatable). For apply: the release file.
-      --set k=v         Override a value (repeatable)
-      --set-file k=path Set a value to a file's contents (repeatable). A chart
-                        references it as values/<k> from a config's file:, which
-                        is how an operator supplies a config the chart does not
-                        ship. See charts/README.md.
-      --version <ver>   Chart version, for a <repo>/<chart> reference (default: latest).
-                        Not valid with a local chart path — its Chart.yaml sets the version.
-      --dry-run         Render and validate without deploying
-      --requirements    template: emit rendered requirements.yaml, not the manifest
-      --wait            Wait for services to converge
-      --timeout <dur>   Wait timeout, e.g. 10m (default 5m)
-      --history-max <n> Max release revisions to retain
-      --resolve-image <mode>  always | changed | never — how the daemon resolves
-                        image tags to digests at deploy time (default: always)
-      --install         upgrade: install the release if absent
-      --reuse-values    upgrade/diff: layer overrides on previous values
-      --revision <n>    get: select a specific revision
-      --purge-volumes   uninstall: also remove the release's volumes
-      --diff            apply: show each changed release's manifest diff (implies --dry-run)
-      --no-repo-update  Resolve from the cached repository indexes and touch no
-                        network (also: SWARMCLI_CHARTS_NO_AUTO_UPDATE=1)
-      --skip-compat-check  Proceed despite a chart's unmet swarmcliVersion constraint
-      --for-version <ver>  lint: check the chart's swarmcliVersion against <ver>
-                        instead of this build's chart engine
-
+// chartsUsageTail is the prose that follows the option reference.
+const chartsUsageTail = `
 lint renders a chart and reports every problem it finds: a broken template,
 values that fail values.schema.json, a swarmcliVersion this build does not
 satisfy. It renders from the chart defaults, layering any -f/--set on top — a
@@ -97,10 +73,10 @@ other version — it cannot tell you the chart RUNS on that version, because thi
 binary carries only its own engine's behaviour. Rendering with a real binary of
 that version is the only thing that settles that.
 
-apply honours --wait, --timeout, --history-max and --resolve-image. It REJECTS --set,
---set-file, --version, --reuse-values, --install, --purge-volumes, --requirements and --revision rather
-than ignoring them: the release file is the only source of truth, so a value passed
-on the command line would be a lie.
+apply takes only the options that make sense for a file-driven converge, and
+REJECTS the rest rather than ignoring them: the release file is the only source
+of truth, so a value passed on the command line would be a lie. Run
+swarmcli charts apply --help for what it does take.
 
 Resolving a <repo>/<chart> reference refreshes that repository's index first, so
 install, upgrade, template, diff, show, lint and search see what the repository
@@ -119,6 +95,14 @@ func chartsMain(args []string) int {
 	sub, rest := args[0], args[1:]
 	switch sub {
 	case "-h", "--help", "help":
+		// `charts help <command>` is the same page as `charts <command> --help`,
+		// mirroring the TUI, where `:help <cmd>` and `:cmd --help` are one screen.
+		if len(rest) > 0 {
+			if c, ok := lookupCommand(rest[0]); ok {
+				out(commandHelp(c))
+				return 0
+			}
+		}
 		out(chartsUsage())
 		return 0
 	}
