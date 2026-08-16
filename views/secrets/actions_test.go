@@ -4,13 +4,21 @@
 package secretsview
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Eldara-Tech/swarmcli/docker"
+	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
 	"github.com/Eldara-Tech/swarmcli/views/view"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/stretchr/testify/require"
 )
@@ -244,4 +252,71 @@ func TestCheckSecretsCmd_HashMatchesAfterLoad(t *testing.T) {
 	msg := runCmd(cmd)
 	_, isLoaded := msg.(secretsLoadedMsg)
 	require.False(t, isLoaded, "hash from secretsLoadedMsg must match hash from checkSecretsCmd for identical data")
+}
+
+// captureLog bridges the package logger into a buffer at debug level, so a test
+// can assert on everything the code under test writes. utils/log keeps the
+// previous logger in package-private state, so cleanup installs a discarding
+// bridge rather than restoring one; no other test here reads the log.
+func captureLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	swarmlog.InitSlog(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	t.Cleanup(func() {
+		swarmlog.InitSlog(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
+	})
+	return &buf
+}
+
+// A secret's own bytes must never reach the log at any level. The debug log is
+// the file an operator attaches to a bug report, and lumberjack keeps five
+// compressed rotations of it for fourteen days, so a line written here outlives
+// the terminal the secret was typed into by a fortnight.
+//
+// Both creation paths are covered because each encodes its payload itself, and
+// each carried its own copy of the line that printed it — fixing one proved
+// nothing about the other. The unencoded cases are here to catch a log added to
+// the branch that does no encoding, which is the obvious place for the next one
+// to appear.
+//
+// The Contains assertion is not decoration. Without it, a bridge that captured
+// nothing at all would satisfy every NotContains below and the test would pass
+// while asserting nothing.
+func TestCreateSecretNeverLogsThePayload(t *testing.T) {
+	const payload = "hunter2-correct-horse-battery-staple"
+	encoded := base64.StdEncoding.EncodeToString([]byte(payload))
+
+	file := filepath.Join(t.TempDir(), "secret.txt")
+	require.NoError(t, os.WriteFile(file, []byte(payload), 0o600))
+
+	for _, tc := range []struct {
+		name string
+		cmd  func(*Model) tea.Cmd
+	}{
+		{"from file", func(m *Model) tea.Cmd {
+			return m.createSecretFromFileCmd("s-file", file, nil, true)
+		}},
+		{"from file, not encoded", func(m *Model) tea.Cmd {
+			return m.createSecretFromFileCmd("s-file", file, nil, false)
+		}},
+		{"from content", func(m *Model) tea.Cmd {
+			return m.createSecretFromContentCmd("s-content", []byte(payload), nil, true)
+		}},
+		{"from content, not encoded", func(m *Model) tea.Cmd {
+			return m.createSecretFromContentCmd("s-content", []byte(payload), nil, false)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := captureLog(t)
+			m := testModel(func(m *Model) { m.deps.Secrets = noopSecretOps() })
+
+			require.IsType(t, secretCreatedMsg{}, runCmd(tc.cmd(m)))
+
+			logged := buf.String()
+			require.Contains(t, logged, "Creating secret",
+				"the bridge captured none of this command's own lines, so the assertions below prove nothing")
+			require.NotContains(t, logged, payload, "the secret's plaintext reached the log")
+			require.NotContains(t, logged, encoded, "the secret's base64 reached the log")
+		})
+	}
 }
