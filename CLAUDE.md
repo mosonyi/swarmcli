@@ -34,7 +34,7 @@ tail -f ~/.local/state/swarmcli/app.log          # prod mode (JSON)
 
 ```
 main.go                    Entry point; version injection via ldflags. With args, dispatches non-interactive CLI subcommands via cli.Dispatch(); bare invocation launches the TUI (tea.NewProgram())
-cli/                       Arg-based CLI dispatch (cli.Dispatch): `charts`, `version`, `help`; cli/apply.go holds the GitOps subcommands (`charts apply`, `charts outdated`)
+cli/                       Arg-based CLI dispatch (cli.Dispatch): `charts`, `version`, `help`; cli/commands.go holds chartsCommands — the table dispatch, the usage text, per-command --help and the generated README blocks all read from; cli/apply.go holds the GitOps subcommands (`charts apply`, `charts outdated`)
 charts/                    Helm-like package manager (repos, chart rendering, releases) + declarative releases (releasefile.go, apply.go, outdated.go). charts.ChartSource (source.go) is the seam that resolves a chart ref — repo or local path — so release planning is testable without Docker, a network or a filesystem. charts.NewDockerBackend(ctxName) + NewEngineWith is the seam that targets a *specific* swarm: the default backend uses the ambient Docker context, the SDK client singleton and the shared snapshot cache, all three of which are process-global
 app/
   app.go                   Init(); triggers command autoload via _ "github.com/Eldara-Tech/swarmcli/commands" and view autoload via _ "github.com/Eldara-Tech/swarmcli/views" (view factory registry lives in views/view/registry.go)
@@ -98,7 +98,13 @@ utils/log/
 
 **New view**: Create `views/myview/`, implement `view.View` interface, and add a `register.go` whose `init()` calls `view.RegisterView(name, factory)`. Add its blank import to `views/autoload.go` so the package is loaded. See `views/nodes/register.go`.
 
-**New `swarmcli charts <sub>` CLI subcommand** (this is *not* the TUI `:` registry — it's the arg-based dispatcher): add a `case` to the switch in `cli/charts.go` `chartsMain`, put the logic in `charts/` and keep the `cli/` half thin (the `charts` package is where the coverage bar applies). Any new flag goes in the single **global** `flags` struct in `cli/args.go` — note that every subcommand therefore parses every flag and *silently ignores* what it does not read, so if a flag would be a lie for your subcommand, reject it explicitly (see `rejectUnsupported` in `cli/apply.go`). Then update **all three** places the command list is duplicated, or they drift: `chartsUsage` in `cli/charts.go`, `README.md`, and `charts/README.md`.
+**New `swarmcli charts <sub>` CLI subcommand** (this is *not* the TUI `:` registry — it's the arg-based dispatcher): add a row to `chartsCommands` in `cli/commands.go` — name, group, usage line(s), the flags the handler reads, the handler — and nothing else has a list to update: dispatch, `charts --help`, `charts <sub> --help` and the command blocks in `README.md` and `charts/README.md` all render from it. Put the logic in `charts/` and keep the `cli/` half thin (the `charts` package is where the coverage bar applies). A new flag goes in the single **global** `flags` struct in `cli/args.go`, is listed by every row whose handler reads it — a flag a row does not list is rejected, so an operator is told rather than silently ignored — and gets a `flagDocs` entry so both help surfaces can describe it. Then regenerate the README blocks:
+
+```bash
+go test ./cli -run TestGeneratedCommandBlocks -update
+```
+
+`go test ./cli` fails if you forget; it also compares each row's flag list against what the handler and its callees actually read, so an allow-list cannot quietly drift from the code.
 
 ## Environment Variables
 
