@@ -301,10 +301,21 @@ as fit are drawn.
 ### What is measured, and what is not
 
 A pane reads **`not reported by this host`** when the host does not
-publish that metric at all — a container on the host network has no
-per-interface counters, and some systems publish no block-I/O counters.
-That is deliberately distinct from a flat line at zero, which means the
-container really did nothing.
+publish that metric at all. That is deliberately distinct from a flat
+line at zero, which means the container really did nothing.
+
+Common reasons:
+
+| Pane | Why it may be unavailable |
+|---|---|
+| NET | The container runs on the host network, so it has no per-interface counters of its own. |
+| MEM, BLK | Memory and block I/O both come from cgroup controllers. If the controllers are not delegated to the container's cgroup, the daemon has nothing to report. This is usual under rootless Docker and under Docker-in-Docker, and happens on any host whose cgroup hierarchy does not enable `memory` and `io` for the slice Docker runs in. |
+
+To confirm it is the host rather than SwarmCLI, run `docker stats` against
+the same container on that node: it reads the same daemon fields, so it
+shows the same gaps. `docker info` also prints a warning line per missing
+controller (`No memory limit support`, and similar) at the end of its
+output.
 
 A container that restarts inside the window leaves a short gap rather
 than a spike: its counters begin again from zero, and a rate derived
