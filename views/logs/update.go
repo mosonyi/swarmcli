@@ -69,19 +69,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.lineTasks = newTaskBuf
 		}
 
-		// update searchMatches incrementally
-		if m.searchTerm != "" {
-			if linesDropped > 0 && m.searchMatches != nil {
-				// Lines dropped from top invalidate visible indices; recompute on next n/N
-				m.searchMatches = nil
-			} else if m.nodeFilter == "" && m.filterQuery == "" && !m.hideStopped {
-				// Simple case: no filters, raw index equals visible index
-				if strings.Contains(strings.ToLower(actualLine), strings.ToLower(m.searchTerm)) {
-					m.searchMatches = append(m.searchMatches, len(m.lines)-1)
-				}
-			}
-			// When filters are active, skip incremental update; highlightContent will recompute
-		}
 		shouldFollow := m.follow
 		m.mu.Unlock()
 
@@ -314,40 +301,15 @@ func (m *Model) SetContent(content string) {
 	l().Debugf("[logsview] SetContent called: total lines=%d", len(m.lines))
 }
 
+// highlightContent rebuilds the rendered content, which is also what recomputes
+// the search matches, and re-anchors the selected match inside the new set.
 func (m *Model) highlightContent() {
-	if m.searchTerm == "" {
-		m.searchMatches = nil
-	} else {
-		m.searchMatches = []int{}
-		lower := strings.ToLower(m.searchTerm)
-		m.mu.Lock()
-		var stopped map[string]bool
-		if m.hideStopped {
-			stopped = m.stoppedTaskIDs()
-		}
-		visibleIdx := 0
-		for i, L := range m.lines {
-			// Skip lines hidden by any active filter (must match buildContent
-			// exactly so search-match indices line up with the rendered output).
-			if !m.lineVisible(i, stopped) {
-				continue
-			}
-			if strings.Contains(strings.ToLower(L), lower) {
-				m.searchMatches = append(m.searchMatches, visibleIdx)
-			}
-			visibleIdx++
-		}
-		m.mu.Unlock()
-		if len(m.searchMatches) > 0 {
-			if m.searchIndex >= len(m.searchMatches) {
-				m.searchIndex = 0
-			}
-		} else {
-			m.searchIndex = 0
-		}
+	content := m.buildContent()
+	if m.searchIndex >= len(m.searchMatches) {
+		m.searchIndex = 0
 	}
 	if m.ready {
-		m.viewport.SetContent(m.buildContent())
+		m.viewport.SetContent(content)
 	}
 }
 
@@ -362,11 +324,21 @@ func (m *Model) buildContent() string {
 	if m.hideStopped {
 		stopped = m.stoppedTaskIDs()
 	}
+	// Collect the search matches in the same pass. They are indices into the
+	// visible lines, so they can only be counted where the visible set is
+	// built — deriving them anywhere else means a second copy of this walk,
+	// and the two drifting apart is what froze the match counter (#586).
+	lower := strings.ToLower(m.searchTerm)
+	m.searchMatches = nil
 	var filteredLines []string
 	for i, line := range m.lines {
-		if m.lineVisible(i, stopped) {
-			filteredLines = append(filteredLines, line)
+		if !m.lineVisible(i, stopped) {
+			continue
 		}
+		if lower != "" && strings.Contains(strings.ToLower(line), lower) {
+			m.searchMatches = append(m.searchMatches, len(filteredLines))
+		}
+		filteredLines = append(filteredLines, line)
 	}
 	m.visibleCount = len(filteredLines)
 
