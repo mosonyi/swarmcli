@@ -87,7 +87,7 @@ func (m *Model) View() string {
 		Padding(1, 0)
 
 	helpStyle := dialog.HelpStyle.Width(contentWidth)
-	borderStyle := dialog.BorderStyle.Width(contentWidth + 2)
+	borderStyle := dialog.BorderStyle.Width(contentWidth + dialog.BoxInsetColumns)
 
 	// Build content
 	var lines []string

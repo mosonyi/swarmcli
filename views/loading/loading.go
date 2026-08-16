@@ -82,10 +82,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.spinner++
 		return m.spinnerTickCmd()
 	case tea.WindowSizeMsg:
-		// WindowSizeMsg here is already adjusted by the app (height minus systeminfo header and footer)
-		// But we need to add back the 4 pixels that were subtracted for viewport padding
-		// because the loading view renders its own frame
-		m.width = msg.Width + 4
+		// WindowSizeMsg here is already adjusted by the app (height minus systeminfo
+		// header and footer), including the columns the app took off for the frame.
+		// This view renders its own frame, so it adds them back.
+		m.width = msg.Width + ui.FrameChromeColumns
 		m.height = msg.Height
 		return nil
 	}
