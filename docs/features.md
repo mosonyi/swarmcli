@@ -38,6 +38,17 @@ scrolls away with the output like any other line:
 <<SWC-Shell>> Service: <stack>/<service> | Host: <node>        ctrl+] exit
 ```
 
+For as long as the session is attached, your terminal's title names it and the
+key that leaves it:
+
+```
+SwarmCLI: <stack>/<service> — ctrl+] detach
+```
+
+Unlike the header, the title does not scroll away, and it stays put while a
+full-screen program is running. Your own title comes back when you detach.
+Terminals that show no title are the exception, as is `vim`, which sets its own.
+
 To leave the shell:
 
 - **`Ctrl+]`** detaches immediately and returns to the TUI. Use this when a
