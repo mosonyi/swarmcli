@@ -124,20 +124,23 @@ func (m *Model) refreshColumns() {
 	}
 }
 
-// updCell fills the LATEST column, distinguishing the two reasons a release has
-// no newer version, which an empty cell would run together: nothing newer is
-// published, versus this machine has no cached index to compare against. The
-// second is "?" rather than a footer line because it is a per-row fact and the
-// footer is already carrying the counts, the convergence reason and the
-// read-only hint.
+// updCell fills the LATEST column. Four answers, because "no newer version" is
+// three different facts and a reader acts on each differently: the release is on
+// the newest published version, or its chart is in no index to compare against,
+// or this machine has no cached index at all. The last two are "—" and "?"
+// rather than footer lines because they are per-row facts, and the footer is
+// already carrying the counts, the convergence reason and the read-only hint.
 func (m *Model) updCell(r releaseItem) string {
-	if r.Latest != "" {
-		return r.Latest
-	}
-	if !m.haveIndexes {
+	switch {
+	case !m.haveIndexes:
 		return "?"
+	case r.Latest == "":
+		return "—" // the chart is in no cached index: a local chart
+	case r.Newer:
+		return r.Latest
+	default:
+		return "✓"
 	}
-	return "—"
 }
 
 // sortColumnIndex maps the active sort field to its column index for the header

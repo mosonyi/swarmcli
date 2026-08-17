@@ -42,24 +42,19 @@ func (m *mockOps) ServiceStates(ctx context.Context, release string) []charts.Se
 	return m.serviceStatesFn(ctx, release)
 }
 
-// Outdated mirrors charts.Outdated's contract closely enough for the view:
-// only a strictly newer version is reported, and a chart in no index is not.
-func (m *mockOps) Outdated(rels []charts.Release) ([]charts.OutdatedEntry, bool) {
+// Available answers through the real charts.Available, over an index built
+// from the fixture. Mirroring its rules by hand is how a fake comes to disagree
+// with production — version comparison in particular is not string equality.
+func (m *mockOps) Available(rels []charts.Release) (map[string]charts.Availability, bool) {
 	if m.indexes == nil {
 		return nil, false
 	}
-	var out []charts.OutdatedEntry
-	for _, r := range rels {
-		latest, ok := m.indexes[r.Chart.Name]
-		if !ok || latest == r.Chart.Version {
-			continue
-		}
-		out = append(out, charts.OutdatedEntry{
-			Release: r.Name, Chart: r.Chart.Name,
-			Installed: r.Chart.Version, Latest: latest,
-		})
+	entries := make(map[string][]charts.IndexEntry, len(m.indexes))
+	for chart, version := range m.indexes {
+		entries[chart] = []charts.IndexEntry{{Name: chart, Version: version}}
 	}
-	return out, true
+	index := map[string]*charts.Index{"fixture": {APIVersion: "v1", Entries: entries}}
+	return charts.Available(rels, index), true
 }
 
 func noopOps() *mockOps {

@@ -48,31 +48,59 @@ func TestRepoStoreNeverGoesToTheNetwork(t *testing.T) {
 	require.NotNil(t, store.Warnf, "charts is silent unless the embedder wires this")
 }
 
-func TestOutdatedReadsTheCachedIndex(t *testing.T) {
+func TestAvailableReadsTheCachedIndex(t *testing.T) {
 	seedRepoCache(t, "mychart", "1.0.0", "2.1.0")
 
 	ops := &engineOps{}
-	entries, haveIndexes := ops.Outdated([]charts.Release{{
+	avail, haveIndexes := ops.Available([]charts.Release{{
 		Name: "app", Chart: charts.ReleaseChart{Name: "mychart", Version: "1.0.0"},
 	}})
 
 	require.True(t, haveIndexes)
-	require.Len(t, entries, 1)
-	require.Equal(t, "app", entries[0].Release)
-	require.Equal(t, "1.0.0", entries[0].Installed)
-	require.Equal(t, "2.1.0", entries[0].Latest)
+	require.Len(t, avail, 1)
+	require.Equal(t, "2.1.0", avail["app"].Latest)
+	require.True(t, avail["app"].Newer)
 }
 
-func TestOutdatedReportsNoIndexesWhenNoneAreCached(t *testing.T) {
+// A release already on the newest published version is in the map with Newer
+// false — present, so the view can say "up to date" rather than "unknown".
+func TestAvailableReportsACurrentReleaseRatherThanOmittingIt(t *testing.T) {
+	seedRepoCache(t, "mychart", "1.0.0", "2.1.0")
+
+	ops := &engineOps{}
+	avail, haveIndexes := ops.Available([]charts.Release{{
+		Name: "app", Chart: charts.ReleaseChart{Name: "mychart", Version: "2.1.0"},
+	}})
+
+	require.True(t, haveIndexes)
+	require.Contains(t, avail, "app")
+	require.False(t, avail["app"].Newer)
+}
+
+// A chart in no cached index is absent, which is what a local chart looks like
+// and is a different answer from being current.
+func TestAvailableOmitsAChartInNoIndex(t *testing.T) {
+	seedRepoCache(t, "mychart", "1.0.0", "2.1.0")
+
+	ops := &engineOps{}
+	avail, haveIndexes := ops.Available([]charts.Release{{
+		Name: "app", Chart: charts.ReleaseChart{Name: "local-only", Version: "0.1.0"},
+	}})
+
+	require.True(t, haveIndexes)
+	require.NotContains(t, avail, "app")
+}
+
+func TestAvailableReportsNoIndexesWhenNoneAreCached(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	ops := &engineOps{}
-	entries, haveIndexes := ops.Outdated([]charts.Release{{
+	avail, haveIndexes := ops.Available([]charts.Release{{
 		Name: "app", Chart: charts.ReleaseChart{Name: "mychart", Version: "1.0.0"},
 	}})
 
 	require.False(t, haveIndexes, "no cached index is not the same answer as up to date")
-	require.Empty(t, entries)
+	require.Empty(t, avail)
 }
 
 // The indexes are read once per view, which is what lets the poll ask on every
@@ -82,7 +110,7 @@ func TestIndexesAreReadOnce(t *testing.T) {
 	ops := &engineOps{}
 
 	rels := []charts.Release{{Name: "app", Chart: charts.ReleaseChart{Name: "mychart", Version: "1.0.0"}}}
-	first, haveIndexes := ops.Outdated(rels)
+	first, haveIndexes := ops.Available(rels)
 	require.True(t, haveIndexes)
 	require.Len(t, first, 1)
 
@@ -91,7 +119,7 @@ func TestIndexesAreReadOnce(t *testing.T) {
 	// loaded.
 	require.NoError(t, os.RemoveAll(base))
 
-	second, haveIndexes := ops.Outdated(rels)
+	second, haveIndexes := ops.Available(rels)
 	require.True(t, haveIndexes)
 	require.Equal(t, first, second)
 }

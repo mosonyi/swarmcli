@@ -34,10 +34,12 @@ type releaseItem struct {
 	Services []charts.ServiceState
 
 	// Latest is the newest version of this chart in a cached repository index,
-	// when that is newer than what is installed. Empty otherwise, which covers
-	// both "already current" and "this chart is in no index" — a local chart
-	// has nothing to be outdated against.
+	// whether or not it is newer than what is installed, and Newer says which.
+	// Latest is empty only when the chart is in no index at all — a local chart
+	// has nothing to compare against, which is a different answer from being up
+	// to date and is why this is not one field.
 	Latest string
+	Newer  bool
 }
 
 func (i releaseItem) FilterValue() string { return i.Name }

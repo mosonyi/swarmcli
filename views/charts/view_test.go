@@ -160,23 +160,43 @@ func TestReadOnlyHintIsAlwaysOnScreen(t *testing.T) {
 
 // "nothing newer" and "nothing to compare against" are different answers, and
 // one empty cell for both would let the second read as the first.
-func TestUpdCellDistinguishesUnknownFromCurrent(t *testing.T) {
+// TestUpdCellTellsTheFourAnswersApart: "no newer version" is three different
+// facts, and an operator acts on each differently — upgrade, nothing to do, or
+// go and cache an index.
+func TestUpdCellTellsTheFourAnswersApart(t *testing.T) {
 	m := sized(testModel(), 150, 24)
 
 	loadReleases(t, m, map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}, nil)
 	require.False(t, m.haveIndexes)
-	require.Equal(t, "?", m.updCell(m.list.Filtered[0]), "no index cached")
+	require.Equal(t, "?", m.updCell(m.list.Filtered[0]), "no index cached at all")
 
 	loadReleases(t, m,
 		map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}, nil,
 		map[string]string{"c": "1.0.0"})
 	require.True(t, m.haveIndexes)
-	require.Equal(t, "—", m.updCell(m.list.Filtered[0]), "index cached, nothing newer")
+	require.Equal(t, "✓", m.updCell(m.list.Filtered[0]), "in the index and on its newest version")
+
+	loadReleases(t, m,
+		map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}, nil,
+		map[string]string{"other": "9.9.9"})
+	require.Equal(t, "—", m.updCell(m.list.Filtered[0]), "the chart is in no index: a local chart")
 
 	loadReleases(t, m,
 		map[string][]charts.Release{"app": deployed("app", "c", "1.0.0")}, nil,
 		map[string]string{"c": "2.0.0"})
 	require.Equal(t, "2.0.0", m.updCell(m.list.Filtered[0]))
+}
+
+// A release ahead of every cached index — installed from a local chart, say —
+// has nothing newer to install, so it reads as current rather than as an
+// upgrade back to an older version.
+func TestUpdCellTreatsAReleaseAheadOfTheIndexAsCurrent(t *testing.T) {
+	m := sized(testModel(), 150, 24)
+	loadReleases(t, m,
+		map[string][]charts.Release{"app": deployed("app", "c", "3.0.0")}, nil,
+		map[string]string{"c": "1.0.0"})
+
+	require.Equal(t, "✓", m.updCell(m.list.Filtered[0]))
 }
 
 // The footer carries the counts, the convergence reason and the read-only
@@ -211,10 +231,16 @@ func TestUpdColumnShowsTheNewerVersion(t *testing.T) {
 		byName[it.Name] = it
 	}
 	require.Equal(t, "2.0.0", byName["stale"].Latest)
-	require.Empty(t, byName["current"].Latest, "already newest")
-	require.Empty(t, byName["local"].Latest, "a chart in no index has nothing to be outdated against")
+	require.True(t, byName["stale"].Newer)
+
+	require.Equal(t, "3.0.0", byName["current"].Latest, "the newest published version, which is the installed one")
+	require.False(t, byName["current"].Newer, "already newest")
+
+	require.Empty(t, byName["local"].Latest, "a chart in no index has nothing to compare against")
 
 	out := m.View()
 	require.Contains(t, out, "LATEST", "the header names the column")
 	require.Contains(t, out, "2.0.0")
+	require.Contains(t, out, "✓", "the up-to-date release says so rather than showing a dash")
+	require.Contains(t, out, "—", "and the local chart still reads as unknowable")
 }

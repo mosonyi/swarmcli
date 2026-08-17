@@ -133,13 +133,10 @@ func readReleases(ops releaseOps) ([]releaseItem, bool, error) {
 	for _, it := range items {
 		currents = append(currents, it.current())
 	}
-	entries, haveIndexes := ops.Outdated(currents)
-	latest := make(map[string]string, len(entries))
-	for _, e := range entries {
-		latest[e.Release] = e.Latest
-	}
+	avail, haveIndexes := ops.Available(currents)
 	for i := range items {
-		items[i].Latest = latest[items[i].Name]
+		a := avail[items[i].Name]
+		items[i].Latest, items[i].Newer = a.Latest, a.Newer
 	}
 	return items, haveIndexes, nil
 }
