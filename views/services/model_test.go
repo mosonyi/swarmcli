@@ -291,14 +291,14 @@ func TestWindowSizeMsg(t *testing.T) {
 func TestTickMsg_Visible_Polls(t *testing.T) {
 	m := testModel()
 	loadServices(m, fakeEntries("web"))
-	cmd := m.Update(TickMsg(time.Now()))
+	cmd := m.Update(TickMsg{Gen: m.pollGen})
 	require.NotNil(t, cmd)
 }
 
 func TestTickMsg_NotVisible_SchedulesTick(t *testing.T) {
 	m := testModel()
 	m.Visible = false
-	cmd := m.Update(TickMsg(time.Now()))
+	cmd := m.Update(TickMsg{Gen: m.pollGen})
 	require.NotNil(t, cmd)
 }
 
@@ -748,6 +748,8 @@ func TestShortHelpItems_IncludesShellAndPortForward(t *testing.T) {
 	require.Contains(t, keys["x"], "(BE)")
 	require.Contains(t, keys, "w")
 	require.Contains(t, keys["w"], "(BE)")
+	require.Contains(t, keys, "t")
+	require.Contains(t, keys["t"], "(BE)")
 }
 
 func TestKey_X_NoAction_ShowsBEDialog(t *testing.T) {
@@ -836,4 +838,84 @@ func TestGetServicesHelpContent_IncludesBEActions(t *testing.T) {
 	require.True(t, found["<x>"])
 	require.True(t, found["<w>"])
 	require.True(t, found["<shift+w>"])
+	require.True(t, found["<t>"])
+}
+
+func TestKey_T_ServiceRow_PassesServiceAndNoTask(t *testing.T) {
+	got := ""
+	view.RegisterAction("container-stats", func(ref string) tea.Cmd {
+		return func() tea.Msg { got = ref; return nil }
+	})
+	defer view.UnregisterActionForTest("container-stats")
+
+	m := testModel()
+	loadServices(m, fakeEntries("web"))
+	cmd := m.Update(key("t"))
+	require.NotNil(t, cmd)
+	runCmd(cmd)
+	// Empty task field: the cursor is on the service row, so the extension
+	// picks the replica rather than this view guessing one.
+	require.Equal(t, []string{"web", ""}, view.DecodeRef(got))
+}
+
+func TestKey_T_TaskRow_PassesThatReplicasTaskID(t *testing.T) {
+	got := ""
+	view.RegisterAction("container-stats", func(ref string) tea.Cmd {
+		return func() tea.Msg { got = ref; return nil }
+	})
+	defer view.UnregisterActionForTest("container-stats")
+
+	m := testModel()
+	loadServices(m, fakeEntries("web"))
+	m.expandedServices["id-web"] = true
+	m.serviceTasks["id-web"] = []docker.TaskEntry{{ID: "task-a"}, {ID: "task-b"}}
+	m.selectedTaskIndex = 1
+
+	cmd := m.Update(key("t"))
+	require.NotNil(t, cmd)
+	runCmd(cmd)
+	require.Equal(t, []string{"web", "task-b"}, view.DecodeRef(got))
+}
+
+// The task list is refreshed on a 2s poll while a task row stays selected, so
+// the index can outlive the row it named. That must read as "no replica
+// picked", not index a slice that shrank.
+func TestKey_T_StaleTaskIndex_FallsBackToService(t *testing.T) {
+	got := ""
+	view.RegisterAction("container-stats", func(ref string) tea.Cmd {
+		return func() tea.Msg { got = ref; return nil }
+	})
+	defer view.UnregisterActionForTest("container-stats")
+
+	m := testModel()
+	loadServices(m, fakeEntries("web"))
+	m.expandedServices["id-web"] = true
+	m.serviceTasks["id-web"] = []docker.TaskEntry{{ID: "task-a"}}
+	m.selectedTaskIndex = 3
+
+	cmd := m.Update(key("t"))
+	require.NotNil(t, cmd)
+	runCmd(cmd)
+	require.Equal(t, []string{"web", ""}, view.DecodeRef(got))
+}
+
+func TestKey_T_NoAction_ShowsBEDialog(t *testing.T) {
+	m := testModel()
+	loadServices(m, fakeEntries("web"))
+	m.Update(key("t"))
+	require.True(t, m.confirmDialog.Visible)
+	require.True(t, m.confirmDialog.ErrorMode)
+	require.Contains(t, m.confirmDialog.Message, "Stats")
+	require.Contains(t, m.confirmDialog.Message, "swarmcli.io/be")
+}
+
+func TestKey_T_NoSelection_NoOp(t *testing.T) {
+	view.RegisterAction("container-stats", func(string) tea.Cmd {
+		return func() tea.Msg { return nil }
+	})
+	defer view.UnregisterActionForTest("container-stats")
+
+	m := testModel() // empty list
+	require.Nil(t, m.Update(key("t")))
+	require.False(t, m.confirmDialog.Visible)
 }

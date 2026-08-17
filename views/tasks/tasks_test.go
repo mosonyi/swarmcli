@@ -121,7 +121,10 @@ func TestUpdate_TasksLoaded(t *testing.T) {
 	m := testModel()
 	cmd := m.Update(TasksLoadedMsg{Tasks: fakeTasks("t1", "t2")})
 	require.Len(t, m.tasks, 2)
-	require.NotNil(t, cmd) // tickCmd
+	// A load does not arm the ticker. Only OnEnter and a tick itself do, so a
+	// load issued by OnEnter or the factory cannot start a second chain
+	// alongside the one OnEnter already started.
+	require.Nil(t, cmd)
 }
 
 func TestUpdate_TasksLoaded_Error(t *testing.T) {

@@ -23,15 +23,12 @@ type Column[T any] struct {
 	// Grow marks the column that absorbs leftover width when the terminal is
 	// wider than the content needs.
 	//
-	// It is separate from Flex because the two are not the same property.
-	// Flexing NAME so a long one can scroll on an 80-column terminal also hands
-	// it a share of the slack on a 200-column one, padding a short name out to
-	// forty cells and opening a void between it and the next column. Declaring
-	// Grow on the trailing column instead puts the leftover after the last
-	// cell, where it reads as margin.
-	//
-	// It must be the LAST column. A grow column in the middle does not remove
-	// the void, it relocates it to just after that column.
+	// It is separate from Flex because the two are not the same property, and a
+	// table of short values makes that obvious: flexing NAME so a long one can
+	// scroll on an 80-column terminal also hands it half the slack on a
+	// 200-column one, opening a void in the middle of every row. Declaring Grow
+	// on the trailing column instead puts the leftover after the last cell,
+	// where it reads as margin.
 	//
 	// When no column declares Grow the Flex columns absorb the slack, which is
 	// what every view did before Grow existed.
@@ -88,6 +85,47 @@ func ColumnDefs[T any](cols []Column[T]) []ColumnDef {
 		defs[i] = ColumnDef{Label: c.Label}
 	}
 	return defs
+}
+
+// NaturalWidth is the width the table wants: every column at its content size,
+// plus the gaps, with nothing stretched or squeezed. LayoutWidths returns
+// exactly this when totalWidth equals it.
+//
+// A view uses it to decide whether a terminal has room to spare — for an extra
+// column it only shows when there is genuine surplus, rather than one that
+// squeezes every other column to fit.
+func NaturalWidth[T any](cols []Column[T], items []T, sortCol int) int {
+	n := len(cols)
+	if n == 0 {
+		return 0
+	}
+	sum := 0
+	for i, c := range cols {
+		sum += naturalColWidth(c, items, i == sortCol)
+	}
+	return sum + 1 + ColGap*n // +1 for column 0's leading space
+}
+
+// naturalColWidth is one column's content size: the widest of its label (plus
+// the sort indicator when active), its declared minimum, and any cell.
+func naturalColWidth[T any](c Column[T], items []T, sorted bool) int {
+	fl := displayWidth(c.Label)
+	if sorted {
+		fl += 2 // " ▲"/" ▼"
+	}
+	if fl < c.MinWidth {
+		fl = c.MinWidth
+	}
+	if fl < 3 {
+		fl = 3
+	}
+	w := fl
+	for _, it := range items {
+		if cw := displayWidth(c.Cell(it)); cw > w {
+			w = cw
+		}
+	}
+	return w
 }
 
 // LayoutWidths sizes columns to their content so wide terminals no longer

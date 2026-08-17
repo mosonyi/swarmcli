@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	_ "github.com/Eldara-Tech/swarmcli/commands/command"
+	_ "github.com/Eldara-Tech/swarmcli/commands/command/charts"
 	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker"
 	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker/config"
 	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker/network"
@@ -157,6 +158,19 @@ func TestParseInput_UnknownFlagRejected(t *testing.T) {
 	_, _, err := ParseInput("node --bogus")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unknown flag --bogus for :node")
+}
+
+// :charts takes no flags, so its declared-but-flagless spec must reject every
+// one of them. A command that declares no spec at all skips validateFlags
+// instead, which is the failure this guards against.
+func TestParseInput_ChartsIsStrict(t *testing.T) {
+	cmd, _, err := ParseInput("charts")
+	require.NoError(t, err)
+	require.Equal(t, "charts", cmd.Name())
+
+	_, _, err = ParseInput("charts --bogus")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unknown flag --bogus for :charts")
 }
 
 // ":contexts" is the first command declaring a flag, so its spec is what lets

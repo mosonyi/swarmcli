@@ -6,8 +6,8 @@ Copyright © 2026 Eldara Tech
 # SwarmCLI — Documentation
 
 These pages cover installing, licensing and operating SwarmCLI, including its
-Business Edition features. For TUI navigation, key bindings, search, contexts
-and the chart commands, start at the [README](../README.md); for what the two
+Business Edition features. For TUI navigation, key bindings, search and
+contexts, start at the [README](../README.md); for what the two
 published artefacts are, see [Editions](editions.md).
 
 Business Edition is not a separate program — it is the same binary with
@@ -30,9 +30,10 @@ features a licence unlocks. On top of the Community Edition it adds:
 - [Bootstrap](bootstrap.md) — `:bootstrap` end-to-end: what gets deployed and how.
 - [Migration](migration.md) — moving an existing stack to application-layer mTLS (`:bootstrap --migrate`).
 - [RBAC](rbac.md) — managing users, roles, onboarding, and revocation.
-- [Features](features.md) — shell and reveal-secret in detail.
+- [Features](features.md) — shell, reveal-secret, port-forward and container statistics in detail.
 - [Volumes](volumes.md) — listing across nodes, create/delete/prune, in-volume file browser.
-- [Configuration](configuration.md) — BE environment variables and on-disk paths.
+- [Charts](../charts/README.md) — the chart package manager both editions ship: repositories, install/upgrade, and declarative releases (`charts apply`, `charts outdated`).
+- [Configuration](configuration.md) — environment variables and on-disk paths for both editions.
 - [Troubleshooting](troubleshooting.md) — common errors and fixes.
 
 For install commands see [Installation](installation.md), or the

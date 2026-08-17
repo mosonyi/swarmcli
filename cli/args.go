@@ -4,7 +4,9 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -41,6 +43,67 @@ type flags struct {
 	// resolveImage (--resolve-image) selects the daemon's tag-to-digest
 	// resolution at deploy time: always | changed | never.
 	resolveImage string
+
+	// seen records the canonical long name of every flag actually passed. The
+	// values above cannot answer "was this flag given?" for a flag whose value
+	// happens to equal its zero value, and the allow-list check has to reject a
+	// flag the operator passed rather than one that merely looks set.
+	seen map[string]bool
+}
+
+// canonicalFlag maps a flag's short form to the long one the command table
+// lists. Long forms are the table's vocabulary, so a row never has to spell a
+// flag twice.
+var canonicalFlag = map[string]string{"-f": "--values"}
+
+// reject reports the first flag c does not honour. The charts flag set is
+// parsed globally — every subcommand understands every flag — so without this
+// a valid-but-irrelevant flag is accepted and silently dropped, which reads to
+// an operator as "it worked".
+func (f flags) reject(c chartsCmd) error {
+	allowed := make(map[string]bool, len(c.Flags))
+	for _, n := range c.Flags {
+		allowed[n] = true
+	}
+	// Sorted, so a command given two rejected flags always names the same one.
+	names := make([]string, 0, len(f.seen))
+	for n := range f.seen {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		if allowed[n] {
+			continue
+		}
+		if c.FlagHint != "" {
+			return fmt.Errorf("charts %s does not accept '%s': %s", c.Name, n, c.FlagHint)
+		}
+		return fmt.Errorf("charts %s does not accept '%s'", c.Name, n)
+	}
+	return nil
+}
+
+// errHelp reports that --help was passed. It travels as an error because the
+// parser is the only place that knows a "--help" token is a flag rather than
+// the value of the flag before it.
+var errHelp = errors.New("help requested")
+
+// parse is the prelude every charts subcommand shares: split the arguments,
+// reject a flag this command does not honour, and turn either failure into an
+// exit code. A returned code >= 0 is the command's result.
+func parse(c chartsCmd, args []string) ([]string, flags, int) {
+	pos, f, err := parseArgs(args)
+	if errors.Is(err, errHelp) {
+		out(commandHelp(c))
+		return nil, f, 0
+	}
+	if err != nil {
+		return nil, f, usageErr(err.Error())
+	}
+	if err := f.reject(c); err != nil {
+		return nil, f, usageErr(err.Error())
+	}
+	return pos, f, -1
 }
 
 // parseArgs splits raw args into positionals and flags. It understands the
@@ -62,6 +125,14 @@ func parseArgs(args []string) ([]string, flags, error) {
 		}
 
 		name, inlineVal, hasInline := splitFlag(a)
+		if f.seen == nil {
+			f.seen = map[string]bool{}
+		}
+		canonical := name
+		if long, ok := canonicalFlag[name]; ok {
+			canonical = long
+		}
+		f.seen[canonical] = true
 		next := func() (string, error) {
 			if hasInline {
 				return inlineVal, nil
@@ -74,6 +145,8 @@ func parseArgs(args []string) ([]string, flags, error) {
 		}
 
 		switch name {
+		case "-h", "--help":
+			return nil, f, errHelp
 		case "-f", "--values":
 			v, err := next()
 			if err != nil {

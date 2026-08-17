@@ -20,8 +20,8 @@ func factory(deps docker.Deps, w, h int, _ any) (view.View, tea.Cmd) {
 	model.Visible = true
 	model.SetSize(w, h)
 	model.SetLoading(true)
-	return model, tea.Batch(
-		model.loadContextsCmd(),
-		StartTickerCmd(),
-	)
+	// No tick: OnEnter arms the one chain, and the app calls it right after
+	// this. Arming here instead left the view unable to restart its chain
+	// after a drill-down, because OnEnter is all that goBack runs.
+	return model, model.loadContextsCmd()
 }

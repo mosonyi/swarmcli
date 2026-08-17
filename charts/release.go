@@ -711,6 +711,20 @@ func (e *Engine) List(ctx context.Context) ([]Release, error) {
 	return out, nil
 }
 
+// AllRevisions returns every stored revision, grouped by release name and
+// ascending within each group, with display statuses derived the same way
+// History derives them.
+//
+// It exists for a caller that needs the current revision of every release AND
+// the history of any of them — a browser view, where List followed by a
+// History per expanded release would decode every stored revision twice.
+// Unlike List, nothing is filtered: a release whose current revision is
+// uninstalled is present, because a caller asking for all revisions is asking
+// about the record, not about what is deployed.
+func (e *Engine) AllRevisions(ctx context.Context) (map[string][]Release, error) {
+	return e.allRevisions(ctx)
+}
+
 // Status returns the current release plus live service states for its stack.
 func (e *Engine) Status(ctx context.Context, release string) (*Release, []ServiceState, error) {
 	revs, err := e.revisions(ctx, release)

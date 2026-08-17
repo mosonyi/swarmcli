@@ -231,17 +231,13 @@ func (m *Model) createSecretFromFileCmd(name, filePath string, labels map[string
 			return errorMsg(fmt.Errorf("failed to read file: %w", err))
 		}
 
-		// Base64 encode if requested
+		// Base64 encode if requested. The payload is never logged, at any level:
+		// it is the secret, and a debug log is the file an operator attaches to
+		// a bug report — one lumberjack keeps as five compressed rotations for
+		// fourteen days, long after the terminal it was typed into is gone.
+		// CreateSecret already logs its size, which is the part worth having.
 		if encode {
-			encoded := base64.StdEncoding.EncodeToString(data)
-			// Debug: show encoded payload (may be large)
-			const maxLogged = 4096
-			if len(encoded) > maxLogged {
-				l().Debugf("Secret %s base64 payload (%d chars, truncated to %d): %s…", name, len(encoded), maxLogged, encoded[:maxLogged])
-			} else {
-				l().Debugf("Secret %s base64 payload (%d chars): %s", name, len(encoded), encoded)
-			}
-			data = []byte(encoded)
+			data = []byte(base64.StdEncoding.EncodeToString(data))
 		}
 
 		// Create the secret
@@ -266,17 +262,9 @@ func (m *Model) createSecretFromContentCmd(name string, content []byte, labels m
 	return func() tea.Msg {
 		l().Infof("Creating secret %s from inline content (encode=%v, labels=%v)", name, encode, labels)
 
-		// Base64 encode if requested
+		// Never logged — see createSecretFromFileCmd.
 		if encode {
-			encoded := base64.StdEncoding.EncodeToString(content)
-			// Debug: show encoded payload
-			const maxLogged = 4096
-			if len(encoded) > maxLogged {
-				l().Debugf("Secret %s base64 payload (%d chars, truncated to %d): %s…", name, len(encoded), maxLogged, encoded[:maxLogged])
-			} else {
-				l().Debugf("Secret %s base64 payload (%d chars): %s", name, len(encoded), encoded)
-			}
-			content = []byte(encoded)
+			content = []byte(base64.StdEncoding.EncodeToString(content))
 		}
 
 		// Create the secret

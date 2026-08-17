@@ -5,21 +5,32 @@ Copyright © 2026 Eldara Tech
 
 # Configuration
 
-This page is the single source of truth for Business Edition environment
-variables and on-disk paths. For inherited Community Edition variables
-(`SWARMCLI_ENV`, `LOG_LEVEL`, `DOCKER_CONTEXT`, `SWARMCLI_DISABLE_VERSION_CHECK`),
-see the
-[README](../README.md#environment-variables).
+This page is the single source of truth for SwarmCLI's environment variables and
+on-disk paths. Rows marked **BE** apply to the Business Edition only; the rest
+apply to every build.
 
-## BE-specific environment variables
+## Environment variables
 
-| Variable | Purpose | Default | Read at |
-|---|---|---|---|
-| `SWARMCLI_LICENSE` | License key. Takes priority over the license file. | unset | startup |
-| `SWARMCLI_PROXY_URL` | WebSocket URL of the rbac-proxy. Auto-derived from the active Docker context if unset. | unset | shell connect |
-| `SWARMCLI_REVEAL_IMAGE` | Image used for the temporary service that reveals a secret. | `alpine:latest` | reveal action |
-| `SWARMCLI_SHELL_CMD` | Shell command to exec when opening a shell into a task. If unset, the agent auto-detects (`bash` → `sh` → `ash`). | unset | shell connect |
-| `SWARMCLI_FORWARD_IDLE_TIMEOUT` | Idle timeout for an active port-forward (no traffic in either direction). Accepts any Go duration; capped at `24h`. | `30m` | per-forward, evaluated continuously |
+| Variable | Edition | Purpose | Default | Read at |
+|---|---|---|---|---|
+| `SWARMCLI_ENV` | both | `dev` writes human-readable logs, `prod` writes JSON. | `prod` | startup |
+| `LOG_LEVEL` | both | Log verbosity: `debug`, `info`, `warn`, `error`. | `debug` in dev, `info` in prod | startup |
+| `DOCKER_CONTEXT` | both | Docker context to talk to. It overrides `docker context use`, so while it is set the context switcher refuses to move to a different context rather than writing a switch that could not take effect. | the active context | startup, and every Docker client |
+| `SWARMCLI_DISABLE_VERSION_CHECK` | both | Disables the startup request to `https://swarmcli.io/api/v1/version` that checks whether a newer release is available. | unset | startup |
+| `SWARMCLI_CHARTS_ALLOW_PLAINTEXT` | both | Allows chart repositories served over plain `http://`, which are refused by default (see [charts/README.md](../charts/README.md#transport)). | unset (https only) | `charts` commands |
+| `SWARMCLI_CHARTS_NO_AUTO_UPDATE` | both | Stops a `charts` command refreshing a repository index before resolving a chart from it. `--no-repo-update` does the same for one invocation. | unset (refreshes) | `charts` commands |
+| `EDITOR` | both | Editor invoked by the in-TUI edit actions (stack, config, secret). | `nano` | edit action |
+| `XDG_STATE_HOME` | both | Base directory for logs and chart state — see [On-disk paths](#on-disk-paths). | `~/.local/state` | startup, `charts` commands |
+| `SWARMCLI_LICENSE` | BE | License key. Takes priority over the license file. | unset | startup |
+| `SWARMCLI_PROXY_URL` | BE | WebSocket URL of the rbac-proxy. Auto-derived from the active Docker context if unset. | unset | shell connect |
+| `SWARMCLI_REVEAL_IMAGE` | BE | Image used for the temporary service that reveals a secret. | `alpine:latest` | reveal action |
+| `SWARMCLI_SHELL_CMD` | BE | Shell command to exec when opening a shell into a task. If unset, the agent auto-detects (`bash` → `sh` → `ash`). | unset | shell connect |
+| `SWARMCLI_FORWARD_IDLE_TIMEOUT` | BE | Idle timeout for an active port-forward (no traffic in either direction). Accepts any Go duration; capped at `24h`. | `30m` | per-forward, evaluated continuously |
+
+The three on/off variables (`SWARMCLI_DISABLE_VERSION_CHECK`,
+`SWARMCLI_CHARTS_ALLOW_PLAINTEXT`, `SWARMCLI_CHARTS_NO_AUTO_UPDATE`) accept the
+values Go's `strconv.ParseBool` does — `1`, `t`, `true`, `TRUE` and their false
+counterparts. Anything else is treated as unset.
 
 See [License — Activation](license.md#activation) for the precedence
 between `SWARMCLI_LICENSE` and the license file, and
@@ -28,19 +39,27 @@ between `SWARMCLI_LICENSE` and the license file, and
 
 ## On-disk paths
 
-| Path | Mode | Contents |
-|---|---|---|
-| `~/.config/swarmcli/license.key` | `0600` | Active license key. Created by the startup prompt or by `:license <s>`. |
-| `~/.config/swarmcli/certs/<stack>/ca.pem` | `0600` | CA cert from `:bootstrap`. |
-| `~/.config/swarmcli/certs/<stack>/cert.pem` | `0600` | Admin client cert (CN = seed username). |
-| `~/.config/swarmcli/certs/<stack>/key.pem` | `0600` | Admin client private key. |
-| `~/.docker/contexts/…` | (Docker default) | Managed Docker contexts — the `<original>-managed` entry created by `:bootstrap` and any `<user>-managed` entries imported via `docker context import`. |
+| Path | Edition | Mode | Contents |
+|---|---|---|---|
+| `~/.local/state/swarmcli/app.log` | both | `0600` | JSON logs (`SWARMCLI_ENV=prod`). Rotated at 20 MB, 5 compressed backups, 14 days. |
+| `~/.local/state/swarmcli/app-debug.log` | both | `0600` | Human-readable logs (`SWARMCLI_ENV=dev`), rotated the same way. |
+| `~/.local/state/swarmcli/charts/repos.json` | both | `0644` | Chart repositories configured with `swarmcli charts repo add`. |
+| `~/.local/state/swarmcli/charts/cache/index-<repo>.yaml` | both | `0644` | Cached repository index per configured repository. |
+| `~/.config/swarmcli/update-notice.json` | both | `0644` | The release version at which the startup update notice was dismissed. |
+| `~/.config/swarmcli/license.key` | BE | `0600` | Active license key. Created by the startup prompt or by `:license <s>`. |
+| `~/.config/swarmcli/certs/<stack>/ca.pem` | BE | `0600` | CA cert from `:bootstrap`. |
+| `~/.config/swarmcli/certs/<stack>/cert.pem` | BE | `0600` | Admin client cert (CN = seed username). |
+| `~/.config/swarmcli/certs/<stack>/key.pem` | BE | `0600` | Admin client private key. |
+| `~/.docker/contexts/…` | BE | (Docker default) | Managed Docker contexts — the `<original>-managed` entry created by `:bootstrap` and any `<user>-managed` entries imported via `docker context import`. |
 
-Directory mode is `0700` for `~/.config/swarmcli/certs/<stack>/`.
-`<stack>` is the bootstrap stack name; default `swarmcli-infra`.
+Everything under `~/.local/state/swarmcli/` moves with `XDG_STATE_HOME` when
+that is set, and falls back to the system temp directory when there is no home
+directory. Directory mode is `0755` there, and `0700` for
+`~/.config/swarmcli/certs/<stack>/`. `<stack>` is the bootstrap stack name;
+default `swarmcli-infra`.
 
-Log paths are unchanged from CE — see the
-[README](../README.md).
+Release state is not on disk: `swarmcli charts` stores each release's values and
+rendered manifest in the swarm itself, as Docker configs.
 
 ## Stack-side configuration (rbac-proxy)
 

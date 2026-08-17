@@ -68,7 +68,7 @@ func TestUpdate_TickMsg(t *testing.T) {
 	m := testModel()
 	m.visible = true
 	m.state = stateReady
-	cmd := m.Update(TickMsg(time.Now()))
+	cmd := m.Update(TickMsg{Gen: m.pollGen})
 	require.NotNil(t, cmd)
 }
 
@@ -614,7 +614,7 @@ func TestTickMsg_WhenPollingInFlight_SkipsCheck(t *testing.T) {
 	loadConfigs(m, fakeConfigs("c1"))
 	m.visible = true
 	m.polling.Store(true)
-	cmd := m.Update(TickMsg(time.Now()))
+	cmd := m.Update(TickMsg{Gen: m.pollGen})
 	require.NotNil(t, cmd)
 	// With polling in flight the TickMsg handler should only return tickCmd,
 	// not batch(checkConfigsCmd, tickCmd). Executing the returned cmd should

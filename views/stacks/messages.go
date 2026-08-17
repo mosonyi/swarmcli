@@ -18,13 +18,17 @@ type RefreshErrorMsg struct {
 	Err error
 }
 
-type TickMsg time.Time
+type TickMsg struct{ Gen uint64 }
 
 // PollRetryMsg signals that polling found no changes; the Update handler
 // should schedule the next tick.
 type PollRetryMsg struct{}
 
-const PollInterval = 5 * time.Second
+// PollInterval is how often the view re-reads its resource. It is a var, not a
+// const, so tests can shrink it: a tea.Tick cmd invoked synchronously blocks
+// for the full interval, so a test that runs one to see what it scheduled would
+// otherwise sit here for five seconds.
+var PollInterval = 5 * time.Second
 
 // SpinnerTickMsg drives the deploy spinner and the toast expiry.
 type SpinnerTickMsg time.Time
@@ -50,6 +54,14 @@ type RemoveErrorMsg struct {
 // requested, whether that stack belongs to a chart release. ChartRelease is
 // non-empty when it does, so the confirm dialog can warn before removal.
 type StackDeleteIntentMsg struct {
+	StackName    string
+	ChartRelease string
+}
+
+// ChartJumpMsg carries the result of checking, when "g" is pressed, whether the
+// selected stack belongs to a chart release. ChartRelease is non-empty when it
+// does, and the view then navigates to the charts browser on that release.
+type ChartJumpMsg struct {
 	StackName    string
 	ChartRelease string
 }

@@ -42,6 +42,7 @@ type Model struct {
 	cursor                int
 	mu                    sync.Mutex
 	loading               bool
+	pollGen               uint64 // generation of the live poll chain; see OnEnter
 	errorMsg              string
 	successMsg            string
 	switchPending         bool
@@ -378,14 +379,26 @@ func (m *Model) Name() string {
 // OnEnter is called when the view becomes active
 func (m *Model) OnEnter() tea.Cmd {
 	m.Visible = true
+	// The tick is armed here, not in the factory: OnEnter is the only hook
+	// that runs both on first entry and on every return from a drill-down,
+	// and a chain does not survive a navigation — its tick is delivered to
+	// whichever view is current by then, and dropped.
+	//
+	// Each entry gets its own generation. "Does not survive" holds only once
+	// the leftover tick has fired: one armed just before a drill-down can
+	// still be in flight when the operator returns, and would find this view
+	// current again and re-arm, leaving two chains for the rest of the view's
+	// life. The generation makes it recognisable as a leftover.
+	m.pollGen++
+	tick := tickCmd(m.pollGen)
 	// If we have no contexts loaded, trigger a load on enter so the
 	// view shows progress and fills itself. Also allow explicit reloads
 	// from other code paths by calling SetLoading(true) before navigating.
 	if len(m.contexts) == 0 {
 		m.SetLoading(true)
-		return m.loadContextsCmd()
+		return tea.Batch(m.loadContextsCmd(), tick)
 	}
-	return nil
+	return tick
 }
 
 // OnExit is called when the view is exited

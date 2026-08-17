@@ -39,6 +39,7 @@ type Model struct {
 	sortField             SortField
 	sortAscending         bool   // true for ascending, false for descending
 	lastSnapshot          uint64 // Hash of last node state for change detection
+	pollGen               uint64 // Generation of the live poll chain; see OnEnter
 	confirmDialog         *confirmdialog.Model
 	errorDialogActive     bool
 	availabilityDialog    bool     // Whether availability selection dialog is visible
@@ -101,12 +102,12 @@ func New(width, height int) *Model {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return tickCmd()
+	return nil
 }
 
-func tickCmd() tea.Cmd {
-	return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
-		return TickMsg(t)
+func tickCmd(gen uint64) tea.Cmd {
+	return tea.Tick(PollInterval, func(time.Time) tea.Msg {
+		return TickMsg{Gen: gen}
 	})
 }
 
@@ -190,7 +191,19 @@ func (m *Model) checkNodesCmd(lastHash uint64) tea.Cmd {
 }
 
 func (m *Model) OnEnter() tea.Cmd {
-	return nil
+	m.Visible = true
+	// The tick is armed here, not in Init or the factory: OnEnter is the only
+	// hook that runs both on first entry and on every return from a drill-down,
+	// and a chain does not survive a navigation — its tick is delivered to
+	// whichever view is current by then, and dropped.
+	//
+	// Each entry gets its own generation. "Does not survive" holds only once
+	// the leftover tick has fired: one armed just before a drill-down can
+	// still be in flight when the operator returns, and would find this view
+	// current again and re-arm, leaving two chains for the rest of the view's
+	// life. The generation makes it recognisable as a leftover.
+	m.pollGen++
+	return tea.Batch(m.LoadNodesCmd(), tickCmd(m.pollGen))
 }
 
 func (m *Model) OnExit() tea.Cmd {

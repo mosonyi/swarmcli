@@ -62,10 +62,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		m.SetContent(msg)
 		m.Visible = true
-		// Continue polling and refresh tasks for any expanded services
-		return tea.Batch(tickCmd(), m.refreshExpandedTasksCmd(m.expandedServices))
+		// No re-arm: only a tick arms a tick, so a load issued by OnEnter or the
+		// factory cannot start a second, parallel chain.
+		return m.refreshExpandedTasksCmd(m.expandedServices)
 
 	case TickMsg:
+		if msg.Gen != m.pollGen {
+			return nil // a leftover from an earlier entry — see OnEnter
+		}
 		l().Infof("ServicesView: Received TickMsg, visible=%v", m.Visible)
 		// Check for changes and refresh expanded tasks
 		if m.Visible {
@@ -76,13 +80,18 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return tea.Batch(
 				m.checkServicesCmd(m.lastSnapshot, m.filterType, m.nodeID, m.stackName),
 				m.refreshExpandedTasksCmd(m.expandedServices),
+				tickCmd(m.pollGen),
 			)
 		}
 		// Continue polling even if not visible
-		return tickCmd()
+		return tickCmd(m.pollGen)
 
 	case PollRetryMsg:
-		return tickCmd()
+		// Deliberately no re-arm. The TickMsg handler above always schedules
+		// the next tick, so re-arming here as well gives one beat two
+		// successors — and each of those does the same, so the poll rate does
+		// not merely double, it doubles again on every beat.
+		return nil
 
 	case TasksLoadedMsg:
 		// Store loaded tasks - view will automatically re-render
@@ -450,49 +459,33 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				return nil
 			}
 			entry := m.List.Filtered[m.List.Cursor]
-			action, ok := view.GetAction("shell")
-			if !ok {
-				if cmd := view.FeatureLockedCmd("Shell"); cmd != nil {
-					return cmd
-				}
-				m.confirmDialog.Visible = true
-				m.confirmDialog.ErrorMode = true
-				m.confirmDialog.Message = view.BEUnavailableErr("Shell").Error()
-				return nil
-			}
-			return action(entry.ServiceName)
+			return m.dispatchAction("shell", "Shell", entry.ServiceName)
 		case "w":
 			if m.List.Cursor >= len(m.List.Filtered) {
 				return nil
 			}
 			entry := m.List.Filtered[m.List.Cursor]
-			action, ok := view.GetAction("port-forwards")
-			if !ok {
-				if cmd := view.FeatureLockedCmd("Active Forwards"); cmd != nil {
-					return cmd
-				}
-				m.confirmDialog.Visible = true
-				m.confirmDialog.ErrorMode = true
-				m.confirmDialog.Message = view.BEUnavailableErr("Active Forwards").Error()
-				return nil
-			}
-			return action(entry.ServiceName)
+			return m.dispatchAction("port-forwards", "Active Forwards", entry.ServiceName)
 		case "W":
 			if m.List.Cursor >= len(m.List.Filtered) {
 				return nil
 			}
 			entry := m.List.Filtered[m.List.Cursor]
-			action, ok := view.GetAction("port-forward")
-			if !ok {
-				if cmd := view.FeatureLockedCmd("Port Forward"); cmd != nil {
-					return cmd
-				}
-				m.confirmDialog.Visible = true
-				m.confirmDialog.ErrorMode = true
-				m.confirmDialog.Message = view.BEUnavailableErr("Port Forward").Error()
+			return m.dispatchAction("port-forward", "Port Forward", entry.ServiceName)
+		// t opens live resource statistics for the selection. The ref carries the
+		// service name and, when a task row is highlighted, that replica's task
+		// ID; an empty second field means "the service — pick a replica". The
+		// Swarm API reports no container CPU, memory, network or block-IO at all
+		// (those counters exist only on the node running the container), so the
+		// default build supplies none and the key stays inert unless an extension
+		// that can reach per-node container state registers the action.
+		case "t":
+			if m.List.Cursor >= len(m.List.Filtered) {
 				return nil
 			}
-			return action(entry.ServiceName)
+			entry := m.List.Filtered[m.List.Cursor]
+			return m.dispatchAction("container-stats", "Stats",
+				view.EncodeRef(entry.ServiceName, m.selectedTaskID()))
 		case "esc":
 			// ESC should also go back to stacks view
 			m.Visible = false
@@ -583,6 +576,39 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	m.List.Viewport, cmd = m.List.Viewport.Update(msg)
 	return cmd
+}
+
+// dispatchAction invokes a registered action, or surfaces the standard
+// "Business Edition feature" dialog when it is not available. The action
+// keybindings are inert in builds that do not register them, and an
+// unlicensed build takes this same path because the registry's guard is
+// evaluated on every lookup.
+func (m *Model) dispatchAction(actionName, label, arg string) tea.Cmd {
+	action, ok := view.GetAction(actionName)
+	if !ok {
+		if cmd := view.FeatureLockedCmd(label); cmd != nil {
+			return cmd
+		}
+		m.confirmDialog.Visible = true
+		m.confirmDialog.ErrorMode = true
+		m.confirmDialog.Message = view.BEUnavailableErr(label).Error()
+		return nil
+	}
+	return action(arg)
+}
+
+// selectedTaskID returns the ID of the highlighted task row, or "" when the
+// cursor is on the service row itself. An action that can act on either gets
+// both: the service name always, and one replica only when the user picked one.
+func (m *Model) selectedTaskID() string {
+	if m.selectedTaskIndex < 0 || m.List.Cursor >= len(m.List.Filtered) {
+		return ""
+	}
+	tasks := m.serviceTasks[m.List.Filtered[m.List.Cursor].ServiceID]
+	if m.selectedTaskIndex >= len(tasks) {
+		return ""
+	}
+	return tasks[m.selectedTaskIndex].ID
 }
 
 func (m *Model) SetContent(msg Msg) {
@@ -993,6 +1019,7 @@ func GetServicesHelpContent() []helpview.HelpCategory {
 				{Keys: "<x>", Description: view.BEHelpDesc("shell", "Open shell into service container")},
 				{Keys: "<w>", Description: view.BEHelpDesc("port-forwards", "Show active port-forwards")},
 				{Keys: "<shift+w>", Description: view.BEHelpDesc("port-forward", "Forward service ports to localhost")},
+				{Keys: "<t>", Description: view.BEHelpDesc("container-stats", "CPU, memory, network and I/O over time")},
 				{Keys: "</>", Description: "Filter"},
 			},
 		},

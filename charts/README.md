@@ -39,11 +39,59 @@ swarmcli charts list
 swarmcli charts uninstall my-traefik
 ```
 
+The TUI complements this with a **read-only** browser, `:charts`: the installed
+releases with their revision, recorded status and live rollout health, expandable
+in place to the revision history and running services, with a diff between any
+two consecutive revisions. It changes nothing — install, upgrade, rollback and
+uninstall are the commands above — but it is the fastest way to see what a swarm
+is actually running, and it names the command for whatever you reach for next.
+
 A chart reference is either a configured `repo/chart` or a local path to a chart
 directory or packaged `.tgz`. **`--version` selects a version from a repository
 index, so it applies only to a `repo/chart` reference** — a local chart carries its
 version in its own `Chart.yaml`, and passing `--version` with one is an error
 rather than being silently ignored.
+
+### Every command
+
+The full command set, as `swarmcli charts --help` lists it. Run
+`swarmcli charts <command> --help` for a command's own options.
+
+<!-- BEGIN generated: charts commands -->
+```bash
+# Repository
+swarmcli charts repo add <name> <url>           # Add a chart repository and download its index
+swarmcli charts repo list                       # List configured repositories
+swarmcli charts repo update [name]              # Refresh repository indexes (all, or one)
+swarmcli charts repo remove <name>              # Remove a repository
+
+# Discovery
+swarmcli charts search [keyword]                # Search charts across repositories
+swarmcli charts show chart <repo/chart>         # Show chart metadata
+swarmcli charts show values <repo/chart>        # Show default values.yaml
+swarmcli charts show schema <repo/chart>        # Show values.schema.json
+
+# Authoring
+swarmcli charts lint <chart>                    # Check a chart without deploying it
+
+# Releases
+swarmcli charts template <release> <chart>      # Render manifest to stdout (no deploy)
+swarmcli charts install <release> <chart>       # Install a chart as a release
+swarmcli charts upgrade <release> <chart>       # Upgrade a release to a new revision
+swarmcli charts uninstall <release>             # Remove a release (keeps volumes)
+swarmcli charts rollback <release> <rev>        # Re-deploy the contents of a past revision
+swarmcli charts history <release>               # Show a release's revision history
+swarmcli charts prune [release]                 # Delete old revisions beyond --history-max
+swarmcli charts get values|manifest <release>   # Show stored values or rendered manifest
+swarmcli charts diff upgrade <release> <chart>  # Preview manifest changes before upgrading
+swarmcli charts list                            # List releases (alias: ls)
+swarmcli charts status <release>                # Show release status and services
+
+# GitOps
+swarmcli charts apply -f <file>                 # Converge the swarm to a declarative release file
+swarmcli charts outdated                        # Show releases with a newer chart version available
+```
+<!-- END generated -->
 
 ## Declarative releases (GitOps)
 
@@ -115,7 +163,7 @@ and replaced it in 3.0 for the same reason. The `apply/` prefix keeps a manifest
 applied from the command line from colliding with a controller that happened to
 pick the same name. The controller is the other side of that: a library consumer
 passes its own id as `PlanOptions.Owner` and plans against it instead, so the
-releases it installed under `cd/<app>` read back as its own.
+releases it installed under its own `cd/…` ids read back as its own.
 
 `owner:` is optional and has **no default**. A derived one would either change
 between a laptop and a CI checkout (a path hash) or be shared by every repository
@@ -445,6 +493,19 @@ it with the values a real install would supply. A chart that declares no
 `swarmcliVersion` gets a warning, not an error: the field is optional, but a
 chart naming no floor leaves an operator on an old build nothing to act on.
 
+It also warns when a service's `environment:` block holds a credential inline —
+a key named like a password, secret, token, API key or credential, or a value
+carrying a PEM private key. Such a value is stored verbatim in both the release
+record and the service spec, and both are readable by anyone with Docker access,
+so the credential is disclosed to every operator who can run `docker service
+inspect`. Reference an external Docker secret instead and read it from
+`/run/secrets/<name>`, through the image's `*_FILE` variable or in the service's
+own command — a value that already does either is not flagged, nor is a `${VAR}`
+the deploy substitutes. It is a warning rather than a refusal because the engine
+cannot tell a credential from a value that merely reads like one, and it fires on
+the key even when the rendered value is empty: the key is what will carry the
+credential once an operator supplies one.
+
 `--for-version` asks **whether the chart's declared floor admits that version**.
 It cannot tell you the chart *runs* on it: this binary carries one engine's
 behaviour and cannot emulate another's, so it checks the claim's shape, not its
@@ -619,10 +680,12 @@ window are the protections.
   which is readable by anyone with Docker access — as are `charts get manifest`
   and the TUI config viewer, which read it back. Do **not** inline secret
   material in templates: reference Docker secrets as separate objects instead.
-  Nothing currently enforces that. A redaction pass is
-  [issue #465](https://github.com/Eldara-Tech/swarmcli/issues/465); treat this
-  as a limitation to design around rather than something the engine will catch
-  for you.
+  `charts lint` warns about the common shape of getting this wrong (see
+  [Linting a chart](#linting-a-chart)), but it is advice at authoring time, not a gate:
+  nothing refuses a deploy over it, and no read path redacts. The same material
+  is equally visible in the service spec to anyone who can run `docker service
+  inspect`, so treat the release record as no more secret than the stack it
+  records.
 - **Chart integrity** is only as good as the index: a repository that publishes
   no `digest` gets a warning, not a refusal (see [Integrity](#integrity)). Chart
   archives are capped at 20 MiB on the wire.

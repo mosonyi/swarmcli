@@ -16,13 +16,17 @@ type TasksLoadedMsg struct {
 	Error error
 }
 
-type TickMsg time.Time
+type TickMsg struct{ Gen uint64 }
 
 // PollRetryMsg signals that polling found no changes; the Update handler
 // should schedule the next tick.
 type PollRetryMsg struct{}
 
-const PollInterval = 2 * time.Second
+// PollInterval is how often the view re-reads its resource. It is a var, not a
+// const, so tests can shrink it: a tea.Tick cmd invoked synchronously blocks
+// for the full interval, so a test that runs one to see what it scheduled would
+// otherwise sit here for the whole period.
+var PollInterval = 2 * time.Second
 
 func LoadTasksCmd(stackName string) tea.Cmd {
 	return func() tea.Msg {
@@ -34,9 +38,9 @@ func LoadTasksCmd(stackName string) tea.Cmd {
 	}
 }
 
-func tickCmd() tea.Cmd {
-	return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
-		return TickMsg(t)
+func tickCmd(gen uint64) tea.Cmd {
+	return tea.Tick(PollInterval, func(time.Time) tea.Msg {
+		return TickMsg{Gen: gen}
 	})
 }
 

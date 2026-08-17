@@ -50,6 +50,7 @@ type Model struct {
 	width        int
 	height       int
 	lastSnapshot uint64 // hash of last snapshot for change detection
+	pollGen      uint64 // generation of the live poll chain; see OnEnter
 
 	// Filter
 	filterType FilterType
@@ -123,12 +124,12 @@ func New(width, height int) *Model {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return tickCmd()
+	return nil
 }
 
-func tickCmd() tea.Cmd {
-	return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
-		return TickMsg(t)
+func tickCmd(gen uint64) tea.Cmd {
+	return tea.Tick(PollInterval, func(time.Time) tea.Msg {
+		return TickMsg{Gen: gen}
 	})
 }
 
@@ -147,6 +148,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "x", Desc: view.BEHelpDesc("shell", "Shell"), Disabled: !view.HasAction("shell")},
 		{Key: "w", Desc: view.BEHelpDesc("port-forwards", "Active Forwards"), Disabled: !view.HasAction("port-forwards")},
 		{Key: "shift+w", Desc: view.BEHelpDesc("port-forward", "Port Forward"), Disabled: !view.HasAction("port-forward")},
+		{Key: "t", Desc: view.BEHelpDesc("container-stats", "Stats"), Disabled: !view.HasAction("container-stats")},
 		{Key: "/", Desc: "Filter"},
 		{Key: "?", Desc: "Help"},
 		{Key: "esc", Desc: "Back"},
@@ -154,7 +156,19 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 }
 
 func (m *Model) OnEnter() tea.Cmd {
-	return tickCmd()
+	m.Visible = true
+	// The tick is armed here, not in Init or the factory: OnEnter is the only
+	// hook that runs both on first entry and on every return from a drill-down,
+	// and a chain does not survive a navigation — its tick is delivered to
+	// whichever view is current by then, and dropped.
+	//
+	// Each entry gets its own generation. "Does not survive" holds only once
+	// the leftover tick has fired: one armed just before a drill-down can
+	// still be in flight when the operator returns, and would find this view
+	// current again and re-arm, leaving two chains for the rest of the view's
+	// life. The generation makes it recognisable as a leftover.
+	m.pollGen++
+	return tickCmd(m.pollGen)
 }
 
 func (m *Model) OnExit() tea.Cmd {

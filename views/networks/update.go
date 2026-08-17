@@ -318,17 +318,24 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.computeNetworkUsedCmd(items)
 
 	case TickMsg:
+		if msg.Gen != m.pollGen {
+			return nil // a leftover from an earlier entry — see OnEnter
+		}
 		l().Infof("NetworksView: Received TickMsg, state=%v, visible=%v", m.state, m.visible)
 		if m.visible && m.state == stateReady && !m.confirmDialog.Visible && !m.loadingView.Visible() {
 			return tea.Batch(
 				m.checkNetworksCmd(m.lastSnapshot),
-				tickCmd(),
+				tickCmd(m.pollGen),
 			)
 		}
-		return tickCmd()
+		return tickCmd(m.pollGen)
 
 	case PollRetryMsg:
-		return tickCmd()
+		// Deliberately no re-arm. The TickMsg handler above always schedules
+		// the next tick, so re-arming here as well gives one beat two
+		// successors — and each of those does the same, so the poll rate does
+		// not merely double, it doubles again on every beat.
+		return nil
 
 	case NetworkDeletedMsg:
 		if msg.Err != nil {

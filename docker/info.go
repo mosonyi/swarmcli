@@ -209,6 +209,26 @@ func GetSwarmCPUUsage() (string, error) {
 	return result, nil
 }
 
+// memUsageNoCache is the memory figure `docker stats` reports: the cgroup's
+// usage less the page cache, which is reclaimable and so is not the container's
+// working set. cgroup v1 names that quantity total_inactive_file and cgroup v2
+// names it inactive_file; either is subtracted only when it is smaller than
+// Usage, which is how docker/cli guards a counter the host did not supply.
+//
+// Without the subtraction the header reads high — by the whole page cache — and
+// disagrees with `docker stats` and with every other view of the same number.
+func memUsageNoCache(mem container.MemoryStats) uint64 {
+	// cgroup v1
+	if v, isCgroup1 := mem.Stats["total_inactive_file"]; isCgroup1 && v < mem.Usage {
+		return mem.Usage - v
+	}
+	// cgroup v2
+	if v := mem.Stats["inactive_file"]; v < mem.Usage {
+		return mem.Usage - v
+	}
+	return mem.Usage
+}
+
 // GetSwarmMemUsage returns actual memory usage across running containers.
 func GetSwarmMemUsage() (string, error) {
 	c, err := GetClient()
@@ -269,7 +289,7 @@ func GetSwarmMemUsage() (string, error) {
 				return
 			}
 
-			results <- memResult{usage: int64(s.MemoryStats.Usage)}
+			results <- memResult{usage: int64(memUsageNoCache(s.MemoryStats))}
 		}(cont.ID)
 	}
 
@@ -387,7 +407,7 @@ func GetSwarmResourceUsage() (cpuPct string, memPct string, err error) {
 				cpuPct = (cpuDelta / systemDelta) * onlineCPUs * 100.0
 			}
 
-			results <- result{cpuPercent: cpuPct, memUsage: int64(s.MemoryStats.Usage)}
+			results <- result{cpuPercent: cpuPct, memUsage: int64(memUsageNoCache(s.MemoryStats))}
 		}(cont.ID)
 	}
 

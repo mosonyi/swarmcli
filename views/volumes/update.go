@@ -91,13 +91,20 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.handleVolumesLoaded(msg)
 
 	case TickMsg:
-		if m.visible && m.state == stateReady && !m.errorDialogActive {
-			return tea.Batch(m.checkVolumesCmd(m.lastSnapshot), tickCmd())
+		if msg.Gen != m.pollGen {
+			return nil // a leftover from an earlier entry — see OnEnter
 		}
-		return tickCmd()
+		if m.visible && m.state == stateReady && !m.errorDialogActive {
+			return tea.Batch(m.checkVolumesCmd(m.lastSnapshot), tickCmd(m.pollGen))
+		}
+		return tickCmd(m.pollGen)
 
 	case PollRetryMsg:
-		return tickCmd()
+		// Deliberately no re-arm. The TickMsg handler above always schedules
+		// the next tick, so re-arming here as well gives one beat two
+		// successors — and each of those does the same, so the poll rate does
+		// not merely double, it doubles again on every beat.
+		return nil
 
 	case tea.KeyMsg:
 		if m.errorDialogActive {
