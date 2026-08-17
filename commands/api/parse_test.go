@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	_ "github.com/Eldara-Tech/swarmcli/commands/command"
+	_ "github.com/Eldara-Tech/swarmcli/commands/command/charts"
 	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker"
 	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker/config"
 	_ "github.com/Eldara-Tech/swarmcli/commands/command/docker/network"
@@ -157,6 +158,43 @@ func TestParseInput_UnknownFlagRejected(t *testing.T) {
 	_, _, err := ParseInput("node --bogus")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unknown flag --bogus for :node")
+}
+
+// :charts takes no flags, so its declared-but-flagless spec must reject every
+// one of them. A command that declares no spec at all skips validateFlags
+// instead, which is the failure this guards against.
+func TestParseInput_ChartsIsStrict(t *testing.T) {
+	cmd, _, err := ParseInput("charts")
+	require.NoError(t, err)
+	require.Equal(t, "charts", cmd.Name())
+
+	_, _, err = ParseInput("charts --bogus")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unknown flag --bogus for :charts")
+}
+
+// ":contexts" is the first command declaring a flag, so its spec is what lets
+// --host through strict validation and consume the following token.
+func TestParseInput_ContextsUpdateFlags(t *testing.T) {
+	cmd, a, err := ParseInput("contexts update prod --host tcp://10.0.0.7:2376")
+	require.NoError(t, err)
+	require.Equal(t, "contexts", cmd.Name())
+	require.Equal(t, []string{"update", "prod"}, a.Positionals)
+	require.Equal(t, "tcp://10.0.0.7:2376", a.Get("host"))
+
+	_, _, err = ParseInput("contexts update prod --hosts tcp://10.0.0.7:2376")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unknown flag --hosts for :contexts")
+}
+
+// Aliases resolve to the primary's spec, so :ctx accepts --host too.
+func TestParseInput_ContextAliasesInheritFlags(t *testing.T) {
+	for _, name := range []string{"context", "ctx"} {
+		_, a, err := ParseInput(name + " update prod --host tcp://10.0.0.7:2376")
+		require.NoError(t, err, name)
+		require.Equal(t, "tcp://10.0.0.7:2376", a.Get("host"), name)
+		require.Equal(t, []string{"update", "prod"}, a.Positionals, name)
+	}
 }
 
 func TestParseInput_PassthroughSkipsValidation(t *testing.T) {

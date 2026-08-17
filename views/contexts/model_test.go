@@ -29,8 +29,7 @@ type mockContextOps struct {
 	createContextFn              func(name, dockerHost string) error
 	createContextWithTLSFn       func(name, dockerHost, tlsPath string, skipTLSVerify bool) error
 	createContextWithCertFilesFn func(name, description, dockerHost, caFile, certFile, keyFile string, skipTLSVerify bool) error
-	updateContextDescriptionFn   func(name, description string) error
-	updateContextWithCertFilesFn func(name, description, dockerHost, caFile, certFile, keyFile string, skipTLSVerify bool) error
+	updateContextEndpointFn      func(name, description, dockerHost string) error
 }
 
 func (m *mockContextOps) ListContexts() ([]docker.ContextInfo, error) {
@@ -69,11 +68,8 @@ func (m *mockContextOps) CreateContextWithTLS(name, dockerHost, tlsPath string, 
 func (m *mockContextOps) CreateContextWithCertFiles(name, description, dockerHost, caFile, certFile, keyFile string, skipTLSVerify bool) error {
 	return m.createContextWithCertFilesFn(name, description, dockerHost, caFile, certFile, keyFile, skipTLSVerify)
 }
-func (m *mockContextOps) UpdateContextDescription(name, description string) error {
-	return m.updateContextDescriptionFn(name, description)
-}
-func (m *mockContextOps) UpdateContextWithCertFiles(name, description, dockerHost, caFile, certFile, keyFile string, skipTLSVerify bool) error {
-	return m.updateContextWithCertFilesFn(name, description, dockerHost, caFile, certFile, keyFile, skipTLSVerify)
+func (m *mockContextOps) UpdateContextEndpoint(name, description, dockerHost string) error {
+	return m.updateContextEndpointFn(name, description, dockerHost)
 }
 
 // Verify interface compliance
@@ -135,8 +131,7 @@ func noopContextOps() *mockContextOps {
 		createContextFn:              func(_, _ string) error { return nil },
 		createContextWithTLSFn:       func(_, _, _ string, _ bool) error { return nil },
 		createContextWithCertFilesFn: func(_, _, _, _, _, _ string, _ bool) error { return nil },
-		updateContextDescriptionFn:   func(_, _ string) error { return nil },
-		updateContextWithCertFilesFn: func(_, _, _, _, _, _ string, _ bool) error { return nil },
+		updateContextEndpointFn:      func(_, _, _ string) error { return nil },
 	}
 }
 
@@ -172,6 +167,21 @@ func fakeContexts(names ...string) []docker.ContextInfo {
 		}
 	}
 	return ctxs
+}
+
+// batchMsgs runs a command and returns every message it produced, flattening a
+// tea.Batch so a test can assert on one member of it.
+func batchMsgs(cmd tea.Cmd) []tea.Msg {
+	msg := runCmd(cmd)
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		return []tea.Msg{msg}
+	}
+	msgs := make([]tea.Msg, 0, len(batch))
+	for _, c := range batch {
+		msgs = append(msgs, runCmd(c))
+	}
+	return msgs
 }
 
 func loadContexts(m *Model, ctxs []docker.ContextInfo) {

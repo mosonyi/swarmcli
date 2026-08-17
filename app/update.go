@@ -431,9 +431,9 @@ func (m *Model) updateForResize(msg tea.WindowSizeMsg) tea.Cmd {
 		usableHeight = msg.Height
 	} else {
 		// Normal mode:
-		// - Width: subtract 4 for frame borders/padding
+		// - Width: subtract what the frame spends on itself
 		// - Height: pass full height, handleViewResize will subtract systeminfo header
-		usableWidth = msg.Width - 4
+		usableWidth = msg.Width - ui.FrameChromeColumns
 		usableHeight = msg.Height
 	}
 	// If an input bar is visible, reserve its lines so the main view is reduced
@@ -589,6 +589,17 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}); ok {
 			if configsView.IsInUsedByView() {
 				// Let the configs view handle esc to close UsedBy view
+				cmd := m.currentView.Update(msg)
+				return m, cmd
+			}
+		}
+		// Check if the current view has an expanded row to step out of first
+		// (charts: from a child row back to the release, then collapse it)
+		if expandableView, ok := m.currentView.(interface {
+			IsRowExpanded() bool
+		}); ok {
+			if expandableView.IsRowExpanded() {
+				// Let the view handle esc to walk back out of the expansion
 				cmd := m.currentView.Update(msg)
 				return m, cmd
 			}

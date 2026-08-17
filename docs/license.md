@@ -302,6 +302,6 @@ verification is local and offline. No network call is made for license
 validation, and none is possible — an air-gapped swarm activates exactly like
 a connected one. The unrelated CE version-check behaviour (a single GET to
 `https://swarmcli.io/api/v1/version` at startup) can be disabled with
-`SWARMCLI_DISABLE_VERSION_CHECK=true`; see the
-[README](../README.md#environment-variables).
+`SWARMCLI_DISABLE_VERSION_CHECK=true`; see
+[Configuration](configuration.md#environment-variables).
 

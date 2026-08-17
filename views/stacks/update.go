@@ -239,6 +239,19 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.confirmDialog.CheckboxChecked = true // Checked by default
 		return nil
 
+	case ChartJumpMsg:
+		if msg.ChartRelease == "" {
+			m.showToast(fmt.Sprintf("Stack %q is not managed by a chart release", msg.StackName))
+			return nil
+		}
+		release := msg.ChartRelease
+		return func() tea.Msg {
+			return view.NavigateToMsg{
+				ViewName: view.NameCharts,
+				Payload:  map[string]any{"release": release},
+			}
+		}
+
 	case editorContentMsg:
 		preview := msg.Content
 		if len(preview) > 100 {
@@ -445,6 +458,15 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					m.selectedTaskIndex = -1
 					m.setRenderItem()
 				}
+			}
+		}
+
+		// 'g' goes to the chart release this stack belongs to, if any.
+		// Lowercase because capitals in this view are its sort keys, and 'c'
+		// is already create-stack.
+		if msg.String() == "g" {
+			if m.List.Cursor < len(m.List.Filtered) {
+				return m.chartJumpCmd(m.List.Filtered[m.List.Cursor].Name)
 			}
 		}
 
@@ -1022,13 +1044,23 @@ func (m *Model) handleSaveDialogKey(msg tea.KeyMsg) tea.Cmd {
 // the stack name) and emits a StackDeleteIntentMsg so the confirm dialog can
 // warn. The lookup runs off the main loop so the UI never blocks on it.
 func (m *Model) stackDeleteIntentCmd(name string) tea.Cmd {
+	return m.chartReleaseOfStackCmd(name, func(release string) tea.Msg {
+		return StackDeleteIntentMsg{StackName: name, ChartRelease: release}
+	})
+}
+
+// chartReleaseOfStackCmd resolves whether a stack belongs to a chart release
+// and hands the answer to mk. Two callers need it — the delete guard and the
+// jump to the charts view — and the lookup runs off the main loop either way,
+// so the UI never blocks on a config listing.
+func (m *Model) chartReleaseOfStackCmd(name string, mk func(release string) tea.Msg) tea.Cmd {
 	configOps := m.deps.Configs
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), userActionTimeout)
 		defer cancel()
 		release := ""
 		if cfgs, err := configOps.ListConfigs(ctx); err != nil {
-			l().Warnf("stackDeleteIntentCmd: ListConfigs failed: %v", err)
+			l().Warnf("chartReleaseOfStackCmd: ListConfigs failed: %v", err)
 		} else {
 			for _, c := range cfgs {
 				lbl := c.Spec.Labels
@@ -1040,8 +1072,16 @@ func (m *Model) stackDeleteIntentCmd(name string) tea.Cmd {
 				}
 			}
 		}
-		return StackDeleteIntentMsg{StackName: name, ChartRelease: release}
+		return mk(release)
 	}
+}
+
+// chartJumpCmd opens the charts view on the release that owns this stack, or
+// reports that nothing owns it.
+func (m *Model) chartJumpCmd(name string) tea.Cmd {
+	return m.chartReleaseOfStackCmd(name, func(release string) tea.Msg {
+		return ChartJumpMsg{StackName: name, ChartRelease: release}
+	})
 }
 
 func (m *Model) saveStackToFileCmd(stackName, filePath string) tea.Cmd {
@@ -1625,6 +1665,7 @@ func GetStacksHelpContent() []helpview.HelpCategory {
 				{Keys: "<s>", Description: "Save stack YAML to file"},
 				{Keys: "<p>", Description: "Show tasks for Stack"},
 				{Keys: "<n>", Description: "Create new stack"},
+				{Keys: "<g>", Description: "Go to the chart release this stack belongs to"},
 				{Keys: "<ctrl+d>", Description: "Delete stack"},
 				{Keys: "</>", Description: "Filter"},
 			},

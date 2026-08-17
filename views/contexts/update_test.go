@@ -154,6 +154,18 @@ func TestUpdate_ContextUpdated_Success(t *testing.T) {
 	require.Contains(t, m.GetSuccess(), "ctx1")
 	require.True(t, m.IsLoading())
 	require.NotNil(t, cmd)
+	// Nothing moved under the active client, so no reconnect is requested.
+	require.NotContains(t, batchMsgs(cmd), ContextChangedNotification{})
+}
+
+// A moved endpoint on the active context has to reach the app layer, which is
+// what drops the cached client and snapshot built for the old daemon.
+func TestUpdate_ContextUpdated_Reconnects(t *testing.T) {
+	m := testModel()
+	m.editDialogActive = true
+	m.editContextName = "ctx1"
+	cmd := m.Update(ContextUpdatedMsg{ContextName: "ctx1", Reconnect: true, Success: true})
+	require.Contains(t, batchMsgs(cmd), ContextChangedNotification{})
 }
 
 func TestUpdate_ContextUpdated_Error(t *testing.T) {
@@ -389,7 +401,19 @@ func TestKey_Edit_OpensDialog(t *testing.T) {
 	cmd := m.Update(key("e"))
 	require.True(t, m.editDialogActive)
 	require.Equal(t, "ctx1", m.editContextName)
+	require.Equal(t, "desc-ctx1", m.editDescInput.Value())
+	require.Equal(t, "tcp://ctx1:2375", m.editHostInput.Value())
 	require.NotNil(t, cmd) // textinput.Blink
+}
+
+// Docker reserves the name, so the form would never save.
+func TestKey_Edit_DefaultContext_Refused(t *testing.T) {
+	m := testModel()
+	loadContexts(m, fakeContexts(docker.DefaultContextName))
+	m.Update(key("e"))
+	require.False(t, m.editDialogActive)
+	require.True(t, m.errorDialogActive)
+	require.Equal(t, docker.ErrDefaultContextImmutable.Error(), m.GetError())
 }
 
 func TestKey_Delete_CurrentContext_Error(t *testing.T) {
@@ -706,26 +730,101 @@ func TestEditDialog_Esc_Closes(t *testing.T) {
 	require.Equal(t, "", m.editContextName)
 }
 
+// editing opens the dialog on the first context and applies edits to it.
+func editing(t *testing.T, ops *mockContextOps, edit func(m *Model)) tea.Msg {
+	t.Helper()
+	m := testModel(func(m *Model) { m.deps.Contexts = ops })
+	loadContexts(m, fakeContexts("ctx1", "ctx2"))
+	m.Update(key("e"))
+	edit(m)
+	return runCmd(m.Update(key("enter")))
+}
+
 func TestEditDialog_Enter_Submit(t *testing.T) {
-	var updatedName, updatedDesc string
+	var updatedName, updatedDesc, updatedHost string
 	ops := noopContextOps()
-	ops.updateContextDescriptionFn = func(name, desc string) error {
-		updatedName = name
-		updatedDesc = desc
+	ops.updateContextEndpointFn = func(name, desc, host string) error {
+		updatedName, updatedDesc, updatedHost = name, desc, host
 		return nil
 	}
-	m := testModel(func(m *Model) {
-		m.deps.Contexts = ops
+	msg := editing(t, ops, func(m *Model) {
+		m.editDescInput.SetValue("new desc")
+		m.editHostInput.SetValue("tcp://10.0.0.7:2376")
 	})
-	m.editDialogActive = true
-	m.editContextName = "ctx1"
-	m.editDescInput.SetValue("new desc")
-	cmd := m.Update(key("enter"))
-	require.NotNil(t, cmd)
-	msg := runCmd(cmd)
 	require.IsType(t, ContextUpdatedMsg{}, msg)
 	require.Equal(t, "ctx1", updatedName)
 	require.Equal(t, "new desc", updatedDesc)
+	require.Equal(t, "tcp://10.0.0.7:2376", updatedHost)
+	// fakeContexts marks the first context current, and its endpoint moved.
+	require.True(t, msg.(ContextUpdatedMsg).Reconnect)
+}
+
+// An unchanged host must not reach Docker: passing --docker replaces the whole
+// endpoint and resets the TLS material stored for it.
+func TestEditDialog_Enter_DescriptionOnly_LeavesEndpointAlone(t *testing.T) {
+	var updatedHost string
+	called := false
+	ops := noopContextOps()
+	ops.updateContextEndpointFn = func(_, _, host string) error {
+		called, updatedHost = true, host
+		return nil
+	}
+	msg := editing(t, ops, func(m *Model) { m.editDescInput.SetValue("new desc") })
+	require.True(t, called)
+	require.Equal(t, "", updatedHost)
+	require.False(t, msg.(ContextUpdatedMsg).Reconnect)
+}
+
+// Docker ignores an empty --description, so reporting success would be a lie.
+func TestEditDialog_Enter_ClearDescription_Refused(t *testing.T) {
+	ops := noopContextOps()
+	ops.updateContextEndpointFn = func(_, _, _ string) error {
+		t.Fatal("update must not be attempted")
+		return nil
+	}
+	m := testModel(func(m *Model) { m.deps.Contexts = ops })
+	loadContexts(m, fakeContexts("ctx1"))
+	m.Update(key("e"))
+	m.editDescInput.SetValue("")
+	require.Nil(t, m.Update(key("enter")))
+	require.Contains(t, m.GetError(), "cannot clear a description")
+	require.True(t, m.editDialogActive)
+}
+
+func TestEditDialog_Enter_HostRequired(t *testing.T) {
+	m := testModel()
+	loadContexts(m, fakeContexts("ctx1"))
+	m.Update(key("e"))
+	m.editHostInput.SetValue("")
+	require.Nil(t, m.Update(key("enter")))
+	require.Contains(t, m.GetError(), "Host is required")
+	require.True(t, m.editDialogActive)
+}
+
+func TestEditDialog_Enter_NoChanges_Closes(t *testing.T) {
+	ops := noopContextOps()
+	ops.updateContextEndpointFn = func(_, _, _ string) error {
+		t.Fatal("update must not be attempted")
+		return nil
+	}
+	m := testModel(func(m *Model) { m.deps.Contexts = ops })
+	loadContexts(m, fakeContexts("ctx1"))
+	m.Update(key("e"))
+	require.Nil(t, m.Update(key("enter")))
+	require.False(t, m.editDialogActive)
+}
+
+func TestEditDialog_Tab_MovesFocus(t *testing.T) {
+	m := testModel()
+	loadContexts(m, fakeContexts("ctx1"))
+	m.Update(key("e"))
+	require.Equal(t, 0, m.editInputFocus)
+	m.Update(key("tab"))
+	require.Equal(t, 1, m.editInputFocus)
+	require.True(t, m.editHostInput.Focused())
+	m.Update(key("tab"))
+	require.Equal(t, 0, m.editInputFocus)
+	require.True(t, m.editDescInput.Focused())
 }
 
 func TestEditDialog_Enter_ClearsError(t *testing.T) {

@@ -5,19 +5,17 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/Eldara-Tech/swarmcli/charts"
 	"github.com/Eldara-Tech/swarmcli/utils/textdiff"
 )
 
 // chartsApply converges the swarm to a declarative release manifest.
-func chartsApply(args []string) int {
-	pos, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsApply(c chartsCmd, args []string) int {
+	pos, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	// apply's -f names the release manifest, not a values file: per-release values
 	// live inside the manifest. A bare positional works too.
@@ -25,10 +23,6 @@ func chartsApply(args []string) int {
 	if len(paths) != 1 {
 		return usageErr("charts apply -f <release-file>")
 	}
-	if err := rejectUnsupported(f); err != nil {
-		return usageErr(err.Error())
-	}
-
 	rf, err := charts.LoadReleaseFile(paths[0])
 	if err != nil {
 		return fail(err)
@@ -112,44 +106,6 @@ func chartsApply(args []string) int {
 	}
 	reportUnclaimed(plan)
 	return 0
-}
-
-// rejectUnsupported fails on flags apply does not honour. The charts flag set is
-// global, so every subcommand parses every flag and silently ignores whatever it
-// does not read. For a command whose entire contract is "the file is the only
-// source of truth", quietly discarding --set or --version would be a correctness
-// bug, not a cosmetic one.
-func rejectUnsupported(f flags) error {
-	var bad []string
-	if len(f.sets) > 0 {
-		bad = append(bad, "--set")
-	}
-	if len(f.setFiles) > 0 {
-		bad = append(bad, "--set-file")
-	}
-	if f.version != "" {
-		bad = append(bad, "--version")
-	}
-	if f.reuseValues {
-		bad = append(bad, "--reuse-values")
-	}
-	if f.install {
-		bad = append(bad, "--install")
-	}
-	if f.purge {
-		bad = append(bad, "--purge-volumes")
-	}
-	if f.requirements {
-		bad = append(bad, "--requirements")
-	}
-	if f.revision != 0 {
-		bad = append(bad, "--revision")
-	}
-	if len(bad) == 0 {
-		return nil
-	}
-	return fmt.Errorf("%s not supported by apply: the release file is the only source of truth "+
-		"(set chart versions and values there)", strings.Join(bad, ", "))
 }
 
 func printPlan(plan *charts.Plan, withDiff bool) {
@@ -253,10 +209,10 @@ func reportUnmanaged(plan *charts.Plan) {
 // chartsOutdated compares every installed release against the newest chart
 // version its repositories offer. It is the human-facing complement to an
 // automated updater watching the release file.
-func chartsOutdated(args []string) int {
-	_, f, err := parseArgs(args)
-	if err != nil {
-		return usageErr(err.Error())
+func chartsOutdated(c chartsCmd, args []string) int {
+	_, f, code := parse(c, args)
+	if code >= 0 {
+		return code
 	}
 	store, code := newStore(f)
 	if code >= 0 {

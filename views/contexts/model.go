@@ -70,7 +70,12 @@ type Model struct {
 	lastCertBrowserPath   string // Remember last directory used in cert file browser
 	editDialogActive      bool
 	editContextName       string // Name of context being edited (immutable)
+	editContextDesc       string // Description the dialog opened with
+	editContextHost       string // Host the dialog opened with
+	editContextCurrent    bool   // Whether the context being edited is the active one
 	editDescInput         textinput.Model
+	editHostInput         textinput.Model
+	editInputFocus        int // 0 = description, 1 = host
 }
 
 func New() *Model {
@@ -122,6 +127,12 @@ func New() *Model {
 	editDescInput.CharLimit = 200
 	editDescInput.Width = 50
 
+	editHostInput := textinput.New()
+	editHostInput.Placeholder = "tcp://host:2376"
+	editHostInput.Prompt = "Host: "
+	editHostInput.CharLimit = 256
+	editHostInput.Width = 50
+
 	// Initialize an internal viewport for the filterable list
 	vp := viewport.New(80, 20)
 	vp.SetContent("")
@@ -141,6 +152,7 @@ func New() *Model {
 		createCertInput:  createCertInput,
 		createKeyInput:   createKeyInput,
 		editDescInput:    editDescInput,
+		editHostInput:    editHostInput,
 		sortField:        SortByName,
 		sortAscending:    true,
 	}
@@ -430,7 +442,36 @@ func (m *Model) updateCreateFocus() {
 		m.createKeyInput.Focus()
 		// case 3 is the TLS checkbox, no focus needed
 	}
-} // ShortHelpItems returns the help items for the view
+}
+
+// updateEditFocus updates focus state for edit dialog inputs
+func (m *Model) updateEditFocus() {
+	m.editDescInput.Blur()
+	m.editHostInput.Blur()
+
+	switch m.editInputFocus {
+	case 0:
+		m.editDescInput.Focus()
+	case 1:
+		m.editHostInput.Focus()
+	}
+}
+
+// closeEditDialog clears the edit dialog's state.
+func (m *Model) closeEditDialog() {
+	m.editDialogActive = false
+	m.editContextName = ""
+	m.editContextDesc = ""
+	m.editContextHost = ""
+	m.editContextCurrent = false
+	m.editInputFocus = 0
+	m.editDescInput.Blur()
+	m.editDescInput.SetValue("")
+	m.editHostInput.Blur()
+	m.editHostInput.SetValue("")
+}
+
+// ShortHelpItems returns the help items for the view
 func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 	return []helpbar.HelpEntry{
 		{Key: "↑/↓", Desc: "Navigate"},

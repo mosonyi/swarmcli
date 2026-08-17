@@ -5,7 +5,9 @@ package charts
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -103,6 +105,7 @@ func Lint(ch *Chart, engine string, files [][]byte, sets []string) []LintFinding
 		return out
 	}
 	lintHealthcheckMonitor(manifest, add)
+	lintInlineSecrets(manifest, add)
 	if _, err := RenderRequirements(ch, ctx); err != nil {
 		add(LintError, "requirements.yaml: %v", err)
 	}
@@ -248,4 +251,147 @@ func isHealthcheckNone(test any) bool {
 		return len(v) > 0 && v[0] == "NONE"
 	}
 	return false
+}
+
+// secretishKey matches an environment variable name that names a credential.
+//
+// It is deliberately a rule about the key rather than the value: what makes
+// DB_PASSWORD: hunter2 wrong is the key, and no amount of looking at "hunter2"
+// establishes that. Value-shaped detection — entropy, token prefixes — fires on
+// image digests and generated identifiers and would make the rule noise. The one
+// value-shaped exception is a PEM private key, which is unambiguous wherever it
+// turns up.
+var secretishKey = regexp.MustCompile(`(?i)(password|passwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential)`)
+
+// pemPrivateKey is the opening line of any PEM-armoured private key. A
+// CERTIFICATE block is deliberately not matched: it is public material and
+// inlining one is legitimate.
+var pemPrivateKey = regexp.MustCompile(`-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----`)
+
+// runtimeRef is a value the deploy resolves rather than one the manifest
+// carries: a ${VAR}/$VAR interpolation substituted at deploy time.
+var runtimeRef = regexp.MustCompile(`^\$+\{?[A-Za-z_][A-Za-z0-9_]*\}?$`)
+
+// envPair is one entry of a service's environment: block.
+type envPair struct{ key, value string }
+
+// lintInlineSecrets warns when a service's environment: block carries credential
+// material as a literal.
+//
+// Such a value is stored verbatim twice over — in the release record Config and
+// in the swarm service spec — and both are readable by anyone with Docker
+// access, so the credential is disclosed to every operator who can run `docker
+// service inspect`. The convention charts are expected to follow instead is an
+// external Docker secret read from /run/secrets/<name>, either through an image's
+// *_FILE variable or in the service's own command.
+//
+// A warning, not an error, and deliberately so. The engine cannot tell a
+// credential from a value that merely reads like one, and refusing the deploy on
+// a name-matching heuristic would break third-party charts over a guess. It also
+// fires on the *shape* rather than the rendered value: a chart whose
+// DB_PASSWORD defaults to "" still warns, because the key is what will carry the
+// credential once an operator supplies one, and that is precisely the chart worth
+// warning its author about.
+//
+// Scope is environment: alone. command:, entrypoint: and healthcheck.test: are
+// not scanned, because the sanctioned pattern — reading /run/secrets/<name> in a
+// command wrapper — lives there, and a rule that flagged it would fire on every
+// chart that does the right thing.
+func lintInlineSecrets(manifest string, add func(LintSeverity, string, ...any)) {
+	var top map[string]yaml.Node
+	if err := yaml.Unmarshal([]byte(manifest), &top); err != nil {
+		return // the manifest already rendered; shape problems are not lint's business here
+	}
+	services, ok := top["services"]
+	if !ok {
+		return
+	}
+	for name, svc := range entries(services) {
+		var s struct {
+			Environment yaml.Node `yaml:"environment"`
+		}
+		if err := svc.Decode(&s); err != nil {
+			continue
+		}
+		for _, kv := range envPairs(s.Environment) {
+			reason, bad := inlineSecret(kv.key, kv.value)
+			if !bad {
+				continue
+			}
+			// The PEM rule fires before the _FILE exemption, so the key named
+			// here may already end in _FILE and appending another would name a
+			// variable no image reads.
+			fileVar := kv.key
+			if !strings.HasSuffix(strings.ToUpper(fileVar), "_FILE") {
+				fileVar += "_FILE"
+			}
+			add(LintWarning,
+				"services.%s.environment.%s %s. The manifest is stored verbatim in the release record and in the service spec, both readable by anyone with Docker access — reference an external Docker secret instead and read it from /run/secrets/<name>, through the image's %s variable or in the service's command",
+				name, kv.key, reason, fileVar)
+		}
+	}
+}
+
+// inlineSecret reports whether an environment entry carries credential material,
+// and why.
+//
+// The value is examined but never named in the finding it returns. A lint
+// warning is printed to a terminal and scraped into CI logs, so a rule that
+// quoted the secret it found would disclose it further than the manifest that
+// prompted the warning did.
+func inlineSecret(key, value string) (string, bool) {
+	// A value resolved elsewhere is not material, whatever the key is called:
+	// ${VAR} is substituted at deploy time, and /run/secrets/... is already the
+	// convention this rule exists to ask for.
+	if runtimeRef.MatchString(value) || strings.HasPrefix(value, "/run/secrets/") {
+		return "", false
+	}
+	// Checked before the _FILE exemption below, because a *_FILE variable
+	// holding a PEM block is not naming a path — it is the key material itself,
+	// under a name chosen to suggest otherwise.
+	if pemPrivateKey.MatchString(value) {
+		return "inlines a PEM private key", true
+	}
+	if strings.HasSuffix(strings.ToUpper(key), "_FILE") {
+		return "", false
+	}
+	if secretishKey.MatchString(key) {
+		return "names a credential", true
+	}
+	return "", false
+}
+
+// envPairs flattens an environment: block into key/value pairs. Compose accepts
+// both a mapping and a KEY=value sequence and a chart may render either, so both
+// are read.
+//
+// It walks yaml.Nodes rather than decoding into a map because an environment
+// block legitimately mixes scalar types — PORT: 8080 next to HOST: db — and
+// decoding into map[string]string fails on the whole block at the first integer,
+// taking every sibling with it. A node's raw .Value is the scalar text whatever
+// the type, and works for a non-string key too.
+func envPairs(node yaml.Node) []envPair {
+	var out []envPair
+	switch node.Kind {
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			k, v := node.Content[i], node.Content[i+1]
+			if v.Kind != yaml.ScalarNode {
+				continue
+			}
+			out = append(out, envPair{key: k.Value, value: v.Value})
+		}
+	case yaml.SequenceNode:
+		for _, item := range node.Content {
+			if item.Kind != yaml.ScalarNode {
+				continue
+			}
+			// "KEY" with no "=" passes the host's own value through at deploy
+			// time; there is no literal in the manifest to warn about.
+			if k, v, ok := strings.Cut(item.Value, "="); ok {
+				out = append(out, envPair{key: k, value: v})
+			}
+		}
+	}
+	return out
 }

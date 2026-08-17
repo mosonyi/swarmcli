@@ -58,6 +58,14 @@ type StackDeleteIntentMsg struct {
 	ChartRelease string
 }
 
+// ChartJumpMsg carries the result of checking, when "g" is pressed, whether the
+// selected stack belongs to a chart release. ChartRelease is non-empty when it
+// does, and the view then navigates to the charts browser on that release.
+type ChartJumpMsg struct {
+	StackName    string
+	ChartRelease string
+}
+
 // editorContentMsg is sent when editor returns content
 type editorContentMsg struct {
 	Content         string

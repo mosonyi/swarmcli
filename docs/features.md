@@ -5,8 +5,8 @@ Copyright © 2026 Eldara Tech
 
 # Pro features
 
-Three license-gated capabilities ride on top of the standard SwarmCLI TUI.
-All three require:
+Four license-gated capabilities ride on top of the standard SwarmCLI TUI.
+All of them require:
 
 - A valid (or in-grace) Business Edition license — see [License](license.md).
 - A managed Docker context (i.e. a Swarm that has been put through
@@ -37,6 +37,17 @@ scrolls away with the output like any other line:
 ```
 <<SWC-Shell>> Service: <stack>/<service> | Host: <node>        ctrl+] exit
 ```
+
+For as long as the session is attached, your terminal's title names it and the
+key that leaves it:
+
+```
+SwarmCLI: <stack>/<service> — ctrl+] detach
+```
+
+Unlike the header, the title does not scroll away, and it stays put while a
+full-screen program is running. Your own title comes back when you detach.
+Terminals that show no title are the exception, as is `vim`, which sets its own.
 
 To leave the shell:
 
@@ -249,14 +260,90 @@ See [RBAC — Roles](rbac.md#roles).
 | `forward closed: agent disconnected` | The on-node agent is down or its network path broke. Check `:bootstrap --check`. |
 | `forward target task is no longer running` | The container restarted or moved nodes. Reopen the forward. |
 
+## Container statistics
+
+Press `t` on any row in the Services view to graph one container's CPU,
+memory, network and block I/O over time. Press `p` first to expand a
+service's tasks and the graph opens on the replica you highlighted;
+from the service row it opens on the first.
+
+The last fifteen minutes are already there when the view opens. Each
+node collects its containers' usage in the background while SwarmCLI is
+connected, so you are looking at what happened *before* you went to
+look — not at a graph that starts filling in from the moment you arrive.
+
+### Reading the view
+
+Four panes: **CPU**, **MEM**, **NET rx/tx** and **BLK r/w**. Each names
+its current, average and peak value for the span on screen.
+
+| Key | Action |
+|---|---|
+| `w` | Cycle the span: 1 minute → 5 minutes → 15 minutes |
+| `p` | Pause. The graph freezes so a spike can be read; press again to catch up |
+| `n` / `N` | Step to the next / previous replica of the same service |
+| `Esc` | Back |
+
+The memory pane is scaled to the container's **own** limit when its
+service declares one (`deploy.resources.limits.memory`), so the graph
+answers "how close is this to being killed". A container with no limit
+is scaled to its own peak instead, and the pane is titled `MEM` rather
+than `MEM / <limit>` — the daemon reports the whole host's memory as an
+unconstrained container's limit, and a percentage of that would tell you
+nothing about the container.
+
+CPU is the same figure `docker stats` reports, and is scaled by core
+count: a container fully using two cores reads 200%.
+
+Below about 90 columns the four panes stack into one column and as many
+as fit are drawn.
+
+### What is measured, and what is not
+
+A pane reads **`not reported by this host`** when the host does not
+publish that metric at all. That is deliberately distinct from a flat
+line at zero, which means the container really did nothing.
+
+Common reasons:
+
+| Pane | Why it may be unavailable |
+|---|---|
+| NET | The container runs on the host network, so it has no per-interface counters of its own. |
+| MEM, BLK | Memory and block I/O both come from cgroup controllers. If the controllers are not delegated to the container's cgroup, the daemon has nothing to report. This is usual under rootless Docker and under Docker-in-Docker, and happens on any host whose cgroup hierarchy does not enable `memory` and `io` for the slice Docker runs in. |
+
+To confirm it is the host rather than SwarmCLI, run `docker stats` against
+the same container on that node: it reads the same daemon fields, so it
+shows the same gaps. `docker info` also prints a warning line per missing
+controller (`No memory limit support`, and similar) at the end of its
+output.
+
+A container that restarts inside the window leaves a short gap rather
+than a spike: its counters begin again from zero, and a rate derived
+across that reset would be fiction.
+
+The graph is a viewer, not a monitoring system. Fifteen minutes is what
+the nodes hold; if you need history beyond that, or alerting, run a
+metrics stack (cAdvisor, Prometheus) alongside.
+
+### Failure modes
+
+| What you see | Cause |
+|---|---|
+| `Stats (BE)`, greyed out | No valid license; open `:license`. |
+| `Container statistics need up-to-date infrastructure` | The deployed agent predates this feature. Re-run `:bootstrap`. |
+| `Container statistics need a bootstrapped Docker context` | The current context talks to a daemon directly. `:contexts` to switch, or `:bootstrap`. |
+| `No samples yet` | The node has just started collecting. It fills in within a few seconds. |
+| `service … has no running tasks` | Nothing is running to measure. |
+
 ## Where the gates live
 
-All three features are license-gated — each is enabled only when the
+All four features are license-gated — each is enabled only when the
 active license grants it:
 
 - Shell
 - Reveal-secret
 - Port-forward
+- Container statistics
 
 Tier-to-feature mapping is centralised: today, both `be` and `trial`
-tiers grant all three features. See [License — Model](license.md#model).
+tiers grant all four features. See [License — Model](license.md#model).
