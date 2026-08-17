@@ -148,19 +148,27 @@ func TestScrollRightStopsAtTheEndOfTheText(t *testing.T) {
 		"so the tail is on screen rather than scrolled past")
 }
 
-// The Flex columns share a wide terminal's leftover between them, so the table
-// spans the width instead of packing into the left of it. Confining the whole
-// surplus to the trailing column was tried instead and reverted: it stops the
-// columns before it drifting apart by leaving the rest of the screen dead.
-func TestLayoutWidths_FlexColumnsShareTheLeftover(t *testing.T) {
+// Every column shares a wide terminal's leftover equally, so the table spans the
+// width and no gap in the row is wider than any other.
+//
+// Two narrower rules came first and each opened a hole where the surplus landed:
+// on the Flex columns, which put one in the middle of every row, and on a single
+// trailing column, which put the whole screen's worth at the right-hand end.
+func TestLayoutWidths_EveryColumnSharesTheLeftoverEqually(t *testing.T) {
 	items := []row{{a: "short", b: "kind", c: "x=1"}}
 
-	narrow := LayoutWidths(testCols(), items, 60, -1)
-	wide := LayoutWidths(testCols(), items, 200, -1)
+	narrow := LayoutWidths(oneFlexCols(), items, 60, -1)
+	wide := LayoutWidths(oneFlexCols(), items, 200, -1)
 
-	require.Greater(t, wide[0], narrow[0], "the flex columns still share the slack")
-	require.Greater(t, wide[2], narrow[2])
-	require.Equal(t, 200, sum(wide))
+	require.Equal(t, 200, sum(wide), "the row spans the width")
+	// The non-elastic columns grow too, and by the same amount as the elastic one
+	// — the rounding remainder is deliberately parked on the last column, where
+	// it is trailing margin rather than one gap wider than its neighbours.
+	grown := wide[0] - narrow[0]
+	require.Positive(t, grown)
+	require.Equal(t, grown, wide[1]-narrow[1], "a non-flex column takes the same share")
+	require.InDelta(t, grown, wide[2]-narrow[2], float64(len(wide)),
+		"and the last differs only by the rounding remainder parked on it")
 }
 
 // NaturalWidth must be the width at which LayoutWidths neither stretches nor
