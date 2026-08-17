@@ -112,16 +112,17 @@ func TestResetScrollOnCursorMove(t *testing.T) {
 		"scroll offset must reset when the cursor moves")
 }
 
-// Widening the terminal must not push the columns apart.
+// Widening the terminal must widen every gap by the same amount.
 //
-// Release names and chart refs are short, so flexing them meant a 200-column
-// terminal handed each half the leftover and opened a void in the middle of
-// every row. Only the trailing column grows, so every column up to it sits at
-// the same place whatever the width.
-func TestWideTerminalDoesNotSpreadTheColumns(t *testing.T) {
-	// Short values on purpose: that is when growing a middle column shows as a
-	// void. Both widths are wider than the natural content, so nothing shrinks
-	// and any difference is growth.
+// Two earlier rules put the leftover somewhere in particular — on the elastic
+// columns, then on the trailing one — and each opened a hole where it landed:
+// a void in the middle of every row, and two huge spaces after OWNER and DETAIL.
+// Every cell already fits at the natural width, so the surplus is air wherever
+// it goes; spread equally it is spacing rather than a hole.
+func TestWideTerminalWidensEveryGapEqually(t *testing.T) {
+	// Short values on purpose: that is when uneven padding shows as a void. Both
+	// widths are wider than the natural content, so nothing shrinks and any
+	// difference is growth.
 	short := map[string][]charts.Release{
 		"openclaw": deployed("openclaw", "openclaw", "0.1.0"),
 		"whoami":   deployed("whoami", "whoami", "0.1.9"),
@@ -138,12 +139,18 @@ func TestWideTerminalDoesNotSpreadTheColumns(t *testing.T) {
 	}
 
 	// Both widths carry the same column set (short values, so DETAIL and OWNER
-	// are affordable at each), and the columns before the growing one must not
-	// drift apart between them.
+	// are affordable at each), so every column's start moves right by the same
+	// per-column share of the extra 90 cells.
 	narrow := positions(150)
 	wide := positions(240)
-	require.Equal(t, narrow, wide,
-		"a wider terminal must feed the growing column, not spread the others")
+	gap := wide["REV"] - narrow["REV"]
+	require.Positive(t, gap, "a wider terminal must be filled, not left dead")
+	// Each column starts one more gap further right than the one before it, so
+	// the extra width is spacing rather than a hole after any single column.
+	for i, col := range []string{"STATUS", "HEALTH", "CHART", "LATEST"} {
+		require.Equal(t, gap*(i+2), wide[col]-narrow[col],
+			"%s must move by its position's share of equal gaps", col)
+	}
 
 	// And the row still spans the frame, so the selection highlight does too.
 	m := sized(testModel(), 240, 24)

@@ -18,21 +18,9 @@ type Column[T any] struct {
 	MinWidth int    // declared content floor (excludes the inter-column gap)
 	// Flex marks a column as elastic downwards: it gives up width first when the
 	// terminal is too narrow, and horizontally scrolls when truncated on a
-	// selected row.
+	// selected row. It says nothing about a terminal that is too wide — every
+	// column shares that leftover equally, see LayoutWidths.
 	Flex bool
-	// Grow marks the column that absorbs leftover width when the terminal is
-	// wider than the content needs.
-	//
-	// It is separate from Flex because the two are not the same property, and a
-	// table of short values makes that obvious: flexing NAME so a long one can
-	// scroll on an 80-column terminal also hands it half the slack on a
-	// 200-column one, opening a void in the middle of every row. Declaring Grow
-	// on the trailing column instead puts the leftover after the last cell,
-	// where it reads as margin.
-	//
-	// When no column declares Grow the Flex columns absorb the slack, which is
-	// what every view did before Grow existed.
-	Grow bool
 	Cell func(T) string // extracts the plain cell text (the closure may capture model state)
 }
 
@@ -145,8 +133,6 @@ func LayoutWidths[T any](cols []Column[T], items []T, totalWidth, sortCol int) [
 	content := make([]int, n)
 	floors := make([]int, n)
 	flex := make([]bool, n)
-	grow := make([]bool, n)
-	anyGrow := false
 	sum := 0
 	for i, c := range cols {
 		// Floor: the header label is never truncated by the renderer, so a column
@@ -174,8 +160,6 @@ func LayoutWidths[T any](cols []Column[T], items []T, totalWidth, sortCol int) [
 		floors[i] = fl
 		content[i] = w
 		flex[i] = c.Flex
-		grow[i] = c.Grow
-		anyGrow = anyGrow || c.Grow
 		sum += w
 	}
 
@@ -189,13 +173,7 @@ func LayoutWidths[T any](cols []Column[T], items []T, totalWidth, sortCol int) [
 	need := sum + ColGap*n
 	switch {
 	case need < totalWidth:
-		// Hand the leftover to the Grow columns, falling back to the Flex ones
-		// for a view that declares none — see Column.Grow.
-		absorb := grow
-		if !anyGrow {
-			absorb = flex
-		}
-		distributeSlack(content, absorb, totalWidth-need)
+		distributeSlack(content, totalWidth-need)
 	case need > totalWidth:
 		shrinkColumns(content, floors, flex, need-totalWidth)
 	}
@@ -241,26 +219,28 @@ func RenderRow[T any](cols []Column[T], widths []int, item T, scroll int, select
 	return strings.Join(cells, "")
 }
 
-// distributeSlack spreads leftover width across the flex columns, giving the
-// rounding remainder to the first flex column so it grows first.
-func distributeSlack(content []int, flex []bool, slack int) {
-	if slack <= 0 {
+// distributeSlack spreads leftover width equally across every column, so the gap
+// between each pair of columns grows by the same amount and the table fills the
+// terminal without opening a hole anywhere in the row.
+//
+// Equally, rather than onto the columns that carry the longest values: at any
+// width at or above the natural one every cell already fits, so the leftover is
+// air whichever column receives it. Concentrating it therefore buys no
+// information and only decides where the holes go — first on the Flex columns,
+// which put one in the middle of every row, then on a single trailing column,
+// which put the whole screen's worth at the right-hand end.
+//
+// The rounding remainder goes to the last column, where it is trailing margin
+// rather than one gap wider than its neighbours.
+func distributeSlack(content []int, slack int) {
+	if slack <= 0 || len(content) == 0 {
 		return
 	}
-	var idx []int
-	for i, f := range flex {
-		if f {
-			idx = append(idx, i)
-		}
-	}
-	if len(idx) == 0 {
-		return
-	}
-	per := slack / len(idx)
-	for _, i := range idx {
+	per := slack / len(content)
+	for i := range content {
 		content[i] += per
 	}
-	content[idx[0]] += slack % len(idx)
+	content[len(content)-1] += slack % len(content)
 }
 
 // shrinkColumns removes overflow width, taking from flex columns first and then

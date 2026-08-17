@@ -21,6 +21,16 @@ func testCols() []Column[row] {
 	}
 }
 
+// oneFlexCols is a second shape for the width invariants: a single elastic
+// column, so a rule that only holds when the slack divides evenly is caught.
+func oneFlexCols() []Column[row] {
+	return []Column[row]{
+		{Label: "NAME", MinWidth: 4, Flex: true, Cell: func(r row) string { return r.a }},
+		{Label: "KIND", MinWidth: 4, Cell: func(r row) string { return r.b }},
+		{Label: "LABELS", MinWidth: 6, Cell: func(r row) string { return r.c }},
+	}
+}
+
 func sum(xs []int) int {
 	t := 0
 	for _, x := range xs {
@@ -138,54 +148,27 @@ func TestScrollRightStopsAtTheEndOfTheText(t *testing.T) {
 		"so the tail is on screen rather than scrolled past")
 }
 
-// growCols separates the two elasticities: NAME gives up width when squeezed
-// and scrolls when truncated, while the trailing column takes the leftover.
-func growCols() []Column[row] {
-	return []Column[row]{
-		{Label: "NAME", MinWidth: 4, Flex: true, Cell: func(r row) string { return r.a }},
-		{Label: "KIND", MinWidth: 4, Cell: func(r row) string { return r.b }},
-		{Label: "LABELS", MinWidth: 6, Grow: true, Cell: func(r row) string { return r.c }},
-	}
-}
-
-// Slack goes to the Grow column, so the columns before it stay put however wide
-// the terminal gets. A table of short values is where that matters: growing a
-// middle column opens a void in the middle of every row.
-func TestLayoutWidths_GrowAbsorbsSlackNotFlex(t *testing.T) {
+// Every column shares a wide terminal's leftover equally, so the table spans the
+// width and no gap in the row is wider than any other.
+//
+// Two narrower rules came first and each opened a hole where the surplus landed:
+// on the Flex columns, which put one in the middle of every row, and on a single
+// trailing column, which put the whole screen's worth at the right-hand end.
+func TestLayoutWidths_EveryColumnSharesTheLeftoverEqually(t *testing.T) {
 	items := []row{{a: "short", b: "kind", c: "x=1"}}
 
-	narrow := LayoutWidths(growCols(), items, 60, -1)
-	wide := LayoutWidths(growCols(), items, 200, -1)
+	narrow := LayoutWidths(oneFlexCols(), items, 60, -1)
+	wide := LayoutWidths(oneFlexCols(), items, 200, -1)
 
-	require.Equal(t, narrow[0], wide[0], "the flex column must not absorb slack")
-	require.Equal(t, narrow[1], wide[1])
-	require.Greater(t, wide[2], narrow[2], "the grow column takes it instead")
-	require.Equal(t, 200, sum(wide), "and the row still spans the width")
-}
-
-// A view that declares no Grow keeps the behaviour it had before Grow existed,
-// so adding the field changed nothing for the views already using Flex.
-func TestLayoutWidths_FlexStillAbsorbsWhenNoGrowDeclared(t *testing.T) {
-	items := []row{{a: "short", b: "kind", c: "x=1"}}
-
-	narrow := LayoutWidths(testCols(), items, 60, -1)
-	wide := LayoutWidths(testCols(), items, 200, -1)
-
-	require.Greater(t, wide[0], narrow[0], "the flex columns still share the slack")
-	require.Greater(t, wide[2], narrow[2])
-	require.Equal(t, 200, sum(wide))
-}
-
-// Grow is about width the table does not need; it must not rescue a column from
-// shrinking when the terminal is too narrow for the content.
-func TestLayoutWidths_GrowColumnStillShrinksWhenNarrow(t *testing.T) {
-	items := []row{{a: "a-fairly-long-name-here", b: "kind", c: "team=platform,env=prod"}}
-
-	w := LayoutWidths(growCols(), items, 40, -1)
-	require.LessOrEqual(t, sum(w), 40)
-	for i, c := range growCols() {
-		require.GreaterOrEqual(t, w[i]-ColGap, displayWidth(c.Label), "column %d must still fit its label", i)
-	}
+	require.Equal(t, 200, sum(wide), "the row spans the width")
+	// The non-elastic columns grow too, and by the same amount as the elastic one
+	// — the rounding remainder is deliberately parked on the last column, where
+	// it is trailing margin rather than one gap wider than its neighbours.
+	grown := wide[0] - narrow[0]
+	require.Positive(t, grown)
+	require.Equal(t, grown, wide[1]-narrow[1], "a non-flex column takes the same share")
+	require.InDelta(t, grown, wide[2]-narrow[2], float64(len(wide)),
+		"and the last differs only by the rounding remainder parked on it")
 }
 
 // NaturalWidth must be the width at which LayoutWidths neither stretches nor
@@ -193,7 +176,7 @@ func TestLayoutWidths_GrowColumnStillShrinksWhenNarrow(t *testing.T) {
 func TestNaturalWidth_IsTheNoStretchNoSqueezeWidth(t *testing.T) {
 	items := []row{{a: "some-name", b: "kind", c: "team=platform"}}
 
-	for _, cols := range [][]Column[row]{testCols(), growCols()} {
+	for _, cols := range [][]Column[row]{testCols(), oneFlexCols()} {
 		natural := NaturalWidth(cols, items, -1)
 		require.Equal(t, natural, sum(LayoutWidths(cols, items, natural, -1)),
 			"at the natural width the layout is an identity")
