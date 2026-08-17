@@ -30,7 +30,7 @@ features a licence unlocks. On top of the Community Edition it adds:
 - [Bootstrap](bootstrap.md) — `:bootstrap` end-to-end: what gets deployed and how.
 - [Migration](migration.md) — moving an existing stack to application-layer mTLS (`:bootstrap --migrate`).
 - [RBAC](rbac.md) — managing users, roles, onboarding, and revocation.
-- [Features](features.md) — shell and reveal-secret in detail.
+- [Features](features.md) — shell, reveal-secret, port-forward and container statistics in detail.
 - [Volumes](volumes.md) — listing across nodes, create/delete/prune, in-volume file browser.
 - [Charts](../charts/README.md) — the chart package manager both editions ship: repositories, install/upgrade, and declarative releases (`charts apply`, `charts outdated`).
 - [Configuration](configuration.md) — environment variables and on-disk paths for both editions.
