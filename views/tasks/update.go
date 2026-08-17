@@ -34,20 +34,28 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		// Reapply sorting to maintain sort order after data refresh
 		m.applySorting()
-		// Continue polling
-		return tickCmd()
+		// No re-arm: only a tick arms a tick, so a load issued by OnEnter or the
+		// factory cannot start a second, parallel chain.
+		return nil
 
 	case TickMsg:
+		if msg.Gen != m.pollGen {
+			return nil // a leftover from an earlier entry — see OnEnter
+		}
 		l().Infof("TasksView: Received TickMsg, visible=%v", m.visible)
 		// Check for changes (this will return either a TasksLoadedMsg or PollRetryMsg)
 		if m.visible {
-			return CheckTasksCmd(m.lastSnapshot, m.stackName)
+			return tea.Batch(CheckTasksCmd(m.lastSnapshot, m.stackName), tickCmd(m.pollGen))
 		}
 		// Continue polling even if not visible
-		return tickCmd()
+		return tickCmd(m.pollGen)
 
 	case PollRetryMsg:
-		return tickCmd()
+		// Deliberately no re-arm. The TickMsg handler above always schedules
+		// the next tick, so re-arming here as well gives one beat two
+		// successors — and each of those does the same, so the poll rate does
+		// not merely double, it doubles again on every beat.
+		return nil
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width

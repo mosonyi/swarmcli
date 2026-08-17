@@ -538,7 +538,7 @@ func TestPollLoopDoesNotMultiply(t *testing.T) {
 	}}
 
 	// The model already armed a tick when the load landed; this is that one.
-	pending := []tea.Cmd{tickCmd()}
+	pending := []tea.Cmd{tickCmd(m.pollGen)}
 	for round := 0; round < 12; round++ {
 		var ticks int
 		pending, ticks = drive(m, pending)
@@ -570,7 +570,7 @@ func TestTickDoesNotPollWhenHiddenOrDialogIsUp(t *testing.T) {
 	} {
 		hide()
 		m.tickScheduled = true // the chain the model is already running
-		pending := []tea.Cmd{tickCmd()}
+		pending := []tea.Cmd{tickCmd(m.pollGen)}
 		for round := 0; round < 3; round++ {
 			pending, _ = drive(m, pending)
 			require.Len(t, pending, 1, "the ticker must stay alive so it can resume")
@@ -597,7 +597,7 @@ func TestPollingResumesAfterAFailedFirstLoad(t *testing.T) {
 		return all, nil
 	}}
 
-	pending := []tea.Cmd{tickCmd()}
+	pending := []tea.Cmd{tickCmd(m.pollGen)}
 	for round := 0; round < 4 && m.state != stateReady; round++ {
 		pending, _ = drive(m, pending)
 		time.Sleep(2 * time.Millisecond)

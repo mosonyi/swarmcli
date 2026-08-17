@@ -18,9 +18,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const PollInterval = 5 * time.Second
+// PollInterval is how often the view re-reads its resource. It is a var, not a
+// const, so tests can shrink it: a tea.Tick cmd invoked synchronously blocks
+// for the full interval, so a test that runs one to see what it scheduled would
+// otherwise sit here for five seconds.
+var PollInterval = 5 * time.Second
 
-type TickMsg time.Time
+type TickMsg struct{ Gen uint64 }
 
 // PollRetryMsg signals that polling found no changes; the Update handler
 // should schedule the next tick.

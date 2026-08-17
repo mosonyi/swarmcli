@@ -37,6 +37,7 @@ type Model struct {
 	height        int
 	firstResize   bool   // tracks if we've received the first window size
 	lastSnapshot  uint64 // hash of last snapshot for change detection
+	pollGen       uint64 // generation of the live poll chain; see OnEnter
 	polling       atomic.Bool
 	visible       bool // tracks if view is currently active
 	sortField     SortField
@@ -183,7 +184,7 @@ func (m *Model) ClearSearchQuery() {
 
 func (m *Model) Init() tea.Cmd {
 	l().Info("ConfigsView: Init() called - starting ticker and loading configs")
-	return tea.Batch(tickCmd(), m.spinnerTickCmd(), m.loadConfigsCmd())
+	return tea.Batch(m.spinnerTickCmd(), m.loadConfigsCmd())
 }
 
 func (m *Model) spinnerTickCmd() tea.Cmd {
@@ -192,9 +193,9 @@ func (m *Model) spinnerTickCmd() tea.Cmd {
 	})
 }
 
-func tickCmd() tea.Cmd {
-	return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
-		return TickMsg(t)
+func tickCmd(gen uint64) tea.Cmd {
+	return tea.Tick(PollInterval, func(time.Time) tea.Msg {
+		return TickMsg{Gen: gen}
 	})
 }
 
@@ -250,7 +251,18 @@ func (m *Model) addConfig(cfg docker.ConfigWithDecodedData) {
 func (m *Model) OnEnter() tea.Cmd {
 	m.visible = true
 	l().Info("ConfigsView: OnEnter() - view is now visible")
-	return m.loadConfigsCmd()
+	// The tick is armed here, not in Init or the factory: OnEnter is the only
+	// hook that runs both on first entry and on every return from a drill-down,
+	// and a chain does not survive a navigation — its tick is delivered to
+	// whichever view is current by then, and dropped.
+	//
+	// Each entry gets its own generation. "Does not survive" holds only once
+	// the leftover tick has fired: one armed just before a drill-down can
+	// still be in flight when the operator returns, and would find this view
+	// current again and re-arm, leaving two chains for the rest of the view's
+	// life. The generation makes it recognisable as a leftover.
+	m.pollGen++
+	return tea.Batch(m.loadConfigsCmd(), tickCmd(m.pollGen))
 }
 
 func (m *Model) OnExit() tea.Cmd {

@@ -193,6 +193,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.handleReleasesLoaded(msg)
 
 	case TickMsg:
+		if msg.Gen != m.pollGen {
+			return nil // a leftover from an earlier entry — see OnEnter
+		}
 		m.tickScheduled = false
 		// stateError is deliberately allowed through: one unreadable release
 		// record fails the whole listing, so a view that stopped polling on

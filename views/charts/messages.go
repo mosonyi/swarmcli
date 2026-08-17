@@ -32,7 +32,7 @@ var PollInterval = 5 * time.Second
 // backstop against an unreachable daemon rather than a working budget.
 const loadTimeout = 10 * time.Second
 
-type TickMsg time.Time
+type TickMsg struct{ Gen uint64 }
 
 // PollRetryMsg signals that polling found no changes; the Update handler
 // schedules the next tick.
@@ -54,8 +54,8 @@ type ReleasesLoadedMsg struct {
 // cmd invoked synchronously blocks for the full interval.
 var spinnerTickInterval = 80 * time.Millisecond
 
-func tickCmd() tea.Cmd {
-	return tea.Tick(PollInterval, func(t time.Time) tea.Msg { return TickMsg(t) })
+func tickCmd(gen uint64) tea.Cmd {
+	return tea.Tick(PollInterval, func(time.Time) tea.Msg { return TickMsg{Gen: gen} })
 }
 
 func spinnerTickCmd() tea.Cmd {

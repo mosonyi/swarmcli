@@ -55,8 +55,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// Create commands that will load tasks for each stack asynchronously.
 		taskOps := m.deps.Tasks
 		var cmds []tea.Cmd
-		// Always keep the tick running
-		cmds = append(cmds, tickCmd())
+		// No re-arm: only a tick arms a tick, so a load issued by OnEnter or the
+		// factory cannot start a second, parallel chain.
+
 		for _, s := range msg.Stacks {
 			stackName := s.Name
 			// If we already have tasks cached, skip
@@ -74,19 +75,27 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return tea.Batch(cmds...)
 
 	case TickMsg:
+		if msg.Gen != m.pollGen {
+			return nil // a leftover from an earlier entry — see OnEnter
+		}
 		l().Infof("StacksView: Received TickMsg, visible=%v", m.Visible)
 		// Check for changes (this will return either a Msg or PollRetryMsg)
 		if m.Visible {
 			return tea.Batch(
 				m.checkStacksCmd(m.lastSnapshot, m.nodeID),
 				m.refreshExpandedStackTasksCmd(m.expandedStacks),
+				tickCmd(m.pollGen),
 			)
 		}
 		// Continue polling even if not visible
-		return tickCmd()
+		return tickCmd(m.pollGen)
 
 	case PollRetryMsg:
-		return tickCmd()
+		// Deliberately no re-arm. The TickMsg handler above always schedules
+		// the next tick, so re-arming here as well gives one beat two
+		// successors — and each of those does the same, so the poll rate does
+		// not merely double, it doubles again on every beat.
+		return nil
 
 	case SpinnerTickMsg:
 		m.spinner++

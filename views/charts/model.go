@@ -78,6 +78,9 @@ type Model struct {
 	// merely double the poll rate, they each double again on every beat.
 	tickScheduled bool
 
+	// pollGen is the generation of the live chain; see OnEnter.
+	pollGen uint64
+
 	spinner int
 
 	toastMessage string
@@ -137,7 +140,10 @@ func New(width, height int) *Model {
 func (m *Model) Name() string { return ViewName }
 
 func (m *Model) Init() tea.Cmd {
-	return tea.Batch(m.armTick(), spinnerTickCmd(), m.loadReleasesCmd())
+	// Neither the load nor the tick: OnEnter does both, and the app calls it
+	// right after the factory returns this. Doing them here as well read the
+	// swarm twice on entry and armed a second chain.
+	return spinnerTickCmd()
 }
 
 // armTick schedules the next poll, unless one is already scheduled.
@@ -147,12 +153,18 @@ func (m *Model) Init() tea.Cmd {
 // each of those does the same, so an idle view climbs to thousands of
 // concurrent reads within a minute. Re-arming only after the poll's result has
 // the further benefit that two polls can never overlap.
+//
+// The flag alone is not enough, because it can only be cleared by a tick that
+// arrives — and a chain does not survive a navigation: its tick is delivered to
+// whichever view is current by then, and dropped. That left the flag set with
+// nothing to clear it, so the view came back from a drill-down and never polled
+// again. OnEnter clears it and starts a new generation instead.
 func (m *Model) armTick() tea.Cmd {
 	if m.tickScheduled {
 		return nil
 	}
 	m.tickScheduled = true
-	return tickCmd()
+	return tickCmd(m.pollGen)
 }
 
 // HasActiveFilter reports whether a filter query is active.
@@ -232,6 +244,13 @@ func (m *Model) OnEnter() tea.Cmd {
 		// on screen and swallows the operator's next esc.
 		m.childIndex = noChild
 	}
+	// A new generation on every entry. The chain armed before a drill-down is
+	// usually dropped on the way out, but one still in flight when the operator
+	// returns would find this view current again and re-arm, leaving two.
+	// Tagging the tick makes the leftover recognisable, and clearing the flag
+	// lets the fresh chain start.
+	m.pollGen++
+	m.tickScheduled = false
 	return tea.Batch(m.loadReleasesCmd(), m.armTick())
 }
 

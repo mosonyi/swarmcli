@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/Eldara-Tech/swarmcli/docker"
 	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
@@ -40,14 +39,14 @@ func TestUpdate_WindowSizeMsg(t *testing.T) {
 func TestUpdate_TickMsg_Visible(t *testing.T) {
 	m := testModel()
 	m.Visible = true
-	cmd := m.Update(TickMsg(time.Now()))
+	cmd := m.Update(TickMsg{Gen: m.pollGen})
 	require.NotNil(t, cmd)
 }
 
 func TestUpdate_TickMsg_NotVisible(t *testing.T) {
 	m := testModel()
 	m.Visible = false
-	cmd := m.Update(TickMsg(time.Now()))
+	cmd := m.Update(TickMsg{Gen: m.pollGen})
 	require.NotNil(t, cmd) // still returns tickCmd
 }
 

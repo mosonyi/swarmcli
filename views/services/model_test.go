@@ -291,14 +291,14 @@ func TestWindowSizeMsg(t *testing.T) {
 func TestTickMsg_Visible_Polls(t *testing.T) {
 	m := testModel()
 	loadServices(m, fakeEntries("web"))
-	cmd := m.Update(TickMsg(time.Now()))
+	cmd := m.Update(TickMsg{Gen: m.pollGen})
 	require.NotNil(t, cmd)
 }
 
 func TestTickMsg_NotVisible_SchedulesTick(t *testing.T) {
 	m := testModel()
 	m.Visible = false
-	cmd := m.Update(TickMsg(time.Now()))
+	cmd := m.Update(TickMsg{Gen: m.pollGen})
 	require.NotNil(t, cmd)
 }
 
