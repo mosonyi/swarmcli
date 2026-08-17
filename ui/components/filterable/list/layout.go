@@ -30,6 +30,13 @@ type Column[T any] struct {
 	// on the trailing column instead puts the leftover after the last cell,
 	// where it reads as margin.
 	//
+	// It only applies while the column has something to spend the width on. A
+	// grow column whose every cell fits inside its own header — services' ERROR
+	// on a healthy swarm, LABELS on unlabelled configs — would put the whole
+	// leftover into a cell with nothing in it, which is the "half a wide
+	// terminal dead" case Grow exists to avoid, not an instance of it. There the
+	// slack goes back to the Flex columns.
+	//
 	// When no column declares Grow the Flex columns absorb the slack, which is
 	// what every view did before Grow existed.
 	Grow bool
@@ -146,7 +153,7 @@ func LayoutWidths[T any](cols []Column[T], items []T, totalWidth, sortCol int) [
 	floors := make([]int, n)
 	flex := make([]bool, n)
 	grow := make([]bool, n)
-	anyGrow := false
+	growHasContent := false
 	sum := 0
 	for i, c := range cols {
 		// Floor: the header label is never truncated by the renderer, so a column
@@ -175,7 +182,7 @@ func LayoutWidths[T any](cols []Column[T], items []T, totalWidth, sortCol int) [
 		content[i] = w
 		flex[i] = c.Flex
 		grow[i] = c.Grow
-		anyGrow = anyGrow || c.Grow
+		growHasContent = growHasContent || (c.Grow && w > fl)
 		sum += w
 	}
 
@@ -190,9 +197,10 @@ func LayoutWidths[T any](cols []Column[T], items []T, totalWidth, sortCol int) [
 	switch {
 	case need < totalWidth:
 		// Hand the leftover to the Grow columns, falling back to the Flex ones
-		// for a view that declares none — see Column.Grow.
+		// for a view that declares none — or whose grow column has nothing to
+		// spend it on — see Column.Grow.
 		absorb := grow
-		if !anyGrow {
+		if !growHasContent {
 			absorb = flex
 		}
 		distributeSlack(content, absorb, totalWidth-need)

@@ -152,7 +152,7 @@ func growCols() []Column[row] {
 // the terminal gets. A table of short values is where that matters: growing a
 // middle column opens a void in the middle of every row.
 func TestLayoutWidths_GrowAbsorbsSlackNotFlex(t *testing.T) {
-	items := []row{{a: "short", b: "kind", c: "x=1"}}
+	items := []row{{a: "short", b: "kind", c: "team=platform"}}
 
 	narrow := LayoutWidths(growCols(), items, 60, -1)
 	wide := LayoutWidths(growCols(), items, 200, -1)
@@ -161,6 +161,22 @@ func TestLayoutWidths_GrowAbsorbsSlackNotFlex(t *testing.T) {
 	require.Equal(t, narrow[1], wide[1])
 	require.Greater(t, wide[2], narrow[2], "the grow column takes it instead")
 	require.Equal(t, 200, sum(wide), "and the row still spans the width")
+}
+
+// A grow column every one of whose cells fits inside its own header has nothing
+// to spend the leftover on, so putting it there would leave the terminal's right
+// half dead rather than fill it — services' ERROR on a swarm with no errors is
+// the case. The Flex columns take it back.
+func TestLayoutWidths_EmptyGrowColumnHandsSlackBackToFlex(t *testing.T) {
+	items := []row{{a: "short", b: "kind", c: ""}}
+
+	narrow := LayoutWidths(growCols(), items, 60, -1)
+	wide := LayoutWidths(growCols(), items, 200, -1)
+
+	require.Greater(t, wide[0], narrow[0], "the flex column absorbs instead")
+	require.Equal(t, narrow[1], wide[1], "the non-elastic column stays put")
+	require.Equal(t, narrow[2], wide[2], "and the empty grow column takes none of it")
+	require.Equal(t, 200, sum(wide), "the row still spans the width")
 }
 
 // A view that declares no Grow keeps the behaviour it had before Grow existed,
