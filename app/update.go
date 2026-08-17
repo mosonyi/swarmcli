@@ -593,6 +593,17 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		}
+		// Check if the current view has an expanded row to step out of first
+		// (charts: from a child row back to the release, then collapse it)
+		if expandableView, ok := m.currentView.(interface {
+			IsRowExpanded() bool
+		}); ok {
+			if expandableView.IsRowExpanded() {
+				// Let the view handle esc to walk back out of the expansion
+				cmd := m.currentView.Update(msg)
+				return m, cmd
+			}
+		}
 		// Check if services view is in stack services mode
 		if servicesView, ok := m.currentView.(interface {
 			IsInStackServicesView() bool

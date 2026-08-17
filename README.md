@@ -122,6 +122,12 @@ swarmcli charts install --help
 swarmcli charts apply -f swarmcli-release.yaml --diff   # preview, never deploys
 ```
 
+The TUI has a **read-only** browser for what those commands installed: `:charts`
+lists every release with its revision, recorded status and live rollout health,
+expands one in place to its revision history and services, and diffs any two
+consecutive revisions. Everything that changes a release stays on the command
+line above; the view names the command for you.
+
 `apply` reads a release file pinning each release to a chart version, so the
 deployed state is reproducible and an automated updater (e.g. Renovate) has
 something concrete to bump. It never removes a release the file does not mention —
@@ -254,6 +260,7 @@ TEST_LOG=1 ./test-setup/testenv.sh test
 | `:secret`  | Navigate to Secret    |
 | `:network` | Navigate to Networks  |
 | `:volume`  | Navigate to Volumes   |
+| `:charts`  | Browse chart releases |
 | `l`      | View Logs               |
 | `s`      | Scale Service           |
 | `r`      | Restart Service         |

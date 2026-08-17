@@ -556,6 +556,50 @@ func TestListReturnsCurrentRevisions(t *testing.T) {
 	require.Equal(t, "b", list[1].Name)
 }
 
+// AllRevisions is List's counterpart for a caller that needs the current
+// revision of every release AND the history of any of them from one read. The
+// two differ in exactly two ways, and both are the point: nothing is filtered,
+// and lower revisions carry their derived status.
+func TestAllRevisionsReturnsEveryRevisionUnfiltered(t *testing.T) {
+	fb := newFakeBackend()
+	e := testEngine(fb)
+	ctx := context.Background()
+
+	_, err := e.Install(ctx, "a", ReleaseChart{Name: "ca", Version: "1"}, nil, "services:\n  s:\n    image: x\n", InstallOptions{})
+	require.NoError(t, err)
+	_, err = e.Upgrade(ctx, "a", ReleaseChart{Name: "ca", Version: "2"}, nil, "services:\n  s:\n    image: y\n", InstallOptions{})
+	require.NoError(t, err)
+	_, err = e.Install(ctx, "b", ReleaseChart{Name: "cb", Version: "1"}, nil, "services:\n  s:\n    image: x\n", InstallOptions{})
+	require.NoError(t, err)
+
+	// A record another producer left in StatusUninstalled. List hides it;
+	// AllRevisions must not, because a caller asking for every revision is
+	// asking about the record, not about what is deployed.
+	gone := &Release{Name: "c", Revision: 1, Status: StatusUninstalled, Chart: ReleaseChart{Name: "cc", Version: "1"}}
+	fb.configs[releaseConfigName("c", 1)] = fakeConfig{
+		data:   mustGzipRelease(t, gone),
+		labels: map[string]string{LabelType: TypeRelease},
+	}
+
+	all, err := e.AllRevisions(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 3)
+
+	require.Len(t, all["a"], 2)
+	require.Equal(t, 1, all["a"][0].Revision, "revisions are ascending")
+	require.Equal(t, 2, all["a"][1].Revision)
+	require.Equal(t, StatusSuperseded, all["a"][0].Status, "a lower deployed revision reads as superseded")
+	require.Equal(t, StatusDeployed, all["a"][1].Status)
+
+	require.Len(t, all["b"], 1)
+	require.Len(t, all["c"], 1)
+	require.Equal(t, StatusUninstalled, all["c"][0].Status)
+
+	list, err := e.List(ctx)
+	require.NoError(t, err)
+	require.Len(t, list, 2, "List still hides the uninstalled release AllRevisions reports")
+}
+
 // Reading release history is the engine's hottest path — every List, Status,
 // Install, Upgrade, Rollback and GetRevision walks it, and a GitOps controller
 // walks it on a timer. When the Backend's listing carries the payload, that walk

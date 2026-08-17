@@ -39,6 +39,13 @@ swarmcli charts list
 swarmcli charts uninstall my-traefik
 ```
 
+The TUI complements this with a **read-only** browser, `:charts`: the installed
+releases with their revision, recorded status and live rollout health, expandable
+in place to the revision history and running services, with a diff between any
+two consecutive revisions. It changes nothing — install, upgrade, rollback and
+uninstall are the commands above — but it is the fastest way to see what a swarm
+is actually running, and it names the command for whatever you reach for next.
+
 A chart reference is either a configured `repo/chart` or a local path to a chart
 directory or packaged `.tgz`. **`--version` selects a version from a repository
 index, so it applies only to a `repo/chart` reference** — a local chart carries its
@@ -156,7 +163,7 @@ and replaced it in 3.0 for the same reason. The `apply/` prefix keeps a manifest
 applied from the command line from colliding with a controller that happened to
 pick the same name. The controller is the other side of that: a library consumer
 passes its own id as `PlanOptions.Owner` and plans against it instead, so the
-releases it installed under `cd/<app>` read back as its own.
+releases it installed under its own `cd/…` ids read back as its own.
 
 `owner:` is optional and has **no default**. A derived one would either change
 between a laptop and a CI checkout (a path hash) or be shared by every repository

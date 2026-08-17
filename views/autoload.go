@@ -5,6 +5,7 @@
 package views
 
 import (
+	_ "github.com/Eldara-Tech/swarmcli/views/charts"
 	_ "github.com/Eldara-Tech/swarmcli/views/configs"
 	_ "github.com/Eldara-Tech/swarmcli/views/contexts"
 	_ "github.com/Eldara-Tech/swarmcli/views/help"
