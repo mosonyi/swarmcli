@@ -4,6 +4,7 @@
 package volumesview
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -68,4 +69,53 @@ func TestResetScrollOnCursorMove(t *testing.T) {
 
 	require.NotEqual(t, scrolled, m.volumesList.RenderItem(longVolume(m), true, 0),
 		"scroll offset must reset when the cursor moves")
+}
+
+// The grow column must be the last one, and there must be only one.
+//
+// A grow column in the middle does not remove the void a wide terminal opens,
+// it relocates it to just after that column; two of them split the slack and
+// open two. Both were shipped and reverted before this rule was written down.
+func TestExactlyOneGrowColumnAndItIsLast(t *testing.T) {
+	cols := testModel().buildColumns()
+	require.NotEmpty(t, cols)
+
+	var growing []string
+	for _, c := range cols {
+		if c.Grow {
+			growing = append(growing, c.Label)
+		}
+	}
+	require.Len(t, growing, 1, "exactly one column may absorb leftover width")
+	require.Equal(t, cols[len(cols)-1].Label, growing[0],
+		"and it must be the last column, or the gap merely moves")
+}
+
+// A wider terminal must feed the growing column, not spread the others apart.
+// Before MOUNT POINT moved last and became the sole grow column, NAME, MOUNT
+// POINT and HOST each took a third of the slack, so a 13-character volume name
+// sat in a 45-cell column on a wide screen.
+func TestWideTerminalDoesNotSpreadTheColumns(t *testing.T) {
+	positions := func(width int) map[string]int {
+		m := testModel()
+		m.volumesList.Viewport.Width = width
+		loadVolumes(m, fakeVolumes("openclaw_data", "pg_data"))
+		header := m.volumesList.RenderHeader()
+		out := map[string]int{}
+		for _, col := range []string{"STACK", "DRIVER", "CREATED", "HOST", "MOUNT POINT"} {
+			i := strings.Index(header, col)
+			require.GreaterOrEqual(t, i, 0, "%q not in %q", col, header)
+			out[col] = lipgloss.Width(header[:i])
+		}
+		return out
+	}
+
+	require.Equal(t, positions(140), positions(240),
+		"only the last column may take the leftover")
+
+	m := testModel()
+	m.volumesList.Viewport.Width = 240
+	loadVolumes(m, fakeVolumes("openclaw_data"))
+	require.Equal(t, 240, lipgloss.Width(m.volumesList.RenderRow(m.volumesList.Filtered[0], true)),
+		"the row still spans the frame, so the selection highlight does too")
 }

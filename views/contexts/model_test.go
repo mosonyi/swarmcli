@@ -281,7 +281,8 @@ func TestOnEnter_WithContexts(t *testing.T) {
 	m.Visible = false
 	cmd := m.OnEnter()
 	require.True(t, m.Visible)
-	require.Nil(t, cmd) // no reload needed
+	require.False(t, m.IsLoading(), "no reload needed")
+	require.NotNil(t, cmd, "but the poll chain is armed here on every entry")
 }
 
 func TestOnExit(t *testing.T) {

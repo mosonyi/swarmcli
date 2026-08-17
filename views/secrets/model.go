@@ -38,6 +38,7 @@ type Model struct {
 	height        int
 	firstResize   bool   // tracks if we've received the first window size
 	lastSnapshot  uint64 // hash of last snapshot for change detection
+	pollGen       uint64 // generation of the live poll chain; see OnEnter
 	polling       atomic.Bool
 	visible       bool // tracks if view is currently active
 	sortField     SortField
@@ -87,7 +88,12 @@ const (
 	stateError
 )
 
-const PollInterval = 5 * time.Second
+// PollInterval is how often the view re-reads its resource. It is a var, not a
+// const, so tests can shrink it: a tea.Tick cmd invoked synchronously blocks
+// for the full interval, so a test that runs one to see what it scheduled would
+// otherwise sit here for five seconds.
+var PollInterval = 5 * time.Second
+
 const pollTimeout = 4 * time.Second
 const userActionTimeout = 15 * time.Second
 
@@ -198,7 +204,7 @@ func (m *Model) ClearSearchQuery() {
 
 func (m *Model) Init() tea.Cmd {
 	l().Info("SecretsView: Init() called - starting ticker and loading secrets")
-	return tea.Batch(tickCmd(), m.spinnerTickCmd(), m.loadSecretsCmd())
+	return tea.Batch(m.spinnerTickCmd(), m.loadSecretsCmd())
 }
 
 func (m *Model) spinnerTickCmd() tea.Cmd {
@@ -207,9 +213,9 @@ func (m *Model) spinnerTickCmd() tea.Cmd {
 	})
 }
 
-func tickCmd() tea.Cmd {
-	return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
-		return TickMsg(t)
+func tickCmd(gen uint64) tea.Cmd {
+	return tea.Tick(PollInterval, func(time.Time) tea.Msg {
+		return TickMsg{Gen: gen}
 	})
 }
 
@@ -262,7 +268,18 @@ func (m *Model) addSecret(sec docker.SecretWithDecodedData) {
 func (m *Model) OnEnter() tea.Cmd {
 	m.visible = true
 	l().Info("SecretsView: OnEnter() - view is now visible")
-	return m.loadSecretsCmd()
+	// The tick is armed here, not in Init or the factory: OnEnter is the only
+	// hook that runs both on first entry and on every return from a drill-down,
+	// and a chain does not survive a navigation — its tick is delivered to
+	// whichever view is current by then, and dropped.
+	//
+	// Each entry gets its own generation. "Does not survive" holds only once
+	// the leftover tick has fired: one armed just before a drill-down can
+	// still be in flight when the operator returns, and would find this view
+	// current again and re-arm, leaving two chains for the rest of the view's
+	// life. The generation makes it recognisable as a leftover.
+	m.pollGen++
+	return tea.Batch(m.loadSecretsCmd(), tickCmd(m.pollGen))
 }
 
 func (m *Model) OnExit() tea.Cmd {

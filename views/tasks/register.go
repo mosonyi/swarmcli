@@ -17,5 +17,7 @@ func init() {
 func factory(_ docker.Deps, w, h int, payload any) (view.View, tea.Cmd) {
 	stackName, _ := payload.(string)
 	model := New(w, h, stackName)
-	return model, model.OnEnter()
+	// No load and no tick: the app calls OnEnter right after this, and doing
+	// it here as well loaded twice and armed two chains.
+	return model, nil
 }
