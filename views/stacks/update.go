@@ -75,17 +75,20 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return tea.Batch(cmds...)
 
 	case TickMsg:
+		if msg.Gen != m.pollGen {
+			return nil // a leftover from an earlier entry — see OnEnter
+		}
 		l().Infof("StacksView: Received TickMsg, visible=%v", m.Visible)
 		// Check for changes (this will return either a Msg or PollRetryMsg)
 		if m.Visible {
 			return tea.Batch(
 				m.checkStacksCmd(m.lastSnapshot, m.nodeID),
 				m.refreshExpandedStackTasksCmd(m.expandedStacks),
-				tickCmd(),
+				tickCmd(m.pollGen),
 			)
 		}
 		// Continue polling even if not visible
-		return tickCmd()
+		return tickCmd(m.pollGen)
 
 	case PollRetryMsg:
 		// Deliberately no re-arm. The TickMsg handler above always schedules

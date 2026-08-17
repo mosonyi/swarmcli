@@ -18,7 +18,7 @@ type RefreshErrorMsg struct {
 	Err error
 }
 
-type TickMsg time.Time
+type TickMsg struct{ Gen uint64 }
 
 // PollRetryMsg signals that polling found no changes; the Update handler
 // should schedule the next tick.

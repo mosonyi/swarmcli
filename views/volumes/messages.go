@@ -24,7 +24,7 @@ import (
 // otherwise sit here for five seconds.
 var PollInterval = 5 * time.Second
 
-type TickMsg time.Time
+type TickMsg struct{ Gen uint64 }
 
 // PollRetryMsg signals that polling found no changes; the Update handler
 // should schedule the next tick.

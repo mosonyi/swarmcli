@@ -85,7 +85,7 @@ func TestTickMsg_WhenReadyAndVisible_Polls(t *testing.T) {
 	m := testModel()
 	loadSecrets(m, fakeSecrets("s1"))
 	m.visible = true
-	cmd := m.Update(TickMsg(time.Now()))
+	cmd := m.Update(TickMsg{Gen: m.pollGen})
 	require.NotNil(t, cmd)
 }
 
@@ -93,7 +93,7 @@ func TestTickMsg_WhenNotVisible_SchedulesTick(t *testing.T) {
 	m := testModel()
 	loadSecrets(m, fakeSecrets("s1"))
 	m.visible = false
-	cmd := m.Update(TickMsg(time.Now()))
+	cmd := m.Update(TickMsg{Gen: m.pollGen})
 	require.NotNil(t, cmd) // returns tickCmd
 }
 
@@ -638,7 +638,7 @@ func TestTickMsg_WhenPollingInFlight_SkipsCheck(t *testing.T) {
 	loadSecrets(m, fakeSecrets("s1"))
 	m.visible = true
 	m.polling.Store(true)
-	cmd := m.Update(TickMsg(time.Now()))
+	cmd := m.Update(TickMsg{Gen: m.pollGen})
 	require.NotNil(t, cmd)
 	msg := runCmd(cmd)
 	_, isTickMsg := msg.(TickMsg)

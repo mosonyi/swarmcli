@@ -30,6 +30,7 @@ type Model struct {
 	sortField     SortField
 	sortAscending bool   // true for ascending, false for descending
 	lastSnapshot  uint64 // hash of last snapshot for change detection
+	pollGen       uint64 // generation of the live poll chain; see OnEnter
 }
 
 func New(width, height int, stackName string) *Model {
@@ -61,8 +62,16 @@ func (m *Model) OnEnter() tea.Cmd {
 	m.visible = true
 	// The tick is armed here, not in Init or the factory: OnEnter is the only
 	// hook that runs both on first entry and on every return from a drill-down,
-	// and a chain cannot survive a navigation (see the TickMsg handler).
-	return tea.Batch(LoadTasksCmd(m.stackName), tickCmd())
+	// and a chain does not survive a navigation — its tick is delivered to
+	// whichever view is current by then, and dropped.
+	//
+	// Each entry gets its own generation. "Does not survive" holds only once
+	// the leftover tick has fired: one armed just before a drill-down can
+	// still be in flight when the operator returns, and would find this view
+	// current again and re-arm, leaving two chains for the rest of the view's
+	// life. The generation makes it recognisable as a leftover.
+	m.pollGen++
+	return tea.Batch(LoadTasksCmd(m.stackName), tickCmd(m.pollGen))
 }
 
 func (m *Model) OnExit() tea.Cmd {

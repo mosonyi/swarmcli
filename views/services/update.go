@@ -67,6 +67,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.refreshExpandedTasksCmd(m.expandedServices)
 
 	case TickMsg:
+		if msg.Gen != m.pollGen {
+			return nil // a leftover from an earlier entry — see OnEnter
+		}
 		l().Infof("ServicesView: Received TickMsg, visible=%v", m.Visible)
 		// Check for changes and refresh expanded tasks
 		if m.Visible {
@@ -77,11 +80,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return tea.Batch(
 				m.checkServicesCmd(m.lastSnapshot, m.filterType, m.nodeID, m.stackName),
 				m.refreshExpandedTasksCmd(m.expandedServices),
-				tickCmd(),
+				tickCmd(m.pollGen),
 			)
 		}
 		// Continue polling even if not visible
-		return tickCmd()
+		return tickCmd(m.pollGen)
 
 	case PollRetryMsg:
 		// Deliberately no re-arm. The TickMsg handler above always schedules

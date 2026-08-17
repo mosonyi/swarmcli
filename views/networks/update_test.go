@@ -153,7 +153,7 @@ func TestUpdate_TickMsg(t *testing.T) {
 	m := testModel()
 	m.visible = true
 	m.state = stateReady
-	cmd := m.Update(TickMsg(time.Now()))
+	cmd := m.Update(TickMsg{Gen: m.pollGen})
 	require.NotNil(t, cmd)
 }
 

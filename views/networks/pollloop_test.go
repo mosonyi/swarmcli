@@ -78,7 +78,7 @@ func TestPollLoopDoesNotMultiply(t *testing.T) {
 	m.Update(NetworksLoadedMsg{})
 	require.Equal(t, stateReady, m.state)
 
-	pending := []tea.Cmd{tickCmd()}
+	pending := []tea.Cmd{tickCmd(m.pollGen)}
 	for round := 0; round < 12; round++ {
 		pending = drivePoll(m, pending)
 		require.LessOrEqual(t, len(pending), 1,
@@ -128,11 +128,18 @@ func TestEnteringTheViewArmsExactlyOneChain(t *testing.T) {
 	t.Cleanup(func() { PollInterval = original })
 
 	m := testModel()
-	require.Equal(t, 1, countChains(m, tea.Batch(m.Init(), m.OnEnter())),
+
+	// The real factory, not a hand-written stand-in for it: switchToView
+	// batches the factory's command and OnEnter, and standing in for the
+	// factory with m.Init() is how one view's second arm survived the first
+	// pass at this.
+	v, loadCmd := factory(m.deps, 80, 24, nil)
+	entered := v.(*Model)
+	require.Equal(t, 1, countChains(entered, tea.Batch(entered.Init(), loadCmd, entered.OnEnter())),
 		"the factory and OnEnter must not each start a chain")
 }
 
-// A chain cannot survive a navigation: every view declares its own TickMsg
+// A chain does not survive a navigation: every view declares its own TickMsg
 // type, so a tick belonging to a view that is no longer current is delivered to
 // a different view and dropped. Returning must therefore re-arm, or the view
 // comes back permanently stale. goBack calls OnEnter and nothing else.
@@ -143,4 +150,50 @@ func TestReturningToTheViewRestartsPolling(t *testing.T) {
 
 	m := testModel()
 	require.Equal(t, 1, countChains(m, m.OnEnter()))
+}
+
+// firstTick runs a command and returns the tick it scheduled, so a test can
+// hold on to one chain's tick while a later entry arms another.
+func firstTick(t *testing.T, m *Model, cmd tea.Cmd) TickMsg {
+	t.Helper()
+	var found *TickMsg
+	var run func(c tea.Cmd)
+	run = func(c tea.Cmd) {
+		if c == nil || found != nil {
+			return
+		}
+		msg := c()
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			for _, sub := range batch {
+				run(sub)
+			}
+			return
+		}
+		if tick, ok := msg.(TickMsg); ok {
+			found = &tick
+		}
+	}
+	run(cmd)
+	require.NotNil(t, found, "the command scheduled no tick")
+	return *found
+}
+
+// A tick armed before a drill-down must not sustain a chain after the return.
+//
+// The chain usually dies on the way out: its tick is delivered to whichever
+// view is current by then, and dropped. But one still in flight when the
+// operator returns finds this view current again, and OnEnter has already
+// armed a replacement — re-arming from both leaves the view polling at twice
+// the rate for the rest of its life.
+func TestStaleTickFromAnEarlierEntryIsDropped(t *testing.T) {
+	original := PollInterval
+	PollInterval = time.Millisecond
+	t.Cleanup(func() { PollInterval = original })
+	m := testModel()
+
+	stale := firstTick(t, m, m.OnEnter()) // the chain armed on the first entry
+	m.OnEnter()                           // goBack: a fresh chain
+
+	require.Equal(t, 0, countChains(m, m.Update(stale)),
+		"a tick from an earlier entry must not arm a successor")
 }

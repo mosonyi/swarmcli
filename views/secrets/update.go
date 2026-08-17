@@ -164,14 +164,17 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.computeSecretUsedCmd(msg)
 
 	case TickMsg:
+		if msg.Gen != m.pollGen {
+			return nil // a leftover from an earlier entry — see OnEnter
+		}
 		l().Infof("SecretsView: Received TickMsg, state=%v, visible=%v", m.state, m.visible)
 		if m.visible && m.state == stateReady && !m.confirmDialog.Visible && !m.loadingView.Visible() && !m.polling.Load() {
 			return tea.Batch(
 				m.checkSecretsCmd(m.lastSnapshot),
-				tickCmd(),
+				tickCmd(m.pollGen),
 			)
 		}
-		return tickCmd()
+		return tickCmd(m.pollGen)
 
 	case PollRetryMsg:
 		// Deliberately no re-arm. The TickMsg handler above always schedules

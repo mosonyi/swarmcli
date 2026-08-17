@@ -21,31 +21,37 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-type RefreshTickMsg time.Time
+// RefreshTickMsg drives the periodic re-read. Gen names the poll chain it
+// belongs to; see Model.OnEnter.
+type RefreshTickMsg struct{ Gen uint64 }
 
-func tickCmd() tea.Cmd {
-	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
-		return RefreshTickMsg(t)
+// PollInterval is how often the view re-reads the context list. It is a var,
+// not a const, so tests can shrink it: a tea.Tick cmd invoked synchronously
+// blocks for the full interval, so a test that runs one to see what it
+// scheduled would otherwise sit here for five seconds.
+var PollInterval = 5 * time.Second
+
+func tickCmd(gen uint64) tea.Cmd {
+	return tea.Tick(PollInterval, func(time.Time) tea.Msg {
+		return RefreshTickMsg{Gen: gen}
 	})
-}
-
-// StartTickerCmd starts the periodic refresh ticker
-func StartTickerCmd() tea.Cmd {
-	return tickCmd()
 }
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case RefreshTickMsg:
+		if msg.Gen != m.pollGen {
+			return nil // a leftover from an earlier entry — see OnEnter
+		}
 		// Auto-refresh contexts list every 5 seconds when visible and no dialogs open
 		if m.Visible && !m.CapturesInput() && !m.loading {
 			return tea.Batch(
 				m.loadContextsCmd(),
-				tickCmd(),
+				tickCmd(m.pollGen),
 			)
 		}
 		// Continue ticking even if not visible
-		return tickCmd()
+		return tickCmd(m.pollGen)
 
 	case tea.WindowSizeMsg:
 		m.viewport.Width = msg.Width

@@ -70,14 +70,14 @@ func TestUpdate_Msg_LaunchesTaskFetches(t *testing.T) {
 func TestUpdate_TickMsg_WhenVisible(t *testing.T) {
 	m := testModel()
 	m.Visible = true
-	cmd := m.Update(TickMsg(time.Now()))
+	cmd := m.Update(TickMsg{Gen: m.pollGen})
 	require.NotNil(t, cmd)
 }
 
 func TestUpdate_TickMsg_WhenNotVisible(t *testing.T) {
 	m := testModel()
 	m.Visible = false
-	cmd := m.Update(TickMsg(time.Now()))
+	cmd := m.Update(TickMsg{Gen: m.pollGen})
 	// Should still return tick cmd for polling
 	require.NotNil(t, cmd)
 }

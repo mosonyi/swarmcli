@@ -70,5 +70,7 @@ func factory(deps docker.Deps, w, h int, payload any) (view.View, tea.Cmd) {
 	v.SetContent(msg)
 	v.Visible = true
 
-	return v, tickCmd()
+	// No tick: OnEnter arms the one chain, and the app calls it right after
+	// this. Arming here too gave the view two for its whole life.
+	return v, nil
 }

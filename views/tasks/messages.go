@@ -16,7 +16,7 @@ type TasksLoadedMsg struct {
 	Error error
 }
 
-type TickMsg time.Time
+type TickMsg struct{ Gen uint64 }
 
 // PollRetryMsg signals that polling found no changes; the Update handler
 // should schedule the next tick.
@@ -38,9 +38,9 @@ func LoadTasksCmd(stackName string) tea.Cmd {
 	}
 }
 
-func tickCmd() tea.Cmd {
-	return tea.Tick(PollInterval, func(t time.Time) tea.Msg {
-		return TickMsg(t)
+func tickCmd(gen uint64) tea.Cmd {
+	return tea.Tick(PollInterval, func(time.Time) tea.Msg {
+		return TickMsg{Gen: gen}
 	})
 }
 
