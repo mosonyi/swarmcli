@@ -120,13 +120,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			m.applySorting()
 			return nil
-		case "?":
-			return func() tea.Msg {
-				return view.NavigateToMsg{
-					ViewName: view.NameHelp,
-					Payload:  GetTasksHelpContent(),
-				}
-			}
 		}
 
 		var cmd tea.Cmd
@@ -180,6 +173,10 @@ func (m *Model) applySorting() {
 	m.viewport.GotoTop()
 }
 
+// HelpContent implements the app's optional help-screen contract: "?" is
+// handled centrally, and a view carrying its own screen supplies it here.
+func (m *Model) HelpContent() []helpview.HelpCategory { return GetTasksHelpContent() }
+
 // GetTasksHelpContent returns categorized help for the tasks view
 func GetTasksHelpContent() []helpview.HelpCategory {
 	return []helpview.HelpCategory{
@@ -198,7 +195,7 @@ func GetTasksHelpContent() []helpview.HelpCategory {
 				{Keys: "<↑/↓>", Description: "Scroll"},
 				{Keys: "<pgup>", Description: "Page up"},
 				{Keys: "<pgdown>", Description: "Page down"},
-				{Keys: "<esc/q>", Description: "Back"},
+				{Keys: "<esc>", Description: "Back"},
 			},
 		},
 	}

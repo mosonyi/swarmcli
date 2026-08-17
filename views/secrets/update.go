@@ -425,14 +425,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			l().Infof("Inspect key pressed for secret: %s", sec)
 			return m.inspectSecretCmd(m.selectedSecret())
 
-		case "?":
-			return func() tea.Msg {
-				return view.NavigateToMsg{
-					ViewName: view.NameHelp,
-					Payload:  GetSecretsHelpContent(),
-				}
-			}
-
 		case "N":
 			if m.sortField == SortByName {
 				m.sortAscending = !m.sortAscending
@@ -899,6 +891,10 @@ func revealDetailedHelpDesc() string {
 	return view.BEHelpDesc("reveal-secret", "Reveal secret content")
 }
 
+// HelpContent implements the app's optional help-screen contract: "?" is
+// handled centrally, and a view carrying its own screen supplies it here.
+func (m *Model) HelpContent() []helpview.HelpCategory { return GetSecretsHelpContent() }
+
 // GetSecretsHelpContent returns categorized help for the secrets view
 func GetSecretsHelpContent() []helpview.HelpCategory {
 	return []helpview.HelpCategory{
@@ -930,7 +926,7 @@ func GetSecretsHelpContent() []helpview.HelpCategory {
 				{Keys: "<↑/↓>", Description: "Navigate"},
 				{Keys: "<pgup>", Description: "Page up"},
 				{Keys: "<pgdown>", Description: "Page down"},
-				{Keys: "<esc/q>", Description: "Back to stacks"},
+				{Keys: "<esc>", Description: "Back to stacks"},
 			},
 		},
 	}

@@ -321,14 +321,11 @@ func TestKey_I_InspectError(t *testing.T) {
 	require.Contains(t, payload["title"].(string), "inspect failed")
 }
 
-func TestKey_Help(t *testing.T) {
+// The "?" key is routed by the app, not by this view — see app.Model.openHelp
+// and its tests. What the view still owns is the content the app asks it for.
+func TestHelpContent(t *testing.T) {
 	m := testModel()
-	loadStacks(m, fakeStacks("s1"))
-	cmd := m.Update(key("?"))
-	msg := runCmd(cmd)
-	nav, ok := msg.(view.NavigateToMsg)
-	require.True(t, ok)
-	require.Equal(t, view.NameHelp, nav.ViewName)
+	require.NotEmpty(t, m.HelpContent())
 }
 
 func TestKey_Esc_ClearsFilter(t *testing.T) {

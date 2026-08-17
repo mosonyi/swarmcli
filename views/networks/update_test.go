@@ -213,14 +213,11 @@ func TestKey_U_OpensUsedByView(t *testing.T) {
 	require.NotNil(t, cmd)
 }
 
-func TestKey_Help(t *testing.T) {
+// The "?" key is routed by the app, not by this view — see app.Model.openHelp
+// and its tests. What the view still owns is the content the app asks it for.
+func TestHelpContent(t *testing.T) {
 	m := testModel()
-	loadNetworks(m, fakeNetworks("net1"))
-	cmd := m.Update(key("?"))
-	msg := runCmd(cmd)
-	nav, ok := msg.(view.NavigateToMsg)
-	require.True(t, ok)
-	require.Equal(t, "help", nav.ViewName)
+	require.NotEmpty(t, m.HelpContent())
 }
 
 func TestKey_ErrorDialog_Dismiss(t *testing.T) {

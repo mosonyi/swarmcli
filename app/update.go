@@ -16,6 +16,7 @@ import (
 	"github.com/Eldara-Tech/swarmcli/views/commandinput"
 	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
 	contextsview "github.com/Eldara-Tech/swarmcli/views/contexts"
+	helpview "github.com/Eldara-Tech/swarmcli/views/help"
 	loadingview "github.com/Eldara-Tech/swarmcli/views/loading"
 	nodesview "github.com/Eldara-Tech/swarmcli/views/nodes"
 	"github.com/Eldara-Tech/swarmcli/views/searchinput"
@@ -624,6 +625,19 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// Global help. The gate is the same condition that decides whether the help
+	// bar advertises "?" at all, so the app answers exactly the keys it offers —
+	// a view that suppresses the global keys gets the keystroke instead, and can
+	// do what it likes with it.
+	if msg.String() == "?" && !m.hidesGlobalKeys() {
+		// Don't intercept if the view is searching: "?" is a character there.
+		if searchView, ok := m.currentView.(interface{ IsSearching() bool }); ok && searchView.IsSearching() {
+			cmd := m.currentView.Update(msg)
+			return m, cmd
+		}
+		return m, m.openHelp()
+	}
+
 	// Global fullscreen toggle
 	if msg.String() == "f" {
 		// Don't intercept if view is searching
@@ -644,6 +658,28 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	cmd := m.currentView.Update(msg)
 	return m, cmd
+}
+
+// openHelp navigates to the help view with whatever the current view can say
+// about itself. A view carrying its own screen implements HelpContent; every
+// other view is described by the keys it already publishes to the help bar,
+// which is a contract every view satisfies — so "?" always lands somewhere.
+func (m *Model) openHelp() tea.Cmd {
+	var categories []helpview.HelpCategory
+	if provider, ok := m.currentView.(interface {
+		HelpContent() []helpview.HelpCategory
+	}); ok {
+		categories = provider.HelpContent()
+	} else {
+		categories = helpview.FromKeys(
+			m.currentView.FrameTitle(),
+			m.currentView.ShortHelpItems(),
+			m.globalHelpEntries(),
+		)
+	}
+	return func() tea.Msg {
+		return view.NavigateToMsg{ViewName: view.NameHelp, Payload: categories}
+	}
 }
 
 func (m *Model) goBack() tea.Cmd {

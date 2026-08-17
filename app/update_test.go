@@ -6,10 +6,13 @@ package app
 import (
 	"testing"
 
+	"github.com/Eldara-Tech/swarmcli/docker"
 	"github.com/Eldara-Tech/swarmcli/views/commandinput"
 	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
 	"github.com/Eldara-Tech/swarmcli/views/helpbar"
 	"github.com/Eldara-Tech/swarmcli/views/searchinput"
+	systeminfoview "github.com/Eldara-Tech/swarmcli/views/systeminfo"
+	"github.com/Eldara-Tech/swarmcli/views/unlockdialog"
 	"github.com/Eldara-Tech/swarmcli/views/view"
 	"github.com/Eldara-Tech/swarmcli/views/viewstack"
 
@@ -50,6 +53,9 @@ func (v *searchingStubView) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
+// newTestAppModel builds a model complete enough to render: View() reaches the
+// header and both overlay dialogs, so a fixture missing any of them panics
+// rather than failing.
 func newTestAppModel(cv view.View) *Model {
 	return &Model{
 		viewport:       viewport.New(200, 50),
@@ -58,6 +64,9 @@ func newTestAppModel(cv view.View) *Model {
 		commandInput:   commandinput.New(),
 		searchInput:    searchinput.New(),
 		errorDialog:    confirmdialog.New(200, 50),
+		unlockDialog:   unlockdialog.New(200, 50),
+		updateDialog:   confirmdialog.New(200, 50),
+		systemInfo:     systeminfoview.New(docker.DefaultDeps(), "test", "test"),
 		terminalWidth:  200,
 		terminalHeight: 50,
 	}

@@ -15,25 +15,26 @@ import (
 
 // Help view provides a generic categorized help screen for any view.
 //
-// To add help to your view:
-// 1. Add "?" key binding in your view's Update() that navigates to help:
-//    case "?":
-//        return m, view.NavigateToMsg{ViewName: "help", Payload: GetMyViewHelpContent()}
+// Nothing is required to get one. "?" is handled by the app, which builds a
+// screen from the ShortHelpItems every view already publishes to the help bar
+// (see FromKeys) — so a new view answers "?" the day it is written, and neither
+// a missing key binding nor a forgotten help entry is a state a view can be in.
+// Do NOT add "?" to ShortHelpItems: the app contributes that entry itself, and
+// a second one renders twice in the bar.
 //
-// 2. Add "?" to your view's ShortHelpItems():
-//    {Key: "?", Desc: "Help"}
+// Implement HelpContent when the keys are not the whole story — what the
+// columns mean, what the view is reading, why it shows what it shows:
 //
-// 3. Create a function that returns help categories:
-//    func GetMyViewHelpContent() []helpview.HelpCategory {
-//        return []helpview.HelpCategory{
-//            {Title: "General", Items: []helpview.HelpItem{
-//                {Keys: "<key>", Description: "What it does"},
-//            }},
-//            {Title: "Navigation", Items: []helpview.HelpItem{...}},
-//        }
-//    }
+//	func (m *Model) HelpContent() []helpview.HelpCategory {
+//	    return []helpview.HelpCategory{
+//	        {Title: "General", Items: []helpview.HelpItem{
+//	            {Keys: "<key>", Description: "What it does"},
+//	        }},
+//	        {Title: "Columns", Items: []helpview.HelpItem{...}},
+//	    }
+//	}
 //
-// See views/stacks/update.go for a complete example.
+// See views/charts/help.go for a complete example.
 
 type Model struct {
 	Viewable   viewport.Model

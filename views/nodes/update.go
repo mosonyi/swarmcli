@@ -335,13 +335,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					}
 				}
 			}
-		case "?":
-			return func() tea.Msg {
-				return view.NavigateToMsg{
-					ViewName: view.NameHelp,
-					Payload:  GetNodesHelpContent(),
-				}
-			}
 		case "ctrl+t":
 			if m.List.Cursor < len(m.List.Filtered) {
 				node := m.List.Filtered[m.List.Cursor]
@@ -719,6 +712,10 @@ func (m *Model) handleLabelRemoveDialogKey(msg tea.KeyMsg) tea.Cmd {
 	}
 	return nil
 }
+
+// HelpContent implements the app's optional help-screen contract: "?" is
+// handled centrally, and a view carrying its own screen supplies it here.
+func (m *Model) HelpContent() []helpview.HelpCategory { return GetNodesHelpContent() }
 
 // GetNodesHelpContent returns categorized help for the nodes view
 func GetNodesHelpContent() []helpview.HelpCategory {

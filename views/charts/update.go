@@ -14,7 +14,6 @@ import (
 	"github.com/Eldara-Tech/swarmcli/ui"
 	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
 	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
-	helpview "github.com/Eldara-Tech/swarmcli/views/help"
 	servicesview "github.com/Eldara-Tech/swarmcli/views/services"
 	"github.com/Eldara-Tech/swarmcli/views/view"
 
@@ -362,10 +361,6 @@ func (m *Model) clampChild() {
 
 func (m *Model) handleNormalKeys(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
-	case "?":
-		return func() tea.Msg {
-			return view.NavigateToMsg{ViewName: helpview.ViewName, Payload: GetChartsHelpContent()}
-		}
 	case "N":
 		m.toggleSort(SortByName)
 	case "R":

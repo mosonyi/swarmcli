@@ -282,6 +282,7 @@ its current, average and peak value for the span on screen.
 | `w` | Cycle the span: 1 minute → 5 minutes → 15 minutes |
 | `p` | Pause. The graph freezes so a spike can be read; press again to catch up |
 | `n` / `N` | Step to the next / previous replica of the same service |
+| `?` | Full help: the keys, and what each pane is showing |
 | `Esc` | Back |
 
 The memory pane is scaled to the container's **own** limit when its

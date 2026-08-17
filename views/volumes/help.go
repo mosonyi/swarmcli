@@ -8,6 +8,10 @@ import (
 	"github.com/Eldara-Tech/swarmcli/views/view"
 )
 
+// HelpContent implements the app's optional help-screen contract: "?" is
+// handled centrally, and a view carrying its own screen supplies it here.
+func (m *Model) HelpContent() []helpview.HelpCategory { return GetVolumesHelpContent() }
+
 // GetVolumesHelpContent returns categorized help for the volumes view.
 func GetVolumesHelpContent() []helpview.HelpCategory {
 	return []helpview.HelpCategory{
@@ -45,7 +49,7 @@ func GetVolumesHelpContent() []helpview.HelpCategory {
 				{Keys: "<↑/↓>", Description: "Move cursor"},
 				{Keys: "<pgup>", Description: "Page up"},
 				{Keys: "<pgdown>", Description: "Page down"},
-				{Keys: "<esc/q>", Description: "Back"},
+				{Keys: "<esc>", Description: "Back"},
 			},
 		},
 	}

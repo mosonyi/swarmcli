@@ -254,7 +254,6 @@ func TestShortHelpItems_MainView(t *testing.T) {
 	require.True(t, keys["c"])
 	require.True(t, keys["i"])
 	require.True(t, keys["ctrl+d"])
-	require.True(t, keys["?"])
 }
 
 func TestShortHelpItems_UsedByView(t *testing.T) {

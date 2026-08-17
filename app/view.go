@@ -42,21 +42,11 @@ func (m *Model) View() string {
 
 	systemInfo := m.systemInfo.View()
 
-	// Build global help - exclude "?" when already in help view
-	globalHelp := []helpbar.HelpEntry{
-		{Key: "f", Desc: "Fullscreen"},
-		{Key: "?", Desc: "Help"},
-		{Key: "ctrl+q", Desc: "Quit"},
-	}
-	if m.hidesGlobalKeys() {
-		globalHelp = []helpbar.HelpEntry{}
-	}
-
 	// Check if current view has errors for logo color
 	hasError := m.currentView.HasErrors()
 
 	help := helpbar.New(m.viewport.Width, systeminfoview.Height).
-		WithGlobalHelp(globalHelp).
+		WithGlobalHelp(m.globalHelpEntries()).
 		WithViewHelp(m.currentView.ShortHelpItems()).
 		View(systemInfo, hasError)
 
@@ -88,6 +78,21 @@ func (m *Model) renderInputBar() string {
 		return ui.RenderFramedBoxHeight("", "", m.searchInput.View(), "", m.terminalWidth, inputBarHeight)
 	default:
 		return ""
+	}
+}
+
+// globalHelpEntries are the app's own keybindings, and the single list both the
+// help bar and the "?" screen are built from — the app must not advertise a key
+// on one surface that the other has never heard of. Empty for a view that
+// suppresses them, which is also what stops the app answering "?" for it.
+func (m *Model) globalHelpEntries() []helpbar.HelpEntry {
+	if m.hidesGlobalKeys() {
+		return nil
+	}
+	return []helpbar.HelpEntry{
+		{Key: "f", Desc: "Fullscreen"},
+		{Key: "?", Desc: "Help"},
+		{Key: helpbar.KeyQuit, Desc: "Quit"},
 	}
 }
 

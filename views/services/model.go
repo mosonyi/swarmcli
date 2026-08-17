@@ -150,7 +150,6 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "shift+w", Desc: view.BEHelpDesc("port-forward", "Port Forward"), Disabled: !view.HasAction("port-forward")},
 		{Key: "t", Desc: view.BEHelpDesc("container-stats", "Stats"), Disabled: !view.HasAction("container-stats")},
 		{Key: "/", Desc: "Filter"},
-		{Key: "?", Desc: "Help"},
 		{Key: "esc", Desc: "Back"},
 	}
 }

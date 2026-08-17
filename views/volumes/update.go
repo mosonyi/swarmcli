@@ -11,7 +11,6 @@ import (
 	"github.com/Eldara-Tech/swarmcli/core/primitives/hash"
 	"github.com/Eldara-Tech/swarmcli/ui"
 	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
-	helpview "github.com/Eldara-Tech/swarmcli/views/help"
 	view "github.com/Eldara-Tech/swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -173,10 +172,6 @@ func (m *Model) handleNormalKeys(msg tea.KeyMsg) tea.Cmd {
 	case "esc":
 		// Volumes is a root view, no back navigation.
 		return nil
-	case "?":
-		return func() tea.Msg {
-			return view.NavigateToMsg{ViewName: helpview.ViewName, Payload: GetVolumesHelpContent()}
-		}
 	case "N":
 		m.toggleSort(SortByName)
 		return nil
