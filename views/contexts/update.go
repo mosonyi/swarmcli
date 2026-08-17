@@ -10,7 +10,6 @@ import (
 	"github.com/Eldara-Tech/swarmcli/ui/dialog"
 	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
 	helpview "github.com/Eldara-Tech/swarmcli/views/help"
-	"github.com/Eldara-Tech/swarmcli/views/view"
 	"os"
 	"path/filepath"
 	"sort"
@@ -758,14 +757,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			return m.inspectContextCmd(ctx.Name)
 
-		case "?":
-			return func() tea.Msg {
-				return view.NavigateToMsg{
-					ViewName: view.NameHelp,
-					Payload:  GetContextsHelpContent(),
-				}
-			}
-
 		case "N":
 			if m.sortField == SortByName {
 				m.sortAscending = !m.sortAscending
@@ -898,6 +889,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	return nil
 }
+
+// HelpContent implements the app's optional help-screen contract: "?" is
+// handled centrally, and a view carrying its own screen supplies it here.
+func (m *Model) HelpContent() []helpview.HelpCategory { return GetContextsHelpContent() }
 
 // GetContextsHelpContent returns categorized help for the contexts view
 func GetContextsHelpContent() []helpview.HelpCategory {

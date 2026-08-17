@@ -163,14 +163,11 @@ func TestKey_P_ShowsServices(t *testing.T) {
 	require.Equal(t, "services", nav.ViewName)
 }
 
-func TestKey_Help(t *testing.T) {
+// The "?" key is routed by the app, not by this view — see app.Model.openHelp
+// and its tests. What the view still owns is the content the app asks it for.
+func TestHelpContent(t *testing.T) {
 	m := testModel()
-	loadNodes(m, fakeNodes("n1"))
-	cmd := m.Update(key("?"))
-	msg := runCmd(cmd)
-	nav, ok := msg.(view.NavigateToMsg)
-	require.True(t, ok)
-	require.Equal(t, view.NameHelp, nav.ViewName)
+	require.NotEmpty(t, m.HelpContent())
 }
 
 func TestKey_CtrlD_OpensRemoveConfirm(t *testing.T) {

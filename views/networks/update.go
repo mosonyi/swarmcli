@@ -9,7 +9,6 @@ import (
 	"github.com/Eldara-Tech/swarmcli/core/primitives/hash"
 	"github.com/Eldara-Tech/swarmcli/ui"
 	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
-	helpview "github.com/Eldara-Tech/swarmcli/views/help"
 	servicesview "github.com/Eldara-Tech/swarmcli/views/services"
 	view "github.com/Eldara-Tech/swarmcli/views/view"
 	"net/netip"
@@ -794,13 +793,6 @@ func (m *Model) handleNormalKeys(msg tea.KeyMsg) tea.Cmd {
 	case "esc":
 		// Networks is a root view, no back navigation
 		return nil
-	case "?":
-		return func() tea.Msg {
-			return view.NavigateToMsg{
-				ViewName: helpview.ViewName,
-				Payload:  GetNetworksHelpContent(),
-			}
-		}
 	case "N": // Shift+N: Sort by Name
 		if m.sortField == SortByName {
 			m.sortAscending = !m.sortAscending

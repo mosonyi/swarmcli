@@ -5,6 +5,10 @@ package networksview
 
 import helpview "github.com/Eldara-Tech/swarmcli/views/help"
 
+// HelpContent implements the app's optional help-screen contract: "?" is
+// handled centrally, and a view carrying its own screen supplies it here.
+func (m *Model) HelpContent() []helpview.HelpCategory { return GetNetworksHelpContent() }
+
 // GetNetworksHelpContent returns categorized help for the networks view.
 func GetNetworksHelpContent() []helpview.HelpCategory {
 	return []helpview.HelpCategory{
@@ -35,7 +39,7 @@ func GetNetworksHelpContent() []helpview.HelpCategory {
 				{Keys: "<↑/↓>", Description: "Move cursor"},
 				{Keys: "<pgup>", Description: "Page up"},
 				{Keys: "<pgdown>", Description: "Page down"},
-				{Keys: "<esc/q>", Description: "Back"},
+				{Keys: "<esc>", Description: "Back"},
 			},
 		},
 		{

@@ -371,11 +371,11 @@ func TestKeysOnAnEmptyListDoNotPanic(t *testing.T) {
 	}
 }
 
-func TestHelpKeyOpensTheCheatSheet(t *testing.T) {
+// The "?" key is routed by the app, not by this view — see app.Model.openHelp
+// and its tests. What the view still owns is the content the app asks it for.
+func TestHelpContent(t *testing.T) {
 	m := testModel()
-	nav := runCmd(m.Update(key("?"))).(view.NavigateToMsg)
-	require.Equal(t, "help", nav.ViewName)
-	require.NotEmpty(t, nav.Payload)
+	require.NotEmpty(t, m.HelpContent())
 }
 
 // A read failure with good data on screen must not blank the view: one

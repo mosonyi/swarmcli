@@ -419,16 +419,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// the inline task list with up/down keys. We call HandleKey later
 		// after giving task-navigation a chance to intercept the key.
 
-		// Show help screen
-		if msg.String() == "?" {
-			return func() tea.Msg {
-				return view.NavigateToMsg{
-					ViewName: view.NameHelp,
-					Payload:  GetStacksHelpContent(),
-				}
-			}
-		}
-
 		// Enter triggers navigation to services
 		if msg.String() == "enter" {
 			if m.List.Cursor < len(m.List.Filtered) {
@@ -1655,6 +1645,10 @@ func (m *Model) refreshExpandedStackTasksCmd(expandedStacks map[string]bool) tea
 
 	return tea.Batch(cmds...)
 }
+
+// HelpContent implements the app's optional help-screen contract: "?" is
+// handled centrally, and a view carrying its own screen supplies it here.
+func (m *Model) HelpContent() []helpview.HelpCategory { return GetStacksHelpContent() }
 
 // GetStacksHelpContent returns categorized help for the stacks view
 func GetStacksHelpContent() []helpview.HelpCategory {

@@ -61,7 +61,9 @@ func TestShortHelpItemsMatchRealKeys(t *testing.T) {
 		keys[e.Key] = true
 		require.NotEmpty(t, e.Desc, "key %q has no description", e.Key)
 	}
-	for _, want := range []string{"enter", "i", "v", "d", "s", "/", "?"} {
+	// "?" is not here: the app contributes that entry, and a view adding its
+	// own would render it twice.
+	for _, want := range []string{"enter", "i", "v", "d", "s", "/"} {
 		require.True(t, keys[want], "the helpbar should advertise %q", want)
 	}
 }

@@ -327,7 +327,7 @@ func TestHasErrors_WithError(t *testing.T) {
 func TestShortHelpItems(t *testing.T) {
 	m := testModel()
 	items := m.ShortHelpItems()
-	require.True(t, len(items) >= 10)
+	require.True(t, len(items) >= 9)
 	keys := make(map[string]bool)
 	for _, item := range items {
 		keys[item.Key] = true
@@ -337,7 +337,6 @@ func TestShortHelpItems(t *testing.T) {
 	require.True(t, keys["s"])
 	require.True(t, keys["i"])
 	require.True(t, keys["ctrl+d"])
-	require.True(t, keys["?"])
 }
 
 func TestOnEnter_ReturnsLoadCmd(t *testing.T) {

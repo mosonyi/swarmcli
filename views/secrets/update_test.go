@@ -201,15 +201,11 @@ func TestKey_X_NoAction_ShowsError(t *testing.T) {
 	require.Contains(t, m.err.Error(), "swarmcli.io/be")
 }
 
-func TestKey_Help_NavigatesToHelp(t *testing.T) {
+// The "?" key is routed by the app, not by this view — see app.Model.openHelp
+// and its tests. What the view still owns is the content the app asks it for.
+func TestHelpContent(t *testing.T) {
 	m := testModel()
-	loadSecrets(m, fakeSecrets("s1"))
-	cmd := m.Update(key("?"))
-	require.NotNil(t, cmd)
-	msg := runCmd(cmd)
-	nav, ok := msg.(view.NavigateToMsg)
-	require.True(t, ok)
-	require.Equal(t, view.NameHelp, nav.ViewName)
+	require.NotEmpty(t, m.HelpContent())
 }
 
 func TestKey_ErrorDialog_EnterDismisses(t *testing.T) {

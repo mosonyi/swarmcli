@@ -373,7 +373,6 @@ func TestShortHelpItems(t *testing.T) {
 	require.True(t, keys["c"])
 	require.True(t, keys["ctrl+d"])
 	require.True(t, keys["e"])
-	require.True(t, keys["?"])
 }
 
 func TestGetContextsHelpContent(t *testing.T) {

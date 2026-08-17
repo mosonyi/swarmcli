@@ -496,7 +496,6 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "c", Desc: "Create"},
 		{Key: "ctrl+d", Desc: "Delete"},
 		{Key: "/", Desc: "Filter"},
-		{Key: "?", Desc: "Help"},
 		{Key: "Esc", Desc: "Back"},
 	}
 }

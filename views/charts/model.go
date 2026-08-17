@@ -200,7 +200,6 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "d", Desc: "Diff"},
 		{Key: "s", Desc: "Services"},
 		{Key: "/", Desc: "Filter"},
-		{Key: "?", Desc: "Help"},
 		{Key: "esc", Desc: "Back"},
 	}
 }

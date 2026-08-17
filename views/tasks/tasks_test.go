@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/Eldara-Tech/swarmcli/docker"
-	"github.com/Eldara-Tech/swarmcli/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"
@@ -187,14 +186,11 @@ func TestKey_Sort_State(t *testing.T) {
 	require.Equal(t, SortByState, m.sortField)
 }
 
-func TestKey_Help(t *testing.T) {
+// The "?" key is routed by the app, not by this view — see app.Model.openHelp
+// and its tests. What the view still owns is the content the app asks it for.
+func TestHelpContent(t *testing.T) {
 	m := testModel()
-	cmd := m.Update(key("?"))
-	require.NotNil(t, cmd)
-	msg := cmd()
-	nav, ok := msg.(view.NavigateToMsg)
-	require.True(t, ok)
-	require.Equal(t, view.NameHelp, nav.ViewName)
+	require.NotEmpty(t, m.HelpContent())
 }
 
 func TestGetTasksHelpContent(t *testing.T) {

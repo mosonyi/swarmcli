@@ -421,13 +421,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				m.confirmDialog.ErrorMode = false
 				m.confirmDialog.Message = fmt.Sprintf("Restart service %q?", entry.ServiceName)
 			}
-		case "?":
-			return func() tea.Msg {
-				return view.NavigateToMsg{
-					ViewName: view.NameHelp,
-					Payload:  GetServicesHelpContent(),
-				}
-			}
 		case "ctrl+d":
 			if m.List.Cursor < len(m.List.Filtered) {
 				entry := m.List.Filtered[m.List.Cursor]
@@ -1002,6 +995,10 @@ func formatRelativeTime(t time.Time) string {
 		return fmt.Sprintf("%dy ago", years)
 	}
 }
+
+// HelpContent implements the app's optional help-screen contract: "?" is
+// handled centrally, and a view carrying its own screen supplies it here.
+func (m *Model) HelpContent() []helpview.HelpCategory { return GetServicesHelpContent() }
 
 // GetServicesHelpContent returns categorized help for the services view
 func GetServicesHelpContent() []helpview.HelpCategory {

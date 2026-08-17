@@ -587,13 +587,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			cfg := m.selectedConfig()
 			l().Infof("Inspect key pressed for config: %s", cfg)
 			return m.inspectConfigCmd(m.selectedConfig())
-		case "?":
-			return func() tea.Msg {
-				return view.NavigateToMsg{
-					ViewName: view.NameHelp,
-					Payload:  GetConfigsHelpContent(),
-				}
-			}
 		case "enter":
 			cfg := m.selectedConfig()
 			l().Infof("Inspect key pressed for config: %s", cfg)
@@ -1074,6 +1067,10 @@ func (m *Model) handleUsedByViewKey(msg tea.KeyMsg) tea.Cmd {
 	}
 }
 
+// HelpContent implements the app's optional help-screen contract: "?" is
+// handled centrally, and a view carrying its own screen supplies it here.
+func (m *Model) HelpContent() []helpview.HelpCategory { return GetConfigsHelpContent() }
+
 // GetConfigsHelpContent returns categorized help for the configs view
 func GetConfigsHelpContent() []helpview.HelpCategory {
 	return []helpview.HelpCategory{
@@ -1107,7 +1104,7 @@ func GetConfigsHelpContent() []helpview.HelpCategory {
 				{Keys: "<↑/↓>", Description: "Navigate"},
 				{Keys: "<pgup>", Description: "Page up"},
 				{Keys: "<pgdown>", Description: "Page down"},
-				{Keys: "<esc/q>", Description: "Back to stacks"},
+				{Keys: "<esc>", Description: "Back to stacks"},
 			},
 		},
 	}
