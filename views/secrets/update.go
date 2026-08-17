@@ -539,7 +539,7 @@ func (m *Model) buildColumns() []filterlist.Column[secretItem] {
 		}},
 		{Label: "CREATED AT", MinWidth: 19, Cell: func(s secretItem) string { return formatTimestamp(s.CreatedAt) }},
 		{Label: "UPDATED AT", MinWidth: 19, Cell: func(s secretItem) string { return formatTimestamp(s.UpdatedAt) }},
-		{Label: "LABELS", MinWidth: 6, Flex: true, Cell: func(s secretItem) string { return formatLabels(s.Labels) }},
+		{Label: "LABELS", MinWidth: 6, Flex: true, Grow: true, Cell: func(s secretItem) string { return formatLabels(s.Labels) }},
 	}
 }
 
