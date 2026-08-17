@@ -46,6 +46,10 @@ type Model struct {
 	height     int
 	// app-level "/" filter query
 	query string
+	// overflows records whether the last render left content out of sight, so
+	// the footer can offer the scroll keys only when there is something to
+	// scroll to.
+	overflows bool
 	// commandHelp, when set, selects the vertical single-column
 	// per-command help layout (distinct from the columnar keybinding
 	// cheat-sheet produced by NewDetailed).
