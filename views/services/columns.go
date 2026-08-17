@@ -93,7 +93,7 @@ func (m *Model) serviceColumns() []serviceColumn {
 			Label: "UPDATED", MinWidth: 7,
 			Cell: func(e docker.ServiceEntry) string { return formatRelativeTime(e.UpdatedAt) }}},
 		{sort: SortByError, hasSort: true, col: filterlist.Column[docker.ServiceEntry]{
-			Label: "ERROR", MinWidth: 6, Flex: true, Grow: true,
+			Label: "ERROR", MinWidth: 6, Flex: true,
 			Cell: func(e docker.ServiceEntry) string { return m.serviceErrorText[e.ServiceID] }}},
 	}
 	dropStack := m.filterType != AllFilter

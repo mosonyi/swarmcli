@@ -44,9 +44,9 @@ const minOwnerWidth = 32
 //
 // The set is responsive. A terminal with surplus width gets a DETAIL column,
 // which carries the one genuinely long, variable-length thing a release has to
-// say, and which absorbs all the leftover — so the table fills the width with
-// information rather than with air, and no column is stretched away from its
-// neighbour. A terminal without that surplus gets the compact set instead.
+// say — so the table fills the width with information first, and only shares out
+// what is left over that. A terminal without that surplus gets the compact set
+// instead.
 func (m *Model) buildColumns() []filterlist.Column[releaseItem] {
 	base := m.baseColumns(false)
 	width := m.list.Viewport.Width
@@ -79,17 +79,18 @@ func (m *Model) buildColumns() []filterlist.Column[releaseItem] {
 	}
 	return append(cols, filterlist.Column[releaseItem]{
 		Label: "DETAIL", MinWidth: 6,
-		// Both: it takes every spare cell, and — with OWNER, the only other
-		// column allowed to truncate — a narrowing terminal eats into the
-		// explanation rather than into the release's name.
-		Flex: true, Grow: true,
+		// Elastic, so that — with OWNER, the only other column allowed to
+		// truncate — a narrowing terminal eats into the explanation rather than
+		// into the release's name, and a wide one spends its leftover on the two
+		// columns at the end rather than on the identity columns at the front.
+		Flex: true,
 		Cell: func(r releaseItem) string { return r.detail() },
 	})
 }
 
 // baseColumns is the set every width shows. withDetail moves the elasticity to
-// the DETAIL column that follows: without it, NAME and CHART give up width
-// first and scroll when truncated, and UPDATED soaks up any small surplus.
+// the DETAIL and OWNER columns that follow: without them, NAME and CHART are
+// what gives up width first, scrolls when truncated, and shares any surplus.
 func (m *Model) baseColumns(withDetail bool) []filterlist.Column[releaseItem] {
 	flex := !withDetail
 	return []filterlist.Column[releaseItem]{
@@ -100,7 +101,7 @@ func (m *Model) baseColumns(withDetail bool) []filterlist.Column[releaseItem] {
 		{Label: "CHART", MinWidth: 5, Flex: flex, Cell: func(r releaseItem) string { return r.chartRef() }},
 		// Next to CHART, because it is the version that chart could be at.
 		{Label: "LATEST", MinWidth: 6, Cell: m.updCell},
-		{Label: "UPDATED", MinWidth: 16, Grow: flex, Cell: func(r releaseItem) string { return formatCreated(r.Created) }},
+		{Label: "UPDATED", MinWidth: 16, Cell: func(r releaseItem) string { return formatCreated(r.Created) }},
 	}
 }
 

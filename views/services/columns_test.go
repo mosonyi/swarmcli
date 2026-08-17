@@ -340,3 +340,40 @@ func TestHeaderRowAlignment(t *testing.T) {
 		}
 	}
 }
+
+// colWidth reports the laid-out width of the named column at totalWidth, and
+// the width at which the table is neither stretched nor squeezed — the baseline
+// a wider terminal has to be compared against.
+func colWidth(t *testing.T, m *Model, label string, totalWidth int) (width, natural int) {
+	t.Helper()
+	cols := m.layoutColumns()
+	sortCol, _ := m.sortIndicator()
+	natural = filterlist.NaturalWidth(cols, m.List.Items, sortCol)
+	widths := filterlist.LayoutWidths(cols, m.List.Items, totalWidth, sortCol)
+	for i, c := range cols {
+		if c.Label == label {
+			return widths[i], natural
+		}
+	}
+	t.Fatalf("no %s column", label)
+	return 0, 0
+}
+
+// A wide terminal must be filled, not left half dead.
+//
+// Confining the leftover to the trailing column was tried first, so the columns
+// before it would stop drifting apart. ERROR is that column here, and it is
+// empty on a swarm with nothing wrong: on a 360-column terminal the table needs
+// 177 and the remaining 183 cells went into a cell with nothing in them, so
+// every service packed into the left half. The elastic columns share it instead.
+func TestWideTerminalFillsTheColumnsAnOperatorReads(t *testing.T) {
+	m := testModel()
+	loadServices(m, fakeEntries("alpha", "beta"))
+
+	for _, label := range []string{"SERVICE", "IMAGE", "PORTS"} {
+		wide, natural := colWidth(t, m, label, 300)
+		require.Less(t, natural, 300, "the fixture must leave a wide terminal something to spend")
+		at, _ := colWidth(t, m, label, natural)
+		require.Greater(t, wide, at, "%s must take a share of the leftover", label)
+	}
+}

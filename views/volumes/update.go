@@ -28,11 +28,11 @@ func formatCreated(t time.Time) string {
 // and horizontally scroll when truncated on the selected row); the rest size to
 // content.
 //
-// MOUNT POINT is last, and is the column that grows. A mount path is by far the
-// longest and least-scanned value a volume has, so it is both the natural place
-// to spend a wide terminal's leftover width and the one that can be truncated
-// without losing the row's identity. It used to sit in the middle, where the
-// slack it absorbed opened a gap between it and CREATED.
+// MOUNT POINT is last. A mount path is by far the longest and least-scanned
+// value a volume has, so it is the one that can be truncated without losing the
+// row's identity, and the one whose share of a wide terminal's leftover reads as
+// margin rather than as a gap. It used to sit in the middle, between HOST and
+// CREATED.
 func (m *Model) buildColumns() []filterlist.Column[volumeItem] {
 	return []filterlist.Column[volumeItem]{
 		{Label: "NAME", MinWidth: 4, Flex: true, Cell: func(v volumeItem) string { return v.Name }},
@@ -40,7 +40,7 @@ func (m *Model) buildColumns() []filterlist.Column[volumeItem] {
 		{Label: "DRIVER", MinWidth: 6, Cell: func(v volumeItem) string { return v.Driver }},
 		{Label: "CREATED", MinWidth: 16, Cell: func(v volumeItem) string { return formatCreated(v.Created) }},
 		{Label: "HOST", MinWidth: 4, Cell: func(v volumeItem) string { return displayOrDash(v.Host) }},
-		{Label: "MOUNT POINT", MinWidth: 10, Flex: true, Grow: true, Cell: func(v volumeItem) string { return v.Mountpoint }},
+		{Label: "MOUNT POINT", MinWidth: 10, Flex: true, Cell: func(v volumeItem) string { return v.Mountpoint }},
 	}
 }
 
