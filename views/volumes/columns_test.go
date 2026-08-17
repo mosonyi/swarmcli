@@ -77,8 +77,8 @@ func TestResetScrollOnCursorMove(t *testing.T) {
 // before it would stop drifting apart. It stops the drift by spending the whole
 // surplus on one cell: on a 360-column terminal the volumes table needs 108 and
 // MOUNT POINT got a 300-cell column to hold a 43-character path, so everything
-// packed into the left third. Operators asked for the width back.
-func TestWideTerminalSpreadsTheLeftoverAcrossTheElasticColumns(t *testing.T) {
+// packed into the left third. Every column takes an equal share instead.
+func TestWideTerminalWidensEveryGapEqually(t *testing.T) {
 	positions := func(width int) map[string]int {
 		m := testModel()
 		m.volumesList.Viewport.Width = width
@@ -94,9 +94,14 @@ func TestWideTerminalSpreadsTheLeftoverAcrossTheElasticColumns(t *testing.T) {
 	}
 
 	narrow, wide := positions(140), positions(240)
-	require.Greater(t, wide["STACK"], narrow["STACK"],
-		"NAME shares the leftover, so every later column starts further right")
-	require.Greater(t, wide["MOUNT POINT"], narrow["MOUNT POINT"])
+	gap := wide["STACK"] - narrow["STACK"]
+	require.Positive(t, gap, "a wider terminal must be filled, not left dead")
+	// Each column starts one more gap further right than the one before it, so
+	// the extra width is spacing rather than a hole after any single column.
+	for i, col := range []string{"DRIVER", "CREATED", "HOST", "MOUNT POINT"} {
+		require.Equal(t, gap*(i+2), wide[col]-narrow[col],
+			"%s must move by its position's share of equal gaps", col)
+	}
 
 	m := testModel()
 	m.volumesList.Viewport.Width = 240
