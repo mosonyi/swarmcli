@@ -16,30 +16,19 @@ import (
 type Column[T any] struct {
 	Label    string // header label; also the no-truncate width floor
 	MinWidth int    // declared content floor (excludes the inter-column gap)
-	// Flex marks a column as elastic downwards: it gives up width first when the
-	// terminal is too narrow, and horizontally scrolls when truncated on a
-	// selected row.
+	// Flex marks a column as elastic in both directions: it gives up width first
+	// when the terminal is too narrow (and horizontally scrolls when truncated on
+	// a selected row), and it shares the leftover when the terminal is wider than
+	// the content needs.
+	//
+	// Confining the leftover to a single trailing column was tried instead, so
+	// that the columns before it stop drifting apart. It removes the gaps by
+	// spending the whole surplus on one cell, which on a wide terminal packs the
+	// table into the left third and leaves the rest of the screen dead — and it
+	// only reads as margin when that column has something in it, which ERROR on a
+	// healthy swarm and LABELS on unlabelled entities do not. Sharing it is the
+	// behaviour operators asked for at the widths they actually run.
 	Flex bool
-	// Grow marks the column that absorbs leftover width when the terminal is
-	// wider than the content needs.
-	//
-	// It is separate from Flex because the two are not the same property, and a
-	// table of short values makes that obvious: flexing NAME so a long one can
-	// scroll on an 80-column terminal also hands it half the slack on a
-	// 200-column one, opening a void in the middle of every row. Declaring Grow
-	// on the trailing column instead puts the leftover after the last cell,
-	// where it reads as margin.
-	//
-	// It only applies while the column has something to spend the width on. A
-	// grow column whose every cell fits inside its own header — services' ERROR
-	// on a healthy swarm, LABELS on unlabelled configs — would put the whole
-	// leftover into a cell with nothing in it, which is the "half a wide
-	// terminal dead" case Grow exists to avoid, not an instance of it. There the
-	// slack goes back to the Flex columns.
-	//
-	// When no column declares Grow the Flex columns absorb the slack, which is
-	// what every view did before Grow existed.
-	Grow bool
 	Cell func(T) string // extracts the plain cell text (the closure may capture model state)
 }
 
@@ -152,8 +141,6 @@ func LayoutWidths[T any](cols []Column[T], items []T, totalWidth, sortCol int) [
 	content := make([]int, n)
 	floors := make([]int, n)
 	flex := make([]bool, n)
-	grow := make([]bool, n)
-	growHasContent := false
 	sum := 0
 	for i, c := range cols {
 		// Floor: the header label is never truncated by the renderer, so a column
@@ -181,8 +168,6 @@ func LayoutWidths[T any](cols []Column[T], items []T, totalWidth, sortCol int) [
 		floors[i] = fl
 		content[i] = w
 		flex[i] = c.Flex
-		grow[i] = c.Grow
-		growHasContent = growHasContent || (c.Grow && w > fl)
 		sum += w
 	}
 
@@ -196,14 +181,7 @@ func LayoutWidths[T any](cols []Column[T], items []T, totalWidth, sortCol int) [
 	need := sum + ColGap*n
 	switch {
 	case need < totalWidth:
-		// Hand the leftover to the Grow columns, falling back to the Flex ones
-		// for a view that declares none — or whose grow column has nothing to
-		// spend it on — see Column.Grow.
-		absorb := grow
-		if !growHasContent {
-			absorb = flex
-		}
-		distributeSlack(content, absorb, totalWidth-need)
+		distributeSlack(content, flex, totalWidth-need)
 	case need > totalWidth:
 		shrinkColumns(content, floors, flex, need-totalWidth)
 	}

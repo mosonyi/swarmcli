@@ -76,7 +76,7 @@ func revisionColumns() []filterlist.Column[charts.Release] {
 			return r.Chart.Name + "-" + r.Chart.Version
 		}},
 		{Label: "UPDATED", MinWidth: 16, Cell: func(r charts.Release) string { return formatCreated(parseCreated(r.Created)) }},
-		{Label: "OWNER", MinWidth: 5, Flex: true, Grow: true, Cell: func(r charts.Release) string {
+		{Label: "OWNER", MinWidth: 5, Flex: true, Cell: func(r charts.Release) string {
 			return ownerCell(r.Owner, r.Name)
 		}},
 	}
@@ -87,7 +87,7 @@ func serviceColumns() []filterlist.Column[charts.ServiceState] {
 		{Label: "SERVICE", MinWidth: 7, Flex: true, Cell: func(s charts.ServiceState) string { return s.Name }},
 		{Label: "MODE", MinWidth: 4, Cell: func(s charts.ServiceState) string { return displayOrDash(s.Mode) }},
 		{Label: "REPLICAS", MinWidth: 8, Cell: func(s charts.ServiceState) string { return displayOrDash(s.Replicas) }},
-		{Label: "STATUS", MinWidth: 6, Flex: true, Grow: true, Cell: func(s charts.ServiceState) string {
+		{Label: "STATUS", MinWidth: 6, Flex: true, Cell: func(s charts.ServiceState) string {
 			return displayOrDash(s.Status)
 		}},
 	}

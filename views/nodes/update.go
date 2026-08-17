@@ -545,7 +545,7 @@ func (m *Model) buildColumns() []filterlist.Column[docker.NodeEntry] {
 		{Label: "MGR STATUS", Cell: func(n docker.NodeEntry) string { return n.ManagerStatus }},
 		{Label: "VERSION", Cell: func(n docker.NodeEntry) string { return n.Version }},
 		{Label: "ADDRESS", Cell: func(n docker.NodeEntry) string { return n.Addr }},
-		{Label: "LABELS", MinWidth: 6, Flex: true, Grow: true, Cell: func(n docker.NodeEntry) string { return formatLabels(n.Labels) }},
+		{Label: "LABELS", MinWidth: 6, Flex: true, Cell: func(n docker.NodeEntry) string { return formatLabels(n.Labels) }},
 	}
 }
 

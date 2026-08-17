@@ -71,31 +71,14 @@ func TestResetScrollOnCursorMove(t *testing.T) {
 		"scroll offset must reset when the cursor moves")
 }
 
-// The grow column must be the last one, and there must be only one.
+// A wide terminal must be filled, not left half dead.
 //
-// A grow column in the middle does not remove the void a wide terminal opens,
-// it relocates it to just after that column; two of them split the slack and
-// open two. Both were shipped and reverted before this rule was written down.
-func TestExactlyOneGrowColumnAndItIsLast(t *testing.T) {
-	cols := testModel().buildColumns()
-	require.NotEmpty(t, cols)
-
-	var growing []string
-	for _, c := range cols {
-		if c.Grow {
-			growing = append(growing, c.Label)
-		}
-	}
-	require.Len(t, growing, 1, "exactly one column may absorb leftover width")
-	require.Equal(t, cols[len(cols)-1].Label, growing[0],
-		"and it must be the last column, or the gap merely moves")
-}
-
-// A wider terminal must feed the growing column, not spread the others apart.
-// Before MOUNT POINT moved last and became the sole grow column, NAME, MOUNT
-// POINT and HOST each took a third of the slack, so a 13-character volume name
-// sat in a 45-cell column on a wide screen.
-func TestWideTerminalDoesNotSpreadTheColumns(t *testing.T) {
+// Confining the leftover to the trailing column was tried first, so the columns
+// before it would stop drifting apart. It stops the drift by spending the whole
+// surplus on one cell: on a 360-column terminal the volumes table needs 108 and
+// MOUNT POINT got a 300-cell column to hold a 43-character path, so everything
+// packed into the left third. Operators asked for the width back.
+func TestWideTerminalSpreadsTheLeftoverAcrossTheElasticColumns(t *testing.T) {
 	positions := func(width int) map[string]int {
 		m := testModel()
 		m.volumesList.Viewport.Width = width
@@ -110,8 +93,10 @@ func TestWideTerminalDoesNotSpreadTheColumns(t *testing.T) {
 		return out
 	}
 
-	require.Equal(t, positions(140), positions(240),
-		"only the last column may take the leftover")
+	narrow, wide := positions(140), positions(240)
+	require.Greater(t, wide["STACK"], narrow["STACK"],
+		"NAME shares the leftover, so every later column starts further right")
+	require.Greater(t, wide["MOUNT POINT"], narrow["MOUNT POINT"])
 
 	m := testModel()
 	m.volumesList.Viewport.Width = 240
