@@ -40,8 +40,9 @@ func GetChartsHelpContent() []helpview.HelpCategory {
 			Title: "The LATEST column",
 			Items: []helpview.HelpItem{
 				{Keys: "0.2.0", Description: "A newer chart version is published in a cached repository index"},
-				{Keys: "—", Description: "Nothing newer, or the chart is in no index (a local chart)"},
-				{Keys: "?", Description: "No cached index to compare against — run `swarmcli charts repo update`"},
+				{Keys: "✓", Description: "Up to date: the chart is in a cached index and nothing newer is published"},
+				{Keys: "—", Description: "Nothing to compare against — the chart is in no cached index, which is what a local chart looks like"},
+				{Keys: "?", Description: "No cached index at all — run `swarmcli charts repo update`"},
 			},
 		},
 		{

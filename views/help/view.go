@@ -29,6 +29,12 @@ func (m *Model) FrameHeader() string {
 var SupportContact string
 
 func (m *Model) FrameFooter() string {
+	// overflows is set by the last render, which the app runs before it asks
+	// for the footer. Both variants are one line, so the frame's row budget is
+	// the same either way and a stale flag cannot resize anything.
+	if m.overflows {
+		return ui.StatusBarStyle.Render("<↑/↓> scroll · <esc> go back")
+	}
 	return ui.StatusBarStyle.Render("Press <esc> to go back")
 }
 
@@ -53,109 +59,108 @@ func (m *Model) View() string {
 	return ui.RenderViewFrame(m.FrameTitle(), m.FrameHeader(), m.FrameContent(), m.FrameFooter(), m.Viewable.Width, m.Viewable.Height, false)
 }
 
+// buildCategorizedContent lays the cheat sheet out as category blocks packed
+// into as many columns as the terminal has room for, and hands the result to
+// the viewport so a screen taller than the frame scrolls instead of losing its
+// tail. See layout.go for why the column count is not the category count.
 func (m *Model) buildCategorizedContent() string {
-	width := m.Viewable.Width
-	if width <= 0 {
-		width = m.width
-	}
-	if width <= 0 {
-		width = 80
-	}
+	width := m.contentWidth()
+	categories := m.filteredCategories()
 
-	categoryStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("2"))
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("33")).
-		Bold(true)
-
-	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("252"))
-
-	// Apply query filter to categories
-	categories := m.categories
-	if m.query != "" {
-		lower := strings.ToLower(m.query)
-		var filtered []HelpCategory
-		for _, cat := range categories {
-			var items []HelpItem
-			for _, item := range cat.Items {
-				if strings.Contains(strings.ToLower(item.Keys), lower) ||
-					strings.Contains(strings.ToLower(item.Description), lower) {
-					items = append(items, item)
-				}
-			}
-			if len(items) > 0 {
-				filtered = append(filtered, HelpCategory{Title: cat.Title, Items: items})
-			}
-		}
-		categories = filtered
+	// Balancing can find that the sheet reads better in fewer columns than the
+	// width allows. Take that answer and lay out again in it, so the columns
+	// that remain get the whole width rather than leaving an empty one.
+	cols := columnCount(width, len(categories))
+	packed := packAt(categories, width, cols)
+	for len(packed) < cols && cols > 1 {
+		cols = len(packed)
+		packed = packAt(categories, width, cols)
 	}
 
-	numCols := len(categories)
-	if numCols == 0 {
-		numCols = 1
+	colWidth := width / max(len(packed), 1)
+	for i, col := range packed {
+		packed[i] = lipgloss.NewStyle().Width(colWidth).Render(col)
 	}
-	colWidth := width / numCols
-	maxKeyWidth := 15
 
-	maxRows := 0
+	return m.scroll(lipgloss.JoinHorizontal(lipgloss.Top, packed...))
+}
+
+// packAt renders the categories for a cols-wide layout and balances them
+// across it.
+func packAt(categories []HelpCategory, width, cols int) []string {
+	colWidth := width / cols
+	blocks := make([]string, 0, len(categories))
 	for _, cat := range categories {
-		if len(cat.Items) > maxRows {
-			maxRows = len(cat.Items)
-		}
+		blocks = append(blocks, renderCategory(cat, colWidth-categoryGutter))
 	}
+	return packColumns(blocks, cols)
+}
 
-	var headerParts []string
-	for _, cat := range categories {
-		titleText := strings.ToUpper(cat.Title)
-		paddedTitle := fmt.Sprintf("%-*s", colWidth, titleText)
-		styledTitle := categoryStyle.Render(paddedTitle)
-		headerParts = append(headerParts, styledTitle)
+// contentWidth is the width the cheat sheet has to lay out in.
+func (m *Model) contentWidth() int {
+	if m.Viewable.Width > 0 {
+		return m.Viewable.Width
 	}
-	headerRow := strings.Join(headerParts, "")
+	if m.width > 0 {
+		return m.width
+	}
+	return 80
+}
 
-	var contentLines []string
-	for row := 0; row < maxRows; row++ {
-		var rowParts []string
-		for _, cat := range categories {
-			if row < len(cat.Items) {
-				item := cat.Items[row]
-				styledKey := keyStyle.Render(fmt.Sprintf("%-*s", maxKeyWidth, item.Keys))
-				styledDesc := descStyle.Render(item.Description)
-
-				plainText := fmt.Sprintf("%-*s %s", maxKeyWidth, item.Keys, item.Description)
-				plainTextWidth := lipgloss.Width(plainText)
-
-				if plainTextWidth > colWidth {
-					descWidth := colWidth - maxKeyWidth - 1
-					if descWidth > 0 && len(item.Description) > descWidth {
-						styledDesc = descStyle.Render(item.Description[:descWidth-3] + "...")
-						plainText = fmt.Sprintf("%-*s %s", maxKeyWidth, item.Keys, item.Description[:descWidth-3]+"...")
-						plainTextWidth = lipgloss.Width(plainText)
-					}
-				}
-
-				styledLine := styledKey + " " + styledDesc
-				paddingNeeded := colWidth - plainTextWidth
-				if paddingNeeded > 0 {
-					styledLine += strings.Repeat(" ", paddingNeeded)
-				}
-
-				rowParts = append(rowParts, styledLine)
-			} else {
-				rowParts = append(rowParts, strings.Repeat(" ", colWidth))
+// filteredCategories applies the app-level "/" query, keeping a category only
+// while it still has an item that matches.
+func (m *Model) filteredCategories() []HelpCategory {
+	if m.query == "" {
+		return m.categories
+	}
+	lower := strings.ToLower(m.query)
+	var filtered []HelpCategory
+	for _, cat := range m.categories {
+		var items []HelpItem
+		for _, item := range cat.Items {
+			if strings.Contains(strings.ToLower(item.Keys), lower) ||
+				strings.Contains(strings.ToLower(item.Description), lower) {
+				items = append(items, item)
 			}
 		}
-		contentLines = append(contentLines, strings.Join(rowParts, ""))
+		if len(items) > 0 {
+			filtered = append(filtered, HelpCategory{Title: cat.Title, Items: items})
+		}
+	}
+	return filtered
+}
+
+// scroll puts content in the viewport, sized to the rows the frame leaves, and
+// records whether any of it is out of sight so the footer can say so.
+//
+// The frame is measured from m.height rather than from the viewport's own
+// height, which this then overwrites: reading back what we set would shrink the
+// page a little more on every render.
+func (m *Model) scroll(content string) string {
+	frame := ui.ComputeFrameDimensions(m.contentWidth(), m.height, m.width, m.height, "", m.FrameFooter())
+	rows := frame.DesiredContentLines
+	if SupportContact != "" {
+		// The SUPPORT line and its spacer are pinned below the scrolling part.
+		rows = max(0, rows-2)
+	}
+	if rows < 1 {
+		rows = 1
 	}
 
-	fullContent := headerRow + "\n\n" + strings.Join(contentLines, "\n")
+	m.Viewable.Width = m.contentWidth()
+	m.Viewable.Height = rows
+	m.Viewable.SetContent(content)
+	// bubbles keeps YOffset across a height change, so a viewport that grew
+	// would pad the rows it gained until the next keypress clamped it.
+	m.Viewable.SetYOffset(m.Viewable.YOffset)
+	m.overflows = m.Viewable.TotalLineCount() > rows
 
-	footer := m.FrameFooter()
-	frame := ui.ComputeFrameDimensions(m.Viewable.Width, m.Viewable.Height, m.width, m.height, "", footer)
-	return appendSupportLine(fullContent, frame.DesiredContentLines)
+	out := m.Viewable.View()
+	if SupportContact == "" {
+		return out
+	}
+	support := categoryTitleStyle.Render("SUPPORT") + "  " + itemDescStyle.Render(SupportContact)
+	return ui.TrimOrPadContentToLines(out+"\n"+support, frame.DesiredContentLines)
 }
 
 // appendSupportLine fits content to total lines, pinning the edition SUPPORT

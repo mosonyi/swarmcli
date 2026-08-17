@@ -27,10 +27,13 @@ type releaseOps interface {
 	// the shared Docker snapshot cache, so calling it once per release costs
 	// one snapshot and N in-memory filters.
 	ServiceStates(ctx context.Context, release string) []charts.ServiceState
-	// Outdated joins the installed releases against the cached repository
-	// indexes. haveIndexes reports whether there was anything to compare
-	// against, so the view can say "no indexes" rather than "up to date".
-	Outdated(rels []charts.Release) (entries []charts.OutdatedEntry, haveIndexes bool)
+	// Available joins the installed releases against the cached repository
+	// indexes, one entry per release whose chart is in one. haveIndexes reports
+	// whether there was anything to compare against, so the view can say "no
+	// indexes" rather than "up to date" — and a release missing from the map
+	// while haveIndexes is true is a chart in no index, which is a third answer
+	// again.
+	Available(rels []charts.Release) (avail map[string]charts.Availability, haveIndexes bool)
 }
 
 // engineOps binds releaseOps to the ambient release engine.
@@ -63,12 +66,12 @@ func (o *engineOps) ServiceStates(ctx context.Context, release string) []charts.
 	return o.engine.Backend.StackServices(ctx, release)
 }
 
-func (o *engineOps) Outdated(rels []charts.Release) ([]charts.OutdatedEntry, bool) {
+func (o *engineOps) Available(rels []charts.Release) (map[string]charts.Availability, bool) {
 	o.once.Do(o.loadIndexes)
 	if !o.haveIndexes {
 		return nil, false
 	}
-	return charts.Outdated(rels, o.indexes), true
+	return charts.Available(rels, o.indexes), true
 }
 
 // loadIndexes reads the cached repository indexes and nothing else.

@@ -83,3 +83,58 @@ func TestOutdatedSortsByRelease(t *testing.T) {
 	require.Equal(t, "alpha", got[0].Release)
 	require.Equal(t, "zeta", got[1].Release)
 }
+
+// --- Available ---
+
+// Available answers the question Outdated cannot: an entry with Newer false is
+// a release on the newest published version, and no entry at all is a chart in
+// no index. Outdated omits both, which made the two indistinguishable.
+func TestAvailableSeparatesCurrentFromNotIndexed(t *testing.T) {
+	indexes := map[string]*Index{"repo": idx("mychart", "1.0.0", "2.1.0")}
+
+	got := Available([]Release{
+		rel("stale", "mychart", "1.0.0"),
+		rel("current", "mychart", "2.1.0"),
+		rel("ahead", "mychart", "3.0.0"),
+		rel("local", "unpublished", "0.1.0"),
+	}, indexes)
+
+	require.Equal(t, Availability{Repo: "repo", Latest: "2.1.0", Newer: true}, got["stale"])
+	require.Equal(t, Availability{Repo: "repo", Latest: "2.1.0", Newer: false}, got["current"])
+	require.Equal(t, Availability{Repo: "repo", Latest: "2.1.0", Newer: false}, got["ahead"],
+		"a release ahead of the index has nothing newer to install")
+	require.NotContains(t, got, "local", "a chart in no index is absent, not current")
+}
+
+func TestAvailableIsEmptyWithoutIndexes(t *testing.T) {
+	got := Available([]Release{rel("app", "mychart", "1.0.0")}, nil)
+	require.Empty(t, got)
+}
+
+// Outdated is now a filter over Available, so this pins the two together: every
+// entry Outdated reports must be one Available marked as newer, and nothing
+// else.
+func TestOutdatedIsAvailableFilteredToUpgrades(t *testing.T) {
+	indexes := map[string]*Index{"repo": idx("mychart", "1.0.0", "2.1.0")}
+	rels := []Release{
+		rel("stale", "mychart", "1.0.0"),
+		rel("current", "mychart", "2.1.0"),
+		rel("local", "unpublished", "0.1.0"),
+	}
+
+	avail := Available(rels, indexes)
+	var wantNewer []string
+	for name, a := range avail {
+		if a.Newer {
+			wantNewer = append(wantNewer, name)
+		}
+	}
+
+	got := Outdated(rels, indexes)
+	require.Len(t, got, len(wantNewer))
+	for _, e := range got {
+		require.Contains(t, wantNewer, e.Release)
+		require.Equal(t, avail[e.Release].Latest, e.Latest)
+		require.Equal(t, avail[e.Release].Repo, e.Repo)
+	}
+}
