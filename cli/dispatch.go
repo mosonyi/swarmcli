@@ -5,7 +5,9 @@ package cli
 
 import "github.com/Eldara-Tech/swarmcli/charts"
 
-const topUsage = `swarmcli — keyboard-driven Docker Swarm manager
+// topUsageHead lists what this package itself serves. Anything a build
+// embedding this module registered is rendered after it — see topUsage.
+const topUsageHead = `swarmcli — keyboard-driven Docker Swarm manager
 
 Run with no arguments to launch the interactive TUI.
 
@@ -13,9 +15,19 @@ Commands:
   charts      Manage charts (Helm-like package manager)
   version     Print the swarmcli version
   help        Show this help
+`
 
+const topUsageTail = `
 Run "swarmcli charts help" for chart commands.
 `
+
+// topUsage is the help this binary can honestly print: the built-in verbs
+// plus whatever a build embedding this module registered. A build of this
+// repository alone registers nothing and prints exactly what it printed
+// before the seam existed.
+func topUsage() string {
+	return topUsageHead + externalUsage() + topUsageTail
+}
 
 // binaryVersion is the version this binary reports for itself, recorded by
 // Dispatch so diagnostics can name it. It is not necessarily the version of the
@@ -84,11 +96,18 @@ func Dispatch(args []string, version string) int {
 		outln(versionLine(version))
 		return 0
 	case "help", "--help", "-h":
-		out(topUsage)
+		out(topUsage())
 		return 0
-	default:
-		return usageErr("unknown command " + quote(args[0]) + "\n\n" + topUsage)
 	}
+
+	// A verb this binary does not implement itself. Checked after the
+	// built-ins, and RegisterCommand refuses to shadow one, so the
+	// vocabulary of this package cannot be changed from outside it — only
+	// extended.
+	if c, ok := externalCommands[args[0]]; ok {
+		return c.run(args[1:])
+	}
+	return usageErr("unknown command " + quote(args[0]) + "\n\n" + topUsage())
 }
 
 func quote(s string) string { return "\"" + s + "\"" }
