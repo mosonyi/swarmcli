@@ -22,13 +22,16 @@ apply to every build.
 | `EDITOR` | both | Editor invoked by the in-TUI edit actions (stack, config, secret). | `nano` | edit action |
 | `XDG_STATE_HOME` | both | Base directory for logs and chart state — see [On-disk paths](#on-disk-paths). | `~/.local/state` | startup, `charts` commands |
 | `SWARMCLI_LICENSE` | BE | License key. Takes priority over the license file. | unset | startup |
+| `SWARMCLI_DISABLE_LICENSE_RENEWAL` | BE | Stops swarmcli asking the license service to renew a [managed license](license.md#managed-licenses-activation-is-a-second-step)'s activation. Leases are then installed from a file. No effect on any other license type, which never make the request at all. | unset | startup |
+| `SWARMCLI_LICENSE_API_URL` | BE | Base URL of the license service renewals are asked of. Pointing it elsewhere cannot grant anything — every artifact is verified against a key compiled into swarmcli. | `https://swarmcli.io/api/v1` | startup |
 | `SWARMCLI_PROXY_URL` | BE | WebSocket URL of the rbac-proxy. Auto-derived from the active Docker context if unset. | unset | shell connect |
 | `SWARMCLI_REVEAL_IMAGE` | BE | Image used for the temporary service that reveals a secret. | `alpine:latest` | reveal action |
 | `SWARMCLI_SHELL_CMD` | BE | Shell command to exec when opening a shell into a task. If unset, the agent auto-detects (`bash` → `sh` → `ash`). | unset | shell connect |
 | `SWARMCLI_FORWARD_IDLE_TIMEOUT` | BE | Idle timeout for an active port-forward (no traffic in either direction). Accepts any Go duration; capped at `24h`. | `30m` | per-forward, evaluated continuously |
 
-The three on/off variables (`SWARMCLI_DISABLE_VERSION_CHECK`,
-`SWARMCLI_CHARTS_ALLOW_PLAINTEXT`, `SWARMCLI_CHARTS_NO_AUTO_UPDATE`) accept the
+The four on/off variables (`SWARMCLI_DISABLE_VERSION_CHECK`,
+`SWARMCLI_CHARTS_ALLOW_PLAINTEXT`, `SWARMCLI_CHARTS_NO_AUTO_UPDATE`,
+`SWARMCLI_DISABLE_LICENSE_RENEWAL`) accept the
 values Go's `strconv.ParseBool` does — `1`, `t`, `true`, `TRUE` and their false
 counterparts. Anything else is treated as unset.
 
