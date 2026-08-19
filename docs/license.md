@@ -413,21 +413,25 @@ whether your license is valid, and none is possible — there is no server whose
 answer swarmcli would accept over its own check, which is also why an outage of
 ours cannot disable your features.
 
-**Your license key never leaves your machine.** It is not uploaded during
-activation, renewal, or anything else.
+**For an unbound license, or one bound at issuance, the key never leaves your
+machine.** There is nothing to renew, so nothing is ever sent.
 
 What changes with a managed license is **renewal**, and only renewal. A
 managed license is activated per swarm with a lease that expires, so getting
-the next lease means asking us for it. When swarmcli does that, the request
-tells us:
+the next lease means asking us for it. That request sends:
 
-- the **license id** (`lic_…`) — which license is renewing,
-- the **cluster id** of the swarm being renewed — which swarm it is for,
-- the **swarmcli version** making the request, and
-- the **time** of the request.
+- **your license key**, as the credential proving the request is yours. We
+  issued and signed it, so it tells us nothing about you we did not already
+  know — but it is accurate to say the key is transmitted, over TLS, rather
+  than staying on the machine as it does for every other license type;
+- the **license id** (`lic_…`) — which license is renewing;
+- the **cluster id** of the swarm being renewed — which swarm it is for;
+- the **swarmcli version** making the request; and
+- the time and network origin of the request, as with any HTTPS call.
 
 Nothing else. Not your services, nodes, images, users, configuration, or
-anything read from your Docker daemon.
+anything else read from your Docker daemon — swarmcli does not gather it and
+the request has nowhere to put it.
 
 Two things about that request are worth being precise on, because they are
 the questions people actually ask:
