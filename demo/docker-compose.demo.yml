@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright © 2026 Eldara Tech
+#
+# Overlay on test-setup/docker-compose.yml, for recordings only. It sets
+# nothing but the node hostnames: without it `docker node ls` — and so the
+# nodes view — shows raw container IDs, which is what the demo has to avoid.
+# Kept out of test-setup so the shared test environment is untouched.
+#
+#   docker compose -f test-setup/docker-compose.yml \
+#                  -f demo/docker-compose.demo.yml up -d
+
+services:
+  manager:
+    hostname: swarm-mgr-1
+  worker1:
+    hostname: swarm-node-2
+  worker2:
+    hostname: swarm-node-3

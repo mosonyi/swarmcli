@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright © 2026 Eldara Tech
+#
+# The charts beat. Two releases are pinned deliberately BEHIND the published
+# version so the charts view's LATEST column shows a real upgrade offer; the
+# third is current, so the same column also shows a ✓. Both states in one
+# screenshot is what makes the column legible.
+#
+#   swarmcli charts apply -f demo/swarmcli-release.yaml
+#
+# Versions checked against https://eldara-tech.github.io/swarmcli-charts on
+# 2026-08-20 (traefik 0.1.5, whoami 0.1.10, redis 0.2.3 were current). Re-check
+# before recording — the point is the gap, not the numbers.
+
+repositories:
+  - name: swarmcli-charts
+    url: https://eldara-tech.github.io/swarmcli-charts
+
+releases:
+  - name: edge
+    chart: swarmcli-charts/traefik
+    version: "0.1.3" # behind: LATEST shows the newer chart
+
+  - name: hello
+    chart: swarmcli-charts/whoami
+    version: "0.1.8" # behind: LATEST shows the newer chart
+    wave: 1 # deployed once the ingress it attaches to has converged
+
+  - name: sessions
+    chart: swarmcli-charts/redis
+    version: "0.2.3" # current: LATEST shows ✓

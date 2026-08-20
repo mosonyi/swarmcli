@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright © 2026 Eldara Tech
+#
+# The container-statistics clip only. Deploy this on a REAL single-node swarm
+# (`docker swarm init` on a laptop, VM or cloud host) — NOT on the DinD test
+# environment, where memory and block-I/O are unreadable and a service that
+# declares a memory limit does not start at all.
+#
+# The load loop drives all four panes on a ~12s cycle, so a 1-minute span shows
+# four or five repeating peaks:
+#   CPU  a two-second busy loop
+#   MEM  a 64 MB tmpfs allocation against a 128 MB limit, then released
+#   BLK  a 32 MB fsync'd write to the container filesystem, then removed
+#   NET  a burst of requests to the peer service
+
+networks:
+  demo:
+    driver: overlay
+
+services:
+  web:
+    image: nginx:alpine
+    networks: [demo]
+    deploy:
+      replicas: 1
+
+  api:
+    image: alpine:3.20
+    networks: [demo]
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          # Load-bearing for the clip: with a declared limit the pane is titled
+          # `MEM / 128MB` and the graph is scaled to it, which is the version
+          # that answers "how close is this to being killed".
+          memory: 128M
+    command: >
+      sh -c '
+        while true; do
+          end=$$(( $$(date +%s) + 2 ));
+          while [ $$(date +%s) -lt $$end ]; do :; done;
+
+          dd if=/dev/zero of=/dev/shm/blob bs=1M count=48 2>/dev/null;
+          sleep 2;
+          rm -f /dev/shm/blob;
+
+          dd if=/dev/zero of=/tmp/blk bs=1M count=32 conv=fsync 2>/dev/null;
+          rm -f /tmp/blk;
+
+          i=0;
+          while [ $$i -lt 40 ]; do
+            wget -q -O /dev/null http://web/ 2>/dev/null;
+            i=$$((i + 1));
+          done;
+
+          sleep 4;
+        done'
