@@ -4,6 +4,7 @@
 package servicesview
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -13,6 +14,8 @@ import (
 	"github.com/Eldara-Tech/swarmcli/views/view"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -155,21 +158,57 @@ func TestExpandedRow_ContainerStateFallback(t *testing.T) {
 	require.Contains(t, out, "exited", "the container's live state must render as the HEALTH fallback")
 }
 
-func TestTaskRowStyle_TintsFailureStates(t *testing.T) {
-	red, yellow, grey := lipgloss.Color("9"), lipgloss.Color("3"), lipgloss.Color("7")
-	cases := map[string]lipgloss.Color{
-		"unhealthy":  red,
-		"exited":     red,
-		"dead":       red,
-		"starting":   yellow,
-		"restarting": yellow,
-		"healthy":    grey,
-		"running":    grey,
-		"":           grey,
+// The tint rule itself is tested in views/taskutil; what this asserts is that
+// the expanded rows go through it, and that a replica swarm stopped on purpose
+// no longer reads like the one that crashed next to it (issue #601).
+func TestExpandedRow_TintsByTaskState(t *testing.T) {
+	trueColour(t)
+	m := testModel()
+	loadWithFilter(m, AllFilter, fakeEntries("web"))
+	m.expandedServices["id-web"] = true
+	m.serviceTasks["id-web"] = []docker.TaskEntry{
+		{Name: "web.1", NodeName: "node-up", DesiredState: "Running", State: "running",
+			CurrentState: "running 18 minutes ago", Health: "healthy", ContainerState: "running"},
+		{Name: "web.2", NodeName: "node-gone", DesiredState: "Shutdown", State: "shutdown",
+			CurrentState: "shutdown 11 minutes ago", ContainerState: "exited"},
+		{Name: "web.3", NodeName: "node-bad", DesiredState: "Shutdown", State: "failed",
+			CurrentState: "failed 19 minutes ago", ContainerState: "exited", Error: "task: non-zero exit (1)"},
 	}
-	for status, want := range cases {
-		require.Equal(t, want, taskRowStyle(status).GetForeground(), "status %q", status)
+	m.setRenderItem()
+
+	out := m.List.RenderItem(m.List.Filtered[0], false, 0)
+	require.Equal(t, fgSeq(lipgloss.Color("7")), rowTint(t, out, "node-up"))
+	require.Equal(t, fgSeq(lipgloss.Color("3")), rowTint(t, out, "node-gone"))
+	require.Equal(t, fgSeq(lipgloss.Color("9")), rowTint(t, out, "node-bad"))
+}
+
+// trueColour makes a test's assertions run against the tinted rows: the default
+// profile under `go test` is Ascii, where every style renders as plain text.
+func trueColour(t *testing.T) {
+	t.Helper()
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+}
+
+// rowTint returns the opening SGR sequence of the rendered row carrying marker.
+func rowTint(t *testing.T, out, marker string) string {
+	t.Helper()
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(ansi.Strip(line), marker) {
+			return sgrPrefix.FindString(line)
+		}
 	}
+	require.FailNowf(t, "no rendered row", "no row containing %q", marker)
+	return ""
+}
+
+var sgrPrefix = regexp.MustCompile(`^\x1b\[[0-9;]*m`)
+
+// fgSeq is the SGR sequence a foreground colour renders as, so a test names the
+// colour it expects rather than an escape sequence.
+func fgSeq(c lipgloss.Color) string {
+	return strings.SplitN(lipgloss.NewStyle().Foreground(c).Render("x"), "x", 2)[0]
 }
 
 func TestFirstNonEmpty(t *testing.T) {

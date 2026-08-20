@@ -4,6 +4,7 @@
 package stacksview
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -118,6 +120,63 @@ func TestView_ExpandedStackShowsTasks(t *testing.T) {
 	out := m.View()
 	require.Contains(t, out, "mystack_web.1")
 	require.Contains(t, out, "node1")
+}
+
+// The tint rule itself is tested in views/taskutil; what this asserts is that
+// both task-row branches here — the expanded stack under the cursor and one
+// merely expanded — go through it, so a replica swarm stopped on purpose does
+// not read like a crash (issue #601).
+func TestView_ExpandedStackTintsTasksByState(t *testing.T) {
+	trueColour(t)
+	m := testModel()
+	loadStacks(m, fakeStacks("mystack"))
+	m.expandedStacks["mystack"] = true
+	m.stackTasks["mystack"] = []docker.TaskEntry{
+		{Name: "mystack_web.1", NodeName: "node-up", DesiredState: "running", State: "running",
+			CurrentState: "running 18 minutes ago"},
+		{Name: "mystack_web.2", NodeName: "node-gone", DesiredState: "shutdown", State: "shutdown",
+			CurrentState: "shutdown 11 minutes ago"},
+		{Name: "mystack_web.3", NodeName: "node-bad", DesiredState: "shutdown", State: "failed",
+			CurrentState: "failed 19 minutes ago", Error: "task: non-zero exit (1)"},
+	}
+	m.setRenderItem()
+	m.List.Viewport.Width = 120
+
+	for _, underCursor := range []bool{false, true} {
+		out := m.List.RenderItem(m.List.Filtered[0], underCursor, 0)
+		require.Equal(t, fgSeq(lipgloss.Color("7")), rowTint(t, out, "node-up"), "under cursor: %v", underCursor)
+		require.Equal(t, fgSeq(lipgloss.Color("3")), rowTint(t, out, "node-gone"), "under cursor: %v", underCursor)
+		require.Equal(t, fgSeq(lipgloss.Color("9")), rowTint(t, out, "node-bad"), "under cursor: %v", underCursor)
+	}
+}
+
+// trueColour makes a test's assertions run against the tinted rows: the default
+// profile under `go test` is Ascii, where every style renders as plain text.
+func trueColour(t *testing.T) {
+	t.Helper()
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+}
+
+// rowTint returns the opening SGR sequence of the rendered row carrying marker.
+func rowTint(t *testing.T, out, marker string) string {
+	t.Helper()
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(ansi.Strip(line), marker) {
+			return sgrPrefix.FindString(line)
+		}
+	}
+	require.FailNowf(t, "no rendered row", "no row containing %q", marker)
+	return ""
+}
+
+var sgrPrefix = regexp.MustCompile(`^\x1b\[[0-9;]*m`)
+
+// fgSeq is the SGR sequence a foreground colour renders as, so a test names the
+// colour it expects rather than an escape sequence.
+func fgSeq(c lipgloss.Color) string {
+	return strings.SplitN(lipgloss.NewStyle().Foreground(c).Render("x"), "x", 2)[0]
 }
 
 func TestView_SaveDialog(t *testing.T) {

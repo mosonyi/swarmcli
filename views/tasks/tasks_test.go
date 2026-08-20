@@ -5,11 +5,17 @@ package tasksview
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -112,6 +118,59 @@ func TestShortHelpItems(t *testing.T) {
 	require.True(t, keys["shift+s"])
 	require.True(t, keys["shift+d"])
 	require.True(t, keys["shift+t"])
+}
+
+// --- Rendering tests ---
+
+// The tint rule itself is tested in views/taskutil; what this asserts is that
+// the rows here go through it, and that a replica swarm stopped on purpose no
+// longer reads like a crash (issue #601). A row with nothing wrong keeps this
+// view's own cyan, which is not the colour the other two views use.
+func TestRenderTasks_TintsByTaskState(t *testing.T) {
+	trueColour(t)
+	m := testModel()
+	m.Update(TasksLoadedMsg{Tasks: []docker.TaskEntry{
+		{Name: "web.1", ServiceName: "web", NodeName: "node-up", DesiredState: "running",
+			State: "running", CurrentState: "running 18 minutes ago"},
+		{Name: "web.2", ServiceName: "web", NodeName: "node-gone", DesiredState: "shutdown",
+			State: "shutdown", CurrentState: "shutdown 11 minutes ago"},
+		{Name: "web.3", ServiceName: "web", NodeName: "node-bad", DesiredState: "shutdown",
+			State: "failed", CurrentState: "failed 19 minutes ago", Error: "task: non-zero exit (1)"},
+	}})
+
+	out := m.renderTasks()
+	require.Equal(t, fgSeq(ui.ListItemStyle.GetForeground()), rowTint(t, out, "node-up"))
+	require.Equal(t, fgSeq(lipgloss.Color("3")), rowTint(t, out, "node-gone"))
+	require.Equal(t, fgSeq(lipgloss.Color("9")), rowTint(t, out, "node-bad"))
+}
+
+// trueColour makes a test's assertions run against the tinted rows: the default
+// profile under `go test` is Ascii, where every style renders as plain text.
+func trueColour(t *testing.T) {
+	t.Helper()
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+}
+
+// rowTint returns the opening SGR sequence of the rendered row carrying marker.
+func rowTint(t *testing.T, out, marker string) string {
+	t.Helper()
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(ansi.Strip(line), marker) {
+			return sgrPrefix.FindString(line)
+		}
+	}
+	require.FailNowf(t, "no rendered row", "no row containing %q", marker)
+	return ""
+}
+
+var sgrPrefix = regexp.MustCompile(`^\x1b\[[0-9;]*m`)
+
+// fgSeq is the SGR sequence a foreground colour renders as, so a test names the
+// colour it expects rather than an escape sequence.
+func fgSeq(c lipgloss.TerminalColor) string {
+	return strings.SplitN(lipgloss.NewStyle().Foreground(c).Render("x"), "x", 2)[0]
 }
 
 // --- Update tests ---
