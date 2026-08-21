@@ -5,7 +5,7 @@ package helpview
 
 import (
 	"fmt"
-	"github.com/Eldara-Tech/swarmcli/ui"
+	"github.com/Eldara-Tech/swarmcli/v2/ui"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"

@@ -5,11 +5,11 @@ package networksview
 
 import (
 	"fmt"
-	"github.com/Eldara-Tech/swarmcli/ui"
-	"github.com/Eldara-Tech/swarmcli/ui/components/errordialog"
-	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
-	"github.com/Eldara-Tech/swarmcli/ui/components/sorting"
-	"github.com/Eldara-Tech/swarmcli/ui/dialog"
+	"github.com/Eldara-Tech/swarmcli/v2/ui"
+	"github.com/Eldara-Tech/swarmcli/v2/ui/components/errordialog"
+	filterlist "github.com/Eldara-Tech/swarmcli/v2/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/v2/ui/components/sorting"
+	"github.com/Eldara-Tech/swarmcli/v2/ui/dialog"
 	"strings"
 	"time"
 

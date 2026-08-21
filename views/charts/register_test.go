@@ -6,8 +6,8 @@ package chartsview
 import (
 	"testing"
 
-	"github.com/Eldara-Tech/swarmcli/docker"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 
 	"github.com/stretchr/testify/require"
 )

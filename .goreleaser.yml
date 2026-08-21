@@ -40,7 +40,7 @@ builds:
       - -X main.version={{.Version}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
-      - -X github.com/Eldara-Tech/swarmcli/charts.engineVersion={{.Version}}
+      - -X github.com/Eldara-Tech/swarmcli/v2/charts.engineVersion={{.Version}}
     main: .
     hooks:
       post:
@@ -59,7 +59,7 @@ builds:
       - -X main.version={{.Version}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
-      - -X github.com/Eldara-Tech/swarmcli/charts.engineVersion={{.Version}}
+      - -X github.com/Eldara-Tech/swarmcli/v2/charts.engineVersion={{.Version}}
     main: .
     hooks:
       post:
@@ -79,7 +79,7 @@ builds:
       - -X main.version={{.Version}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
-      - -X github.com/Eldara-Tech/swarmcli/charts.engineVersion={{.Version}}
+      - -X github.com/Eldara-Tech/swarmcli/v2/charts.engineVersion={{.Version}}
     main: .
     hooks:
       post:
@@ -98,7 +98,7 @@ builds:
       - -X main.version={{.Version}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
-      - -X github.com/Eldara-Tech/swarmcli/charts.engineVersion={{.Version}}
+      - -X github.com/Eldara-Tech/swarmcli/v2/charts.engineVersion={{.Version}}
     main: .
     hooks:
       post:

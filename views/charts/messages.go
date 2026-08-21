@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Eldara-Tech/swarmcli/charts"
-	"github.com/Eldara-Tech/swarmcli/core/primitives/hash"
-	"github.com/Eldara-Tech/swarmcli/utils/textdiff"
-	inspectview "github.com/Eldara-Tech/swarmcli/views/inspect"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/charts"
+	"github.com/Eldara-Tech/swarmcli/v2/core/primitives/hash"
+	"github.com/Eldara-Tech/swarmcli/v2/utils/textdiff"
+	inspectview "github.com/Eldara-Tech/swarmcli/v2/views/inspect"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 

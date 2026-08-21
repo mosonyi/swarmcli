@@ -8,7 +8,7 @@ package secret
 import (
 	"context"
 	"fmt"
-	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
 	"testing"
 	"time"
 

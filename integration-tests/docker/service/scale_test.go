@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
 )
 
 // TestScaleWhoamiService verifies scaling demo_whoami up and down safely.

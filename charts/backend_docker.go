@@ -10,10 +10,10 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 
-	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
 )
 
-// dockerBackend implements Backend against the live github.com/Eldara-Tech/swarmcli/docker package.
+// dockerBackend implements Backend against the live github.com/Eldara-Tech/swarmcli/v2/docker package.
 //
 // Every operation is addressed to one Docker context. When ctxName is empty that
 // is the ambient one — whatever DOCKER_CONTEXT or `docker context show` resolves

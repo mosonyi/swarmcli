@@ -6,7 +6,7 @@ package helpview
 import (
 	"testing"
 
-	"github.com/Eldara-Tech/swarmcli/views/helpbar"
+	"github.com/Eldara-Tech/swarmcli/v2/views/helpbar"
 
 	"github.com/stretchr/testify/require"
 )

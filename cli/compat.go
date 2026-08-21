@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Eldara-Tech/swarmcli/charts"
+	"github.com/Eldara-Tech/swarmcli/v2/charts"
 )
 
 // compatPolicy is what a subcommand does with a chart that declares a newer

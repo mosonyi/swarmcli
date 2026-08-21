@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Eldara-Tech/swarmcli/ui"
-	"github.com/Eldara-Tech/swarmcli/ui/components/errordialog"
+	"github.com/Eldara-Tech/swarmcli/v2/ui"
+	"github.com/Eldara-Tech/swarmcli/v2/ui/components/errordialog"
 )
 
 // emptyStateLines is what an operator sees when nothing is installed. Charts

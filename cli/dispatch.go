@@ -3,7 +3,7 @@
 
 package cli
 
-import "github.com/Eldara-Tech/swarmcli/charts"
+import "github.com/Eldara-Tech/swarmcli/v2/charts"
 
 // topUsageHead lists what this package itself serves. Anything a build
 // embedding this module registered is rendered after it — see topUsage.

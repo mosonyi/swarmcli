@@ -14,9 +14,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Eldara-Tech/swarmcli/docker"
-	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
+	swarmlog "github.com/Eldara-Tech/swarmcli/v2/utils/log"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/docker/docker/api/types/swarm"

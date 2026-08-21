@@ -4,10 +4,10 @@
 package network
 
 import (
-	"github.com/Eldara-Tech/swarmcli/args"
-	"github.com/Eldara-Tech/swarmcli/registry"
-	networksview "github.com/Eldara-Tech/swarmcli/views/networks"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/args"
+	"github.com/Eldara-Tech/swarmcli/v2/registry"
+	networksview "github.com/Eldara-Tech/swarmcli/v2/views/networks"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

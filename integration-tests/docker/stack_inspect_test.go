@@ -8,7 +8,7 @@ package docker_test
 
 import (
 	"encoding/json"
-	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
 	"strings"
 	"testing"
 )

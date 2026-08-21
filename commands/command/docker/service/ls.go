@@ -4,10 +4,10 @@
 package service
 
 import (
-	"github.com/Eldara-Tech/swarmcli/args"
-	"github.com/Eldara-Tech/swarmcli/registry"
-	servicesview "github.com/Eldara-Tech/swarmcli/views/services"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/args"
+	"github.com/Eldara-Tech/swarmcli/v2/registry"
+	servicesview "github.com/Eldara-Tech/swarmcli/v2/views/services"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

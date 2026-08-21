@@ -6,8 +6,8 @@ package chartsview
 import (
 	"strconv"
 
-	"github.com/Eldara-Tech/swarmcli/charts"
-	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/v2/charts"
+	filterlist "github.com/Eldara-Tech/swarmcli/v2/ui/components/filterable/list"
 
 	"github.com/charmbracelet/lipgloss"
 )

@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Eldara-Tech/swarmcli/features"
-	"github.com/Eldara-Tech/swarmcli/ui"
-	"github.com/Eldara-Tech/swarmcli/ui/components/errordialog"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/features"
+	"github.com/Eldara-Tech/swarmcli/v2/ui"
+	"github.com/Eldara-Tech/swarmcli/v2/ui/components/errordialog"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 )
 
 // connectedNodeHint is shown in the footer while the all-nodes capability is

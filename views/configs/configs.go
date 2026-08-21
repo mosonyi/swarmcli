@@ -3,7 +3,7 @@
 
 package configsview
 
-import swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
+import swarmlog "github.com/Eldara-Tech/swarmcli/v2/utils/log"
 
 const ViewName = "configs"
 

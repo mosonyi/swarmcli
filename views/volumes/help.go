@@ -4,8 +4,8 @@
 package volumesview
 
 import (
-	helpview "github.com/Eldara-Tech/swarmcli/views/help"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	helpview "github.com/Eldara-Tech/swarmcli/v2/views/help"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 )
 
 // HelpContent implements the app's optional help-screen contract: "?" is

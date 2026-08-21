@@ -4,7 +4,7 @@
 package commandinput
 
 import (
-	"github.com/Eldara-Tech/swarmcli/commands"
+	"github.com/Eldara-Tech/swarmcli/v2/commands"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"

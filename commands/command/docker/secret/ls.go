@@ -4,11 +4,11 @@
 package secret
 
 import (
-	"github.com/Eldara-Tech/swarmcli/args"
-	"github.com/Eldara-Tech/swarmcli/registry"
-	secretsview "github.com/Eldara-Tech/swarmcli/views/secrets"
+	"github.com/Eldara-Tech/swarmcli/v2/args"
+	"github.com/Eldara-Tech/swarmcli/v2/registry"
+	secretsview "github.com/Eldara-Tech/swarmcli/v2/views/secrets"
 
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

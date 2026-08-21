@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Eldara-Tech/swarmcli/charts"
-	"github.com/Eldara-Tech/swarmcli/core/primitives/hash"
-	"github.com/Eldara-Tech/swarmcli/ui"
-	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
-	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
-	servicesview "github.com/Eldara-Tech/swarmcli/views/services"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/charts"
+	"github.com/Eldara-Tech/swarmcli/v2/core/primitives/hash"
+	"github.com/Eldara-Tech/swarmcli/v2/ui"
+	filterlist "github.com/Eldara-Tech/swarmcli/v2/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/v2/views/confirmdialog"
+	servicesview "github.com/Eldara-Tech/swarmcli/v2/views/services"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

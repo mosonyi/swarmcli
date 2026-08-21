@@ -13,8 +13,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/Eldara-Tech/swarmcli/charts"
-	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
+	"github.com/Eldara-Tech/swarmcli/v2/charts"
+	swarmlog "github.com/Eldara-Tech/swarmcli/v2/utils/log"
 )
 
 // slowStartDelay is how long the fixture below takes to report healthy. It has

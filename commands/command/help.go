@@ -6,10 +6,10 @@ package command
 import (
 	"fmt"
 
-	"github.com/Eldara-Tech/swarmcli/args"
-	"github.com/Eldara-Tech/swarmcli/registry"
-	helpview "github.com/Eldara-Tech/swarmcli/views/help"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/args"
+	"github.com/Eldara-Tech/swarmcli/v2/registry"
+	helpview "github.com/Eldara-Tech/swarmcli/v2/views/help"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
