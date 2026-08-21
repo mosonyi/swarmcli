@@ -6,16 +6,16 @@ package app
 import (
 	"strings"
 
-	"github.com/Eldara-Tech/swarmcli/docker"
-	"github.com/Eldara-Tech/swarmcli/views/commandinput"
-	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
-	loadingview "github.com/Eldara-Tech/swarmcli/views/loading"
-	"github.com/Eldara-Tech/swarmcli/views/searchinput"
-	systeminfoview "github.com/Eldara-Tech/swarmcli/views/systeminfo"
-	"github.com/Eldara-Tech/swarmcli/views/unlockdialog"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
+	"github.com/Eldara-Tech/swarmcli/v2/views/commandinput"
+	"github.com/Eldara-Tech/swarmcli/v2/views/confirmdialog"
+	loadingview "github.com/Eldara-Tech/swarmcli/v2/views/loading"
+	"github.com/Eldara-Tech/swarmcli/v2/views/searchinput"
+	systeminfoview "github.com/Eldara-Tech/swarmcli/v2/views/systeminfo"
+	"github.com/Eldara-Tech/swarmcli/v2/views/unlockdialog"
 
-	"github.com/Eldara-Tech/swarmcli/views/view"
-	"github.com/Eldara-Tech/swarmcli/views/viewstack"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/views/viewstack"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/charmbracelet/bubbles/viewport"

@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Eldara-Tech/swarmcli/args"
-	"github.com/Eldara-Tech/swarmcli/docker"
-	"github.com/Eldara-Tech/swarmcli/registry"
-	contextsview "github.com/Eldara-Tech/swarmcli/views/contexts"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/args"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
+	"github.com/Eldara-Tech/swarmcli/v2/registry"
+	contextsview "github.com/Eldara-Tech/swarmcli/v2/views/contexts"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

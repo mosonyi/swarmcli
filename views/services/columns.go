@@ -6,8 +6,8 @@ package servicesview
 import (
 	"fmt"
 
-	"github.com/Eldara-Tech/swarmcli/docker"
-	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
+	filterlist "github.com/Eldara-Tech/swarmcli/v2/ui/components/filterable/list"
 )
 
 // serviceColumn pairs a shared-layout column with its sort metadata. The set is

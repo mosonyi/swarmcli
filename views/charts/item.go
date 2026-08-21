@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Eldara-Tech/swarmcli/charts"
+	"github.com/Eldara-Tech/swarmcli/v2/charts"
 )
 
 // releaseItem is one row: every stored revision of a release, plus the live

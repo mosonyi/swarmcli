@@ -5,7 +5,7 @@ package helpview
 
 import (
 	"fmt"
-	"github.com/Eldara-Tech/swarmcli/views/helpbar"
+	"github.com/Eldara-Tech/swarmcli/v2/views/helpbar"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"

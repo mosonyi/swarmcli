@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Eldara-Tech/swarmcli/charts"
-	inspectview "github.com/Eldara-Tech/swarmcli/views/inspect"
-	servicesview "github.com/Eldara-Tech/swarmcli/views/services"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/charts"
+	inspectview "github.com/Eldara-Tech/swarmcli/v2/views/inspect"
+	servicesview "github.com/Eldara-Tech/swarmcli/v2/views/services"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"

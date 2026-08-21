@@ -4,10 +4,10 @@
 package volume
 
 import (
-	"github.com/Eldara-Tech/swarmcli/args"
-	"github.com/Eldara-Tech/swarmcli/registry"
-	"github.com/Eldara-Tech/swarmcli/views/view"
-	volumesview "github.com/Eldara-Tech/swarmcli/views/volumes"
+	"github.com/Eldara-Tech/swarmcli/v2/args"
+	"github.com/Eldara-Tech/swarmcli/v2/registry"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
+	volumesview "github.com/Eldara-Tech/swarmcli/v2/views/volumes"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

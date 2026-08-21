@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
 )
 
 // The context these tests create and remove. Every case works on its own

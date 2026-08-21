@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/Eldara-Tech/swarmcli/args"
-	contextsview "github.com/Eldara-Tech/swarmcli/views/contexts"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/args"
+	contextsview "github.com/Eldara-Tech/swarmcli/v2/views/contexts"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 
 	"github.com/stretchr/testify/require"
 )

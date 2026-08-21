@@ -6,7 +6,7 @@ package chartsview
 import (
 	"strings"
 
-	"github.com/Eldara-Tech/swarmcli/charts"
+	"github.com/Eldara-Tech/swarmcli/v2/charts"
 )
 
 // controllerOwnerPrefix is the id namespace swarmcli-cd stamps its releases

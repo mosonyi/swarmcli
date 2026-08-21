@@ -5,8 +5,8 @@ package loadingview
 
 import (
 	"fmt"
-	"github.com/Eldara-Tech/swarmcli/ui"
-	"github.com/Eldara-Tech/swarmcli/views/helpbar"
+	"github.com/Eldara-Tech/swarmcli/v2/ui"
+	"github.com/Eldara-Tech/swarmcli/v2/views/helpbar"
 	"strings"
 	"time"
 

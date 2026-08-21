@@ -7,7 +7,7 @@
 // the release engine it reads from keeps the plain `charts` identifier.
 package chartsview
 
-import swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
+import swarmlog "github.com/Eldara-Tech/swarmcli/v2/utils/log"
 
 const ViewName = "charts"
 

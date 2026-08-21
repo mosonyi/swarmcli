@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Eldara-Tech/swarmcli/registry"
+	"github.com/Eldara-Tech/swarmcli/v2/registry"
 )
 
 // chartsCmd describes one `swarmcli charts` subcommand: what it is called, what

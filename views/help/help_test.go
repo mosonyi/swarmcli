@@ -4,7 +4,7 @@
 package helpview
 
 import (
-	"github.com/Eldara-Tech/swarmcli/ui"
+	"github.com/Eldara-Tech/swarmcli/v2/ui"
 	"strings"
 	"testing"
 

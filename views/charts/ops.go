@@ -7,7 +7,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/Eldara-Tech/swarmcli/charts"
+	"github.com/Eldara-Tech/swarmcli/v2/charts"
 )
 
 // releaseOps is the read-only slice of the release engine this view needs.

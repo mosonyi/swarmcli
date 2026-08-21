@@ -8,7 +8,7 @@ package unlockdialog
 import (
 	"strings"
 
-	"github.com/Eldara-Tech/swarmcli/ui/dialog"
+	"github.com/Eldara-Tech/swarmcli/v2/ui/dialog"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"

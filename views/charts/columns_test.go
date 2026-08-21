@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Eldara-Tech/swarmcli/charts"
+	"github.com/Eldara-Tech/swarmcli/v2/charts"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"

@@ -7,8 +7,8 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/Eldara-Tech/swarmcli/charts"
-	"github.com/Eldara-Tech/swarmcli/utils/textdiff"
+	"github.com/Eldara-Tech/swarmcli/v2/charts"
+	"github.com/Eldara-Tech/swarmcli/v2/utils/textdiff"
 )
 
 // chartsApply converges the swarm to a declarative release manifest.
