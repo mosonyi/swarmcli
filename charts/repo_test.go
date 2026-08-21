@@ -395,6 +395,16 @@ entries:
 // store plus the resolved entry and base URL, ready to Pull.
 func serveChart(t *testing.T, digest string, tgz []byte) (*RepoStore, IndexEntry, string) {
 	t.Helper()
+	return serveChartFunc(t, digest, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(tgz)
+	})
+}
+
+// serveChartFunc is serveChart with the tarball response under the test's
+// control, for the cases that are about what the repository does on the second
+// request rather than what it serves on the first.
+func serveChartFunc(t *testing.T, digest string, tarball http.HandlerFunc) (*RepoStore, IndexEntry, string) {
+	t.Helper()
 	digestLine := ""
 	if digest != "" {
 		digestLine = "\n      digest: " + digest
@@ -411,7 +421,7 @@ entries:
 		case strings.HasSuffix(r.URL.Path, "/index.yaml"):
 			_, _ = w.Write([]byte(idx))
 		case strings.HasSuffix(r.URL.Path, "demo-0.1.0.tgz"):
-			_, _ = w.Write(tgz)
+			tarball(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -492,6 +502,233 @@ func TestPullRejectsOversizedArchive(t *testing.T) {
 	s, e, base := serveChart(t, "", bytes.Repeat([]byte{0}, maxChartArchiveSize+1))
 	_, err := s.Pull(e, base)
 	require.ErrorContains(t, err, "exceeds")
+}
+
+// --- the archive cache: what a second Pull does, and what it refuses to do ---
+
+// fastPullBackoff shrinks the retry schedule for a test that means to exercise
+// it. The real one sleeps seconds, and the suite is not what it is there for.
+func fastPullBackoff(t *testing.T) {
+	t.Helper()
+	saved := pullBackoff
+	pullBackoff = []time.Duration{time.Millisecond, time.Millisecond}
+	t.Cleanup(func() { pullBackoff = saved })
+}
+
+func TestPullCachesTheArchive(t *testing.T) {
+	tgz := []byte(packDirToTgz(t, "testdata/demo", "demo"))
+	sum := sha256.Sum256(tgz)
+	digest := "sha256:" + hex.EncodeToString(sum[:])
+
+	// counting serves the archive and records how many times it was asked for.
+	counting := func(hits *int) http.HandlerFunc {
+		return func(w http.ResponseWriter, _ *http.Request) {
+			*hits++
+			_, _ = w.Write(tgz)
+		}
+	}
+
+	t.Run("a second pull does not download again", func(t *testing.T) {
+		var hits int
+		s, e, base := serveChartFunc(t, digest, counting(&hits))
+		for range 3 {
+			ch, err := s.Pull(e, base)
+			require.NoError(t, err)
+			require.Equal(t, "demo", ch.Metadata.Name)
+		}
+		require.Equal(t, 1, hits, "a pinned, digest-verified archive is worth downloading once")
+	})
+
+	// The failure this whole thing is about: swarmcli-cd re-plans every three
+	// minutes, and a gateway blip on any one of those ticks used to fail the
+	// application's whole reconcile (#605).
+	t.Run("the cache answers when the repository is down", func(t *testing.T) {
+		down := false
+		s, e, base := serveChartFunc(t, digest, func(w http.ResponseWriter, _ *http.Request) {
+			if down {
+				http.Error(w, "gateway timeout", http.StatusGatewayTimeout)
+				return
+			}
+			_, _ = w.Write(tgz)
+		})
+		_, err := s.Pull(e, base)
+		require.NoError(t, err)
+
+		down = true
+		ch, err := s.Pull(e, base)
+		require.NoError(t, err)
+		require.Equal(t, "demo", ch.Metadata.Name)
+	})
+
+	// The shape that makes this cache worth having: swarmcli-cd constructs a
+	// fresh RepoStore for every reconcile, against the same directory. The win
+	// has to survive the store, not merely the call.
+	t.Run("a second store at the same directory reuses the cache", func(t *testing.T) {
+		var hits int
+		s, e, base := serveChartFunc(t, digest, counting(&hits))
+		_, err := s.Pull(e, base)
+		require.NoError(t, err)
+
+		next := NewRepoStoreAt(s.dir)
+		next.AllowPlaintext = true
+		ch, err := next.Pull(e, base)
+		require.NoError(t, err)
+		require.Equal(t, "demo", ch.Metadata.Name)
+		require.Equal(t, 1, hits)
+	})
+
+	// What a chart rebuilt and re-uploaded under one version looks like from
+	// here. The cache is keyed on the digest and the bytes are re-checked
+	// against it, so the stale copy cannot answer for the new entry — which is
+	// the whole reason this cache is safe and a name-and-version one would not
+	// be.
+	t.Run("a moved digest misses, and the download is judged by the new one", func(t *testing.T) {
+		var hits int
+		s, e, base := serveChartFunc(t, digest, counting(&hits))
+		_, err := s.Pull(e, base)
+		require.NoError(t, err)
+		require.Equal(t, 1, hits)
+
+		moved := e
+		moved.Digest = "sha256:" + strings.Repeat("a", 64)
+		_, err = s.Pull(moved, base)
+		require.ErrorContains(t, err, "digest mismatch")
+		require.Equal(t, 2, hits, "the cache must not answer for a digest it does not hold")
+	})
+
+	t.Run("an entry with no digest is never cached", func(t *testing.T) {
+		var hits int
+		s, e, base := serveChartFunc(t, "", counting(&hits))
+		s.Warnf = func(string, ...any) {}
+		for range 2 {
+			_, err := s.Pull(e, base)
+			require.NoError(t, err)
+		}
+		require.Equal(t, 2, hits, "nothing could validate the read, so there is nothing to cache")
+		require.NoDirExists(t, s.chartCacheDir())
+	})
+
+	t.Run("a corrupted cache file falls through to a download", func(t *testing.T) {
+		var hits int
+		s, e, base := serveChartFunc(t, digest, counting(&hits))
+		_, err := s.Pull(e, base)
+		require.NoError(t, err)
+
+		cached := filepath.Join(s.chartCacheDir(), cacheKey(e)+".tgz")
+		require.NoError(t, os.WriteFile(cached, []byte("not a chart"), 0o644))
+
+		ch, err := s.Pull(e, base)
+		require.NoError(t, err)
+		require.Equal(t, "demo", ch.Metadata.Name)
+		require.Equal(t, 2, hits)
+	})
+
+	// The half of the TTL bound that keeps it from evicting the one archive
+	// every tick is using.
+	t.Run("a hit keeps the archive from ageing out", func(t *testing.T) {
+		s, e, base := serveChart(t, digest, tgz)
+		_, err := s.Pull(e, base)
+		require.NoError(t, err)
+
+		cached := filepath.Join(s.chartCacheDir(), cacheKey(e)+".tgz")
+		old := time.Now().Add(-chartCacheTTL - time.Hour)
+		require.NoError(t, os.Chtimes(cached, old, old))
+
+		_, err = s.Pull(e, base)
+		require.NoError(t, err)
+		info, err := os.Stat(cached)
+		require.NoError(t, err)
+		require.WithinDuration(t, time.Now(), info.ModTime(), time.Minute,
+			"otherwise a pinned chart ages out of its own cache and is downloaded again")
+	})
+}
+
+func TestCacheKey(t *testing.T) {
+	hexsum := strings.Repeat("ab", sha256.Size)
+	require.Equal(t, hexsum, cacheKey(IndexEntry{Digest: "sha256:" + hexsum}))
+	// `helm repo index` writes a bare hex sum, and hex is case-insensitive.
+	require.Equal(t, hexsum, cacheKey(IndexEntry{Digest: hexsum}))
+	require.Equal(t, hexsum, cacheKey(IndexEntry{Digest: strings.ToUpper(hexsum)}))
+
+	// Anything this package cannot verify is not cacheable: a read of it would
+	// have nothing to validate it against.
+	require.Empty(t, cacheKey(IndexEntry{}))
+	require.Empty(t, cacheKey(IndexEntry{Digest: "sha512:" + hexsum}))
+	require.Empty(t, cacheKey(IndexEntry{Digest: "sha256:" + hexsum[:32]}))
+	require.Empty(t, cacheKey(IndexEntry{Digest: "sha256:" + strings.Repeat("zz", sha256.Size)}))
+	// The key becomes a path component, and the digest is repository-supplied.
+	require.Empty(t, cacheKey(IndexEntry{Digest: "sha256:../../../etc/passwd"}))
+}
+
+func TestSweepChartCacheDropsWhatNothingReads(t *testing.T) {
+	dir := t.TempDir()
+	fresh, stale := filepath.Join(dir, "fresh.tgz"), filepath.Join(dir, "stale.tgz")
+	require.NoError(t, os.WriteFile(fresh, []byte("f"), 0o644))
+	require.NoError(t, os.WriteFile(stale, []byte("s"), 0o644))
+	old := time.Now().Add(-chartCacheTTL - time.Hour)
+	require.NoError(t, os.Chtimes(stale, old, old))
+
+	sweepChartCache(dir)
+
+	require.FileExists(t, fresh)
+	require.NoFileExists(t, stale)
+}
+
+func TestPullRetriesATransientFailure(t *testing.T) {
+	tgz := []byte(packDirToTgz(t, "testdata/demo", "demo"))
+	sum := sha256.Sum256(tgz)
+	digest := "sha256:" + hex.EncodeToString(sum[:])
+
+	t.Run("a 504 that clears is ridden out", func(t *testing.T) {
+		fastPullBackoff(t)
+		var hits int
+		s, e, base := serveChartFunc(t, digest, func(w http.ResponseWriter, _ *http.Request) {
+			hits++
+			if hits <= len(pullBackoff) {
+				http.Error(w, "gateway timeout", http.StatusGatewayTimeout)
+				return
+			}
+			_, _ = w.Write(tgz)
+		})
+		var warnings []string
+		s.Warnf = func(format string, a ...any) { warnings = append(warnings, fmt.Sprintf(format, a...)) }
+
+		ch, err := s.Pull(e, base)
+		require.NoError(t, err)
+		require.Equal(t, "demo", ch.Metadata.Name)
+		require.Equal(t, len(pullBackoff)+1, hits)
+		require.Len(t, warnings, len(pullBackoff), "every wait the caller cannot interrupt is announced")
+		require.Contains(t, warnings[0], "504")
+	})
+
+	t.Run("a persistent 504 gives up", func(t *testing.T) {
+		fastPullBackoff(t)
+		var hits int
+		s, e, base := serveChartFunc(t, digest, func(w http.ResponseWriter, _ *http.Request) {
+			hits++
+			http.Error(w, "gateway timeout", http.StatusGatewayTimeout)
+		})
+		s.Warnf = func(string, ...any) {}
+
+		_, err := s.Pull(e, base)
+		require.ErrorContains(t, err, "504")
+		require.Equal(t, len(pullBackoff)+1, hits, "the schedule is the whole budget")
+	})
+
+	// A repository that does not have this chart has said so. Asking twice more
+	// gets the same answer, three times as slowly.
+	t.Run("a 404 is not retried", func(t *testing.T) {
+		fastPullBackoff(t)
+		var hits int
+		s, e, base := serveChartFunc(t, digest, func(w http.ResponseWriter, r *http.Request) {
+			hits++
+			http.NotFound(w, r)
+		})
+
+		_, err := s.Pull(e, base)
+		require.ErrorContains(t, err, "404")
+		require.Equal(t, 1, hits)
+	})
 }
 
 func TestCompareVersions(t *testing.T) {
