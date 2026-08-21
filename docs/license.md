@@ -26,8 +26,10 @@ What a key records about you:
 
 - **Who it is for** — your customer identifier.
 - **Which tier** — `be` (Business Edition) or `trial`. Both grant the same
-  feature set today; `trial` is meant to be paired with a short expiry.
-- **When it expires**, if ever. A key may be issued without an expiry.
+  feature set today, so the expiry is what separates them — a `trial` must
+  carry one, and from v2.0.0 a key that does not is refused.
+- **When it expires**, if ever. A `be` key may be issued without an expiry; a
+  `trial` may not.
 - **Node and user limits**, if any. See [Limits](#limits).
 - **Which swarm it is bound to**, if any, and **how** — see
   [Per-swarm binding](#per-swarm-binding).
