@@ -30,11 +30,17 @@ if [ $# -ne 1 ]; then
 fi
 binary=$1
 
-main=github.com/Eldara-Tech/swarmcli
+# The major suffix is part of the path, not decoration: `go version -m` stamps
+# the module line exactly as go.mod declares it, so a v1 value here refuses
+# every binary this repository now builds.
+main=github.com/Eldara-Tech/swarmcli/v2
 
 # The private modules. Matched as whole module paths or as a parent of one, so
 # that `…/swarmcli` is not read as a prefix of `…/swarmcli-be` in either
 # direction — this repository's own module would otherwise match every entry.
+# Listed without a major suffix on purpose: the parent match already covers
+# `…/swarmcli-be/v2` and every major after it, so a private module going v3
+# does not need an edit here to stay caught.
 private='github.com/Eldara-Tech/swarmcli-be github.com/Eldara-Tech/swarmcli-cd-be'
 
 stamp=$(go version -m "$binary")
