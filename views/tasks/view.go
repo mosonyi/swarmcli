@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/Eldara-Tech/swarmcli/v2/ui"
 	"github.com/Eldara-Tech/swarmcli/v2/ui/components/sorting"
+	"github.com/Eldara-Tech/swarmcli/v2/views/taskutil"
 	"strings"
 )
 
@@ -124,7 +125,7 @@ func (m *Model) renderTasks() string {
 			colWidths[4], desiredState,
 			colWidths[5], status)
 
-		lines = append(lines, ui.ListItemStyle.Render(line))
+		lines = append(lines, taskutil.TaskRowStyle(task, ui.ListItemStyle).Render(line))
 	}
 
 	return strings.Join(lines, "\n")

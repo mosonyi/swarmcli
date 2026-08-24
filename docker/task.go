@@ -25,6 +25,14 @@ type TaskEntry struct {
 	NodeName     string
 	ContainerID  string
 	DesiredState string
+	// State is the swarm task state on its own ("running", "shutdown",
+	// "failed", …). CurrentState carries the same state for display, with a
+	// relative timestamp appended; this field is what a caller deciding on the
+	// task's meaning reads, so nobody has to parse the display string. It is
+	// the only signal that separates a replica swarm stopped on purpose (an
+	// update, a scale-down, a drained node — "shutdown") from one that died
+	// ("failed"): the container's own docker-ps state is "exited" for both.
+	State        string
 	CurrentState string
 	Error        string
 	Ports        string
@@ -37,7 +45,7 @@ type TaskEntry struct {
 	// ContainerState is the container's live lifecycle state as reported by the
 	// on-node agent (e.g. "running", "restarting", "exited", "dead"); "" by
 	// default. Like Health it is an extension point populated by a TaskOps
-	// decorator. Unlike CurrentState (the swarm task state) it reflects the
+	// decorator. Unlike State (the swarm task state) it reflects the
 	// container's `docker ps` state, which the remote Swarm API cannot report;
 	// the services view shows it as a fallback when Health is empty so container
 	// errors surface even for images without a healthcheck.
@@ -153,6 +161,7 @@ func GetTasksForStack(stackName string) ([]TaskEntry, error) {
 				NodeName:     nodeName,
 				ContainerID:  containerID,
 				DesiredState: string(task.DesiredState),
+				State:        string(task.Status.State),
 				CurrentState: currentState,
 				Error:        errorMsg,
 				Ports:        "", // Ports are typically on service level, not task level
@@ -266,6 +275,7 @@ func GetTasksForService(serviceID string) ([]TaskEntry, error) {
 				NodeName:     nodeName,
 				ContainerID:  containerID,
 				DesiredState: string(task.DesiredState),
+				State:        string(task.Status.State),
 				CurrentState: currentState,
 				Error:        errorMsg,
 				Ports:        "", // Ports are typically on service level, not task level
