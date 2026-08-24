@@ -1441,3 +1441,104 @@ func TestSyncViewport_TrimShiftsTheOffset(t *testing.T) {
 	m.Update(LineMsg{Line: "node1\x00task-1\x00one more"})
 	require.Equal(t, 4, m.viewport.YOffset)
 }
+
+// --- stream notice tests ---
+
+// The filters key off a node and a task a notice does not have, so before
+// lineNotice existed a reader filtered to one node watched the stream die and
+// was told nothing at all.
+
+func TestStreamNotice_SurvivesTheNodeFilter(t *testing.T) {
+	m := testModel()
+	m.setNodeFilter("node-1")
+	m.mu.Lock()
+	m.appendLine("real log", "node-1", "t1", lineLog, time.Time{})
+	m.mu.Unlock()
+
+	m.Update(StreamErrMsg{Err: errors.New("connection lost")})
+	require.Contains(t, m.buildContent(), "connection lost")
+}
+
+func TestStreamNotice_SurvivesTheTextFilter(t *testing.T) {
+	m := testModel()
+	m.ApplySearchQuery("nginx")
+
+	m.Update(StreamDoneMsg{})
+	require.Contains(t, m.buildContent(), "stream closed")
+}
+
+func TestStreamNotice_IsNotCountedAsALogLine(t *testing.T) {
+	m := testModel()
+	m.mu.Lock()
+	m.appendLine("real log", "n1", "t1", lineLog, time.Time{})
+	m.mu.Unlock()
+
+	m.Update(StreamDoneMsg{})
+	m.buildContent()
+	require.Equal(t, 1, m.getVisibleCount(), "the view speaking is not the service logging")
+}
+
+func TestStreamNotice_IsStillFoundByTheSearch(t *testing.T) {
+	m := testModel()
+	m.Update(StreamErrMsg{Err: errors.New("connection lost")})
+	m.mu.Lock()
+	m.searchTerm = "connection"
+	m.mu.Unlock()
+
+	m.buildContent()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	require.Len(t, m.searchMatches, 1, "ctrl+f seeks rather than hides, so a notice is still a hit")
+}
+
+// bothNotices is every message that makes the view speak for itself. They are
+// separate cases in Update, so a test that exercises one proves nothing about
+// the other.
+func bothNotices() map[string]tea.Msg {
+	return map[string]tea.Msg{
+		"error":  StreamErrMsg{Err: errors.New("connection lost")},
+		"closed": StreamDoneMsg{},
+	}
+}
+
+func TestStreamNotice_ShownToAFollower(t *testing.T) {
+	for name, msg := range bothNotices() {
+		t.Run(name, func(t *testing.T) {
+			m := testModel()
+			m.viewport.Height = 3
+			m.setFollow(true)
+			m.mu.Lock()
+			for i := range 20 {
+				m.appendLine(fmt.Sprintf("line %d", i), "n1", "t1", lineLog, time.Time{})
+			}
+			m.mu.Unlock()
+			m.viewport.SetContent(m.buildContent())
+			m.viewport.GotoBottom()
+
+			m.Update(msg)
+			require.True(t, m.viewport.AtBottom(),
+				"the one line saying why nothing else is coming must not land below the window")
+		})
+	}
+}
+
+func TestStreamNotice_RespectsMaxLines(t *testing.T) {
+	for name, msg := range bothNotices() {
+		t.Run(name, func(t *testing.T) {
+			m := testModel()
+			m.MaxLines = 2
+			m.mu.Lock()
+			for i := range 2 {
+				m.appendLine(fmt.Sprintf("line %d", i), "n1", "t1", lineLog, time.Time{})
+			}
+			m.mu.Unlock()
+
+			m.Update(msg)
+
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			require.Len(t, m.lines, 2, "a notice is bounded by the buffer like everything else")
+			require.Len(t, m.lineKinds, 2, "and trimmed in lock-step")
+		})
+	}
+}

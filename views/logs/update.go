@@ -70,23 +70,21 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// append an error line and stop
 		now := time.Now()
 		m.mu.Lock()
-		m.appendLine(fmt.Sprintf("Error: %v", msg.Err), "", "", lineLog, m.stamp(now))
+		m.appendLine(fmt.Sprintf("Error: %v", msg.Err), "", "", lineNotice, m.stamp(now))
+		linesDropped := m.trimToMaxLines()
 		m.mu.Unlock()
 		l().Errorf("[logsview] stream error: %v", msg.Err)
-		if m.ready {
-			m.viewport.SetContent(m.buildContent())
-		}
+		m.syncViewport(linesDropped)
 		return m.fadeTickCmd()
 
 	case StreamDoneMsg:
 		now := time.Now()
 		m.mu.Lock()
-		m.appendLine("--- stream closed ---", "", "", lineLog, m.stamp(now))
+		m.appendLine("--- stream closed ---", "", "", lineNotice, m.stamp(now))
+		linesDropped := m.trimToMaxLines()
 		m.mu.Unlock()
 		l().Debugf("[logsview] stream closed")
-		if m.ready {
-			m.viewport.SetContent(m.buildContent())
-		}
+		m.syncViewport(linesDropped)
 		return m.fadeTickCmd()
 
 	case WrapToggledMsg:
@@ -404,7 +402,9 @@ func (m *Model) renderRows(now time.Time) (rows []string, isMark []bool) {
 		}
 		rows = append(rows, line)
 		isMark = append(isMark, false)
-		visible++
+		if m.kindAt(i) == lineLog {
+			visible++
+		}
 	}
 	m.visibleCount = visible
 	return rows, isMark

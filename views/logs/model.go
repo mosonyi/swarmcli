@@ -108,14 +108,18 @@ func New(width, height int, maxLines int, service docker.ServiceEntry) *Model {
 	}
 }
 
-// lineKind distinguishes a streamed log line from a separator the reader asked
-// for with "enter". A mark carries no node or task and no arrival time, and is
-// rendered at build time rather than stored, so it follows the current width.
+// lineKind distinguishes what the view itself put in the buffer from what the
+// service actually logged. A mark is the separator the reader asked for with
+// "enter": it carries no node or task and no arrival time, and is rendered at
+// build time rather than stored, so it follows the current width. A notice is
+// the view speaking about the stream — an error, or the stream closing. Only a
+// lineLog is filterable and counted; see lineVisible and renderRows.
 type lineKind uint8
 
 const (
 	lineLog lineKind = iota
 	lineMark
+	lineNotice
 )
 
 // appendLine grows the per-line slices in lock-step. They are indexed together
@@ -418,10 +422,14 @@ func (m *Model) stoppedTaskIDs() map[string]bool {
 // (node filter, "/" text filter, hide-stopped). Callers must hold m.mu and pass
 // the precomputed stopped-task set (nil = don't apply the hide-stopped filter).
 func (m *Model) lineVisible(i int, stopped map[string]bool) bool {
-	// A separator the reader put in is exempt from every filter. It is their
-	// mark of where they had read to, and a filter that swallowed it would
-	// answer a keypress with nothing at all.
-	if m.kindAt(i) == lineMark {
+	// Anything the view itself put in the buffer is exempt from every filter.
+	// A separator is the reader's mark of where they had read to, and a filter
+	// that swallowed it would answer a keypress with nothing at all. A notice
+	// is worse: the filters key off a node and a task a notice does not have,
+	// so a reader filtered to one node would watch the stream die and be told
+	// nothing. A notice is still matched by the "ctrl+f" search — that seeks
+	// rather than hides, and finding one is no reason to hide the rest.
+	if m.kindAt(i) != lineLog {
 		return true
 	}
 	// node filter
