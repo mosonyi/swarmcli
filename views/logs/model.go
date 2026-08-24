@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -25,9 +26,11 @@ type Model struct {
 	searchTerm    string
 	searchIndex   int
 	searchMatches []int
-	lines         []string // bounded: only last MaxLines kept
-	lineNodes     []string // node name for each line (parallel to lines)
-	lineTasks     []string // full task ID for each line (parallel to lines), "" if unparseable
+	lines         []string    // bounded: only last MaxLines kept
+	lineNodes     []string    // node name for each line (parallel to lines)
+	lineTasks     []string    // full task ID for each line (parallel to lines), "" if unparseable
+	lineKinds     []lineKind  // log line or separator (parallel to lines)
+	lineAt        []time.Time // arrival time (parallel to lines), zero when the line is not new
 	MaxLines      int
 	ready         bool
 	// visibleCount is how many lines passed the filters the last time content
@@ -62,6 +65,12 @@ type Model struct {
 	filterQuery string
 	// when true, hide log lines from tasks that are no longer running
 	hideStopped bool
+
+	// new-line highlight state
+	linesSinceInit int       // lines received since the stream opened
+	lastLineAt     time.Time // when the previous line arrived
+	highlightArmed bool      // false until the backlog replay is over
+	fadeArmed      bool      // a fade tick is already scheduled
 	// node selection dialog
 	nodeSelectVisible bool
 	nodeSelectCursor  int
@@ -80,6 +89,8 @@ func New(width, height int, maxLines int, service docker.ServiceEntry) *Model {
 		lines:             make([]string, 0, 1024),
 		lineNodes:         make([]string, 0, 1024),
 		lineTasks:         make([]string, 0, 1024),
+		lineKinds:         make([]lineKind, 0, 1024),
+		lineAt:            make([]time.Time, 0, 1024),
 		MaxLines:          maxLines,
 		StreamCtx:         ctx,
 		StreamCancel:      cancel,
@@ -95,6 +106,111 @@ func New(width, height int, maxLines int, service docker.ServiceEntry) *Model {
 		nodeSelectCursor:  0,
 		nodeSelectNodes:   []string{},
 	}
+}
+
+// lineKind distinguishes a streamed log line from a separator the reader asked
+// for with "enter". A mark carries no node or task and no arrival time, and is
+// rendered at build time rather than stored, so it follows the current width.
+type lineKind uint8
+
+const (
+	lineLog lineKind = iota
+	lineMark
+)
+
+// appendLine grows the per-line slices in lock-step. They are indexed together
+// everywhere, so growing them anywhere but here is how they come apart.
+// Callers hold m.mu.
+func (m *Model) appendLine(text, node, task string, kind lineKind, at time.Time) {
+	m.lines = append(m.lines, text)
+	m.lineNodes = append(m.lineNodes, node)
+	m.lineTasks = append(m.lineTasks, task)
+	m.lineKinds = append(m.lineKinds, kind)
+	m.lineAt = append(m.lineAt, at)
+}
+
+// trimToMaxLines drops the oldest lines once the buffer is over MaxLines and
+// returns how many it dropped — which is what a viewport that is not following
+// has to take off its offset to keep showing the same lines. Callers hold m.mu.
+func (m *Model) trimToMaxLines() int {
+	if m.MaxLines <= 0 || len(m.lines) <= m.MaxLines {
+		return 0
+	}
+	start := len(m.lines) - m.MaxLines
+	m.lines = append(make([]string, 0, m.MaxLines), m.lines[start:]...)
+	m.lineNodes = append(make([]string, 0, m.MaxLines), m.lineNodes[start:]...)
+	m.lineTasks = append(make([]string, 0, m.MaxLines), m.lineTasks[start:]...)
+	m.lineKinds = append(make([]lineKind, 0, m.MaxLines), m.lineKinds[start:]...)
+	m.lineAt = append(make([]time.Time, 0, m.MaxLines), m.lineAt[start:]...)
+	return start
+}
+
+// kindAt and arrivedAt read the newer per-line slices tolerantly: a caller that
+// set m.lines wholesale — SetContent, and every test that builds a buffer by
+// hand — leaves them short, and a short slice means "an ordinary log line that
+// is not new" rather than an index panic.
+func (m *Model) kindAt(i int) lineKind {
+	if i < len(m.lineKinds) {
+		return m.lineKinds[i]
+	}
+	return lineLog
+}
+
+func (m *Model) arrivedAt(i int) time.Time {
+	if i < len(m.lineAt) {
+		return m.lineAt[i]
+	}
+	return time.Time{}
+}
+
+// armHighlight opens the highlight once the backlog replay is over. A stream
+// opens with the lines Docker replays for the tail request: that is history,
+// not news, and highlighting it would flash the whole screen at open. Two
+// signals end the replay, and each covers the other's blind spot — a gap
+// between arrivals, which a quiet service gives immediately, and more lines
+// than the backlog can hold, which is the only signal a service logging
+// faster than the gap will ever give. Callers hold m.mu.
+func (m *Model) armHighlight(now time.Time) {
+	if m.highlightArmed {
+		return
+	}
+	if m.linesSinceInit > backlogTail ||
+		(!m.lastLineAt.IsZero() && now.Sub(m.lastLineAt) >= highlightArmDelay) {
+		m.highlightArmed = true
+	}
+}
+
+// stamp is the arrival time to record for a line landing now: the real time
+// once highlighting is armed, and the zero time before that, which is what
+// makes a line permanently not new. Callers hold m.mu.
+func (m *Model) stamp(now time.Time) time.Time {
+	if !m.highlightArmed {
+		return time.Time{}
+	}
+	return now
+}
+
+// isFresh reports whether the line at i is still inside its highlight window.
+// Callers hold m.mu.
+func (m *Model) isFresh(i int, now time.Time) bool {
+	if m.kindAt(i) == lineMark {
+		return false
+	}
+	at := m.arrivedAt(i)
+	return !at.IsZero() && now.Sub(at) < highlightDuration
+}
+
+// anyFresh reports whether any line is still highlighted. Arrival times only
+// ever grow, so the newest log line settles it — the walk exists to step over
+// marks, which carry no arrival time of their own. Callers hold m.mu.
+func (m *Model) anyFresh(now time.Time) bool {
+	for i := len(m.lines) - 1; i >= 0; i-- {
+		if m.kindAt(i) == lineMark {
+			continue
+		}
+		return m.isFresh(i, now)
+	}
+	return false
 }
 
 func (m *Model) Init() tea.Cmd { return nil }
@@ -240,6 +356,7 @@ func (m *Model) ShortHelpItems() []helpbar.HelpEntry {
 		{Key: "w", Desc: "Toggle wrap"},
 		{Key: "o", Desc: "Filter node"},
 		{Key: "t", Desc: "Show/hide stopped"},
+		{Key: "enter", Desc: "Mark"},
 	}
 
 	// Show left/right help only when wrap is off
@@ -301,6 +418,12 @@ func (m *Model) stoppedTaskIDs() map[string]bool {
 // (node filter, "/" text filter, hide-stopped). Callers must hold m.mu and pass
 // the precomputed stopped-task set (nil = don't apply the hide-stopped filter).
 func (m *Model) lineVisible(i int, stopped map[string]bool) bool {
+	// A separator the reader put in is exempt from every filter. It is their
+	// mark of where they had read to, and a filter that swallowed it would
+	// answer a keypress with nothing at all.
+	if m.kindAt(i) == lineMark {
+		return true
+	}
 	// node filter
 	if m.nodeFilter != "" && (i >= len(m.lineNodes) || m.lineNodes[i] != m.nodeFilter) {
 		return false

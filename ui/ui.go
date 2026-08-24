@@ -432,3 +432,71 @@ func TruncateANSIAfter(s string, skipWidth int) string {
 	}
 	return ansi.TruncateLeft(s, skipWidth, "")
 }
+
+// SGR escapes used to embolden a line that already carries its own colours.
+const (
+	sgrBold  = "\x1b[1m"
+	sgrReset = "\x1b[0m"
+)
+
+// BoldANSI renders s bold without discarding the colours it already carries.
+// A log line arrives with its own escapes — our own node prefix ends in a reset
+// — and a reset clears the bold along with everything else, so a plain
+// sgrBold+s would embolden the text only as far as the first one. Bold is
+// therefore re-asserted after every reset the line contains.
+func BoldANSI(s string) string {
+	if s == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(s) + 2*len(sgrBold) + len(sgrReset))
+	b.WriteString(sgrBold)
+	for i := 0; i < len(s); {
+		seq, ok := csiAt(s, i)
+		if !ok {
+			b.WriteByte(s[i])
+			i++
+			continue
+		}
+		b.WriteString(seq)
+		i += len(seq)
+		// seq is "\x1b[" + params + final; re-assert only after an SGR reset.
+		if seq[len(seq)-1] == 'm' && sgrResets(seq[2:len(seq)-1]) {
+			b.WriteString(sgrBold)
+		}
+	}
+	b.WriteString(sgrReset)
+	return b.String()
+}
+
+// csiAt returns the complete CSI sequence starting at i, if one starts there.
+// Parameter and intermediate bytes run 0x20–0x3f and the final byte ends the
+// sequence; an unterminated escape at the end of the string is not one.
+func csiAt(s string, i int) (string, bool) {
+	if s[i] != 0x1b || i+1 >= len(s) || s[i+1] != '[' {
+		return "", false
+	}
+	j := i + 2
+	for j < len(s) && s[j] >= 0x20 && s[j] <= 0x3f {
+		j++
+	}
+	if j >= len(s) {
+		return "", false
+	}
+	return s[i : j+1], true
+}
+
+// sgrResets reports whether an SGR parameter list turns attributes off. An
+// empty list is "\x1b[m", the shorthand for a full reset, and an omitted
+// parameter defaults to 0 — so "0", "" and "00" all reset.
+func sgrResets(params string) bool {
+	if params == "" {
+		return true
+	}
+	for _, p := range strings.Split(params, ";") {
+		if p == "" || strings.Trim(p, "0") == "" {
+			return true
+		}
+	}
+	return false
+}

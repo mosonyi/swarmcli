@@ -8,6 +8,7 @@ import (
 	"github.com/Eldara-Tech/swarmcli/v2/ui"
 	"github.com/Eldara-Tech/swarmcli/v2/utils"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -23,6 +24,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.linesChan = msg.Lines
 		m.errChan = msg.Errs
 		m.Visible = true
+		// A re-opened stream replays its backlog again, so everything that
+		// decides when the replay is over starts over with it — otherwise the
+		// second open would highlight its own history.
+		m.mu.Lock()
+		m.linesSinceInit = 0
+		m.lastLineAt = time.Time{}
+		m.highlightArmed = false
+		m.mu.Unlock()
 		l().Debugf("[logsview] stream initialized")
 		return m.readOneLineCmd()
 
@@ -42,93 +51,43 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		actualLine = strings.ReplaceAll(actualLine, "\r", "")
 
 		// append line into bounded buffer (store line, node and task)
+		now := time.Now()
 		m.mu.Lock()
+		m.linesSinceInit++
+		// Read before lastLineAt moves: the gap that ends the backlog replay is
+		// the one between this line and the one before it.
+		m.armHighlight(now)
 		// store line as-is (no newline); rendering will join with '\n'
-		m.lines = append(m.lines, actualLine)
-		m.lineNodes = append(m.lineNodes, nodeName)
-		m.lineTasks = append(m.lineTasks, taskID)
-
-		// track how many lines we're dropping from the top
-		linesDropped := 0
-
-		// trim if over MaxLines
-		if m.MaxLines > 0 && len(m.lines) > m.MaxLines {
-			// drop older lines from both slices
-			start := len(m.lines) - m.MaxLines
-			linesDropped = start
-			newBuf := make([]string, 0, m.MaxLines)
-			newBuf = append(newBuf, m.lines[start:]...)
-			m.lines = newBuf
-
-			newNodeBuf := make([]string, 0, m.MaxLines)
-			newNodeBuf = append(newNodeBuf, m.lineNodes[start:]...)
-			m.lineNodes = newNodeBuf
-
-			newTaskBuf := make([]string, 0, m.MaxLines)
-			newTaskBuf = append(newTaskBuf, m.lineTasks[start:]...)
-			m.lineTasks = newTaskBuf
-		}
-
-		shouldFollow := m.follow
+		m.appendLine(actualLine, nodeName, taskID, lineLog, m.stamp(now))
+		m.lastLineAt = now
+		linesDropped := m.trimToMaxLines()
 		m.mu.Unlock()
 
-		if m.ready {
-			// auto-follow behavior: only scroll to bottom when follow is enabled
-			if shouldFollow {
-				m.viewport.SetContent(m.buildContent())
-				m.viewport.GotoBottom()
-			} else {
-				// Save current offset before updating content
-				savedOffset := m.viewport.YOffset
-				m.viewport.SetContent(m.buildContent())
-
-				// Adjust offset if we dropped lines from the top
-				newOffset := savedOffset
-				if linesDropped > 0 {
-					newOffset = savedOffset - linesDropped
-					if newOffset < 0 {
-						newOffset = 0
-					}
-				}
-
-				// Ensure offset is within bounds (important when wrapping changes line count)
-				maxOffset := m.viewport.TotalLineCount() - m.viewport.Height
-				if maxOffset < 0 {
-					maxOffset = 0
-				}
-				if newOffset > maxOffset {
-					newOffset = maxOffset
-				}
-
-				m.viewport.YOffset = newOffset
-			}
-		}
-		return m.readOneLineCmd()
+		m.syncViewport(linesDropped)
+		return tea.Batch(m.readOneLineCmd(), m.fadeTickCmd())
 
 	case StreamErrMsg:
 		// append an error line and stop
+		now := time.Now()
 		m.mu.Lock()
-		m.lines = append(m.lines, fmt.Sprintf("Error: %v", msg.Err))
-		m.lineNodes = append(m.lineNodes, "")
-		m.lineTasks = append(m.lineTasks, "")
+		m.appendLine(fmt.Sprintf("Error: %v", msg.Err), "", "", lineLog, m.stamp(now))
 		m.mu.Unlock()
 		l().Errorf("[logsview] stream error: %v", msg.Err)
 		if m.ready {
 			m.viewport.SetContent(m.buildContent())
 		}
-		return nil
+		return m.fadeTickCmd()
 
 	case StreamDoneMsg:
+		now := time.Now()
 		m.mu.Lock()
-		m.lines = append(m.lines, "--- stream closed ---")
-		m.lineNodes = append(m.lineNodes, "")
-		m.lineTasks = append(m.lineTasks, "")
+		m.appendLine("--- stream closed ---", "", "", lineLog, m.stamp(now))
 		m.mu.Unlock()
 		l().Debugf("[logsview] stream closed")
 		if m.ready {
 			m.viewport.SetContent(m.buildContent())
 		}
-		return nil
+		return m.fadeTickCmd()
 
 	case WrapToggledMsg:
 		// Refresh viewport content with new wrap setting
@@ -178,6 +137,24 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 		}
 		return nil
+
+	case MarkInsertedMsg:
+		// The separator goes in at the end of the buffer, so it lands under
+		// everything read so far and above everything still to come.
+		m.syncViewport(0)
+		return nil
+
+	case FadeTickMsg:
+		m.mu.Lock()
+		m.fadeArmed = false
+		m.mu.Unlock()
+		if m.ready {
+			// Only the highlight expired: the rendered row count is unchanged,
+			// so SetContent leaves a reader who scrolled up exactly where they
+			// were, and a follower already at the bottom stays there.
+			m.viewport.SetContent(m.buildContent())
+		}
+		return m.fadeTickCmd()
 
 	case tea.WindowSizeMsg:
 		// Safety check: ensure dimensions are positive
@@ -283,9 +260,13 @@ func (m *Model) SetContent(content string) {
 	}
 	// SetContent carries no per-line node/task metadata; reset the parallel
 	// slices to empty (length-aligned) so all lines are treated as
-	// unfilterable (always visible) and indices stay aligned.
+	// unfilterable (always visible) and indices stay aligned. The zero lineKind
+	// is an ordinary log line and the zero time is "not new", which is what
+	// content that did not arrive over the stream should be.
 	m.lineNodes = make([]string, len(m.lines))
 	m.lineTasks = make([]string, len(m.lines))
+	m.lineKinds = make([]lineKind, len(m.lines))
+	m.lineAt = make([]time.Time, len(m.lines))
 	m.searchMatches = nil
 	m.searchTerm = ""
 	m.searchIndex = 0
@@ -313,75 +294,148 @@ func (m *Model) highlightContent() {
 	}
 }
 
-// buildContent returns the full content (required by viewport) — HighlightMatches may return colored output.
+// syncViewport rebuilds the content and keeps the reader where they were:
+// pinned to the bottom while following, and otherwise on the same lines, which
+// means taking off the offset however many lines the trim just dropped.
+func (m *Model) syncViewport(linesDropped int) {
+	if !m.ready {
+		return
+	}
+	if m.getFollow() {
+		m.viewport.SetContent(m.buildContent())
+		m.viewport.GotoBottom()
+		return
+	}
+	savedOffset := m.viewport.YOffset
+	m.viewport.SetContent(m.buildContent())
+
+	newOffset := savedOffset - linesDropped
+	if newOffset < 0 {
+		newOffset = 0
+	}
+	// Keep the offset in bounds — wrapping changes how many rows the same
+	// lines occupy, so an offset that was valid before need not be now.
+	maxOffset := m.viewport.TotalLineCount() - m.viewport.Height
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if newOffset > maxOffset {
+		newOffset = maxOffset
+	}
+	m.viewport.YOffset = newOffset
+}
+
+// fadeTickCmd schedules the redraw that lets a highlight expire, and only when
+// one is live and no beat is already in flight. Arming from every arriving line
+// would give one beat as many successors as there were lines, and each of those
+// would do the same — the rate would not merely multiply once, it would
+// multiply again on every beat.
+func (m *Model) fadeTickCmd() tea.Cmd {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.fadeArmed || !m.anyFresh(time.Now()) {
+		return nil
+	}
+	m.fadeArmed = true
+	return tea.Tick(fadeTickInterval, func(t time.Time) tea.Msg { return FadeTickMsg(t) })
+}
+
+// buildContent returns the full content (required by viewport) — rows may carry
+// search highlighting and the bold of a freshly arrived line.
 func (m *Model) buildContent() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	rows, isMark := m.renderRows(time.Now())
+
+	// Apply wrapping based on wrap setting
+	// BUT: skip wrapping if node selection dialog is visible to avoid overlay issues
+	if m.wrap && m.viewport.Width > 0 && !m.nodeSelectVisible {
+		// Wrap the entire content to viewport width
+		return wordwrap.String(strings.Join(rows, "\n"), m.viewport.Width)
+	}
+	if m.viewport.Width > 0 {
+		m.scrollRows(rows, isMark)
+	}
+	return strings.Join(rows, "\n")
+}
+
+// renderRows turns the line buffer into the rows to draw, and reports which of
+// them belong to a separator. It also collects the search matches and the
+// visible count in the same pass: both are positions in the rows it is
+// building, so deriving them anywhere else means a second copy of this walk,
+// and the two drifting apart is what froze the match counter (#586).
+// Callers hold m.mu.
+func (m *Model) renderRows(now time.Time) (rows []string, isMark []bool) {
 	// Apply all active filters (node, "/" text, hide-stopped) in a single pass
 	// via the shared predicate so the visible set matches highlightContent.
 	var stopped map[string]bool
 	if m.hideStopped {
 		stopped = m.stoppedTaskIDs()
 	}
-	// Collect the search matches in the same pass. They are indices into the
-	// visible lines, so they can only be counted where the visible set is
-	// built — deriving them anywhere else means a second copy of this walk,
-	// and the two drifting apart is what froze the match counter (#586).
 	lower := strings.ToLower(m.searchTerm)
 	m.searchMatches = nil
-	var filteredLines []string
+	visible := 0
+
 	for i, line := range m.lines {
 		if !m.lineVisible(i, stopped) {
 			continue
 		}
+		// A separator is drawn, not stored: rendering it here is what lets it
+		// follow the viewport across a resize. It is not a log line, so it is
+		// out of the count in the title and out of the search matches — a
+		// query of "0" must not land on a timestamp the reader did not write.
+		if m.kindAt(i) == lineMark {
+			rows = append(rows, "", renderMark(line, m.viewport.Width))
+			isMark = append(isMark, true, true)
+			continue
+		}
 		if lower != "" && strings.Contains(strings.ToLower(line), lower) {
-			m.searchMatches = append(m.searchMatches, len(filteredLines))
+			m.searchMatches = append(m.searchMatches, len(rows))
 		}
-		filteredLines = append(filteredLines, line)
-	}
-	m.visibleCount = len(filteredLines)
-
-	// Join lines first
-	full := strings.Join(filteredLines, "\n")
-
-	// Apply wrapping based on wrap setting
-	// BUT: skip wrapping if node selection dialog is visible to avoid overlay issues
-	if m.wrap && m.viewport.Width > 0 && !m.nodeSelectVisible {
-		// Wrap the entire content to viewport width
-		full = wordwrap.String(full, m.viewport.Width)
-	} else if (!m.wrap || m.nodeSelectVisible) && m.viewport.Width > 0 {
-		// When wrap is off, apply horizontal scrolling using ANSI-aware operations
-		// to avoid splitting escape sequences in colored log lines.
-		processedLines := make([]string, len(filteredLines))
-
-		for i, line := range filteredLines {
-			lineWidth := lipgloss.Width(line)
-			if lineWidth <= m.horizontalOffset {
-				processedLines[i] = ""
-			} else {
-				visiblePart := ui.TruncateANSIAfter(line, m.horizontalOffset)
-				visibleWidth := lipgloss.Width(visiblePart)
-
-				if visibleWidth > m.viewport.Width {
-					if m.viewport.Width > 1 {
-						processedLines[i] = ui.TruncateANSI(visiblePart, m.viewport.Width-1) + ">"
-					} else {
-						processedLines[i] = ">"
-					}
-				} else {
-					processedLines[i] = visiblePart
-				}
-			}
+		// Highlight first, embolden second: the search highlight ends in a
+		// reset, and BoldANSI re-asserts across it. The other order would drop
+		// the bold from the rest of a line that happens to hold a match.
+		if m.searchTerm != "" {
+			line = utils.HighlightMatches(line, m.searchTerm)
 		}
-		full = strings.Join(processedLines, "\n")
+		if m.isFresh(i, now) {
+			line = ui.BoldANSI(line)
+		}
+		rows = append(rows, line)
+		isMark = append(isMark, false)
+		visible++
 	}
+	m.visibleCount = visible
+	return rows, isMark
+}
 
-	// Apply highlighting if we have an active search, regardless of mode
-	if m.searchTerm != "" {
-		return utils.HighlightMatches(full, m.searchTerm)
+// scrollRows applies the horizontal offset in place, using ANSI-aware
+// operations so an escape sequence in a coloured log line is never split.
+// Separators are left alone: they carry no content that scrolls, and one that
+// slid out of frame would leave the reader nothing to have marked.
+// Callers hold m.mu.
+func (m *Model) scrollRows(rows []string, isMark []bool) {
+	for i, line := range rows {
+		if isMark[i] {
+			continue
+		}
+		lineWidth := lipgloss.Width(line)
+		if lineWidth <= m.horizontalOffset {
+			rows[i] = ""
+			continue
+		}
+		visiblePart := ui.TruncateANSIAfter(line, m.horizontalOffset)
+		if lipgloss.Width(visiblePart) <= m.viewport.Width {
+			rows[i] = visiblePart
+			continue
+		}
+		if m.viewport.Width > 1 {
+			rows[i] = ui.TruncateANSI(visiblePart, m.viewport.Width-1) + ">"
+		} else {
+			rows[i] = ">"
+		}
 	}
-	return full
 }
 
 // scrollToMatch centers the viewport on the selected match

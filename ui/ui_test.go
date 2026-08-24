@@ -146,3 +146,76 @@ func TestRenderFramedBoxHeightCannotShrinkBelowItsChrome(t *testing.T) {
 	out := RenderFramedBoxHeight("Title", "one\ntwo\nthree", "footer\nsecond", "x", 40, 6)
 	require.Greater(t, len(strings.Split(out, "\n")), 6)
 }
+
+func TestBoldANSI_ReAssertsPastEveryReset(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "plain text is wrapped once",
+			in:   "hello",
+			want: "\x1b[1mhello\x1b[0m",
+		},
+		{
+			// The log view's own node prefix: a colour, then a reset, then the
+			// message. Without the re-assertion the message would not be bold.
+			name: "a colour ending in a reset",
+			in:   "\x1b[38;5;117mweb.task@node\x1b[0m | msg",
+			want: "\x1b[1m\x1b[38;5;117mweb.task@node\x1b[0m\x1b[1m | msg\x1b[0m",
+		},
+		{
+			name: "a reset folded into a composite SGR",
+			in:   "a\x1b[0;32mb",
+			want: "\x1b[1ma\x1b[0;32m\x1b[1mb\x1b[0m",
+		},
+		{
+			name: "the empty-parameter reset shorthand",
+			in:   "a\x1b[mb",
+			want: "\x1b[1ma\x1b[m\x1b[1mb\x1b[0m",
+		},
+		{
+			name: "a colour that does not reset is left alone",
+			in:   "a\x1b[32mb",
+			want: "\x1b[1ma\x1b[32mb\x1b[0m",
+		},
+		{
+			name: "empty in, empty out",
+			in:   "",
+			want: "",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, BoldANSI(tc.in))
+		})
+	}
+}
+
+func TestBoldANSI_PreservesWidthAndText(t *testing.T) {
+	in := "\x1b[38;5;117mweb\x1b[0m | msg"
+	out := BoldANSI(in)
+	require.Equal(t, lipgloss.Width(in), lipgloss.Width(out), "bold adds no printable cells")
+	require.Equal(t, "web | msg", stripSGR(out))
+}
+
+func TestBoldANSI_LeavesAnUnterminatedEscapeAlone(t *testing.T) {
+	// A truncated escape at the end of a line must not send the scan past the
+	// end of the string.
+	require.Equal(t, "\x1b[1mabc\x1b[38;5\x1b[0m", BoldANSI("abc\x1b[38;5"))
+}
+
+// stripSGR removes CSI sequences so a test can assert on the text alone.
+func stripSGR(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if seq, ok := csiAt(s, i); ok {
+			i += len(seq)
+			continue
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
+}

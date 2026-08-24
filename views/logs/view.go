@@ -5,6 +5,8 @@ package logsview
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/Eldara-Tech/swarmcli/v2/ui"
 	"github.com/Eldara-Tech/swarmcli/v2/ui/dialog"
 
@@ -88,6 +90,30 @@ func (m *Model) searchToggle() (ui.Toggle, bool) {
 }
 
 func (m *Model) FrameFooter() string { return "" }
+
+// markStyle dims a separator: it is punctuation between reads, and has to stay
+// quieter than the log lines it separates.
+var markStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+
+// markTimeFormat is what a separator records — the wall-clock time it was made,
+// which is the one thing about it worth reading.
+const markTimeFormat = "15:04:05"
+
+// renderMark draws a separator as a rule carrying the time it was made, filling
+// width exactly. It is called at build time rather than stored, so a resize
+// re-cuts it instead of leaving a rule from the old width behind.
+func renderMark(stamp string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	label := " " + stamp + " "
+	if len(label)+2 > width {
+		return markStyle.Render(strings.Repeat("─", width))
+	}
+	left := (width - len(label)) / 2
+	right := width - len(label) - left
+	return markStyle.Render(strings.Repeat("─", left) + label + strings.Repeat("─", right))
+}
 
 func (m *Model) FrameContent() string {
 	width := m.viewport.Width
