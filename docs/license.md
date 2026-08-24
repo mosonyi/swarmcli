@@ -73,18 +73,30 @@ stored on the swarm:
 
 A **managed** license is issued to you rather than to one swarm, and then
 *activated* for each swarm you run it on. Installing the key is the first
-step; the second is installing an **activation lease** — a short-lived signed
-file naming that license and that swarm.
+step; the second is an **activation lease** — a short-lived signed artifact
+naming that license and that swarm.
+
+On a swarm that can reach us, the second step takes care of itself. A managed
+license with no lease installed is due for renewal by definition, and the
+check runs every few minutes and again whenever you open `:license` — so
+activation follows the key install on its own, and renewal continues from
+there. Installing the key is the only thing you do:
 
 ```
-:license install ~/license.key        # the license itself
-:license lease install ~/swarm.lease  # activates it for this swarm
+:license install ~/license.key
 ```
 
-Until the lease is installed, `:license` reports **Not activated for this
+Until a lease is in place, `:license` reports **Not activated for this
 swarm** and Business Edition features stay off. That is deliberate: with a
 managed license the lease is the binding, so its absence is an answer rather
 than an unknown.
+
+An air-gapped swarm cannot ask, so it is activated from a lease file you are
+sent instead:
+
+```
+:license lease install ~/swarm.lease
+```
 
 A lease carries its own dates. The default is **30 days to renewal and a
 further 30 days of grace** — features keep working through the grace window
@@ -307,9 +319,9 @@ swarm's license away from it.
 
 So a move is done from your account with us, it is rate-limited, and it is
 recorded. Use **Unbind Cluster** at
-[swarmcli.io/licenses](https://swarmcli.io/licenses), activate the new swarm
-with the lease you are sent, and the old swarm stops being licensed when its
-own lease runs out. A lease that has been issued cannot be recalled, so a
+[swarmcli.io/licenses](https://swarmcli.io/licenses), let the new swarm
+activate itself, and the old swarm stops being licensed when its own lease
+runs out. A lease that has been issued cannot be recalled, so a
 managed license moves at most once per lease window — 60 days at the default
 30 days plus 30 days of grace — and the refusal names the date the next move
 becomes possible.
@@ -333,9 +345,9 @@ When a swarm is destroyed and a new one initialized (`docker swarm leave
 license will not verify against the new cluster.
 
 With a **managed** license this is self-service in the sense that matters:
-the key you hold is still your key. Move it to the new swarm as above, then
-`:license lease install <file>` the lease you are sent. No reissued key, and
-nothing to uninstall first.
+the key you hold is still your key. Move it to the new swarm as above and the
+new swarm activates itself, or takes a lease file if it is air-gapped. No
+reissued key, and nothing to uninstall first.
 
 With a license **bound at issuance**, do it yourself from the dashboard:
 **Unbind Cluster** on the license's card, then **Register Cluster** with the
