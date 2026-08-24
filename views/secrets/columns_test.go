@@ -6,7 +6,7 @@ package secretsview
 import (
 	"testing"
 
-	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
+	filterlist "github.com/Eldara-Tech/swarmcli/v2/ui/components/filterable/list"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"

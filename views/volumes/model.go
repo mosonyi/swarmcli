@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Eldara-Tech/swarmcli/docker"
-	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
-	"github.com/Eldara-Tech/swarmcli/views/helpbar"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
+	filterlist "github.com/Eldara-Tech/swarmcli/v2/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/v2/views/helpbar"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"

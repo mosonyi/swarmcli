@@ -6,7 +6,7 @@ package api //nolint:revive // standard short package name
 import (
 	"fmt"
 
-	"github.com/Eldara-Tech/swarmcli/registry"
+	"github.com/Eldara-Tech/swarmcli/v2/registry"
 )
 
 var ErrEmptyCommand = fmt.Errorf("empty command")

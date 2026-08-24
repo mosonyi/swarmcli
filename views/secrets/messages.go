@@ -4,7 +4,7 @@
 package secretsview
 
 import (
-	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
 	"time"
 )
 

@@ -7,7 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
+	swarmlog "github.com/Eldara-Tech/swarmcli/v2/utils/log"
 	"os"
 	"os/exec"
 	"path/filepath"

@@ -532,10 +532,20 @@ manifest is validated as a Docker stack before use.
 
 A repository is an HTTPS-served `index.yaml` listing chart versions, each with
 a tarball URL (Helm repository format) — hostable on GitHub Pages/Releases, S3,
-or any static host. Configured repos and cached indexes live under
-`$XDG_STATE_HOME/swarmcli/charts` (default `~/.local/state/swarmcli/charts`); a
-repository's name is a component of its cache filename, so it is limited to
-letters, digits, `-`, `_` and `.`.
+or any static host. Configured repos, cached indexes and downloaded chart
+archives live under `$XDG_STATE_HOME/swarmcli/charts` (default
+`~/.local/state/swarmcli/charts`); a repository's name is a component of its
+cache filename, so it is limited to letters, digits, `-`, `_` and `.`.
+
+A chart archive is downloaded once. The index publishes a sha256 for it, which
+is checked on every download and again on every read of the cache, so a cached
+archive is used only while it still hashes to what the repository publishes
+*now* — a chart rebuilt and re-uploaded under one version misses the cache
+rather than resolving to the copy you already had. An entry that publishes no
+digest is never cached, because nothing could validate the read. A download that
+fails on the way — a gateway answering 502 or 504, a dropped connection — is
+retried twice before the command gives up, and each wait is reported. Archives
+are swept 30 days after the last time one was used.
 
 ### Staying current
 

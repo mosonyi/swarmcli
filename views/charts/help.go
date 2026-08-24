@@ -4,7 +4,7 @@
 package chartsview
 
 import (
-	helpview "github.com/Eldara-Tech/swarmcli/views/help"
+	helpview "github.com/Eldara-Tech/swarmcli/v2/views/help"
 )
 
 // HelpContent implements the app's optional help-screen contract: "?" is

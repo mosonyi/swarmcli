@@ -6,9 +6,9 @@ package app
 import (
 	"testing"
 
-	helpview "github.com/Eldara-Tech/swarmcli/views/help"
-	"github.com/Eldara-Tech/swarmcli/views/helpbar"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	helpview "github.com/Eldara-Tech/swarmcli/v2/views/help"
+	"github.com/Eldara-Tech/swarmcli/v2/views/helpbar"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"

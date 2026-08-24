@@ -4,8 +4,8 @@
 package servicesview
 
 import (
-	"github.com/Eldara-Tech/swarmcli/features"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/features"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 )
 
 // serviceHealthFeature gates the per-container HEALTH/PORTS enrichment. The base

@@ -15,8 +15,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/Eldara-Tech/swarmcli/charts"
-	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
+	"github.com/Eldara-Tech/swarmcli/v2/charts"
+	swarmlog "github.com/Eldara-Tech/swarmcli/v2/utils/log"
 )
 
 // waveChart writes a chart whose single service is the stack given, so a

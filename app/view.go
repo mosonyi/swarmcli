@@ -4,10 +4,10 @@
 package app
 
 import (
-	"github.com/Eldara-Tech/swarmcli/ui"
-	"github.com/Eldara-Tech/swarmcli/views/helpbar"
-	systeminfoview "github.com/Eldara-Tech/swarmcli/views/systeminfo"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/ui"
+	"github.com/Eldara-Tech/swarmcli/v2/views/helpbar"
+	systeminfoview "github.com/Eldara-Tech/swarmcli/v2/views/systeminfo"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 
 	"github.com/charmbracelet/lipgloss"
 )

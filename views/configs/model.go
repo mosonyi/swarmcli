@@ -5,11 +5,11 @@ package configsview
 
 import (
 	"fmt"
-	"github.com/Eldara-Tech/swarmcli/docker"
-	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
-	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
-	"github.com/Eldara-Tech/swarmcli/views/helpbar"
-	loading "github.com/Eldara-Tech/swarmcli/views/loading"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
+	filterlist "github.com/Eldara-Tech/swarmcli/v2/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/v2/views/confirmdialog"
+	"github.com/Eldara-Tech/swarmcli/v2/views/helpbar"
+	loading "github.com/Eldara-Tech/swarmcli/v2/views/loading"
 	"strings"
 	"sync/atomic"
 	"time"

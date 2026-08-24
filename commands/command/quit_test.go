@@ -6,8 +6,8 @@ package command
 import (
 	"testing"
 
-	"github.com/Eldara-Tech/swarmcli/args"
-	"github.com/Eldara-Tech/swarmcli/registry"
+	"github.com/Eldara-Tech/swarmcli/v2/args"
+	"github.com/Eldara-Tech/swarmcli/v2/registry"
 
 	"github.com/stretchr/testify/require"
 )

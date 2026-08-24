@@ -5,9 +5,9 @@ package tasksview
 
 import (
 	"fmt"
-	"github.com/Eldara-Tech/swarmcli/ui"
-	"github.com/Eldara-Tech/swarmcli/ui/components/sorting"
-	"github.com/Eldara-Tech/swarmcli/views/taskutil"
+	"github.com/Eldara-Tech/swarmcli/v2/ui"
+	"github.com/Eldara-Tech/swarmcli/v2/ui/components/sorting"
+	"github.com/Eldara-Tech/swarmcli/v2/views/taskutil"
 	"strings"
 )
 

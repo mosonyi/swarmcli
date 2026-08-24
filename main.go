@@ -4,9 +4,9 @@
 package main
 
 import (
-	"github.com/Eldara-Tech/swarmcli/app"
-	"github.com/Eldara-Tech/swarmcli/cli"
-	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
+	"github.com/Eldara-Tech/swarmcli/v2/app"
+	"github.com/Eldara-Tech/swarmcli/v2/cli"
+	swarmlog "github.com/Eldara-Tech/swarmcli/v2/utils/log"
 	"os"
 	"runtime/debug"
 
