@@ -306,15 +306,25 @@ holding a key were enough to move it, a copied key would be enough to take a
 swarm's license away from it.
 
 So a move is done from your account with us, it is rate-limited, and it is
-recorded. Ask support to move the license, activate the new swarm with the
-lease you are sent, and the old swarm stops being licensed when its own lease
-runs out.
+recorded. Use **Unbind Cluster** at
+[swarmcli.io/licenses](https://swarmcli.io/licenses), activate the new swarm
+with the lease you are sent, and the old swarm stops being licensed when its
+own lease runs out. A lease that has been issued cannot be recalled, so a
+managed license moves at most once per lease window — 60 days at the default
+30 days plus 30 days of grace — and the refusal names the date the next move
+becomes possible.
 
 ### Getting a bound license
 
-Run `:license cluster-id` in swarmcli to see your swarm's id, send that
-to support along with your account information, and you'll receive a
-bound license file. Install it with `:license install <file>`.
+Sign in at [swarmcli.io/licenses](https://swarmcli.io/licenses) and use
+**Register Cluster**. It asks for the swarm's cluster id — read it with
+`:license cluster-id`, or press `g` on the `:license` view — and for an
+optional alias, so that a later list of swarms is readable. The key is signed
+bound to that swarm and shown on the license's card; copy it and install it
+with `:license install <file>`, or by pressing `s` on the `:license` view.
+
+Following the link from the license prompt opens that page with the cluster
+id already filled in, so it never has to be retyped.
 
 ### My cluster was rebuilt — what now?
 
@@ -323,14 +333,23 @@ When a swarm is destroyed and a new one initialized (`docker swarm leave
 license will not verify against the new cluster.
 
 With a **managed** license this is self-service in the sense that matters:
-the key you hold is still your key. Ask for the license to be moved to the
-new swarm, then `:license lease install <file>` the lease you are sent. No
-reissued key, and nothing to uninstall first.
+the key you hold is still your key. Move it to the new swarm as above, then
+`:license lease install <file>` the lease you are sent. No reissued key, and
+nothing to uninstall first.
 
-With a license **bound at issuance**, the resolution is unchanged: contact
-support with the new cluster id (`:license cluster-id` against the new swarm)
-and sales will reissue a license bound to the new id. Install the replacement
-with `:license install <file>`.
+With a license **bound at issuance**, do it yourself from the dashboard:
+**Unbind Cluster** on the license's card, then **Register Cluster** with the
+new id (`:license cluster-id` against the new swarm). Unbinding clears the
+issued key, so the old key stops working — which is what makes handing out a
+replacement safe — and registering issues one bound to the new swarm. The
+step is not optional: binding a license that already names a different swarm
+is refused with *"This license is already bound to a different Swarm. Please
+unbind it first."* A license bound at issuance may be moved this way as often
+as you need. Install the replacement with `:license install <file>`.
+
+**Unbind Cluster** is offered for licenses that carry a subscription. A
+license issued to you outside the dashboard has no unbind button, and moving
+one is still a support request — send the new cluster id.
 
 Force-restoring a swarm from a backup of `/var/lib/docker/swarm/` (a
 documented DR procedure with `docker swarm init --force-new-cluster`)
