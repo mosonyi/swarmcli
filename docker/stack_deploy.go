@@ -103,9 +103,8 @@ func DeployStackResolved(ctx context.Context, stackName string, yamlContent stri
 // DeployStackInContext deploys a stack to an explicitly named Docker context.
 //
 // `docker stack deploy` has no SDK equivalent, so this shells out; naming the
-// context is what keeps the target an argument rather than whatever
-// DOCKER_CONTEXT or `docker context show` happens to say at the moment the
-// command runs.
+// context is what keeps the target an argument rather than the session pin the
+// whole process shares.
 //
 // Cancelling ctx kills the child. Nothing else can reach it: the CLI holds its
 // own connection to the daemon, so a caller being torn down while the daemon is
@@ -313,23 +312,12 @@ func cleanupNetworks(stackName string, networkNames []string) {
 	}
 }
 
-// GetDockerContext returns the current Docker context name.
+// GetDockerContext returns the Docker context name this session addresses,
+// which is what the exec-based stack commands name with `--context`.
+//
+// It reports the session pin rather than re-reading the config file, so a
+// stack shown from one swarm cannot be deployed to another that was made
+// current in some other terminal meanwhile. See SessionContext.
 func GetDockerContext() (string, error) {
-	// Check DOCKER_CONTEXT environment variable first
-	if ctx := os.Getenv("DOCKER_CONTEXT"); ctx != "" {
-		return ctx, nil
-	}
-
-	// Fall back to running "docker context show"
-	output, err := exec.Command("docker", "context", "show").Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to get current docker context: %w", err)
-	}
-
-	// Parse output and return trimmed context name
-	ctx := string(output)
-	if len(ctx) > 0 && ctx[len(ctx)-1] == '\n' {
-		ctx = ctx[:len(ctx)-1]
-	}
-	return ctx, nil
+	return SessionContext()
 }

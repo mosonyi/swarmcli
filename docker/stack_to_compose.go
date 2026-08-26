@@ -713,9 +713,38 @@ func (cf *ComposeFile) buildService(si *ServiceInspect, stackName string, netID2
 	return cs
 }
 
+// contextArgs prefixes a docker CLI invocation with the session's context.
+//
+// Without it these commands follow ~/.docker/config.json, which is neither the
+// context the SDK client is connected to nor the one $DOCKER_CONTEXT names —
+// so a stack read here could describe a different swarm from the one it was
+// selected in (#611).
+func contextArgs(extra ...string) []string {
+	args := make([]string, 0, 2+len(extra))
+	if ctxName, err := SessionContext(); err == nil && strings.TrimSpace(ctxName) != "" {
+		args = append(args, "--context", ctxName)
+	}
+	return append(args, extra...)
+}
+
+// stackServicesArgs builds the argument list for listing a stack's services.
+func stackServicesArgs(stackName string) []string {
+	return contextArgs("stack", "services", stackName, "--format", "{{.Name}}")
+}
+
+// serviceInspectArgs builds the argument list for inspecting one service.
+func serviceInspectArgs(serviceName string) []string {
+	return contextArgs("service", "inspect", serviceName)
+}
+
+// networkListArgs builds the argument list for the id-to-name network listing.
+func networkListArgs() []string {
+	return contextArgs("network", "ls", "--no-trunc", "--format", "{{.ID}}\t{{.Name}}")
+}
+
 // getStackServices returns the list of service names for a stack
 func getStackServices(stackName string) ([]string, error) {
-	cmd := exec.Command("docker", "stack", "services", stackName, "--format", "{{.Name}}")
+	cmd := exec.Command("docker", stackServicesArgs(stackName)...)
 	var out bytes.Buffer
 	var errb bytes.Buffer
 	cmd.Stdout = &out
@@ -738,7 +767,7 @@ func getStackServices(stackName string) ([]string, error) {
 
 // inspectService returns the inspect data for a service
 func inspectService(serviceName string) (*ServiceInspect, error) {
-	cmd := exec.Command("docker", "service", "inspect", serviceName)
+	cmd := exec.Command("docker", serviceInspectArgs(serviceName)...)
 	var out bytes.Buffer
 	var errb bytes.Buffer
 	cmd.Stdout = &out
@@ -757,7 +786,7 @@ func inspectService(serviceName string) (*ServiceInspect, error) {
 
 // dockerNetworkIDToNameMap builds a map of network IDs to names
 func dockerNetworkIDToNameMap() (map[string]string, error) {
-	cmd := exec.Command("docker", "network", "ls", "--no-trunc", "--format", "{{.ID}}\t{{.Name}}")
+	cmd := exec.Command("docker", networkListArgs()...)
 	var out bytes.Buffer
 	var errb bytes.Buffer
 	cmd.Stdout = &out

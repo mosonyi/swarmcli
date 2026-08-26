@@ -58,17 +58,18 @@ func (v *searchingStubView) Update(msg tea.Msg) tea.Cmd {
 // rather than failing.
 func newTestAppModel(cv view.View) *Model {
 	return &Model{
-		viewport:       viewport.New(200, 50),
-		currentView:    cv,
-		viewStack:      viewstack.Stack{},
-		commandInput:   commandinput.New(),
-		searchInput:    searchinput.New(),
-		errorDialog:    confirmdialog.New(200, 50),
-		unlockDialog:   unlockdialog.New(200, 50),
-		updateDialog:   confirmdialog.New(200, 50),
-		systemInfo:     systeminfoview.New(docker.DefaultDeps(), "test", "test"),
-		terminalWidth:  200,
-		terminalHeight: 50,
+		viewport:           viewport.New(200, 50),
+		currentView:        cv,
+		viewStack:          viewstack.Stack{},
+		commandInput:       commandinput.New(),
+		searchInput:        searchinput.New(),
+		errorDialog:        confirmdialog.New(200, 50),
+		unlockDialog:       unlockdialog.New(200, 50),
+		updateDialog:       confirmdialog.New(200, 50),
+		contextDriftDialog: confirmdialog.New(200, 50),
+		systemInfo:         systeminfoview.New(docker.DefaultDeps(), "test", "test"),
+		terminalWidth:      200,
+		terminalHeight:     50,
 	}
 }
 

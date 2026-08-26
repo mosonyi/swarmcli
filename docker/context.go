@@ -104,13 +104,25 @@ type contextInspectResult struct {
 	} `json:"Endpoints"`
 }
 
-// ListContexts returns all available Docker contexts using docker CLI
+// ListContexts returns all available Docker contexts using docker CLI.
+//
+// `docker context ls` marks whichever context ~/.docker/config.json says is
+// current, which is not necessarily the one this session is talking to. The
+// current flag is recomputed against the session pin: a list that marked the
+// externally-switched context current while every read came from the pinned
+// one would be reporting the very mismatch #611 is about. The pin is also
+// where the contexts view reads the context being left when a switch is
+// confirmed.
 func ListContexts() ([]ContextInfo, error) {
-	cmd := exec.Command("docker", "context", "ls", "--format", "json")
-	output, err := cmd.Output()
+	output, err := listContextsFn()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list contexts: %w", err)
 	}
+
+	// An unresolvable pin leaves every entry unmarked rather than failing the
+	// list: the names are still worth showing, and a switch is how the user
+	// would recover.
+	sessionName, _ := SessionContext()
 
 	var contexts []ContextInfo
 	scanner := bufio.NewScanner(bytes.NewReader(output))
@@ -123,7 +135,7 @@ func ListContexts() ([]ContextInfo, error) {
 
 		contexts = append(contexts, ContextInfo{
 			Name:        item.Name,
-			Current:     item.Current,
+			Current:     item.Name == sessionName,
 			Description: item.Description,
 			DockerHost:  item.DockerEndpoint,
 			TLS:         checkContextTLS(item.Name),
@@ -135,6 +147,14 @@ func ListContexts() ([]ContextInfo, error) {
 	}
 
 	return contexts, nil
+}
+
+// listContextsFn is the seam for `docker context ls`, so which entry ListContexts
+// marks current is testable without a Docker CLI on PATH.
+var listContextsFn = runContextList
+
+func runContextList() ([]byte, error) {
+	return exec.Command("docker", "context", "ls", "--format", "json").Output()
 }
 
 // checkContextTLS checks if a context has TLS enabled
@@ -214,6 +234,7 @@ var (
 	useContextFn     = UseContext
 	resetClientFn    = ResetClient
 	currentContextFn = GetCurrentContext
+	setContextFn     = SetSessionContext
 	probeContextFn   = probeActiveContext
 )
 
@@ -222,7 +243,7 @@ func ValidateContext(ctx context.Context, contextName string) error {
 	// A switch cannot take effect while DOCKER_CONTEXT names something else,
 	// so report that instead of writing config.json and claiming success.
 	// Naming the same context is not a conflict — nothing has to move.
-	if env := os.Getenv("DOCKER_CONTEXT"); env != "" && env != contextName {
+	if env := envContext(); env != "" && env != contextName {
 		return fmt.Errorf("%w to '%s' — unset it to switch to '%s'", ErrContextPinnedByEnv, env, contextName)
 	}
 
@@ -236,15 +257,20 @@ func ValidateContext(ctx context.Context, contextName string) error {
 	if err := useContextFn(contextName); err != nil {
 		return err
 	}
-	// The client is a process-wide singleton built for the context we just
-	// left. Without dropping it, every check below would describe that
-	// context and pass whatever the new one is doing.
+	// Two pieces of state, both stale until moved: the session pin every
+	// caller resolves its context through, and the process-wide client
+	// singleton built for the context we just left. Without dropping the
+	// client, every check below would describe that context and pass whatever
+	// the new one is doing; without moving the pin, the probe below would
+	// build the replacement for the old context all over again.
+	setContextFn(contextName)
 	resetClientFn()
 
 	if err := probeContextFn(ctx, contextName); err != nil {
 		// Switch back to original context, and drop the client built for the
 		// one being rejected.
 		_ = useContextFn(currentCtx)
+		setContextFn(currentCtx)
 		resetClientFn()
 		return err
 	}

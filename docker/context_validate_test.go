@@ -27,9 +27,11 @@ func stubValidateSeams(t *testing.T, s *validateSeams) {
 	t.Helper()
 	origUse, origReset := useContextFn, resetClientFn
 	origCurrent, origProbe := currentContextFn, probeContextFn
+	origSet := setContextFn
 	t.Cleanup(func() {
 		useContextFn, resetClientFn = origUse, origReset
 		currentContextFn, probeContextFn = origCurrent, origProbe
+		setContextFn = origSet
 	})
 
 	if s.current == "" {
@@ -40,6 +42,7 @@ func stubValidateSeams(t *testing.T, s *validateSeams) {
 		return s.useErr
 	}
 	resetClientFn = func() { s.trace = append(s.trace, "reset") }
+	setContextFn = func(name string) { s.trace = append(s.trace, "pin:"+name) }
 	currentContextFn = func() (string, error) { return s.current, s.curErr }
 	probeContextFn = func(context.Context, string) error {
 		s.trace = append(s.trace, "probe")
@@ -50,15 +53,16 @@ func stubValidateSeams(t *testing.T, s *validateSeams) {
 	t.Setenv("DOCKER_CONTEXT", "")
 }
 
-// The cached client is a process-wide singleton built for the previous
-// context. Probing before dropping it validates the context being left, which
-// is how an unreachable target used to pass.
-func TestValidateContext_DropsTheCachedClientBeforeProbing(t *testing.T) {
+// Two pieces of process-wide state describe the previous context: the session
+// pin every caller resolves through, and the cached client built from it.
+// Probing before both have moved validates the context being left, which is how
+// an unreachable target used to pass.
+func TestValidateContext_MovesThePinAndDropsTheClientBeforeProbing(t *testing.T) {
 	s := &validateSeams{}
 	stubValidateSeams(t, s)
 
 	require.NoError(t, ValidateContext(context.Background(), "new"))
-	require.Equal(t, []string{"use:new", "reset", "probe"}, s.trace)
+	require.Equal(t, []string{"use:new", "pin:new", "reset", "probe"}, s.trace)
 }
 
 // A target that does not answer must leave the machine exactly as it was —
@@ -70,7 +74,9 @@ func TestValidateContext_UnreachableTargetRevertsAndDropsItsClient(t *testing.T)
 
 	err := ValidateContext(context.Background(), "new")
 	require.ErrorIs(t, err, boom, "the probe's reason must reach the caller unchanged")
-	require.Equal(t, []string{"use:new", "reset", "probe", "use:old", "reset"}, s.trace)
+	require.Equal(t,
+		[]string{"use:new", "pin:new", "reset", "probe", "use:old", "pin:old", "reset"},
+		s.trace)
 }
 
 // DOCKER_CONTEXT is resolved ahead of ~/.docker/config.json, so switching
@@ -96,7 +102,7 @@ func TestValidateContext_EnvNamingTheSameContextIsNotAConflict(t *testing.T) {
 	t.Setenv("DOCKER_CONTEXT", "new")
 
 	require.NoError(t, ValidateContext(context.Background(), "new"))
-	require.Equal(t, []string{"use:new", "reset", "probe"}, s.trace)
+	require.Equal(t, []string{"use:new", "pin:new", "reset", "probe"}, s.trace)
 }
 
 // Without a context to revert to there is nothing safe to do, so the switch
