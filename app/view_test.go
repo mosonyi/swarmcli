@@ -71,16 +71,17 @@ func (stubClusterInfo) GetDockerVersion() (string, error) { return "27.0.0", nil
 func newLayoutTestModel(cv view.View) *Model {
 	deps := docker.Deps{ClusterInfo: stubClusterInfo{}}
 	return &Model{
-		deps:         deps,
-		viewport:     viewport.New(0, 0),
-		currentView:  cv,
-		viewStack:    viewstack.Stack{},
-		commandInput: commandinput.New(),
-		searchInput:  searchinput.New(),
-		errorDialog:  confirmdialog.New(0, 0),
-		unlockDialog: unlockdialog.New(0, 0),
-		updateDialog: confirmdialog.New(0, 0),
-		systemInfo:   systeminfoview.New(deps, "test", "ce"),
+		deps:               deps,
+		viewport:           viewport.New(0, 0),
+		currentView:        cv,
+		viewStack:          viewstack.Stack{},
+		commandInput:       commandinput.New(),
+		searchInput:        searchinput.New(),
+		errorDialog:        confirmdialog.New(0, 0),
+		unlockDialog:       unlockdialog.New(0, 0),
+		updateDialog:       confirmdialog.New(0, 0),
+		contextDriftDialog: confirmdialog.New(0, 0),
+		systemInfo:         systeminfoview.New(deps, "test", "ce"),
 	}
 }
 

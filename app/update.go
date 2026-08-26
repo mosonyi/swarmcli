@@ -70,7 +70,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case snapshotLoadedMsg:
 		if msg.Err != nil {
 			if m.previousContext != "" {
-				_ = docker.UseContext(m.previousContext)
+				if m.revertWritesConfig {
+					_ = docker.UseContext(m.previousContext)
+				} else {
+					// The config file still names the context that would not
+					// load, and it is not ours to change. Stop offering it, or
+					// the drift prompt asks again on the next tick and every
+					// tick after that.
+					failed, _ := docker.SessionContext()
+					m.declinedDriftContext = failed
+				}
+				// The pin comes back either way, or the session is left
+				// addressing the context whose snapshot just failed.
+				docker.SetSessionContext(m.previousContext)
 				docker.ResetClient()
 				m.previousContext = ""
 				m.showAppError(
@@ -281,10 +293,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// owns the screen, another app dialog is up, or the user opted out of
 		// this version.
 		cmd := m.systemInfo.Update(msg)
-		if startupOverlay != nil && startupOverlay.Active() {
-			return m, cmd
-		}
-		if m.appErrorDialogActive || m.unlockDialogActive || m.updateDialogActive {
+		if m.dialogActive() {
 			return m, cmd
 		}
 		if msg.LatestVersion != settings.Load().DismissedUpdateVersion {
@@ -297,22 +306,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case contextsview.ContextChangedNotification:
 		// Context has changed - show loading view then navigate to stacks
-		m.previousContext = msg.PreviousContext
-		// Close cached Docker client so a fresh one is created for the new context
-		docker.ResetClient()
-		// Invalidate snapshot cache so stacks load fresh data for new context
-		docker.InvalidateSnapshot()
-		cmd := m.replaceView(loadingview.ViewName, map[string]string{
-			"title":   "Loading",
-			"header":  "Fetching cluster info",
-			"message": "Loading Swarm nodes and stacks...",
-		})
-		return m, tea.Batch(
-			m.systemInfo.LoadStatus(),
-			cmd,
-			// Load snapshot and navigate to stacks when ready
-			loadSnapshotAsync(),
-		)
+		return m, m.enterContext(msg.PreviousContext, true)
+
+	case contextDriftMsg:
+		return m, m.handleContextDrift(msg)
 
 	case view.AppErrorMsg:
 		m.showAppError(msg.Error, msg.FallbackView)
@@ -323,6 +320,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case confirmdialog.ResultMsg:
+		if m.contextDriftDialogActive {
+			return m, m.resolveContextDrift(msg.Confirmed)
+		}
 		if m.updateDialogActive {
 			m.updateDialogActive = false
 			m.updateDialog.Visible = false
@@ -390,6 +390,36 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := m.delegateToCurrentView(msg)
 		return m, cmd
 	}
+}
+
+// enterContext takes the session into the context the pin now names: it drops
+// the client and the snapshot built for the previous one, shows the loading
+// view, and reloads. previous is remembered so a snapshot that fails to load
+// can be reverted, and writesConfig says whether that revert may write
+// ~/.docker/config.json — true only when this switch wrote it in the first
+// place.
+//
+// Both ways into a new context go through here — a switch made from the
+// contexts view and an accepted drift prompt — because a second copy of this
+// sequence is a second chance to forget one of the four things it does.
+func (m *Model) enterContext(previous string, writesConfig bool) tea.Cmd {
+	m.previousContext = previous
+	m.revertWritesConfig = writesConfig
+	// Close cached Docker client so a fresh one is created for the new context
+	docker.ResetClient()
+	// Invalidate snapshot cache so stacks load fresh data for new context
+	docker.InvalidateSnapshot()
+	cmd := m.replaceView(loadingview.ViewName, map[string]string{
+		"title":   "Loading",
+		"header":  "Fetching cluster info",
+		"message": "Loading Swarm nodes and stacks...",
+	})
+	return tea.Batch(
+		m.systemInfo.LoadStatus(),
+		cmd,
+		// Load snapshot and navigate to stacks when ready
+		loadSnapshotAsync(),
+	)
 }
 
 // unlockResultMsg carries the outcome of a docker.UnlockSwarm call.
@@ -507,6 +537,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// If the update notice is active, forward keys to it exclusively
 	if m.updateDialogActive {
 		cmd := m.updateDialog.Update(msg)
+		return m, cmd
+	}
+
+	// If the context drift prompt is active, forward keys to it exclusively
+	if m.contextDriftDialogActive {
+		cmd := m.contextDriftDialog.Update(msg)
 		return m, cmd
 	}
 

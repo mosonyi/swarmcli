@@ -15,7 +15,7 @@ apply to every build.
 |---|---|---|---|---|
 | `SWARMCLI_ENV` | both | `dev` writes human-readable logs, `prod` writes JSON. | `prod` | startup |
 | `LOG_LEVEL` | both | Log verbosity: `debug`, `info`, `warn`, `error`. | `debug` in dev, `info` in prod | startup |
-| `DOCKER_CONTEXT` | both | Docker context to talk to. It overrides `docker context use`, so while it is set the context switcher refuses to move to a different context rather than writing a switch that could not take effect. | the active context | startup, and every Docker client |
+| `DOCKER_CONTEXT` | both | Docker context to talk to. It overrides `docker context use`, so while it is set the context switcher refuses to move to a different context rather than writing a switch that could not take effect. | the active context | startup |
 | `SWARMCLI_DISABLE_VERSION_CHECK` | both | Disables the startup request to `https://swarmcli.io/api/v1/version` that checks whether a newer release is available. | unset | startup |
 | `SWARMCLI_CHARTS_ALLOW_PLAINTEXT` | both | Allows chart repositories served over plain `http://`, which are refused by default (see [charts/README.md](../charts/README.md#transport)). | unset (https only) | `charts` commands |
 | `SWARMCLI_CHARTS_NO_AUTO_UPDATE` | both | Stops a `charts` command refreshing a repository index before resolving a chart from it. `--no-repo-update` does the same for one invocation. | unset (refreshes) | `charts` commands |
@@ -39,6 +39,29 @@ See [License — Activation](license.md#activation) for the precedence
 between `SWARMCLI_LICENSE` and the license file, and
 [Features](features.md) for how `SWARMCLI_REVEAL_IMAGE`,
 `SWARMCLI_SHELL_CMD`, and `SWARMCLI_FORWARD_IDLE_TIMEOUT` are used.
+
+## The Docker context
+
+swarmcli resolves the Docker context once, at startup — from `DOCKER_CONTEXT`
+if it is set, otherwise from the active context — and then addresses that one
+context for the rest of the session. Everything it does goes to the same
+swarm: the lists, the logs, `stack deploy`, and every `docker` command it runs
+for you.
+
+So running `docker context use <other>` in another terminal does **not** move a
+running swarmcli. Instead, within a few seconds it asks:
+
+```
+The Docker context changed outside swarmcli: 'a' → 'b'.
+
+swarmcli is still using 'a'. Switch to 'b'?
+```
+
+Answer `y` to follow the switch — swarmcli drops its connection, reconnects to
+`b` and reloads the cluster. Answer `n` to stay on `a`; you are not asked about
+`b` again unless the context changes to something else, or changes back to `a`
+and away again. Switching from inside swarmcli, with `:contexts`, needs no
+prompt and still runs `docker context use`, so your shell follows along.
 
 ## On-disk paths
 
