@@ -17,10 +17,10 @@ us: swarmcli checks the signature itself, so a key works on an air-gapped
 swarm and no outage of ours can disable your features. Keys are versioned, so
 a key issued today keeps working when the format gains a field.
 
-A [managed license](#managed-licenses-activation-is-a-second-step) adds a
-renewal step that *can* use the network — never verification, only renewal, and
-there is an offline path for it. [Privacy](#privacy) says exactly what that
-sends and when.
+Any license may use the network to collect a key we re-signed for it, and a
+[managed license](#managed-licenses-activation-is-a-second-step) adds a renewal
+step on top — never verification, and there is an offline path for both.
+[Privacy](#privacy) says exactly what is sent and when.
 
 What a key records about you:
 
@@ -73,18 +73,30 @@ stored on the swarm:
 
 A **managed** license is issued to you rather than to one swarm, and then
 *activated* for each swarm you run it on. Installing the key is the first
-step; the second is installing an **activation lease** — a short-lived signed
-file naming that license and that swarm.
+step; the second is an **activation lease** — a short-lived signed artifact
+naming that license and that swarm.
+
+On a swarm that can reach us, the second step takes care of itself. A managed
+license with no lease installed is due for renewal by definition, and the
+check runs every few minutes and again whenever you open `:license` — so
+activation follows the key install on its own, and renewal continues from
+there. Installing the key is the only thing you do:
 
 ```
-:license install ~/license.key        # the license itself
-:license lease install ~/swarm.lease  # activates it for this swarm
+:license install ~/license.key
 ```
 
-Until the lease is installed, `:license` reports **Not activated for this
+Until a lease is in place, `:license` reports **Not activated for this
 swarm** and Business Edition features stay off. That is deliberate: with a
 managed license the lease is the binding, so its absence is an answer rather
 than an unknown.
+
+An air-gapped swarm cannot ask, so it is activated from a lease file you are
+sent instead:
+
+```
+:license lease install ~/swarm.lease
+```
 
 A lease carries its own dates. The default is **30 days to renewal and a
 further 30 days of grace** — features keep working through the grace window
@@ -306,15 +318,25 @@ holding a key were enough to move it, a copied key would be enough to take a
 swarm's license away from it.
 
 So a move is done from your account with us, it is rate-limited, and it is
-recorded. Ask support to move the license, activate the new swarm with the
-lease you are sent, and the old swarm stops being licensed when its own lease
-runs out.
+recorded. Use **Unbind Cluster** at
+[swarmcli.io/licenses](https://swarmcli.io/licenses), let the new swarm
+activate itself, and the old swarm stops being licensed when its own lease
+runs out. A lease that has been issued cannot be recalled, so a
+managed license moves at most once per lease window — 60 days at the default
+30 days plus 30 days of grace — and the refusal names the date the next move
+becomes possible.
 
 ### Getting a bound license
 
-Run `:license cluster-id` in swarmcli to see your swarm's id, send that
-to support along with your account information, and you'll receive a
-bound license file. Install it with `:license install <file>`.
+Sign in at [swarmcli.io/licenses](https://swarmcli.io/licenses) and use
+**Register Cluster**. It asks for the swarm's cluster id — read it with
+`:license cluster-id`, or press `g` on the `:license` view — and for an
+optional alias, so that a later list of swarms is readable. The key is signed
+bound to that swarm and shown on the license's card; copy it and install it
+with `:license install <file>`, or by pressing `s` on the `:license` view.
+
+Following the link from the license prompt opens that page with the cluster
+id already filled in, so it never has to be retyped.
 
 ### My cluster was rebuilt — what now?
 
@@ -323,14 +345,23 @@ When a swarm is destroyed and a new one initialized (`docker swarm leave
 license will not verify against the new cluster.
 
 With a **managed** license this is self-service in the sense that matters:
-the key you hold is still your key. Ask for the license to be moved to the
-new swarm, then `:license lease install <file>` the lease you are sent. No
+the key you hold is still your key. Move it to the new swarm as above and the
+new swarm activates itself, or takes a lease file if it is air-gapped. No
 reissued key, and nothing to uninstall first.
 
-With a license **bound at issuance**, the resolution is unchanged: contact
-support with the new cluster id (`:license cluster-id` against the new swarm)
-and sales will reissue a license bound to the new id. Install the replacement
-with `:license install <file>`.
+With a license **bound at issuance**, do it yourself from the dashboard:
+**Unbind Cluster** on the license's card, then **Register Cluster** with the
+new id (`:license cluster-id` against the new swarm). Unbinding clears the
+issued key, so the old key stops working — which is what makes handing out a
+replacement safe — and registering issues one bound to the new swarm. The
+step is not optional: binding a license that already names a different swarm
+is refused with *"This license is already bound to a different Swarm. Please
+unbind it first."* A license bound at issuance may be moved this way as often
+as you need. Install the replacement with `:license install <file>`.
+
+**Unbind Cluster** is offered for licenses that carry a subscription. A
+license issued to you outside the dashboard has no unbind button, and moving
+one is still a support request — send the new cluster id.
 
 Force-restoring a swarm from a backup of `/var/lib/docker/swarm/` (a
 documented DR procedure with `docker swarm init --force-new-cluster`)
@@ -465,19 +496,29 @@ whether your license is valid, and none is possible — there is no server whose
 answer swarmcli would accept over its own check, which is also why an outage of
 ours cannot disable your features.
 
-**For an unbound license, or one bound at issuance, the key never leaves your
-machine.** There is nothing to renew, so nothing is ever sent.
+**There are two requests, and only the second is managed-only.** Both send the
+same small set of fields, and one environment variable switches off both.
 
-What changes with a managed license is **renewal**, and only renewal. A
-managed license is activated per swarm with a lease that expires, so getting
-the next lease means asking us for it. That request sends:
+The first is a **token refresh**, made by every license that carries a
+[license id](#license-id) — including unbound and bound-at-issuance ones. Your
+tier, node count and binding mode are *signed*, so changing any of them means
+re-signing your key, and a key we re-signed is no use sitting on our side. Once
+a day swarmcli asks whether we hold different bytes for the license it already
+has, and installs them if we do. It is how a renewal or a tier change reaches
+your swarm without you copying a key out of the dashboard by hand. Nothing is
+written unless the bytes actually differ.
+
+The second is a **lease renewal**, and only a managed license makes it: the
+activation lease expires, so getting the next one means asking for it.
+
+Both requests send:
 
 - **your license key**, as the credential proving the request is yours. We
   issued and signed it, so it tells us nothing about you we did not already
   know — but it is accurate to say the key is transmitted, over TLS, rather
-  than staying on the machine as it does for every other license type;
-- the **license id** (`lic_…`) — which license is renewing;
-- the **cluster id** of the swarm being renewed — which swarm it is for;
+  than staying on the machine;
+- the **license id** (`lic_…`) — which license is asking;
+- the **cluster id** of the swarm it is asking for;
 - the **swarmcli version** making the request; and
 - the time and network origin of the request, as with any HTTPS call.
 
@@ -485,29 +526,36 @@ Nothing else. Not your services, nodes, images, users, configuration, or
 anything else read from your Docker daemon — swarmcli does not gather it and
 the request has nowhere to put it.
 
-Two things about that request are worth being precise on, because they are
+Four things about these requests are worth being precise on, because they are
 the questions people actually ask:
 
-- **It is made by the swarmcli client on an operator's machine, not by your
-  swarm.** Nothing deployed into your cluster talks to us; the agent and the
-  proxy have no outbound path to us at all.
+- **It is normally made by the swarmcli client on an operator's machine.** The
+  agent and the proxy have no outbound path to us and never make it. There is
+  one deployed exception, and it is the point of it: `:bootstrap` installs a
+  `licence-renewer` service — the same swarmcli image running `license sync` on
+  a timer — so a cluster nobody opens the TUI against still collects its
+  renewals. It is the only service in that stack with a route off the cluster,
+  and `:bootstrap --no-renewer` omits it.
 - **It is not required for the license to work.** A lease can be delivered as
   a file instead — `:license lease install <file>` — which is the supported
   path for air-gapped and policy-restricted clusters. Ask for a long lease and
   the file is something you install rarely.
-- **It is attempted automatically**, from a third of the way through the lease's
-  window and when you open `:license`, and by `swarmcli license sync` when you
-  run it. An attempt that is refused is not repeated on a timer — the answer is
-  shown on the `:license` page instead — so a license the service has answered
-  about is asked about once, not every few minutes.
-- **It can be switched off**, with `SWARMCLI_DISABLE_LICENSE_RENEWAL=true`. Then
-  no licensing request is ever made and leases arrive as files.
+- **They are attempted automatically** — the token refresh once a day, the lease
+  renewal from a third of the way through the lease's window — and both when you
+  open `:license` or run `swarmcli license sync`. An attempt that is refused is
+  not repeated on a timer; the answer is shown on the `:license` page instead, so
+  a license the service has answered about is asked about once, not every few
+  minutes.
+- **They can be switched off**, both of them, with
+  `SWARMCLI_DISABLE_LICENSE_RENEWAL=true` — it stops swarmcli building the
+  client at all, so neither request has anything to make it. Then no licensing
+  request is ever made and leases arrive as files.
   `SWARMCLI_LICENSE_API_URL` points the request at a different deployment; it
   cannot be used to grant anything, because every artifact is verified against a
   key compiled into swarmcli itself.
 
-Licenses that are unbound or bound at issuance make no such request, ever:
-there is nothing to renew.
+A license issued before we began naming them carries no license id, and makes
+no request of either kind — there is nothing for it to ask about.
 
 The unrelated CE version-check behaviour (a single GET to
 `https://swarmcli.io/api/v1/version` at startup) can be disabled with
