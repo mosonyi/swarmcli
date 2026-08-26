@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Eldara-Tech/swarmcli/v2/docker"
 
@@ -1113,4 +1114,480 @@ func TestSearchSurvivesTheBufferWrapping(t *testing.T) {
 		m.Update(LineMsg{Line: "node-a\x00task-run\x00needle"})
 	}
 	require.Equal(t, []int{1, 2, 3}, m.searchMatches)
+}
+
+// --- separator ("enter" mark) tests ---
+
+// markedModel returns a model holding one log line and then a separator.
+func markedModel(t *testing.T) *Model {
+	t.Helper()
+	m := testModel()
+	m.mu.Lock()
+	m.appendLine("first line", "node1", "task-1", lineLog, time.Time{})
+	m.mu.Unlock()
+	m.Update(key("enter"))
+	return m
+}
+
+func TestKey_Enter_InsertsMark(t *testing.T) {
+	m := testModel()
+	cmd := m.Update(key("enter"))
+
+	m.mu.Lock()
+	require.Len(t, m.lines, 1)
+	require.Equal(t, lineMark, m.lineKinds[0])
+	require.True(t, m.lineAt[0].IsZero(), "a separator is never new")
+	m.mu.Unlock()
+
+	require.NotNil(t, cmd)
+	require.IsType(t, MarkInsertedMsg{}, cmd())
+}
+
+func TestKey_Enter_MarkIsARuleAtViewportWidth(t *testing.T) {
+	m := markedModel(t)
+	rows := strings.Split(m.buildContent(), "\n")
+	require.Len(t, rows, 3, "one log line, then a blank row and the rule")
+	require.Equal(t, "", rows[1], "the rule is preceded by a blank row")
+	require.Equal(t, m.viewport.Width, lipgloss.Width(rows[2]))
+	require.Contains(t, ansi.Strip(rows[2]), "─")
+}
+
+func TestKey_Enter_MarkFollowsTheWidth(t *testing.T) {
+	m := markedModel(t)
+	m.Update(tea.WindowSizeMsg{Width: 40, Height: 24})
+
+	rows := strings.Split(m.buildContent(), "\n")
+	require.Equal(t, 40, lipgloss.Width(rows[len(rows)-1]),
+		"the rule is rendered at build time, so a resize re-cuts it")
+}
+
+func TestKey_Enter_MarkKeepsAFollowerAtTheBottom(t *testing.T) {
+	m := testModel()
+	m.viewport.Height = 3
+	m.mu.Lock()
+	for i := range 20 {
+		m.appendLine(fmt.Sprintf("line %d", i), "", "", lineLog, time.Time{})
+	}
+	m.mu.Unlock()
+	m.setFollow(true)
+	m.viewport.SetContent(m.buildContent())
+	m.viewport.GotoTop()
+
+	m.Update(key("enter"))
+	m.Update(MarkInsertedMsg{})
+	require.True(t, m.viewport.AtBottom(), "a follower must be shown the separator they just made")
+}
+
+func TestKey_Enter_InsertsNothingWhileTheNodeDialogIsOpen(t *testing.T) {
+	m := testModel()
+	m.mu.Lock()
+	m.nodeSelectVisible = true
+	m.nodeSelectNodes = []string{"All nodes", "node1"}
+	m.mu.Unlock()
+
+	m.Update(key("enter"))
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	require.Empty(t, m.lines, "enter selects a node there; it does not also mark the log")
+}
+
+func TestBuildContent_MarkSurvivesEveryFilter(t *testing.T) {
+	m := markedModel(t)
+	m.deps = docker.Deps{Snapshot: &mockSnapshotOps{snap: &docker.SwarmSnapshot{
+		Tasks: []swarm.Task{{ID: "task-1", ServiceID: "svc-123",
+			Status: swarm.TaskStatus{State: swarm.TaskStateShutdown}}},
+	}}}
+	m.setNodeFilter("some-other-node")
+	m.setHideStopped(true)
+	m.ApplySearchQuery("nothing matches this")
+
+	content := m.buildContent()
+	require.NotContains(t, content, "first line", "every filter hides the log line")
+	require.Contains(t, ansi.Strip(content), "─", "but never the separator")
+}
+
+func TestBuildContent_MarkIsNotCounted(t *testing.T) {
+	m := markedModel(t)
+	m.buildContent()
+	require.Equal(t, 1, m.getVisibleCount(), "a separator is not a log line")
+}
+
+func TestBuildContent_MarkIsNotASearchMatch(t *testing.T) {
+	m := testModel()
+	m.mu.Lock()
+	m.appendLine("12:34:56", "", "", lineMark, time.Time{})
+	m.searchTerm = ":"
+	m.mu.Unlock()
+
+	m.buildContent()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	require.Empty(t, m.searchMatches, "a query must not land on a timestamp the reader did not write")
+}
+
+func TestBuildContent_NoWrap_MarkIgnoresHorizontalOffset(t *testing.T) {
+	m := markedModel(t)
+	m.setWrap(false)
+	m.horizontalOffset = 200
+
+	rows := strings.Split(m.buildContent(), "\n")
+	require.Equal(t, "", rows[0], "the log line has scrolled out of frame")
+	require.Equal(t, m.viewport.Width, lipgloss.Width(rows[2]),
+		"a separator that scrolled away would leave nothing to have marked")
+}
+
+// --- new-line highlight tests ---
+
+// fastFade shrinks the highlight timings for the duration of a test: a tea.Tick
+// cmd invoked synchronously blocks for its whole interval.
+func fastFade(t *testing.T) {
+	t.Helper()
+	prevTick, prevDur := fadeTickInterval, highlightDuration
+	fadeTickInterval, highlightDuration = time.Millisecond, 50*time.Millisecond
+	t.Cleanup(func() { fadeTickInterval, highlightDuration = prevTick, prevDur })
+}
+
+// armedModel returns a model past the backlog replay, so lines it receives from
+// here on are news and get highlighted.
+func armedModel() *Model {
+	m := testModel()
+	m.Visible = true
+	m.linesChan = make(chan string, 10)
+	m.errChan = make(chan error, 1)
+	m.mu.Lock()
+	m.highlightArmed = true
+	m.mu.Unlock()
+	return m
+}
+
+// freshBg is the escape the band opens with, spelled out rather than derived
+// from freshBackground: a test that built it the way the code does would follow
+// the colour anywhere, including to a colour nobody can see.
+const freshBg = "\x1b[48;5;24m"
+
+func TestBuildContent_FreshLineIsHighlighted(t *testing.T) {
+	m := armedModel()
+	m.Update(LineMsg{Line: "node1\x00task-1\x00hello"})
+	require.Contains(t, m.buildContent(), freshBg+"hello")
+}
+
+func TestBuildContent_FreshLineSpansTheFrame(t *testing.T) {
+	m := armedModel()
+	m.Update(LineMsg{Line: "node1\x00task-1\x00hello"})
+
+	row := m.buildContent()
+	require.Equal(t, m.viewport.Width, lipgloss.Width(row), "the band is the row, not the text on it")
+	require.Equal(t, "hello"+strings.Repeat(" ", m.viewport.Width-len("hello")), ansi.Strip(row))
+}
+
+func TestBuildContent_Wrap_EveryRowOfAFreshLineIsHighlighted(t *testing.T) {
+	m := armedModel()
+	m.Update(LineMsg{Line: "node1\x00task-1\x00" + strings.Repeat("word ", 40)})
+
+	rows := strings.Split(m.buildContent(), "\n")
+	require.Greater(t, len(rows), 1, "the line has to wrap for this to test anything")
+	for i, row := range rows {
+		require.True(t, strings.HasPrefix(row, freshBg), "row %d is a row of a new line", i)
+		require.Equal(t, m.viewport.Width, lipgloss.Width(row), "row %d", i)
+	}
+}
+
+func TestBuildContent_MarkDoesNotShiftTheHighlight(t *testing.T) {
+	m := armedModel()
+	m.Update(key("enter")) // one line in the buffer, two rows on the screen
+	m.Update(LineMsg{Line: "node1\x00task-1\x00hello"})
+
+	rows := strings.Split(m.buildContent(), "\n")
+	require.Len(t, rows, 3)
+	require.True(t, strings.HasPrefix(rows[2], freshBg), "the new line is the row that gets the band")
+	require.NotContains(t, rows[0]+rows[1], freshBg, "a separator is not new")
+}
+
+func TestBuildContent_NoWrap_FreshBandIsPaintedAfterTheScroll(t *testing.T) {
+	m := armedModel()
+	m.setWrap(false)
+	m.Update(LineMsg{Line: "node1\x00task-1\x00hello"})
+	m.horizontalOffset = 2
+
+	row := m.buildContent()
+	require.Equal(t, "llo", strings.TrimRight(ansi.Strip(row), " "), "the row has scrolled")
+	require.Equal(t, m.viewport.Width, lipgloss.Width(row),
+		"padding measured before the scroll would come up short by the offset")
+}
+
+func TestBuildContent_ExpiredLineIsPlain(t *testing.T) {
+	m := armedModel()
+	m.Update(LineMsg{Line: "node1\x00task-1\x00hello"})
+
+	m.mu.Lock()
+	m.lineAt[0] = time.Now().Add(-2 * highlightDuration)
+	m.mu.Unlock()
+
+	require.Equal(t, "hello", m.buildContent(), "the highlight expires back to the original line")
+}
+
+func TestBuildContent_FreshLineKeepsItsOwnColours(t *testing.T) {
+	m := armedModel()
+	// The node prefix formatLogLineWithNode builds ends in a reset, which would
+	// otherwise end the band at the message after it.
+	m.Update(LineMsg{Line: "node1\x00task-1\x00\x1b[38;5;117mweb.task@node1\x1b[0m | hello"})
+
+	content := m.buildContent()
+	require.Contains(t, content, "\x1b[38;5;117m", "the line keeps the colour it arrived with")
+	require.Contains(t, content, "\x1b[0m"+freshBg+" | hello", "the band is re-asserted past the prefix's reset")
+}
+
+func TestBuildContent_FreshLineStaysHighlightedPastASearchHit(t *testing.T) {
+	m := armedModel()
+	m.Update(LineMsg{Line: "node1\x00task-1\x00before HIT after"})
+	m.mu.Lock()
+	m.searchTerm = "HIT"
+	m.mu.Unlock()
+
+	content := m.buildContent()
+	require.Contains(t, content, "\x1b[0m"+freshBg+" after",
+		"the search highlight ends in a reset, and the rest of the line is still new")
+}
+
+func TestHighlight_BacklogDoesNotArm(t *testing.T) {
+	m := testModel()
+	m.Visible = true
+	m.linesChan = make(chan string, 10)
+	m.errChan = make(chan error, 1)
+
+	// The replay arrives back to back, which is exactly what makes it a replay.
+	for i := range 3 {
+		m.Update(LineMsg{Line: fmt.Sprintf("node1\x00task-1\x00backlog %d", i)})
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	require.False(t, m.highlightArmed)
+	for i, at := range m.lineAt {
+		require.True(t, at.IsZero(), "backlog line %d must never be highlighted", i)
+	}
+}
+
+func TestUpdate_InitStreamMsg_DisarmsForTheNewBacklog(t *testing.T) {
+	m := armedModel()
+	m.Update(LineMsg{Line: "node1\x00task-1\x00hello"})
+
+	m.Update(InitStreamMsg{Lines: make(chan string, 1), Errs: make(chan error, 1)})
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	require.False(t, m.highlightArmed, "a re-opened stream replays history, not news")
+	require.Zero(t, m.linesSinceInit)
+	require.True(t, m.lastLineAt.IsZero())
+}
+
+func TestHighlight_ArmsAfterAQuietGap(t *testing.T) {
+	m := testModel()
+	m.mu.Lock()
+	m.linesSinceInit = 1
+	m.lastLineAt = time.Now().Add(-highlightArmDelay)
+	m.armHighlight(time.Now())
+	armed := m.highlightArmed
+	m.mu.Unlock()
+	require.True(t, armed, "a gap between arrivals ends the replay")
+}
+
+func TestHighlight_ArmsPastTheBacklogSize(t *testing.T) {
+	m := testModel()
+	m.mu.Lock()
+	// A service logging faster than the gap gives no gap to read; the only
+	// other signal is having received more lines than the replay can hold.
+	m.linesSinceInit = backlogTail + 1
+	m.lastLineAt = time.Now()
+	m.armHighlight(time.Now())
+	armed := m.highlightArmed
+	m.mu.Unlock()
+	require.True(t, armed)
+}
+
+func TestHighlight_FirstLineEverDoesNotArm(t *testing.T) {
+	m := testModel()
+	m.mu.Lock()
+	m.linesSinceInit = 1
+	m.armHighlight(time.Now())
+	armed := m.highlightArmed
+	m.mu.Unlock()
+	require.False(t, armed, "with no previous line there is no gap, only an unset clock")
+}
+
+func TestFadeTickCmd_NilAtRest(t *testing.T) {
+	m := testModel()
+	require.Nil(t, m.fadeTickCmd(), "nothing is fresh, so nothing needs redrawing")
+}
+
+func TestFadeTickCmd_ArmsOnceForABurst(t *testing.T) {
+	fastFade(t)
+	m := armedModel()
+	for i := range 5 {
+		m.Update(LineMsg{Line: fmt.Sprintf("node1\x00task-1\x00line %d", i)})
+	}
+	require.True(t, m.fadeArmed)
+	require.Nil(t, m.fadeTickCmd(), "one beat must not gain a successor per line")
+}
+
+func TestUpdate_FadeTickMsg_ReArmsWhileFresh(t *testing.T) {
+	fastFade(t)
+	m := armedModel()
+	m.Update(LineMsg{Line: "node1\x00task-1\x00hello"})
+
+	cmd := m.Update(FadeTickMsg(time.Now()))
+	require.NotNil(t, cmd, "the highlight needs redraws to expire on time")
+}
+
+func TestUpdate_FadeTickMsg_StopsWhenNothingIsFresh(t *testing.T) {
+	fastFade(t)
+	m := armedModel()
+	m.Update(LineMsg{Line: "node1\x00task-1\x00hello"})
+
+	m.mu.Lock()
+	m.lineAt[0] = time.Now().Add(-2 * highlightDuration)
+	m.mu.Unlock()
+
+	require.Nil(t, m.Update(FadeTickMsg(time.Now())), "the beat must not run on at rest")
+}
+
+func TestAnyFresh_LooksPastATrailingMark(t *testing.T) {
+	m := armedModel()
+	m.Update(LineMsg{Line: "node1\x00task-1\x00hello"})
+	m.Update(key("enter"))
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	require.True(t, m.anyFresh(time.Now()), "a separator on top of a fresh line does not end the fade")
+}
+
+// --- viewport bookkeeping ---
+
+func TestSyncViewport_KeepsOffsetWhenNotFollowing(t *testing.T) {
+	m := armedModel()
+	m.setFollow(false)
+	m.viewport.Height = 3
+	for i := range 20 {
+		m.Update(LineMsg{Line: fmt.Sprintf("node1\x00task-1\x00line %d", i)})
+	}
+	m.viewport.YOffset = 5
+
+	m.Update(LineMsg{Line: "node1\x00task-1\x00one more"})
+	require.Equal(t, 5, m.viewport.YOffset, "a reader who scrolled up stays where they were")
+}
+
+func TestSyncViewport_TrimShiftsTheOffset(t *testing.T) {
+	m := armedModel()
+	m.setFollow(false)
+	m.MaxLines = 10
+	m.viewport.Height = 3
+	for i := range 10 {
+		m.Update(LineMsg{Line: fmt.Sprintf("node1\x00task-1\x00line %d", i)})
+	}
+	m.viewport.YOffset = 5
+
+	// The buffer is full, so this line pushes the oldest one out and every
+	// remaining line moves up by one row.
+	m.Update(LineMsg{Line: "node1\x00task-1\x00one more"})
+	require.Equal(t, 4, m.viewport.YOffset)
+}
+
+// --- stream notice tests ---
+
+// The filters key off a node and a task a notice does not have, so before
+// lineNotice existed a reader filtered to one node watched the stream die and
+// was told nothing at all.
+
+func TestStreamNotice_SurvivesTheNodeFilter(t *testing.T) {
+	m := testModel()
+	m.setNodeFilter("node-1")
+	m.mu.Lock()
+	m.appendLine("real log", "node-1", "t1", lineLog, time.Time{})
+	m.mu.Unlock()
+
+	m.Update(StreamErrMsg{Err: errors.New("connection lost")})
+	require.Contains(t, m.buildContent(), "connection lost")
+}
+
+func TestStreamNotice_SurvivesTheTextFilter(t *testing.T) {
+	m := testModel()
+	m.ApplySearchQuery("nginx")
+
+	m.Update(StreamDoneMsg{})
+	require.Contains(t, m.buildContent(), "stream closed")
+}
+
+func TestStreamNotice_IsNotCountedAsALogLine(t *testing.T) {
+	m := testModel()
+	m.mu.Lock()
+	m.appendLine("real log", "n1", "t1", lineLog, time.Time{})
+	m.mu.Unlock()
+
+	m.Update(StreamDoneMsg{})
+	m.buildContent()
+	require.Equal(t, 1, m.getVisibleCount(), "the view speaking is not the service logging")
+}
+
+func TestStreamNotice_IsStillFoundByTheSearch(t *testing.T) {
+	m := testModel()
+	m.Update(StreamErrMsg{Err: errors.New("connection lost")})
+	m.mu.Lock()
+	m.searchTerm = "connection"
+	m.mu.Unlock()
+
+	m.buildContent()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	require.Len(t, m.searchMatches, 1, "ctrl+f seeks rather than hides, so a notice is still a hit")
+}
+
+// bothNotices is every message that makes the view speak for itself. They are
+// separate cases in Update, so a test that exercises one proves nothing about
+// the other.
+func bothNotices() map[string]tea.Msg {
+	return map[string]tea.Msg{
+		"error":  StreamErrMsg{Err: errors.New("connection lost")},
+		"closed": StreamDoneMsg{},
+	}
+}
+
+func TestStreamNotice_ShownToAFollower(t *testing.T) {
+	for name, msg := range bothNotices() {
+		t.Run(name, func(t *testing.T) {
+			m := testModel()
+			m.viewport.Height = 3
+			m.setFollow(true)
+			m.mu.Lock()
+			for i := range 20 {
+				m.appendLine(fmt.Sprintf("line %d", i), "n1", "t1", lineLog, time.Time{})
+			}
+			m.mu.Unlock()
+			m.viewport.SetContent(m.buildContent())
+			m.viewport.GotoBottom()
+
+			m.Update(msg)
+			require.True(t, m.viewport.AtBottom(),
+				"the one line saying why nothing else is coming must not land below the window")
+		})
+	}
+}
+
+func TestStreamNotice_RespectsMaxLines(t *testing.T) {
+	for name, msg := range bothNotices() {
+		t.Run(name, func(t *testing.T) {
+			m := testModel()
+			m.MaxLines = 2
+			m.mu.Lock()
+			for i := range 2 {
+				m.appendLine(fmt.Sprintf("line %d", i), "n1", "t1", lineLog, time.Time{})
+			}
+			m.mu.Unlock()
+
+			m.Update(msg)
+
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			require.Len(t, m.lines, 2, "a notice is bounded by the buffer like everything else")
+			require.Len(t, m.lineKinds, 2, "and trimmed in lock-step")
+		})
+	}
 }

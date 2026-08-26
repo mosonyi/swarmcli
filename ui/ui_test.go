@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -145,4 +146,109 @@ func TestRenderFramedBoxHeightFillsRequestedHeight(t *testing.T) {
 func TestRenderFramedBoxHeightCannotShrinkBelowItsChrome(t *testing.T) {
 	out := RenderFramedBoxHeight("Title", "one\ntwo\nthree", "footer\nsecond", "x", 40, 6)
 	require.Greater(t, len(strings.Split(out, "\n")), 6)
+}
+
+// bg is the 256-colour background these tests assert with, and its escape.
+var (
+	bg    = termenv.ANSI256Color(24)
+	sgrBg = "\x1b[48;5;24m"
+)
+
+func TestBackgroundANSI_ReAssertsPastEverythingThatClearsIt(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "plain text is wrapped once",
+			in:   "hello",
+			want: sgrBg + "hello\x1b[0m",
+		},
+		{
+			// The log view's own node prefix: a colour, then a reset, then the
+			// message. Without the re-assertion the band would stop at the "|".
+			name: "a colour ending in a reset",
+			in:   "\x1b[38;5;117mweb.task@node\x1b[0m | msg",
+			want: sgrBg + "\x1b[38;5;117mweb.task@node\x1b[0m" + sgrBg + " | msg\x1b[0m",
+		},
+		{
+			name: "a reset folded into a composite SGR",
+			in:   "a\x1b[0;32mb",
+			want: sgrBg + "a\x1b[0;32m" + sgrBg + "b\x1b[0m",
+		},
+		{
+			name: "the empty-parameter reset shorthand",
+			in:   "a\x1b[mb",
+			want: sgrBg + "a\x1b[m" + sgrBg + "b\x1b[0m",
+		},
+		{
+			// 49 restores the default background without resetting anything
+			// else, so it clears the band while a bold would have survived it.
+			name: "the default-background code",
+			in:   "a\x1b[49mb",
+			want: sgrBg + "a\x1b[49m" + sgrBg + "b\x1b[0m",
+		},
+		{
+			name: "a colour that does not reset is left alone",
+			in:   "a\x1b[32mb",
+			want: sgrBg + "a\x1b[32mb\x1b[0m",
+		},
+		{
+			// The 0 is a colour index, not a reset. Re-asserting here would
+			// take a background the line set for itself away from it.
+			name: "an extended colour whose index looks like a reset",
+			in:   "\x1b[41ma\x1b[38;5;0mb",
+			want: sgrBg + "\x1b[41ma\x1b[38;5;0mb\x1b[0m",
+		},
+		{
+			name: "a truecolour component that looks like a default background",
+			in:   "a\x1b[38;2;0;49;120mb",
+			want: sgrBg + "a\x1b[38;2;0;49;120mb\x1b[0m",
+		},
+		{
+			// Past the arguments of the extended colour, an ordinary reset is
+			// still a reset.
+			name: "a reset after an extended colour",
+			in:   "a\x1b[38;5;117;0mb",
+			want: sgrBg + "a\x1b[38;5;117;0m" + sgrBg + "b\x1b[0m",
+		},
+		{
+			name: "empty in, empty out",
+			in:   "",
+			want: "",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, BackgroundANSI(tc.in, bg))
+		})
+	}
+}
+
+func TestBackgroundANSI_PreservesWidthAndText(t *testing.T) {
+	in := "\x1b[38;5;117mweb\x1b[0m | msg"
+	out := BackgroundANSI(in, bg)
+	require.Equal(t, lipgloss.Width(in), lipgloss.Width(out), "the band adds no printable cells")
+	require.Equal(t, "web | msg", stripSGR(out))
+}
+
+func TestBackgroundANSI_LeavesAnUnterminatedEscapeAlone(t *testing.T) {
+	// A truncated escape at the end of a line must not send the scan past the
+	// end of the string.
+	require.Equal(t, sgrBg+"abc\x1b[38;5\x1b[0m", BackgroundANSI("abc\x1b[38;5", bg))
+}
+
+// stripSGR removes CSI sequences so a test can assert on the text alone.
+func stripSGR(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if seq, ok := csiAt(s, i); ok {
+			i += len(seq)
+			continue
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
 }

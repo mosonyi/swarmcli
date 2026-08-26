@@ -4,6 +4,8 @@
 package logsview
 
 import (
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -130,8 +132,18 @@ func HandleKey(m *Model, k tea.KeyMsg) tea.Cmd {
 		m.searchIndex = 0
 		return nil
 	case "enter":
-		// In normal mode, enter doesn't do anything
-		return nil
+		// The bash gesture: hitting enter under a `tail -f` pushes what has
+		// been read up the screen, so whatever arrives next is unmistakably
+		// new. There is no scrollback to push here, so the break goes into the
+		// buffer instead — at the end, under everything read so far.
+		m.mu.Lock()
+		m.appendLine(time.Now().Format(markTimeFormat), "", "", lineMark, time.Time{})
+		m.trimToMaxLines()
+		m.mu.Unlock()
+		l().Debugf("[logsview] 'enter' key pressed: separator inserted")
+		return func() tea.Msg {
+			return MarkInsertedMsg{}
+		}
 	case "n":
 		if len(m.searchMatches) > 0 {
 			m.searchIndex = (m.searchIndex + 1) % len(m.searchMatches)
