@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -147,7 +148,13 @@ func TestRenderFramedBoxHeightCannotShrinkBelowItsChrome(t *testing.T) {
 	require.Greater(t, len(strings.Split(out, "\n")), 6)
 }
 
-func TestBoldANSI_ReAssertsPastEveryReset(t *testing.T) {
+// bg is the 256-colour background these tests assert with, and its escape.
+var (
+	bg    = termenv.ANSI256Color(24)
+	sgrBg = "\x1b[48;5;24m"
+)
+
+func TestBackgroundANSI_ReAssertsPastEverythingThatClearsIt(t *testing.T) {
 	tests := []struct {
 		name string
 		in   string
@@ -156,29 +163,55 @@ func TestBoldANSI_ReAssertsPastEveryReset(t *testing.T) {
 		{
 			name: "plain text is wrapped once",
 			in:   "hello",
-			want: "\x1b[1mhello\x1b[0m",
+			want: sgrBg + "hello\x1b[0m",
 		},
 		{
 			// The log view's own node prefix: a colour, then a reset, then the
-			// message. Without the re-assertion the message would not be bold.
+			// message. Without the re-assertion the band would stop at the "|".
 			name: "a colour ending in a reset",
 			in:   "\x1b[38;5;117mweb.task@node\x1b[0m | msg",
-			want: "\x1b[1m\x1b[38;5;117mweb.task@node\x1b[0m\x1b[1m | msg\x1b[0m",
+			want: sgrBg + "\x1b[38;5;117mweb.task@node\x1b[0m" + sgrBg + " | msg\x1b[0m",
 		},
 		{
 			name: "a reset folded into a composite SGR",
 			in:   "a\x1b[0;32mb",
-			want: "\x1b[1ma\x1b[0;32m\x1b[1mb\x1b[0m",
+			want: sgrBg + "a\x1b[0;32m" + sgrBg + "b\x1b[0m",
 		},
 		{
 			name: "the empty-parameter reset shorthand",
 			in:   "a\x1b[mb",
-			want: "\x1b[1ma\x1b[m\x1b[1mb\x1b[0m",
+			want: sgrBg + "a\x1b[m" + sgrBg + "b\x1b[0m",
+		},
+		{
+			// 49 restores the default background without resetting anything
+			// else, so it clears the band while a bold would have survived it.
+			name: "the default-background code",
+			in:   "a\x1b[49mb",
+			want: sgrBg + "a\x1b[49m" + sgrBg + "b\x1b[0m",
 		},
 		{
 			name: "a colour that does not reset is left alone",
 			in:   "a\x1b[32mb",
-			want: "\x1b[1ma\x1b[32mb\x1b[0m",
+			want: sgrBg + "a\x1b[32mb\x1b[0m",
+		},
+		{
+			// The 0 is a colour index, not a reset. Re-asserting here would
+			// take a background the line set for itself away from it.
+			name: "an extended colour whose index looks like a reset",
+			in:   "\x1b[41ma\x1b[38;5;0mb",
+			want: sgrBg + "\x1b[41ma\x1b[38;5;0mb\x1b[0m",
+		},
+		{
+			name: "a truecolour component that looks like a default background",
+			in:   "a\x1b[38;2;0;49;120mb",
+			want: sgrBg + "a\x1b[38;2;0;49;120mb\x1b[0m",
+		},
+		{
+			// Past the arguments of the extended colour, an ordinary reset is
+			// still a reset.
+			name: "a reset after an extended colour",
+			in:   "a\x1b[38;5;117;0mb",
+			want: sgrBg + "a\x1b[38;5;117;0m" + sgrBg + "b\x1b[0m",
 		},
 		{
 			name: "empty in, empty out",
@@ -188,22 +221,22 @@ func TestBoldANSI_ReAssertsPastEveryReset(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, BoldANSI(tc.in))
+			require.Equal(t, tc.want, BackgroundANSI(tc.in, bg))
 		})
 	}
 }
 
-func TestBoldANSI_PreservesWidthAndText(t *testing.T) {
+func TestBackgroundANSI_PreservesWidthAndText(t *testing.T) {
 	in := "\x1b[38;5;117mweb\x1b[0m | msg"
-	out := BoldANSI(in)
-	require.Equal(t, lipgloss.Width(in), lipgloss.Width(out), "bold adds no printable cells")
+	out := BackgroundANSI(in, bg)
+	require.Equal(t, lipgloss.Width(in), lipgloss.Width(out), "the band adds no printable cells")
 	require.Equal(t, "web | msg", stripSGR(out))
 }
 
-func TestBoldANSI_LeavesAnUnterminatedEscapeAlone(t *testing.T) {
+func TestBackgroundANSI_LeavesAnUnterminatedEscapeAlone(t *testing.T) {
 	// A truncated escape at the end of a line must not send the scan past the
 	// end of the string.
-	require.Equal(t, "\x1b[1mabc\x1b[38;5\x1b[0m", BoldANSI("abc\x1b[38;5"))
+	require.Equal(t, sgrBg+"abc\x1b[38;5\x1b[0m", BackgroundANSI("abc\x1b[38;5", bg))
 }
 
 // stripSGR removes CSI sequences so a test can assert on the text alone.

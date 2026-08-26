@@ -11,6 +11,7 @@ import (
 	"github.com/Eldara-Tech/swarmcli/v2/ui/dialog"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
 
 func (m *Model) FrameTitle() string {
@@ -94,6 +95,12 @@ func (m *Model) FrameFooter() string { return "" }
 // markStyle dims a separator: it is punctuation between reads, and has to stay
 // quieter than the log lines it separates.
 var markStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+
+// freshBackground is the band a line that has just arrived is drawn over —
+// the colour a picked-out row already carries elsewhere in the app. Only the
+// background is set: the line keeps the colours it arrived with, which is the
+// point of highlighting it at all.
+var freshBackground = termenv.ANSI256Color(24)
 
 // markTimeFormat is what a separator records — the wall-clock time it was made,
 // which is the one thing about it worth reading.

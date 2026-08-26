@@ -1260,10 +1260,59 @@ func armedModel() *Model {
 	return m
 }
 
-func TestBuildContent_FreshLineIsBold(t *testing.T) {
+// freshBg is the escape the band opens with, spelled out rather than derived
+// from freshBackground: a test that built it the way the code does would follow
+// the colour anywhere, including to a colour nobody can see.
+const freshBg = "\x1b[48;5;24m"
+
+func TestBuildContent_FreshLineIsHighlighted(t *testing.T) {
 	m := armedModel()
 	m.Update(LineMsg{Line: "node1\x00task-1\x00hello"})
-	require.Contains(t, m.buildContent(), "\x1b[1mhello")
+	require.Contains(t, m.buildContent(), freshBg+"hello")
+}
+
+func TestBuildContent_FreshLineSpansTheFrame(t *testing.T) {
+	m := armedModel()
+	m.Update(LineMsg{Line: "node1\x00task-1\x00hello"})
+
+	row := m.buildContent()
+	require.Equal(t, m.viewport.Width, lipgloss.Width(row), "the band is the row, not the text on it")
+	require.Equal(t, "hello"+strings.Repeat(" ", m.viewport.Width-len("hello")), ansi.Strip(row))
+}
+
+func TestBuildContent_Wrap_EveryRowOfAFreshLineIsHighlighted(t *testing.T) {
+	m := armedModel()
+	m.Update(LineMsg{Line: "node1\x00task-1\x00" + strings.Repeat("word ", 40)})
+
+	rows := strings.Split(m.buildContent(), "\n")
+	require.Greater(t, len(rows), 1, "the line has to wrap for this to test anything")
+	for i, row := range rows {
+		require.True(t, strings.HasPrefix(row, freshBg), "row %d is a row of a new line", i)
+		require.Equal(t, m.viewport.Width, lipgloss.Width(row), "row %d", i)
+	}
+}
+
+func TestBuildContent_MarkDoesNotShiftTheHighlight(t *testing.T) {
+	m := armedModel()
+	m.Update(key("enter")) // one line in the buffer, two rows on the screen
+	m.Update(LineMsg{Line: "node1\x00task-1\x00hello"})
+
+	rows := strings.Split(m.buildContent(), "\n")
+	require.Len(t, rows, 3)
+	require.True(t, strings.HasPrefix(rows[2], freshBg), "the new line is the row that gets the band")
+	require.NotContains(t, rows[0]+rows[1], freshBg, "a separator is not new")
+}
+
+func TestBuildContent_NoWrap_FreshBandIsPaintedAfterTheScroll(t *testing.T) {
+	m := armedModel()
+	m.setWrap(false)
+	m.Update(LineMsg{Line: "node1\x00task-1\x00hello"})
+	m.horizontalOffset = 2
+
+	row := m.buildContent()
+	require.Equal(t, "llo", strings.TrimRight(ansi.Strip(row), " "), "the row has scrolled")
+	require.Equal(t, m.viewport.Width, lipgloss.Width(row),
+		"padding measured before the scroll would come up short by the offset")
 }
 
 func TestBuildContent_ExpiredLineIsPlain(t *testing.T) {
@@ -1280,15 +1329,15 @@ func TestBuildContent_ExpiredLineIsPlain(t *testing.T) {
 func TestBuildContent_FreshLineKeepsItsOwnColours(t *testing.T) {
 	m := armedModel()
 	// The node prefix formatLogLineWithNode builds ends in a reset, which would
-	// otherwise drop the bold from the message after it.
+	// otherwise end the band at the message after it.
 	m.Update(LineMsg{Line: "node1\x00task-1\x00\x1b[38;5;117mweb.task@node1\x1b[0m | hello"})
 
 	content := m.buildContent()
 	require.Contains(t, content, "\x1b[38;5;117m", "the line keeps the colour it arrived with")
-	require.Contains(t, content, "\x1b[0m\x1b[1m | hello", "bold is re-asserted past the prefix's reset")
+	require.Contains(t, content, "\x1b[0m"+freshBg+" | hello", "the band is re-asserted past the prefix's reset")
 }
 
-func TestBuildContent_FreshLineStaysBoldPastASearchHit(t *testing.T) {
+func TestBuildContent_FreshLineStaysHighlightedPastASearchHit(t *testing.T) {
 	m := armedModel()
 	m.Update(LineMsg{Line: "node1\x00task-1\x00before HIT after"})
 	m.mu.Lock()
@@ -1296,7 +1345,7 @@ func TestBuildContent_FreshLineStaysBoldPastASearchHit(t *testing.T) {
 	m.mu.Unlock()
 
 	content := m.buildContent()
-	require.Contains(t, content, "\x1b[0m\x1b[1m after",
+	require.Contains(t, content, "\x1b[0m"+freshBg+" after",
 		"the search highlight ends in a reset, and the rest of the line is still new")
 }
 

@@ -344,18 +344,60 @@ func (m *Model) buildContent() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	rows, isMark := m.renderRows(time.Now())
+	rows, isMark, isFresh := m.renderRows(time.Now())
 
 	// Apply wrapping based on wrap setting
 	// BUT: skip wrapping if node selection dialog is visible to avoid overlay issues
 	if m.wrap && m.viewport.Width > 0 && !m.nodeSelectVisible {
-		// Wrap the entire content to viewport width
-		return wordwrap.String(strings.Join(rows, "\n"), m.viewport.Width)
+		return m.wrapRows(rows, isFresh)
 	}
 	if m.viewport.Width > 0 {
 		m.scrollRows(rows, isMark)
 	}
+	// Paint last, so the band covers the row the reader actually sees rather
+	// than the text the scroll then cuts out of it.
+	for i, fresh := range isFresh {
+		if fresh {
+			rows[i] = m.highlightRow(rows[i])
+		}
+	}
 	return strings.Join(rows, "\n")
+}
+
+// wrapRows wraps each row to the viewport width and paints the fresh ones.
+// Wrapping row by row rather than over the joined buffer is what keeps the two
+// in step: after a single wrap of everything, which output row came from which
+// line is no longer knowable. A row that already fits is handed back untouched
+// — wrapping one that cannot break costs an allocation per line of the buffer.
+// Callers hold m.mu.
+func (m *Model) wrapRows(rows []string, isFresh []bool) string {
+	out := make([]string, 0, len(rows))
+	for i, row := range rows {
+		wrapped := []string{row}
+		if lipgloss.Width(row) > m.viewport.Width {
+			wrapped = strings.Split(wordwrap.String(row, m.viewport.Width), "\n")
+		}
+		if isFresh[i] {
+			// Every row a new line wrapped onto is new as well.
+			for j := range wrapped {
+				wrapped[j] = m.highlightRow(wrapped[j])
+			}
+		}
+		out = append(out, wrapped...)
+	}
+	return strings.Join(out, "\n")
+}
+
+// highlightRow draws a freshly arrived row over freshBackground, padded to the
+// viewport width so the band spans the frame instead of stopping wherever the
+// text happens to end. It is applied after the search highlight, which ends in
+// a reset the band is re-asserted past; the other order would leave the rest of
+// a line holding a match unpainted. Callers hold m.mu.
+func (m *Model) highlightRow(row string) string {
+	if pad := m.viewport.Width - lipgloss.Width(row); pad > 0 {
+		row += strings.Repeat(" ", pad)
+	}
+	return ui.BackgroundANSI(row, freshBackground)
 }
 
 // renderRows turns the line buffer into the rows to draw, and reports which of
@@ -364,7 +406,7 @@ func (m *Model) buildContent() string {
 // building, so deriving them anywhere else means a second copy of this walk,
 // and the two drifting apart is what froze the match counter (#586).
 // Callers hold m.mu.
-func (m *Model) renderRows(now time.Time) (rows []string, isMark []bool) {
+func (m *Model) renderRows(now time.Time) (rows []string, isMark, isFresh []bool) {
 	// Apply all active filters (node, "/" text, hide-stopped) in a single pass
 	// via the shared predicate so the visible set matches highlightContent.
 	var stopped map[string]bool
@@ -386,28 +428,26 @@ func (m *Model) renderRows(now time.Time) (rows []string, isMark []bool) {
 		if m.kindAt(i) == lineMark {
 			rows = append(rows, "", renderMark(line, m.viewport.Width))
 			isMark = append(isMark, true, true)
+			isFresh = append(isFresh, false, false)
 			continue
 		}
 		if lower != "" && strings.Contains(strings.ToLower(line), lower) {
 			m.searchMatches = append(m.searchMatches, len(rows))
 		}
-		// Highlight first, embolden second: the search highlight ends in a
-		// reset, and BoldANSI re-asserts across it. The other order would drop
-		// the bold from the rest of a line that happens to hold a match.
 		if m.searchTerm != "" {
 			line = utils.HighlightMatches(line, m.searchTerm)
 		}
-		if m.isFresh(i, now) {
-			line = ui.BoldANSI(line)
-		}
 		rows = append(rows, line)
 		isMark = append(isMark, false)
+		// The band itself is painted later, once the wrap or the scroll has
+		// settled what the row is; here it is only recorded.
+		isFresh = append(isFresh, m.isFresh(i, now))
 		if m.kindAt(i) == lineLog {
 			visible++
 		}
 	}
 	m.visibleCount = visible
-	return rows, isMark
+	return rows, isMark, isFresh
 }
 
 // scrollRows applies the horizontal offset in place, using ANSI-aware
