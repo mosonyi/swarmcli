@@ -30,7 +30,13 @@ func TestTaskRowStyle(t *testing.T) {
 		{"running", docker.TaskEntry{State: "running", Health: "healthy", ContainerState: "running"}, base.GetForeground()},
 		{"running, no healthcheck", docker.TaskEntry{State: "running"}, base.GetForeground()},
 		{"still coming up", docker.TaskEntry{State: "preparing"}, base.GetForeground()},
-		{"finished on its own", docker.TaskEntry{State: "complete", ContainerState: "exited"}, yellow},
+		// #613: "complete" is the one state that proves exit 0 — swarm reaches
+		// it only when the container exited cleanly, and anything else is
+		// "failed". A job's whole task history is complete, so tinting it at
+		// all would make the tint meaningless the way #601's red was.
+		{"finished on its own, exit 0", docker.TaskEntry{State: "complete", ContainerState: "exited"}, base.GetForeground()},
+		{"finished, container already pruned", docker.TaskEntry{State: "complete"}, base.GetForeground()},
+		{"complete but carrying an error", docker.TaskEntry{State: "complete", Error: "boom"}, red},
 		{"marked for removal", docker.TaskEntry{State: "remove"}, yellow},
 		{"rejected by the node", docker.TaskEntry{State: "rejected", Error: "invalid mount config"}, red},
 		{"rejected without a message", docker.TaskEntry{State: "rejected"}, red},

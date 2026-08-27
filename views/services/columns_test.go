@@ -159,8 +159,10 @@ func TestExpandedRow_ContainerStateFallback(t *testing.T) {
 }
 
 // The tint rule itself is tested in views/taskutil; what this asserts is that
-// the expanded rows go through it, and that a replica swarm stopped on purpose
-// no longer reads like the one that crashed next to it (issue #601).
+// the expanded rows go through it, that a replica swarm stopped on purpose no
+// longer reads like the one that crashed next to it (issue #601), and that a
+// task which ran to completion reads like an ordinary row whether or not its
+// container is still on the node to report "exited" (issue #613).
 func TestExpandedRow_TintsByTaskState(t *testing.T) {
 	trueColour(t)
 	m := testModel()
@@ -173,6 +175,10 @@ func TestExpandedRow_TintsByTaskState(t *testing.T) {
 			CurrentState: "shutdown 11 minutes ago", ContainerState: "exited"},
 		{Name: "web.3", NodeName: "node-bad", DesiredState: "Shutdown", State: "failed",
 			CurrentState: "failed 19 minutes ago", ContainerState: "exited", Error: "task: non-zero exit (1)"},
+		{Name: "web.4", NodeName: "node-done", DesiredState: "Shutdown", State: "complete",
+			CurrentState: "complete 44 seconds ago", ContainerState: "exited"},
+		{Name: "web.5", NodeName: "node-old", DesiredState: "Shutdown", State: "complete",
+			CurrentState: "complete 3 days ago"},
 	}
 	m.setRenderItem()
 
@@ -180,6 +186,11 @@ func TestExpandedRow_TintsByTaskState(t *testing.T) {
 	require.Equal(t, fgSeq(lipgloss.Color("7")), rowTint(t, out, "node-up"))
 	require.Equal(t, fgSeq(lipgloss.Color("3")), rowTint(t, out, "node-gone"))
 	require.Equal(t, fgSeq(lipgloss.Color("9")), rowTint(t, out, "node-bad"))
+	// The two rows issue #613 was reported on: same state, and they differ only
+	// in whether the node has pruned the container out of the health decorator's
+	// inventory. They must not differ in colour.
+	require.Equal(t, fgSeq(lipgloss.Color("7")), rowTint(t, out, "node-done"))
+	require.Equal(t, fgSeq(lipgloss.Color("7")), rowTint(t, out, "node-old"))
 }
 
 // trueColour makes a test's assertions run against the tinted rows: the default
