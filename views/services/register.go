@@ -4,9 +4,9 @@
 package servicesview
 
 import (
-	"github.com/Eldara-Tech/swarmcli/core/primitives/hash"
-	"github.com/Eldara-Tech/swarmcli/docker"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/core/primitives/hash"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

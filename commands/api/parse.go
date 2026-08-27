@@ -5,9 +5,9 @@ package api //nolint:revive // standard short package name
 
 import (
 	"fmt"
-	"github.com/Eldara-Tech/swarmcli/args"
-	"github.com/Eldara-Tech/swarmcli/commands"
-	"github.com/Eldara-Tech/swarmcli/registry"
+	"github.com/Eldara-Tech/swarmcli/v2/args"
+	"github.com/Eldara-Tech/swarmcli/v2/commands"
+	"github.com/Eldara-Tech/swarmcli/v2/registry"
 	"strings"
 )
 

@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
 )
 
 const (
@@ -67,6 +67,7 @@ func TestLockedSwarm_SwitchSnapshotAndUnlock(t *testing.T) {
 	_, _ = hostDocker(t, "rm", "-f", containerName)
 	_ = exec.Command("docker", "context", "rm", "-f", lockedContext).Run()
 	t.Cleanup(func() {
+		docker.ResetSessionContext()
 		docker.ResetClient()
 		// The context must not be current when we remove it.
 		_ = exec.Command("docker", "context", "use", "default").Run()
@@ -111,6 +112,10 @@ func TestLockedSwarm_SwitchSnapshotAndUnlock(t *testing.T) {
 		t.Fatalf("creating context: %v\n%s", err, out)
 	}
 	t.Setenv("DOCKER_CONTEXT", lockedContext)
+	// The context is resolved once per process and then pinned, so setting the
+	// variable is not enough: drop the pin as well, or the client is rebuilt
+	// for whatever context this binary resolved first.
+	docker.ResetSessionContext()
 	docker.ResetClient()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

@@ -7,7 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
+	swarmlog "github.com/Eldara-Tech/swarmcli/v2/utils/log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -66,11 +66,11 @@ func GetClient() (*client.Client, error) {
 // ClientFor returns a client for an explicitly named Docker context, cached per
 // name.
 //
-// It is the seam that lets a caller address a specific swarm. GetClient resolves
-// DOCKER_CONTEXT or `docker context show` and caches one client for the whole
-// process — correct for a single-swarm CLI, and unusable for anything that has
-// to reconcile two swarms at once, because there is no argument by which to ask
-// for the other one.
+// It is the seam that lets a caller address a specific swarm. GetClient builds
+// from the session pin and caches one client for the whole process — correct
+// for a single-swarm CLI, and unusable for anything that has to reconcile two
+// swarms at once, because there is no argument by which to ask for the other
+// one.
 func ClientFor(ctxName string) (*client.Client, error) {
 	if ctxName == "" {
 		return nil, fmt.Errorf("docker context name is required")
@@ -214,37 +214,23 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-// GetCurrentContext returns the name of the active Docker context.
+// GetCurrentContext returns the name of the Docker context this session uses.
+//
+// It reports the session pin, not whatever ~/.docker/config.json says at the
+// moment of the call: the name shown in the header has to be the name the
+// client is connected to. See SessionContext.
 func GetCurrentContext() (string, error) {
-	ctxNameBytes, err := exec.Command("docker", "context", "show").Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to get docker context: %w", err)
-	}
-	ctxName := string(ctxNameBytes)
-	if len(ctxName) > 0 && ctxName[len(ctxName)-1] == '\n' {
-		ctxName = ctxName[:len(ctxName)-1]
-	}
-	return ctxName, nil
+	return SessionContext()
 }
 
-// GetContextFromEnv returns the docker context to use. It prefers the
-// DOCKER_CONTEXT environment variable (so the app can be run against a
-// specific context, e.g. in CI or local testing). If that variable is not
-// set, it falls back to calling `docker context show` to retrieve the active
-// context. The returned string will not contain a trailing newline.
+// GetContextFromEnv returns the docker context to use: the DOCKER_CONTEXT
+// environment variable if set (so the app can be run against a specific
+// context, e.g. in CI or local testing), otherwise the context that was active
+// when the session started. The returned string will not contain a trailing
+// newline.
+//
+// The resolution happens once — see SessionContext for why this does not
+// follow a `docker context use` run in another terminal.
 func GetContextFromEnv() (string, error) {
-	ctxName := os.Getenv("DOCKER_CONTEXT")
-	if ctxName != "" {
-		return ctxName, nil
-	}
-
-	ctxNameBytes, err := exec.Command("docker", "context", "show").Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to get docker context: %w", err)
-	}
-	ctxName = string(ctxNameBytes)
-	if len(ctxName) > 0 && ctxName[len(ctxName)-1] == '\n' {
-		ctxName = ctxName[:len(ctxName)-1]
-	}
-	return ctxName, nil
+	return SessionContext()
 }

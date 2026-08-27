@@ -7,10 +7,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Eldara-Tech/swarmcli/ui/dialog"
+	"github.com/Eldara-Tech/swarmcli/v2/ui/dialog"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 )
 
 // Styles (you can override these per-view if desired)
@@ -431,4 +432,97 @@ func TruncateANSIAfter(s string, skipWidth int) string {
 		return s
 	}
 	return ansi.TruncateLeft(s, skipWidth, "")
+}
+
+// sgrReset ends the attribute this file asserts over a line.
+const sgrReset = "\x1b[0m"
+
+// BackgroundANSI draws s over background colour bg without discarding the
+// colours it already carries. A log line arrives with its own escapes — our own
+// node prefix ends in a reset — and a reset clears the background along with
+// everything else, so a plain sequence+s would tint the text only as far as the
+// first one. The background is therefore re-asserted after everything that
+// turns one off.
+func BackgroundANSI(s string, bg termenv.Color) string {
+	if s == "" {
+		return ""
+	}
+	sgrBg := termenv.CSI + bg.Sequence(true) + "m"
+	var b strings.Builder
+	b.Grow(len(s) + 2*len(sgrBg) + len(sgrReset))
+	b.WriteString(sgrBg)
+	for i := 0; i < len(s); {
+		seq, ok := csiAt(s, i)
+		if !ok {
+			b.WriteByte(s[i])
+			i++
+			continue
+		}
+		b.WriteString(seq)
+		i += len(seq)
+		// seq is "\x1b[" + params + final; re-assert only where the line has
+		// turned the background off.
+		if seq[len(seq)-1] == 'm' && sgrClearsBackground(seq[2:len(seq)-1]) {
+			b.WriteString(sgrBg)
+		}
+	}
+	b.WriteString(sgrReset)
+	return b.String()
+}
+
+// csiAt returns the complete CSI sequence starting at i, if one starts there.
+// Parameter and intermediate bytes run 0x20–0x3f and the final byte ends the
+// sequence; an unterminated escape at the end of the string is not one.
+func csiAt(s string, i int) (string, bool) {
+	if s[i] != 0x1b || i+1 >= len(s) || s[i+1] != '[' {
+		return "", false
+	}
+	j := i + 2
+	for j < len(s) && s[j] >= 0x20 && s[j] <= 0x3f {
+		j++
+	}
+	if j >= len(s) {
+		return "", false
+	}
+	return s[i : j+1], true
+}
+
+// sgrClearsBackground reports whether an SGR parameter list turns the
+// background off: a reset — 0, an omitted parameter, or the empty "\x1b[m"
+// shorthand — or 49, which restores the default background without touching
+// anything else. The arguments of an extended colour are stepped over rather
+// than read: the 0 in "38;5;0" is a colour index, and a line that set its own
+// background must keep it across one.
+func sgrClearsBackground(params string) bool {
+	if params == "" {
+		return true
+	}
+	ps := strings.Split(params, ";")
+	for i := 0; i < len(ps); i++ {
+		switch strings.TrimLeft(ps[i], "0") {
+		case "": // "0", "00" and an omitted parameter all reset
+			return true
+		case "49":
+			return true
+		case "38", "48", "58":
+			i += extendedColorArgs(ps[i+1:])
+		}
+	}
+	return false
+}
+
+// extendedColorArgs is how many parameters follow a 38/48/58 selector: two for
+// "5;n" and four for "2;r;g;b". A form that is neither consumes nothing, which
+// leaves the walk exactly where it was.
+func extendedColorArgs(rest []string) int {
+	if len(rest) == 0 {
+		return 0
+	}
+	switch strings.TrimLeft(rest[0], "0") {
+	case "5":
+		return min(2, len(rest))
+	case "2":
+		return min(4, len(rest))
+	}
+	return 0
 }

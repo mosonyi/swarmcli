@@ -8,16 +8,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Eldara-Tech/swarmcli/docker"
-	"github.com/Eldara-Tech/swarmcli/ui"
-	"github.com/Eldara-Tech/swarmcli/views/commandinput"
-	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
-	inspectview "github.com/Eldara-Tech/swarmcli/views/inspect"
-	"github.com/Eldara-Tech/swarmcli/views/searchinput"
-	systeminfoview "github.com/Eldara-Tech/swarmcli/views/systeminfo"
-	"github.com/Eldara-Tech/swarmcli/views/unlockdialog"
-	"github.com/Eldara-Tech/swarmcli/views/view"
-	"github.com/Eldara-Tech/swarmcli/views/viewstack"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
+	"github.com/Eldara-Tech/swarmcli/v2/ui"
+	"github.com/Eldara-Tech/swarmcli/v2/views/commandinput"
+	"github.com/Eldara-Tech/swarmcli/v2/views/confirmdialog"
+	inspectview "github.com/Eldara-Tech/swarmcli/v2/views/inspect"
+	"github.com/Eldara-Tech/swarmcli/v2/views/searchinput"
+	systeminfoview "github.com/Eldara-Tech/swarmcli/v2/views/systeminfo"
+	"github.com/Eldara-Tech/swarmcli/v2/views/unlockdialog"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/views/viewstack"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -71,16 +71,17 @@ func (stubClusterInfo) GetDockerVersion() (string, error) { return "27.0.0", nil
 func newLayoutTestModel(cv view.View) *Model {
 	deps := docker.Deps{ClusterInfo: stubClusterInfo{}}
 	return &Model{
-		deps:         deps,
-		viewport:     viewport.New(0, 0),
-		currentView:  cv,
-		viewStack:    viewstack.Stack{},
-		commandInput: commandinput.New(),
-		searchInput:  searchinput.New(),
-		errorDialog:  confirmdialog.New(0, 0),
-		unlockDialog: unlockdialog.New(0, 0),
-		updateDialog: confirmdialog.New(0, 0),
-		systemInfo:   systeminfoview.New(deps, "test", "ce"),
+		deps:               deps,
+		viewport:           viewport.New(0, 0),
+		currentView:        cv,
+		viewStack:          viewstack.Stack{},
+		commandInput:       commandinput.New(),
+		searchInput:        searchinput.New(),
+		errorDialog:        confirmdialog.New(0, 0),
+		unlockDialog:       unlockdialog.New(0, 0),
+		updateDialog:       confirmdialog.New(0, 0),
+		contextDriftDialog: confirmdialog.New(0, 0),
+		systemInfo:         systeminfoview.New(deps, "test", "ce"),
 	}
 }
 

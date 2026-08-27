@@ -4,10 +4,10 @@
 package app
 
 import (
-	"github.com/Eldara-Tech/swarmcli/ui"
-	"github.com/Eldara-Tech/swarmcli/views/helpbar"
-	systeminfoview "github.com/Eldara-Tech/swarmcli/views/systeminfo"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/ui"
+	"github.com/Eldara-Tech/swarmcli/v2/views/helpbar"
+	systeminfoview "github.com/Eldara-Tech/swarmcli/v2/views/systeminfo"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -37,7 +37,7 @@ func (m *Model) View() string {
 		if inputBar != "" {
 			out = lipgloss.JoinVertical(lipgloss.Left, inputBar, out)
 		}
-		return m.overlayStartup(m.overlayUnlock(m.overlayAppError(m.overlayUpdate(out))))
+		return m.overlayStartup(m.overlayUnlock(m.overlayAppError(m.overlayUpdate(m.overlayContextDrift(out)))))
 	}
 
 	systemInfo := m.systemInfo.View()
@@ -65,7 +65,7 @@ func (m *Model) View() string {
 	rows = append(rows, framedView, m.renderStackBar())
 
 	out := lipgloss.JoinVertical(lipgloss.Left, rows...)
-	return m.overlayStartup(m.overlayUnlock(m.overlayAppError(m.overlayUpdate(out))))
+	return m.overlayStartup(m.overlayUnlock(m.overlayAppError(m.overlayUpdate(m.overlayContextDrift(out)))))
 }
 
 // renderInputBar renders whichever of the ":" command bar and the "/" search
@@ -129,6 +129,14 @@ func (m *Model) overlayUpdate(base string) string {
 		return base
 	}
 	return ui.OverlayCentered(base, m.updateDialog.View(), m.terminalWidth, 0)
+}
+
+// overlayContextDrift overlays the "context changed outside swarmcli" prompt.
+func (m *Model) overlayContextDrift(base string) string {
+	if !m.contextDriftDialog.Visible {
+		return base
+	}
+	return ui.OverlayCentered(base, m.contextDriftDialog.View(), m.terminalWidth, 0)
 }
 
 // overlayStartup composites the startup overlay on top of the rendered output.

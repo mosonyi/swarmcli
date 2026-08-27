@@ -6,8 +6,8 @@ package app
 import (
 	"testing"
 
-	"github.com/Eldara-Tech/swarmcli/settings"
-	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
+	"github.com/Eldara-Tech/swarmcli/v2/settings"
+	"github.com/Eldara-Tech/swarmcli/v2/views/confirmdialog"
 
 	"github.com/stretchr/testify/require"
 )

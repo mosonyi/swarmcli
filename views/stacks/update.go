@@ -6,16 +6,16 @@ package stacksview
 import (
 	"context"
 	"fmt"
-	"github.com/Eldara-Tech/swarmcli/charts"
-	"github.com/Eldara-Tech/swarmcli/core/primitives/hash"
-	"github.com/Eldara-Tech/swarmcli/docker"
-	"github.com/Eldara-Tech/swarmcli/ui"
-	"github.com/Eldara-Tech/swarmcli/ui/dialog"
-	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
-	helpview "github.com/Eldara-Tech/swarmcli/views/help"
-	servicesview "github.com/Eldara-Tech/swarmcli/views/services"
-	"github.com/Eldara-Tech/swarmcli/views/taskutil"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/charts"
+	"github.com/Eldara-Tech/swarmcli/v2/core/primitives/hash"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
+	"github.com/Eldara-Tech/swarmcli/v2/ui"
+	"github.com/Eldara-Tech/swarmcli/v2/ui/dialog"
+	"github.com/Eldara-Tech/swarmcli/v2/views/confirmdialog"
+	helpview "github.com/Eldara-Tech/swarmcli/v2/views/help"
+	servicesview "github.com/Eldara-Tech/swarmcli/v2/views/services"
+	"github.com/Eldara-Tech/swarmcli/v2/views/taskutil"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -1527,7 +1527,7 @@ func (m *Model) setRenderItem() {
 							taskSelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("24")).Bold(true)
 							line += "\n" + taskSelStyle.Render(fmt.Sprintf("   %-22s  %-12s  %-13s  %-40s  %s", taskName, taskNode, taskDesired, taskCurrent, taskErr))
 						} else {
-							taskStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
+							taskStyle := taskutil.TaskRowStyle(task, taskRowBaseStyle)
 							line += "\n" + taskStyle.Render(fmt.Sprintf("   %-22s  %-12s  %-13s  %-40s  %s", taskName, taskNode, taskDesired, taskCurrent, taskErr))
 						}
 					}
@@ -1564,7 +1564,7 @@ func (m *Model) setRenderItem() {
 					taskDesired := truncateWithEllipsis(task.DesiredState, 13)
 					taskCurrent := truncateWithEllipsis(task.StatusText(), 40)
 					taskErr := truncateWithEllipsis(task.Error, 30)
-					taskStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
+					taskStyle := taskutil.TaskRowStyle(task, taskRowBaseStyle)
 					line += "\n" + taskStyle.Render(fmt.Sprintf("   %-22s  %-12s  %-13s  %-40s  %s", taskName, taskNode, taskDesired, taskCurrent, taskErr))
 				}
 			} else {
@@ -1574,6 +1574,10 @@ func (m *Model) setRenderItem() {
 		return line
 	}
 }
+
+// taskRowBaseStyle is a task sub-row with nothing wrong with it; the tints for
+// the rest come from taskutil.TaskRowStyle.
+var taskRowBaseStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
 
 // formatErrorWithScroll formats error text with horizontal scroll offset (like services view)
 func formatErrorWithScroll(full string, offset int, maxWidth int) string {

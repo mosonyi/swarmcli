@@ -11,7 +11,7 @@ import (
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
 )
 
 // A named backend addresses the context it was constructed with, not the one

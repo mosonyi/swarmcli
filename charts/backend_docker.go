@@ -10,16 +10,17 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 
-	"github.com/Eldara-Tech/swarmcli/docker"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
 )
 
-// dockerBackend implements Backend against the live github.com/Eldara-Tech/swarmcli/docker package.
+// dockerBackend implements Backend against the live github.com/Eldara-Tech/swarmcli/v2/docker package.
 //
 // Every operation is addressed to one Docker context. When ctxName is empty that
-// is the ambient one — whatever DOCKER_CONTEXT or `docker context show` resolves
-// to — which is what the CLI has always used and what NewEngine still builds.
-// When it is set, the backend resolves its own client and its own snapshots and
-// touches no process-wide state, so two backends can target two swarms at once.
+// is the ambient one — the session pin, resolved once from DOCKER_CONTEXT or
+// `docker context show` and held for the life of the process — which is what
+// the CLI has always used and what NewEngine still builds. When it is set, the
+// backend resolves its own client and its own snapshots and touches no
+// process-wide state, so two backends can target two swarms at once.
 type dockerBackend struct {
 	ctxName string
 }
@@ -34,8 +35,8 @@ var _ Backend = (*dockerBackend)(nil)
 // the process happens to be pointed at.
 //
 // Pair it with NewEngineWith. The three pieces of process-global state this
-// avoids are the SDK client singleton, the `docker context show` lookup the
-// exec-based stack commands do, and the shared snapshot cache — all three, not
+// avoids are the SDK client singleton, the session context pin the exec-based
+// stack commands name, and the shared snapshot cache — all three, not
 // just the last: a backend that deployed to one swarm and read its history,
 // networks and convergence from another would be worse than an honestly
 // single-swarm one, because nothing would report the mismatch.

@@ -6,7 +6,7 @@ package helpview
 import (
 	"strings"
 
-	"github.com/Eldara-Tech/swarmcli/views/helpbar"
+	"github.com/Eldara-Tech/swarmcli/v2/views/helpbar"
 )
 
 // FromKeys builds a help screen for a view that does not carry one of its own.

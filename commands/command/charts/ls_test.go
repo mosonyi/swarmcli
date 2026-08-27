@@ -6,10 +6,10 @@ package charts
 import (
 	"testing"
 
-	"github.com/Eldara-Tech/swarmcli/args"
-	"github.com/Eldara-Tech/swarmcli/registry"
-	chartsview "github.com/Eldara-Tech/swarmcli/views/charts"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/args"
+	"github.com/Eldara-Tech/swarmcli/v2/registry"
+	chartsview "github.com/Eldara-Tech/swarmcli/v2/views/charts"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 
 	"github.com/stretchr/testify/require"
 )

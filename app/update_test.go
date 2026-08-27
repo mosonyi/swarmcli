@@ -6,15 +6,15 @@ package app
 import (
 	"testing"
 
-	"github.com/Eldara-Tech/swarmcli/docker"
-	"github.com/Eldara-Tech/swarmcli/views/commandinput"
-	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
-	"github.com/Eldara-Tech/swarmcli/views/helpbar"
-	"github.com/Eldara-Tech/swarmcli/views/searchinput"
-	systeminfoview "github.com/Eldara-Tech/swarmcli/views/systeminfo"
-	"github.com/Eldara-Tech/swarmcli/views/unlockdialog"
-	"github.com/Eldara-Tech/swarmcli/views/view"
-	"github.com/Eldara-Tech/swarmcli/views/viewstack"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
+	"github.com/Eldara-Tech/swarmcli/v2/views/commandinput"
+	"github.com/Eldara-Tech/swarmcli/v2/views/confirmdialog"
+	"github.com/Eldara-Tech/swarmcli/v2/views/helpbar"
+	"github.com/Eldara-Tech/swarmcli/v2/views/searchinput"
+	systeminfoview "github.com/Eldara-Tech/swarmcli/v2/views/systeminfo"
+	"github.com/Eldara-Tech/swarmcli/v2/views/unlockdialog"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/views/viewstack"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -58,17 +58,18 @@ func (v *searchingStubView) Update(msg tea.Msg) tea.Cmd {
 // rather than failing.
 func newTestAppModel(cv view.View) *Model {
 	return &Model{
-		viewport:       viewport.New(200, 50),
-		currentView:    cv,
-		viewStack:      viewstack.Stack{},
-		commandInput:   commandinput.New(),
-		searchInput:    searchinput.New(),
-		errorDialog:    confirmdialog.New(200, 50),
-		unlockDialog:   unlockdialog.New(200, 50),
-		updateDialog:   confirmdialog.New(200, 50),
-		systemInfo:     systeminfoview.New(docker.DefaultDeps(), "test", "test"),
-		terminalWidth:  200,
-		terminalHeight: 50,
+		viewport:           viewport.New(200, 50),
+		currentView:        cv,
+		viewStack:          viewstack.Stack{},
+		commandInput:       commandinput.New(),
+		searchInput:        searchinput.New(),
+		errorDialog:        confirmdialog.New(200, 50),
+		unlockDialog:       unlockdialog.New(200, 50),
+		updateDialog:       confirmdialog.New(200, 50),
+		contextDriftDialog: confirmdialog.New(200, 50),
+		systemInfo:         systeminfoview.New(docker.DefaultDeps(), "test", "test"),
+		terminalWidth:      200,
+		terminalHeight:     50,
 	}
 }
 

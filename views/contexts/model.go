@@ -4,10 +4,10 @@
 package contexts
 
 import (
-	"github.com/Eldara-Tech/swarmcli/docker"
-	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
-	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
-	"github.com/Eldara-Tech/swarmcli/views/helpbar"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
+	swarmlog "github.com/Eldara-Tech/swarmcli/v2/utils/log"
+	"github.com/Eldara-Tech/swarmcli/v2/views/confirmdialog"
+	"github.com/Eldara-Tech/swarmcli/v2/views/helpbar"
 	"strings"
 	"sync"
 
@@ -15,7 +15,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
-	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
+	filterlist "github.com/Eldara-Tech/swarmcli/v2/ui/components/filterable/list"
 )
 
 type SortField int

@@ -3,7 +3,7 @@
 
 package networksview
 
-import helpview "github.com/Eldara-Tech/swarmcli/views/help"
+import helpview "github.com/Eldara-Tech/swarmcli/v2/views/help"
 
 // HelpContent implements the app's optional help-screen contract: "?" is
 // handled centrally, and a view carrying its own screen supplies it here.

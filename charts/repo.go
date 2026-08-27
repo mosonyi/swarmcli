@@ -36,6 +36,21 @@ const maxIndexSize = 16 << 20 // 16 MiB
 // can be buffered and hashed before any of it reaches the archive parser.
 const maxChartArchiveSize = 20 << 20 // 20 MiB
 
+// pullBackoff is how long a chart download waits before each retry, one entry
+// per retry — so a tarball is fetched at most len(pullBackoff)+1 times. A var
+// rather than a const so tests can shrink it; nothing else writes it.
+//
+// Short, and few, on purpose. Pull takes no context, so every entry here is
+// time a shutdown cannot interrupt — and the failures worth waiting through, a
+// gateway between here and the archive answering 502 or 504, clear in seconds
+// or not at all.
+var pullBackoff = []time.Duration{500 * time.Millisecond, 2 * time.Second}
+
+// chartCacheTTL is how long an unused chart archive stays cached. A cache hit
+// refreshes the file's modification time, so what ages out is what stopped
+// being pulled: the versions a pinned release has moved past.
+const chartCacheTTL = 30 * 24 * time.Hour
+
 // staleAfter is how long a cached index may go unverified before reads of it
 // warn. Under RefreshAlways nothing gets that far — the index is refreshed
 // before it is read — so this is what is left for the cases where it was not:
@@ -286,9 +301,9 @@ func (s *RepoStore) Add(name, repoURL string) error {
 	return s.save(repos)
 }
 
-// writeCache replaces a cached index in one step. os.WriteFile truncates before
+// writeCache replaces a cached file in one step. os.WriteFile truncates before
 // it writes, so a reader that arrives mid-write sees an empty or half-written
-// index — and under RefreshAlways a write happens on every install, not only
+// one — and under RefreshAlways a write happens on every install, not only
 // on an explicit `repo update`, so two swarmcli processes sharing a state
 // directory (a CI matrix, an apply running beside an install) really do
 // overlap. Writing beside the target and renaming over it means a reader sees
@@ -662,23 +677,17 @@ func (s *RepoStore) Pull(entry IndexEntry, baseURL string) (*Chart, error) {
 	if err := s.checkPlaintext(u); err != nil {
 		return nil, err
 	}
-	resp, err := s.client.Get(tarURL)
+	// Before the network: this archive may already be on disk, and the entry
+	// carries the digest that decides whether what is on disk is still it. The
+	// checks above stay ahead of the lookup so that a repository this store
+	// refuses to download from is not one it serves out of cache either.
+	key := cacheKey(entry)
+	if body, ok := s.cachedArchive(key, entry); ok {
+		return LoadChartArchive(bytes.NewReader(body))
+	}
+	body, err := s.downloadArchive(tarURL)
 	if err != nil {
-		return nil, fmt.Errorf("download chart: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("download chart: HTTP %s", resp.Status)
-	}
-	// Buffer the whole archive before parsing it: the digest must be checked
-	// against the complete body, and a streaming parser would have consumed
-	// unverified bytes by the time the hash was known.
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxChartArchiveSize+1))
-	if err != nil {
-		return nil, fmt.Errorf("download chart: %w", err)
-	}
-	if len(body) > maxChartArchiveSize {
-		return nil, fmt.Errorf("chart archive exceeds %d bytes", maxChartArchiveSize)
+		return nil, err
 	}
 	if err := verifyDigest(entry, body); err != nil {
 		if errors.Is(err, errNoDigest) {
@@ -688,7 +697,73 @@ func (s *RepoStore) Pull(entry IndexEntry, baseURL string) (*Chart, error) {
 			return nil, err
 		}
 	}
+	s.cacheArchive(key, body)
 	return LoadChartArchive(bytes.NewReader(body))
+}
+
+// downloadArchive fetches a chart tarball, retrying a failure that says nothing
+// about this chart.
+//
+// The case it exists for is a gateway between here and the archive — a CDN, a
+// release-asset host — answering 502 or 504 for a few seconds. Without a retry
+// that is a failed apply and not merely a failed download: Pull's error is not
+// scoped to the release that could not be fetched, it propagates out of
+// PlanApply and takes the whole plan with it (#605).
+//
+// Every retry is announced. Pull takes no context, so the waits are time the
+// caller cannot interrupt, and an operator watching a pull take four seconds
+// instead of one is owed the reason.
+func (s *RepoStore) downloadArchive(tarURL string) ([]byte, error) {
+	for attempt := 0; ; attempt++ {
+		body, retry, err := s.fetchArchive(tarURL)
+		if err == nil || !retry || attempt == len(pullBackoff) {
+			return body, err
+		}
+		s.warnf("%v; retrying %s in %s\n", err, tarURL, pullBackoff[attempt])
+		time.Sleep(pullBackoff[attempt])
+	}
+}
+
+// fetchArchive is one download attempt. It reports whether the failure is one
+// another attempt could plausibly get past: a missing or oversized archive is
+// the repository's answer about this chart and will not change, while a
+// transport error or a temporary status is about the path to it.
+func (s *RepoStore) fetchArchive(tarURL string) (body []byte, retry bool, err error) {
+	resp, err := s.client.Get(tarURL)
+	if err != nil {
+		// Refused, reset, timed out, DNS. None of it is about this chart.
+		return nil, true, fmt.Errorf("download chart: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, transientStatus(resp.StatusCode), fmt.Errorf("download chart: HTTP %s", resp.Status)
+	}
+	// Buffer the whole archive before parsing it: the digest must be checked
+	// against the complete body, and a streaming parser would have consumed
+	// unverified bytes by the time the hash was known.
+	body, err = io.ReadAll(io.LimitReader(resp.Body, maxChartArchiveSize+1))
+	if err != nil {
+		return nil, true, fmt.Errorf("download chart: %w", err)
+	}
+	if len(body) > maxChartArchiveSize {
+		return nil, false, fmt.Errorf("chart archive exceeds %d bytes", maxChartArchiveSize)
+	}
+	return body, false, nil
+}
+
+// transientStatus reports a status code that says the request failed on the way
+// rather than that this archive is not there. 404 and 403 are the repository's
+// answer about the chart and repeating the question gets the same one; the
+// codes below come from a gateway, a load balancer or a rate limiter, which is
+// often enough not the same one next time to be worth asking again.
+func transientStatus(code int) bool {
+	switch code {
+	case http.StatusRequestTimeout, http.StatusTooManyRequests,
+		http.StatusInternalServerError, http.StatusBadGateway,
+		http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	}
+	return false
 }
 
 // errNoDigest reports an index entry that carries no digest, so the archive
@@ -730,6 +805,113 @@ func verifyDigest(entry IndexEntry, body []byte) error {
 			entry.Name, entry.Version, want, got)
 	}
 	return nil
+}
+
+// chartCacheDir is where verified chart archives are kept, beside the cached
+// indexes they were resolved from.
+func (s *RepoStore) chartCacheDir() string { return filepath.Join(s.dir, "cache", "charts") }
+
+// cacheKey is the name a chart archive is cached under: the lowercase hex
+// sha256 the index publishes for it.
+//
+// Empty whenever the entry publishes no checkable sha256 — no digest at all, or
+// an algorithm this package cannot verify — and such an entry is never cached.
+// A cached archive is only as safe as the check that validates the read, and
+// for those there is none. Keying on name and version instead would mean
+// trusting a version to be immutable, which is precisely what a repository is
+// free to break by republishing one.
+//
+// The key is the content address and nothing else, which is also what makes it
+// safe as a path component: the digest is the only part of an IndexEntry that
+// has been validated by the time it gets here. Name and version are strings the
+// repository chose, and gluing one of those into a filename is how this file
+// got its last traversal (#527).
+func cacheKey(entry IndexEntry) string {
+	want := entry.Digest
+	if alg, hexsum, ok := strings.Cut(want, ":"); ok {
+		if alg != "sha256" {
+			return ""
+		}
+		want = hexsum
+	}
+	if len(want) != hex.EncodedLen(sha256.Size) {
+		return ""
+	}
+	if _, err := hex.DecodeString(want); err != nil {
+		return ""
+	}
+	return strings.ToLower(want)
+}
+
+// cachedArchive returns an archive downloaded by an earlier Pull, and whether
+// there was one to return.
+//
+// What makes this safe is that the file is accepted only if its bytes satisfy
+// verifyDigest against the entry the caller just resolved — the same check the
+// download path runs, against an index EnsureRepos has just refreshed. So a
+// chart republished under the same version, a truncated write and a hand-edited
+// file all miss and fall through to a download, rather than deploying something
+// the repository no longer serves.
+//
+// Every failure here is a miss and never an error. The cache is an
+// optimisation; the download behind it is the answer.
+func (s *RepoStore) cachedArchive(key string, entry IndexEntry) ([]byte, bool) {
+	if key == "" {
+		return nil, false
+	}
+	path := filepath.Join(s.chartCacheDir(), key+".tgz")
+	// Stat before read: an archive was size-checked before it was cached, so an
+	// oversized file here is not one this package wrote — and reading it to find
+	// that out is the thing maxChartArchiveSize exists to prevent.
+	info, err := os.Stat(path)
+	if err != nil || info.Size() > maxChartArchiveSize {
+		return nil, false
+	}
+	body, err := os.ReadFile(path)
+	if err != nil || verifyDigest(entry, body) != nil {
+		return nil, false
+	}
+	// Keep what is still in use from ageing out of the sweep in cacheArchive.
+	now := time.Now()
+	_ = os.Chtimes(path, now, now)
+	return body, true
+}
+
+// cacheArchive stores a verified archive under its content address.
+//
+// Best-effort throughout: a cache that cannot be written is slower, not wrong.
+func (s *RepoStore) cacheArchive(key string, body []byte) {
+	if key == "" {
+		return
+	}
+	dir := s.chartCacheDir()
+	if err := writeCache(filepath.Join(dir, key+".tgz"), body); err != nil {
+		return
+	}
+	// Swept on a write and not on every read, because a store that is pulling
+	// nothing new is a store whose cache is not growing.
+	sweepChartCache(dir)
+}
+
+// sweepChartCache deletes archives nothing has read for chartCacheTTL.
+//
+// That bounds the cache at the versions actually in use: a hit refreshes the
+// file's modification time, so what ages out is what a pinned release has moved
+// past — and the cost of ageing out something still wanted is one download,
+// which is what would have happened without a cache at all.
+func sweepChartCache(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-chartCacheTTL)
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil || !info.ModTime().Before(cutoff) {
+			continue
+		}
+		_ = os.Remove(filepath.Join(dir, e.Name()))
+	}
 }
 
 func (s *RepoStore) warnf(format string, a ...any) {

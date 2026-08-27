@@ -15,9 +15,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/Eldara-Tech/swarmcli/charts"
-	"github.com/Eldara-Tech/swarmcli/docker"
-	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
+	"github.com/Eldara-Tech/swarmcli/v2/charts"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
+	swarmlog "github.com/Eldara-Tech/swarmcli/v2/utils/log"
 )
 
 // writeOwnedReleaseFile writes a release file for one local chart, with the

@@ -6,17 +6,17 @@ package servicesview
 import (
 	"context"
 	"fmt"
-	"github.com/Eldara-Tech/swarmcli/core/primitives/hash"
-	"github.com/Eldara-Tech/swarmcli/docker"
-	"github.com/Eldara-Tech/swarmcli/ui"
-	filterlist "github.com/Eldara-Tech/swarmcli/ui/components/filterable/list"
-	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
-	helpview "github.com/Eldara-Tech/swarmcli/views/help"
-	inspectview "github.com/Eldara-Tech/swarmcli/views/inspect"
-	logsview "github.com/Eldara-Tech/swarmcli/views/logs"
-	"github.com/Eldara-Tech/swarmcli/views/scaledialog"
-	"github.com/Eldara-Tech/swarmcli/views/taskutil"
-	"github.com/Eldara-Tech/swarmcli/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/core/primitives/hash"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
+	"github.com/Eldara-Tech/swarmcli/v2/ui"
+	filterlist "github.com/Eldara-Tech/swarmcli/v2/ui/components/filterable/list"
+	"github.com/Eldara-Tech/swarmcli/v2/views/confirmdialog"
+	helpview "github.com/Eldara-Tech/swarmcli/v2/views/help"
+	inspectview "github.com/Eldara-Tech/swarmcli/v2/views/inspect"
+	logsview "github.com/Eldara-Tech/swarmcli/v2/views/logs"
+	"github.com/Eldara-Tech/swarmcli/v2/views/scaledialog"
+	"github.com/Eldara-Tech/swarmcli/v2/views/taskutil"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
 	"sort"
 	"strconv"
 	"strings"
@@ -869,10 +869,11 @@ func (m *Model) setRenderItem() {
 							}
 						}
 					} else {
-						// Tint the whole row by container status so unhealthy or
-						// failing replicas stand out, mirroring the service-level
-						// error coloring above.
-						taskLine = taskRowStyle(firstNonEmpty(task.Health, task.ContainerState)).Render(rowText)
+						// Tint the whole row by what the task is doing, so a
+						// failing replica stands out from one swarm retired on
+						// purpose, mirroring the service-level error coloring
+						// above.
+						taskLine = taskutil.TaskRowStyle(task, taskRowBaseStyle).Render(rowText)
 					}
 					lineStr += "\n" + taskLine
 				}
@@ -934,20 +935,9 @@ func shortImage(image string) string {
 	return image
 }
 
-// taskRowStyle tints an expanded task sub-row by container status: failed
-// states (unhealthy / exited / dead) red, transient states (starting /
-// restarting) yellow, everything else (healthy / running / no healthcheck) the
-// default grey used for normal task rows.
-func taskRowStyle(status string) lipgloss.Style {
-	switch status {
-	case "unhealthy", "exited", "dead":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-	case "starting", "restarting":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-	default:
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
-	}
-}
+// taskRowBaseStyle is an expanded task sub-row with nothing wrong with it; the
+// tints for the rest come from taskutil.TaskRowStyle.
+var taskRowBaseStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
 
 // dashIfEmpty renders an em dash for empty cells so aligned columns stay legible.
 func dashIfEmpty(s string) string {

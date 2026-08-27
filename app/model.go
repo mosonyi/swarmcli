@@ -6,16 +6,17 @@ package app
 import (
 	"strings"
 
-	"github.com/Eldara-Tech/swarmcli/docker"
-	"github.com/Eldara-Tech/swarmcli/views/commandinput"
-	"github.com/Eldara-Tech/swarmcli/views/confirmdialog"
-	loadingview "github.com/Eldara-Tech/swarmcli/views/loading"
-	"github.com/Eldara-Tech/swarmcli/views/searchinput"
-	systeminfoview "github.com/Eldara-Tech/swarmcli/views/systeminfo"
-	"github.com/Eldara-Tech/swarmcli/views/unlockdialog"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
+	swarmlog "github.com/Eldara-Tech/swarmcli/v2/utils/log"
+	"github.com/Eldara-Tech/swarmcli/v2/views/commandinput"
+	"github.com/Eldara-Tech/swarmcli/v2/views/confirmdialog"
+	loadingview "github.com/Eldara-Tech/swarmcli/v2/views/loading"
+	"github.com/Eldara-Tech/swarmcli/v2/views/searchinput"
+	systeminfoview "github.com/Eldara-Tech/swarmcli/v2/views/systeminfo"
+	"github.com/Eldara-Tech/swarmcli/v2/views/unlockdialog"
 
-	"github.com/Eldara-Tech/swarmcli/views/view"
-	"github.com/Eldara-Tech/swarmcli/views/viewstack"
+	"github.com/Eldara-Tech/swarmcli/v2/views/view"
+	"github.com/Eldara-Tech/swarmcli/v2/views/viewstack"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -53,12 +54,26 @@ type Model struct {
 	updateDialogActive   bool
 	pendingUpdateVersion string // version to persist if the opt-out box is ticked
 
+	// App-level "the Docker context changed outside swarmcli" prompt. The
+	// session is pinned to one context (docker.SessionContext), so a
+	// `docker context use` elsewhere moves nothing until this is answered.
+	contextDriftDialog       *confirmdialog.Model
+	contextDriftDialogActive bool
+	pendingDriftContext      string // context the prompt is offering to switch to
+	declinedDriftContext     string // context the user chose not to follow; not offered again
+
 	// Terminal dimensions
 	terminalWidth  int
 	terminalHeight int
 
 	// Previous context name, set on context switch for revert on failure
 	previousContext string
+	// revertWritesConfig records whether reverting previousContext should also
+	// rewrite ~/.docker/config.json. A switch made inside swarmcli wrote it, so
+	// undoing the switch has to undo that too; one made in another terminal and
+	// accepted at the drift prompt did not, and swarmcli has no business
+	// reaching into the operator's shell context to take it back.
+	revertWritesConfig bool
 
 	// Fullscreen mode — hides helpbar/stackbar, uses full terminal
 	fullscreen bool
@@ -82,6 +97,18 @@ func buildDeps() docker.Deps {
 }
 
 func InitialModel() *Model {
+	// Pin the Docker context before anything resolves it lazily, so every part
+	// of the session addresses the same swarm even if the operator runs
+	// `docker context use` in another terminal a moment later. Resolved here
+	// rather than in Init(), which also runs for `swarmcli --version` and has
+	// no business spawning a docker subprocess. A failure is only logged: the
+	// loading view is where the user gets told a daemon is unreachable.
+	if ctxName, err := docker.InitSessionContext(); err != nil {
+		swarmlog.L().Infow("could not resolve the Docker context at startup", "error", err)
+	} else {
+		swarmlog.L().Infow("pinned the Docker context for this session", "context", ctxName)
+	}
+
 	// Use larger initial dimensions that will be adjusted by first WindowSizeMsg
 	// This avoids the loading view appearing too small on the first render
 	terminalWidth, terminalHeight := 200, 50
@@ -99,18 +126,19 @@ func InitialModel() *Model {
 	deps := buildDeps()
 
 	return &Model{
-		deps:           deps,
-		viewport:       vp,
-		currentView:    loading,
-		systemInfo:     systeminfoview.New(deps, version, edition),
-		viewStack:      viewstack.Stack{},
-		commandInput:   cmdBar(),
-		searchInput:    searchinput.New(),
-		errorDialog:    confirmdialog.New(terminalWidth, terminalHeight),
-		unlockDialog:   unlockdialog.New(terminalWidth, terminalHeight),
-		updateDialog:   confirmdialog.New(terminalWidth, terminalHeight),
-		terminalWidth:  terminalWidth,
-		terminalHeight: terminalHeight,
+		deps:               deps,
+		viewport:           vp,
+		currentView:        loading,
+		systemInfo:         systeminfoview.New(deps, version, edition),
+		viewStack:          viewstack.Stack{},
+		commandInput:       cmdBar(),
+		searchInput:        searchinput.New(),
+		errorDialog:        confirmdialog.New(terminalWidth, terminalHeight),
+		unlockDialog:       unlockdialog.New(terminalWidth, terminalHeight),
+		updateDialog:       confirmdialog.New(terminalWidth, terminalHeight),
+		contextDriftDialog: confirmdialog.New(terminalWidth, terminalHeight),
+		terminalWidth:      terminalWidth,
+		terminalHeight:     terminalHeight,
 	}
 }
 

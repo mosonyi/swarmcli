@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Eldara-Tech/swarmcli/docker"
-	swarmlog "github.com/Eldara-Tech/swarmcli/utils/log"
+	"github.com/Eldara-Tech/swarmcli/v2/docker"
+	swarmlog "github.com/Eldara-Tech/swarmcli/v2/utils/log"
 
 	"github.com/docker/docker/api/types/volume"
 	"github.com/stretchr/testify/require"

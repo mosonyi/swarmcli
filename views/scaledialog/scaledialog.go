@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Eldara-Tech/swarmcli/ui/dialog"
+	"github.com/Eldara-Tech/swarmcli/v2/ui/dialog"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"

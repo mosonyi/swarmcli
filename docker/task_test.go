@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/docker/docker/api/types/swarm"
 	"github.com/stretchr/testify/require"
 )
 
@@ -95,4 +96,39 @@ func TestTaskEntry_StatusText(t *testing.T) {
 			require.Equal(t, tt.want, tt.e.StatusText())
 		})
 	}
+}
+
+// Both loaders must carry the raw task state, not just the display string it is
+// folded into: it is the only thing telling a replica swarm stopped on purpose
+// apart from one that died, and the views tint on it (issue #601).
+func TestGetTasksForServiceAndStack_CarryTheRawState(t *testing.T) {
+	t.Cleanup(InvalidateSnapshot)
+	SetSnapshot(&SwarmSnapshot{
+		Services: []swarm.Service{{
+			ID: "svc1",
+			Spec: swarm.ServiceSpec{Annotations: swarm.Annotations{
+				Name:   "mystack_web",
+				Labels: map[string]string{"com.docker.stack.namespace": "mystack"},
+			}},
+		}},
+		Tasks: []swarm.Task{{
+			ID: "task1", ServiceID: "svc1", Slot: 1,
+			DesiredState: swarm.TaskStateShutdown,
+			Status: swarm.TaskStatus{
+				State:     swarm.TaskStateShutdown,
+				Timestamp: time.Now().Add(-11 * time.Minute),
+			},
+		}},
+	})
+
+	forService, err := GetTasksForService("svc1")
+	require.NoError(t, err)
+	require.Len(t, forService, 1)
+	require.Equal(t, "shutdown", forService[0].State)
+	require.Equal(t, "shutdown 11 minutes ago", forService[0].CurrentState)
+
+	forStack, err := GetTasksForStack("mystack")
+	require.NoError(t, err)
+	require.Len(t, forStack, 1)
+	require.Equal(t, "shutdown", forStack[0].State)
 }
