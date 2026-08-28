@@ -280,3 +280,59 @@ func TestHandleTick_ReArms(t *testing.T) {
 	_, isTick := batch[0]().(tickMsg)
 	require.True(t, isTick, "the tick must re-arm itself")
 }
+
+// TestHandleContextDrift_AnInconclusiveCheckKeepsTheRefusal is the regression
+// guard for a check that could not be made being read as agreement.
+//
+// A failed lookup and an environment pin both used to arrive as an empty Shell,
+// which handleContextDrift treats as "back in agreement" — so it cleared the
+// record of a drift the operator had already declined, and the next successful
+// check re-raised the prompt they had just answered.
+func TestHandleContextDrift_AnInconclusiveCheckKeepsTheRefusal(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		inconclusive func()
+	}{
+		{"the lookup failed", func() {
+			configFileContextFn = func() (string, error) { return "", errors.New("config unreadable") }
+		}},
+		{"the environment pins the context", func() {
+			envPinsContextFn = func() bool { return true }
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newTestAppModel(&stubView{})
+			stubContexts(t, "swarm-a", "swarm-b")
+			workingConfig, workingEnv := configFileContextFn, envPinsContextFn
+
+			// The operator is asked once, and declines.
+			m.handleContextDrift(driftOf(t))
+			m.resolveContextDrift(false)
+			require.Equal(t, "swarm-b", m.declinedDriftContext)
+
+			// A tick the check cannot answer says nothing either way.
+			tc.inconclusive()
+			require.True(t, driftOf(t).Inconclusive)
+			m.handleContextDrift(driftOf(t))
+			require.Equal(t, "swarm-b", m.declinedDriftContext,
+				"a check that could not be made is not agreement")
+
+			// The check recovers, and the answer still stands.
+			configFileContextFn, envPinsContextFn = workingConfig, workingEnv
+			m.handleContextDrift(driftOf(t))
+			require.False(t, m.contextDriftDialogActive,
+				"the operator already answered this prompt")
+		})
+	}
+}
+
+// Agreement is still agreement: only an inconclusive check is exempt from
+// clearing the refusal, or declining one drift would silence that target
+// forever.
+func TestCheckContextDrift_AgreementIsNotInconclusive(t *testing.T) {
+	stubContexts(t, "swarm-a", "swarm-a")
+
+	msg := driftOf(t)
+	require.Empty(t, msg.Shell)
+	require.False(t, msg.Inconclusive)
+}

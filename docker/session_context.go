@@ -4,16 +4,33 @@
 package docker
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 )
 
-// envContextVar is the environment variable Docker resolves ahead of the
-// config file (docker/cli cli/command.EnvOverrideContext).
-const envContextVar = "DOCKER_CONTEXT"
+const (
+	// envContextVar is the environment variable Docker resolves ahead of the
+	// config file (docker/cli cli/command.EnvOverrideContext).
+	envContextVar = "DOCKER_CONTEXT"
+
+	// envHostVar forces Docker onto the `default` context, ahead of both the
+	// config file and DOCKER_CONTEXT.
+	envHostVar = "DOCKER_HOST"
+
+	// envConfigDirVar names the directory holding the CLI's config.json
+	// (docker/cli cli/config.EnvOverrideConfigDir).
+	envConfigDirVar = "DOCKER_CONFIG"
+
+	// defaultContextName is what Docker resolves to when nothing names a
+	// context.
+	defaultContextName = "default"
+)
 
 // envContext reports the context named by the environment, if any, trimmed.
 // The pin, ValidateContext's refusal guard and the drift check all read it
@@ -40,9 +57,9 @@ var (
 	sessionCtx   string
 )
 
-// showContextFn is the seam for `docker context show`, so the pin's behaviour
-// is testable without a Docker CLI on PATH.
-var showContextFn = runContextShow
+// activeContextFn is the seam for "what context is active right now", so the
+// pin's behaviour is testable without a Docker config file on disk.
+var activeContextFn = activeContextName
 
 // InitSessionContext resolves the session context and pins it, returning the
 // pinned name. Calling it again returns the existing pin without re-resolving,
@@ -134,13 +151,70 @@ func resolveContextName() (string, error) {
 	if ctxName := envContext(); ctxName != "" {
 		return ctxName, nil
 	}
-	return showContextFn()
+	return activeContextFn()
 }
 
-func runContextShow() (string, error) {
-	out, err := exec.Command("docker", "context", "show").Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to get docker context: %w", err)
+// activeContextName reports the context `docker context show` would print,
+// computed here rather than by running it.
+//
+// It used to fork the docker CLI. That was affordable while it happened once,
+// at startup, to resolve the pin — but the drift check calls it on the app tick
+// too, so since the tick learned to re-arm it is a process start every five
+// seconds for the life of the session, to read one field. Everything that field
+// depends on is readable directly: $DOCKER_HOST forces `default`, and otherwise
+// the answer is `currentContext` from the CLI's config file.
+//
+// The failure modes follow Docker's, so swarmcli is never more broken than the
+// CLI is for the same file. A missing config file is a machine where nobody has
+// run `docker context use`, and Docker answers `default` there too. A malformed
+// one Docker warns about and then answers `default` anyway — verified against
+// `docker context show`, which exits 0 — so this warns and does the same rather
+// than failing a session the CLI would not. Only a file that exists and cannot
+// be read is an error, which is where Docker stops as well.
+func activeContextName() (string, error) {
+	// Docker resolves $DOCKER_HOST ahead of everything else and pins the
+	// `default` context to it. swarmcli does not honour the variable — it
+	// always builds its client from a context's stored endpoint, see
+	// SessionContext — but it must still agree with Docker about the *name*,
+	// or the drift check would report a switch that nobody made.
+	if strings.TrimSpace(os.Getenv(envHostVar)) != "" {
+		return defaultContextName, nil
 	}
-	return strings.TrimSpace(string(out)), nil
+
+	path, err := dockerConfigPath()
+	if err != nil {
+		return defaultContextName, nil // nowhere to look is the same as nothing to find
+	}
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return defaultContextName, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("reading Docker config %s: %w", path, err)
+	}
+
+	var cfg struct {
+		CurrentContext string `json:"currentContext"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		l().Infof("Docker config %s could not be parsed (%v); using the %q context, as docker does", path, err, defaultContextName)
+		return defaultContextName, nil
+	}
+	if name := strings.TrimSpace(cfg.CurrentContext); name != "" {
+		return name, nil
+	}
+	return defaultContextName, nil
+}
+
+// dockerConfigPath locates the CLI's config file the way Docker does:
+// $DOCKER_CONFIG names the directory, otherwise ~/.docker.
+func dockerConfigPath() (string, error) {
+	if dir := strings.TrimSpace(os.Getenv(envConfigDirVar)); dir != "" {
+		return filepath.Join(dir, "config.json"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".docker", "config.json"), nil
 }
