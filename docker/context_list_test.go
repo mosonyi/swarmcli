@@ -15,7 +15,7 @@ import (
 // the contexts view display the very mismatch #611 is about, and it is also
 // where the view reads the context being left when a switch is confirmed.
 func TestListContexts_MarksTheSessionContextCurrent(t *testing.T) {
-	stubContextShow(t, "swarm-a")
+	stubActiveContext(t, "swarm-a")
 	_, err := SessionContext()
 	require.NoError(t, err)
 

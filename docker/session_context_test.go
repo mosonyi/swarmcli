@@ -5,22 +5,24 @@ package docker
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-// stubContextShow replaces the `docker context show` seam with a value the test
+// stubActiveContext replaces the active-context seam with a value the test
 // controls, and clears both the pin and DOCKER_CONTEXT so the case starts from
 // a known state. The returned function moves what the config file would say.
-func stubContextShow(t *testing.T, initial string) func(string) {
+func stubActiveContext(t *testing.T, initial string) func(string) {
 	t.Helper()
-	orig := showContextFn
+	orig := activeContextFn
 	current := initial
-	showContextFn = func() (string, error) { return current, nil }
+	activeContextFn = func() (string, error) { return current, nil }
 	ResetSessionContext()
 	t.Cleanup(func() {
-		showContextFn = orig
+		activeContextFn = orig
 		ResetSessionContext()
 	})
 	// Inherited from the developer's shell, this would outrank the stub.
@@ -34,7 +36,7 @@ func stubContextShow(t *testing.T, initial string) func(string) {
 // app — logs, deploy, stack rm — while the SDK client stayed connected to the
 // context the session started in, and the two addressed different swarms.
 func TestSessionContext_DoesNotFollowTheConfigFile(t *testing.T) {
-	move := stubContextShow(t, "swarm-a")
+	move := stubActiveContext(t, "swarm-a")
 
 	pinned, err := SessionContext()
 	require.NoError(t, err)
@@ -51,7 +53,7 @@ func TestSessionContext_DoesNotFollowTheConfigFile(t *testing.T) {
 // exported resolvers used to make the same lookup independently, so it was
 // possible for them to disagree with each other as well as with the client.
 func TestResolvers_AllReportThePin(t *testing.T) {
-	move := stubContextShow(t, "swarm-a")
+	move := stubActiveContext(t, "swarm-a")
 	_, err := SessionContext()
 	require.NoError(t, err)
 
@@ -74,7 +76,7 @@ func TestResolvers_AllReportThePin(t *testing.T) {
 // that is already running, which is the same promise made to a config-file
 // switch.
 func TestSessionContext_EnvironmentWinsAtResolution(t *testing.T) {
-	stubContextShow(t, "from-config")
+	stubActiveContext(t, "from-config")
 	t.Setenv(envContextVar, "from-env")
 
 	pinned, err := SessionContext()
@@ -91,7 +93,7 @@ func TestSessionContext_EnvironmentWinsAtResolution(t *testing.T) {
 // TestSetSessionContext_MovesThePin — a switch made inside swarmcli is the one
 // thing that moves it.
 func TestSetSessionContext_MovesThePin(t *testing.T) {
-	stubContextShow(t, "swarm-a")
+	stubActiveContext(t, "swarm-a")
 	_, err := SessionContext()
 	require.NoError(t, err)
 
@@ -106,7 +108,7 @@ func TestSetSessionContext_MovesThePin(t *testing.T) {
 // somewhere upstream, and adopting it would leave every shell-out without a
 // --context and back on the config file.
 func TestSetSessionContext_IgnoresAnEmptyName(t *testing.T) {
-	stubContextShow(t, "swarm-a")
+	stubActiveContext(t, "swarm-a")
 	_, err := SessionContext()
 	require.NoError(t, err)
 
@@ -120,7 +122,7 @@ func TestSetSessionContext_IgnoresAnEmptyName(t *testing.T) {
 // TestConfigFileContext_ReadsPastThePin — the drift check needs the live
 // answer, and it is the only caller that does.
 func TestConfigFileContext_ReadsPastThePin(t *testing.T) {
-	move := stubContextShow(t, "swarm-a")
+	move := stubActiveContext(t, "swarm-a")
 	_, err := SessionContext()
 	require.NoError(t, err)
 
@@ -139,13 +141,13 @@ func TestConfigFileContext_ReadsPastThePin(t *testing.T) {
 // the session permanently unable to name a context, with no way back short of
 // a restart.
 func TestSessionContext_AFailedLookupIsNotCached(t *testing.T) {
-	orig := showContextFn
+	orig := activeContextFn
 	ResetSessionContext()
-	t.Cleanup(func() { showContextFn = orig; ResetSessionContext() })
+	t.Cleanup(func() { activeContextFn = orig; ResetSessionContext() })
 	t.Setenv(envContextVar, "")
 
 	failing := true
-	showContextFn = func() (string, error) {
+	activeContextFn = func() (string, error) {
 		if failing {
 			return "", errors.New("docker not running")
 		}
@@ -180,7 +182,7 @@ func TestEnvPinsContext(t *testing.T) {
 // second call must report the pin rather than resolve a second time and
 // possibly land somewhere else.
 func TestInitSessionContext_IsIdempotent(t *testing.T) {
-	move := stubContextShow(t, "swarm-a")
+	move := stubActiveContext(t, "swarm-a")
 
 	first, err := InitSessionContext()
 	require.NoError(t, err)
@@ -191,4 +193,97 @@ func TestInitSessionContext_IsIdempotent(t *testing.T) {
 	second, err := InitSessionContext()
 	require.NoError(t, err)
 	require.Equal(t, "swarm-a", second)
+}
+
+// TestActiveContextName_NeedsNoDockerCLI is the regression guard for the fork.
+//
+// Resolving the active context used to run `docker context show`, which the
+// drift check calls on every app tick — a process start every five seconds to
+// read one field. PATH is emptied here, so a implementation that forks cannot
+// pass: the answer has to come from the config file directly.
+func TestActiveContextName_NeedsNoDockerCLI(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(envConfigDirVar, dir)
+	t.Setenv(envHostVar, "")
+	t.Setenv("PATH", "")
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"),
+		[]byte(`{"currentContext":"swarm-b","auths":{}}`), 0o600))
+
+	got, err := activeContextName()
+	require.NoError(t, err)
+	require.Equal(t, "swarm-b", got)
+}
+
+func TestActiveContextName_MatchesDockersOwnAnswer(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		config  string // "" writes no file at all
+		dirTrap bool   // put a directory where config.json should be, so the read fails
+		host    string
+		want    string
+		wantErr bool
+	}{
+		{name: "a context the operator selected", config: `{"currentContext":"swarm-b"}`, want: "swarm-b"},
+		{name: "no config file yet", want: defaultContextName},
+		{name: "a config file that names none", config: `{"auths":{}}`, want: defaultContextName},
+		// `docker context show` prints the whitespace verbatim and the old
+		// fork trimmed it to "", which named nothing resolvable. Naming
+		// nothing is what `default` means, so it is answered directly.
+		{name: "a name that is only whitespace names nothing", config: `{"currentContext":"  "}`, want: defaultContextName},
+		{
+			// docker resolves DOCKER_HOST ahead of everything and pins `default`
+			// to it. swarmcli does not honour the variable, but it has to agree
+			// about the name or the drift check reports a switch nobody made.
+			name: "DOCKER_HOST outranks the config file", config: `{"currentContext":"swarm-b"}`,
+			host: "tcp://10.0.0.1:2376", want: defaultContextName,
+		},
+		{
+			// `docker context show` warns and exits 0 with "default" here, so
+			// failing the session would make swarmcli more broken than the CLI
+			// for a file the CLI tolerates.
+			name: "a malformed config file degrades as docker does", config: `{"currentContext":`, want: defaultContextName,
+		},
+		{
+			// A file that exists and cannot be read is where Docker stops too,
+			// and it is the one case worth surfacing: answering `default` would
+			// invent an agreement the caller has no way to check.
+			name: "a config file that cannot be read is an error", dirTrap: true, wantErr: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv(envConfigDirVar, dir)
+			t.Setenv(envHostVar, tc.host)
+			switch {
+			case tc.dirTrap:
+				require.NoError(t, os.Mkdir(filepath.Join(dir, "config.json"), 0o700))
+			case tc.config != "":
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(tc.config), 0o600))
+			}
+
+			got, err := activeContextName()
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// DOCKER_CONTEXT is still resolved ahead of the config file, as it was when the
+// lookup forked.
+func TestResolveContextName_TheEnvironmentStillOutranksTheFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(envConfigDirVar, dir)
+	t.Setenv(envHostVar, "")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"),
+		[]byte(`{"currentContext":"from-file"}`), 0o600))
+	t.Setenv(envContextVar, "from-env")
+
+	got, err := resolveContextName()
+	require.NoError(t, err)
+	require.Equal(t, "from-env", got)
 }
