@@ -60,8 +60,6 @@ func (stubClusterInfo) GetContainerCount() (int, error)       { return 0, nil }
 func (stubClusterInfo) GetServiceCount() (int, error)         { return 0, nil }
 func (stubClusterInfo) GetSwarmCPUCapacity() (float64, error) { return 0, nil }
 func (stubClusterInfo) GetSwarmMemCapacity() (int64, error)   { return 0, nil }
-func (stubClusterInfo) GetSwarmCPUUsage() (string, error)     { return "0%", nil }
-func (stubClusterInfo) GetSwarmMemUsage() (string, error)     { return "0%", nil }
 func (stubClusterInfo) GetSwarmResourceUsage() (string, string, error) {
 	return "0%", "0%", nil
 }

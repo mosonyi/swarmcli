@@ -90,8 +90,6 @@ func (m *mockClusterInfoOps) GetContainerCount() (int, error)                { r
 func (m *mockClusterInfoOps) GetServiceCount() (int, error)                  { return 0, nil }
 func (m *mockClusterInfoOps) GetSwarmCPUCapacity() (float64, error)          { return 0, nil }
 func (m *mockClusterInfoOps) GetSwarmMemCapacity() (int64, error)            { return 0, nil }
-func (m *mockClusterInfoOps) GetSwarmCPUUsage() (string, error)              { return "", nil }
-func (m *mockClusterInfoOps) GetSwarmMemUsage() (string, error)              { return "", nil }
 func (m *mockClusterInfoOps) GetSwarmResourceUsage() (string, string, error) { return "", "", nil }
 func (m *mockClusterInfoOps) GetDockerVersion() (string, error)              { return "", nil }
 

@@ -113,102 +113,6 @@ func GetSwarmMemCapacity() (int64, error) {
 	return totalMem, nil
 }
 
-// GetSwarmCPUUsage returns actual CPU usage across running containers.
-func GetSwarmCPUUsage() (string, error) {
-	c, err := GetClient()
-	if err != nil {
-		l().Infof("GetSwarmCPUUsage: GetClient error: %v", err)
-		return "N/A", err
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
-	defer cancel()
-	containers, err := c.ContainerList(ctx, container.ListOptions{})
-	if err != nil {
-		l().Infof("GetSwarmCPUUsage: ContainerList error: %v", err)
-		return "N/A", err
-	}
-
-	if len(containers) == 0 {
-		return "0.0%", nil
-	}
-
-	l().Infof("GetSwarmCPUUsage: Collecting stats from %d containers in parallel", len(containers))
-
-	// Use goroutines to collect stats in parallel
-	type cpuResult struct {
-		percent float64
-		err     error
-	}
-
-	results := make(chan cpuResult, len(containers))
-	var wg sync.WaitGroup
-
-	for _, cont := range containers {
-		wg.Add(1)
-		go func(containerID string) {
-			defer wg.Done()
-
-			stats, err := c.ContainerStats(ctx, containerID, false)
-			if err != nil {
-				l().Infof("GetSwarmCPUUsage: ContainerStats error for %s: %v", containerID[:12], err)
-				results <- cpuResult{err: err}
-				return
-			}
-			defer func() { _ = stats.Body.Close() }()
-
-			var s container.StatsResponse
-			decodeErr := json.NewDecoder(stats.Body).Decode(&s)
-
-			if decodeErr != nil {
-				l().Infof("GetSwarmCPUUsage: Decode error for %s: %v", containerID[:12], decodeErr)
-				results <- cpuResult{err: decodeErr}
-				return
-			}
-
-			// Calculate CPU percentage
-			cpuDelta := float64(s.CPUStats.CPUUsage.TotalUsage - s.PreCPUStats.CPUUsage.TotalUsage)
-			systemDelta := float64(s.CPUStats.SystemUsage - s.PreCPUStats.SystemUsage)
-			onlineCPUs := float64(s.CPUStats.OnlineCPUs)
-
-			if onlineCPUs == 0 {
-				onlineCPUs = float64(len(s.CPUStats.CPUUsage.PercpuUsage))
-			}
-
-			var cpuPercent float64
-			if systemDelta > 0 && onlineCPUs > 0 {
-				cpuPercent = (cpuDelta / systemDelta) * onlineCPUs * 100.0
-			}
-
-			results <- cpuResult{percent: cpuPercent}
-		}(cont.ID)
-	}
-
-	// Close results channel after all goroutines complete
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	// Collect results
-	var totalCPU float64
-	successCount := 0
-	for res := range results {
-		if res.err == nil {
-			totalCPU += res.percent
-			successCount++
-		}
-	}
-
-	if successCount == 0 {
-		return "0.0%", nil
-	}
-
-	result := fmt.Sprintf("%.1f%%", totalCPU)
-	l().Infof("GetSwarmCPUUsage: Final result: %s (from %d/%d containers)", result, successCount, len(containers))
-	return result, nil
-}
-
 // memUsageNoCache is the memory figure `docker stats` reports: the cgroup's
 // usage less the page cache, which is reclaimable and so is not the container's
 // working set. cgroup v1 names that quantity total_inactive_file and cgroup v2
@@ -229,99 +133,6 @@ func memUsageNoCache(mem container.MemoryStats) uint64 {
 	return mem.Usage
 }
 
-// GetSwarmMemUsage returns actual memory usage across running containers.
-func GetSwarmMemUsage() (string, error) {
-	c, err := GetClient()
-	if err != nil {
-		l().Infof("GetSwarmMemUsage: GetClient error: %v", err)
-		return "N/A", err
-	}
-
-	// Get total memory capacity from nodes
-	totalCapacity, err := GetSwarmMemCapacity()
-	if err != nil || totalCapacity == 0 {
-		l().Infof("GetSwarmMemUsage: failed to get capacity: %v", err)
-		return "N/A", err
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
-	defer cancel()
-	containers, err := c.ContainerList(ctx, container.ListOptions{})
-	if err != nil {
-		l().Infof("GetSwarmMemUsage: ContainerList error: %v", err)
-		return "N/A", err
-	}
-
-	if len(containers) == 0 {
-		return "0.0%", nil
-	}
-
-	l().Infof("GetSwarmMemUsage: Collecting stats from %d containers in parallel", len(containers))
-
-	// Use goroutines to collect stats in parallel
-	type memResult struct {
-		usage int64
-		err   error
-	}
-
-	results := make(chan memResult, len(containers))
-	var wg sync.WaitGroup
-
-	for _, cont := range containers {
-		wg.Add(1)
-		go func(containerID string) {
-			defer wg.Done()
-
-			stats, err := c.ContainerStats(ctx, containerID, false)
-			if err != nil {
-				l().Infof("GetSwarmMemUsage: ContainerStats error for %s: %v", containerID[:12], err)
-				results <- memResult{err: err}
-				return
-			}
-			defer func() { _ = stats.Body.Close() }()
-
-			var s container.StatsResponse
-			decodeErr := json.NewDecoder(stats.Body).Decode(&s)
-
-			if decodeErr != nil {
-				l().Infof("GetSwarmMemUsage: Decode error for %s: %v", containerID[:12], decodeErr)
-				results <- memResult{err: decodeErr}
-				return
-			}
-
-			results <- memResult{usage: int64(memUsageNoCache(s.MemoryStats))}
-		}(cont.ID)
-	}
-
-	// Close results channel after all goroutines complete
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	// Collect results
-	var totalUsedBytes int64
-	successCount := 0
-	for res := range results {
-		if res.err == nil {
-			totalUsedBytes += res.usage
-			successCount++
-		}
-	}
-
-	if successCount == 0 {
-		return "0.0%", nil
-	}
-
-	// Calculate percentage
-	memPercent := (float64(totalUsedBytes) / float64(totalCapacity)) * 100.0
-
-	result := fmt.Sprintf("%.1f%%", memPercent)
-	l().Infof("GetSwarmMemUsage: Final result: %s (%.1f GB used of %.1f GB total, from %d/%d containers)",
-		result, float64(totalUsedBytes)/(1024*1024*1024), float64(totalCapacity)/(1024*1024*1024), successCount, len(containers))
-	return result, nil
-}
-
 func GetDockerVersion() (string, error) {
 	c, err := GetClient()
 	if err != nil {
@@ -337,10 +148,77 @@ func GetDockerVersion() (string, error) {
 	return info.Version, nil
 }
 
-// GetSwarmResourceUsage returns CPU and memory usage in a single pass,
-// making one ContainerList call and one ContainerStats call per container
-// instead of two separate passes. This halves the Docker API calls compared
-// to calling GetSwarmCPUUsage + GetSwarmMemUsage independently.
+// cpuBaseline is one container's cumulative CPU counters from the previous
+// sampling round.
+//
+// One-shot stats zeroes PreCPUStats, so a retained reading is the only source of
+// a previous value to difference against. That is the trade one-shot asks for,
+// and it is worth taking: the alternative — `stream=0` without `one-shot` —
+// makes the daemon subscribe the container to its global stats collector and
+// discard the first frame to prime the delta itself, which costs a second or two
+// per call and keeps every sampled container on a 1 Hz cgroup treadmill for as
+// long as the request is open (moby daemon/stats.go, daemon/stats/collector.go).
+// Differencing over our own longer window also gives a steadier figure than the
+// one-second window `docker stats` reads off.
+type cpuBaseline struct {
+	total  uint64
+	system uint64
+}
+
+var (
+	cpuBaselineMu sync.Mutex
+	cpuBaselines  = map[string]cpuBaseline{}
+)
+
+// cpuPercentSince differences a fresh reading against this container's retained
+// baseline and replaces it. ok is false when there is nothing to difference
+// against — the first time a container is seen — and when a counter has gone
+// backwards, which means the container restarted and the delta would be
+// nonsense. In both cases the caller omits this container from the CPU figure
+// rather than contributing a wrong number; the next round has a baseline.
+func cpuPercentSince(id string, s container.CPUStats) (float64, bool) {
+	cpuBaselineMu.Lock()
+	prev, seen := cpuBaselines[id]
+	cpuBaselines[id] = cpuBaseline{total: s.CPUUsage.TotalUsage, system: s.SystemUsage}
+	cpuBaselineMu.Unlock()
+
+	if !seen || s.CPUUsage.TotalUsage < prev.total || s.SystemUsage < prev.system {
+		return 0, false
+	}
+	systemDelta := float64(s.SystemUsage - prev.system)
+	if systemDelta <= 0 {
+		return 0, false
+	}
+	onlineCPUs := float64(s.OnlineCPUs)
+	if onlineCPUs == 0 {
+		onlineCPUs = float64(len(s.CPUUsage.PercpuUsage))
+	}
+	if onlineCPUs == 0 {
+		return 0, false
+	}
+	return (float64(s.CPUUsage.TotalUsage-prev.total) / systemDelta) * onlineCPUs * 100.0, true
+}
+
+// pruneCPUBaselines drops the baselines of containers that are no longer
+// running, so the map tracks the node rather than growing for the lifetime of
+// the process.
+func pruneCPUBaselines(live map[string]struct{}) {
+	cpuBaselineMu.Lock()
+	defer cpuBaselineMu.Unlock()
+	for id := range cpuBaselines {
+		if _, ok := live[id]; !ok {
+			delete(cpuBaselines, id)
+		}
+	}
+}
+
+// GetSwarmResourceUsage returns CPU and memory usage for the containers on the
+// connected node, in a single pass: one ContainerList plus one one-shot
+// ContainerStats per container.
+//
+// Memory is instantaneous and is reported from the first round. CPU is a rate,
+// so it needs two readings; a container is counted once it has a baseline (see
+// cpuBaseline).
 func GetSwarmResourceUsage() (cpuPct string, memPct string, err error) {
 	c, err := GetClient()
 	if err != nil {
@@ -360,6 +238,12 @@ func GetSwarmResourceUsage() (cpuPct string, memPct string, err error) {
 		return "N/A", "N/A", err
 	}
 
+	live := make(map[string]struct{}, len(containers))
+	for _, cont := range containers {
+		live[cont.ID] = struct{}{}
+	}
+	pruneCPUBaselines(live)
+
 	if len(containers) == 0 {
 		memStr := "0.0%"
 		if totalCapacity == 0 {
@@ -370,6 +254,7 @@ func GetSwarmResourceUsage() (cpuPct string, memPct string, err error) {
 
 	type result struct {
 		cpuPercent float64
+		hasCPU     bool
 		memUsage   int64
 		err        error
 	}
@@ -382,7 +267,7 @@ func GetSwarmResourceUsage() (cpuPct string, memPct string, err error) {
 		go func(containerID string) {
 			defer wg.Done()
 
-			stats, err := c.ContainerStats(ctx, containerID, false)
+			stats, err := c.ContainerStatsOneShot(ctx, containerID)
 			if err != nil {
 				results <- result{err: err}
 				return
@@ -395,19 +280,12 @@ func GetSwarmResourceUsage() (cpuPct string, memPct string, err error) {
 				return
 			}
 
-			// CPU
-			cpuDelta := float64(s.CPUStats.CPUUsage.TotalUsage - s.PreCPUStats.CPUUsage.TotalUsage)
-			systemDelta := float64(s.CPUStats.SystemUsage - s.PreCPUStats.SystemUsage)
-			onlineCPUs := float64(s.CPUStats.OnlineCPUs)
-			if onlineCPUs == 0 {
-				onlineCPUs = float64(len(s.CPUStats.CPUUsage.PercpuUsage))
+			pct, hasCPU := cpuPercentSince(containerID, s.CPUStats)
+			results <- result{
+				cpuPercent: pct,
+				hasCPU:     hasCPU,
+				memUsage:   int64(memUsageNoCache(s.MemoryStats)),
 			}
-			var cpuPct float64
-			if systemDelta > 0 && onlineCPUs > 0 {
-				cpuPct = (cpuDelta / systemDelta) * onlineCPUs * 100.0
-			}
-
-			results <- result{cpuPercent: cpuPct, memUsage: int64(memUsageNoCache(s.MemoryStats))}
 		}(cont.ID)
 	}
 
@@ -415,25 +293,29 @@ func GetSwarmResourceUsage() (cpuPct string, memPct string, err error) {
 
 	var totalCPU float64
 	var totalMem int64
-	successCount := 0
+	cpuCount, memCount := 0, 0
 	for res := range results {
-		if res.err == nil {
+		if res.err != nil {
+			continue
+		}
+		memCount++
+		totalMem += res.memUsage
+		if res.hasCPU {
+			cpuCount++
 			totalCPU += res.cpuPercent
-			totalMem += res.memUsage
-			successCount++
 		}
 	}
 
-	cpuPct = "0.0%"
-	if successCount > 0 {
+	// No baseline yet on any container (the very first round) reads as unknown,
+	// not as an idle cluster: "0.0%" there would be a measurement we did not make.
+	cpuPct = "N/A"
+	if cpuCount > 0 {
 		cpuPct = fmt.Sprintf("%.1f%%", totalCPU)
 	}
 
 	memPct = "N/A"
-	if totalCapacity > 0 && successCount > 0 {
+	if memCount > 0 && totalCapacity > 0 {
 		memPct = fmt.Sprintf("%.1f%%", (float64(totalMem)/float64(totalCapacity))*100.0)
-	} else if successCount > 0 {
-		memPct = "0.0%"
 	}
 
 	return cpuPct, memPct, nil
