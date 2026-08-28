@@ -23,8 +23,6 @@ type mockClusterInfoOps struct {
 	getServiceCountFn       func() (int, error)
 	getSwarmCPUCapacityFn   func() (float64, error)
 	getSwarmMemCapacityFn   func() (int64, error)
-	getSwarmCPUUsageFn      func() (string, error)
-	getSwarmMemUsageFn      func() (string, error)
 	getSwarmResourceUsageFn func() (string, string, error)
 	getDockerVersionFn      func() (string, error)
 }
@@ -44,12 +42,6 @@ func (m *mockClusterInfoOps) GetSwarmCPUCapacity() (float64, error) {
 func (m *mockClusterInfoOps) GetSwarmMemCapacity() (int64, error) {
 	return m.getSwarmMemCapacityFn()
 }
-func (m *mockClusterInfoOps) GetSwarmCPUUsage() (string, error) {
-	return m.getSwarmCPUUsageFn()
-}
-func (m *mockClusterInfoOps) GetSwarmMemUsage() (string, error) {
-	return m.getSwarmMemUsageFn()
-}
 func (m *mockClusterInfoOps) GetSwarmResourceUsage() (string, string, error) {
 	return m.getSwarmResourceUsageFn()
 }
@@ -66,8 +58,6 @@ func noopClusterInfoOps() *mockClusterInfoOps {
 		getServiceCountFn:       func() (int, error) { return 3, nil },
 		getSwarmCPUCapacityFn:   func() (float64, error) { return 4.0, nil },
 		getSwarmMemCapacityFn:   func() (int64, error) { return 8 * 1024 * 1024 * 1024, nil },
-		getSwarmCPUUsageFn:      func() (string, error) { return "12.5%", nil },
-		getSwarmMemUsageFn:      func() (string, error) { return "45.3%", nil },
 		getSwarmResourceUsageFn: func() (string, string, error) { return "12.5%", "45.3%", nil },
 		getDockerVersionFn:      func() (string, error) { return "27.0.0", nil },
 	}
@@ -126,7 +116,10 @@ func TestUpdate_Msg(t *testing.T) {
 	require.Equal(t, "ctx", m.context)
 	require.Equal(t, 3, m.containerCount)
 	require.Equal(t, 2, m.serviceCount)
-	require.NotNil(t, cmd) // triggers LoadSlowStatus
+	// No follow-on command: the counts land, and the resource-usage fan-out is
+	// left to the single loop SlowStatusMsg re-arms. Chaining it here gave that
+	// loop a second, unsynchronised driver on the app's 5s tick.
+	require.Nil(t, cmd)
 }
 
 func TestUpdate_SlowStatusMsg(t *testing.T) {

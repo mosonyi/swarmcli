@@ -10,8 +10,6 @@ type ClusterInfoOps interface {
 	GetServiceCount() (int, error)
 	GetSwarmCPUCapacity() (float64, error)
 	GetSwarmMemCapacity() (int64, error)
-	GetSwarmCPUUsage() (string, error)
-	GetSwarmMemUsage() (string, error)
 	GetSwarmResourceUsage() (cpuPct, memPct string, err error)
 	GetDockerVersion() (string, error)
 }
@@ -23,8 +21,6 @@ func (defaultClusterInfoOps) GetContainerCount() (int, error)       { return Get
 func (defaultClusterInfoOps) GetServiceCount() (int, error)         { return GetServiceCount() }
 func (defaultClusterInfoOps) GetSwarmCPUCapacity() (float64, error) { return GetSwarmCPUCapacity() }
 func (defaultClusterInfoOps) GetSwarmMemCapacity() (int64, error)   { return GetSwarmMemCapacity() }
-func (defaultClusterInfoOps) GetSwarmCPUUsage() (string, error)     { return GetSwarmCPUUsage() }
-func (defaultClusterInfoOps) GetSwarmMemUsage() (string, error)     { return GetSwarmMemUsage() }
 func (defaultClusterInfoOps) GetSwarmResourceUsage() (string, string, error) {
 	return GetSwarmResourceUsage()
 }

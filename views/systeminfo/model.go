@@ -102,8 +102,15 @@ func New(deps docker.Deps, version, edition string) *Model {
 // update notice (the proactive notice is driven by LatestVersionMsg directly).
 func (m *Model) Latest() string { return m.latest }
 
+// Init starts the header's timers.
+//
+// It seeds the resource-usage loop with the first collection rather than with a
+// tick, because that loop re-arms its own tick from SlowStatusMsg (update.go):
+// arming one here as well would leave two chains running, and the collection is
+// a per-container fan-out at the other end of the Docker socket. One chain in,
+// one chain out — a round cannot start while a round is running.
 func (m *Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.tickCmd(), m.spinnerTickCmd()}
+	cmds := []tea.Cmd{m.LoadSlowStatus(), m.spinnerTickCmd()}
 	if cmd := m.CheckLatestVersion(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}

@@ -16,8 +16,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case Msg:
 		m.SetContent(msg)
-		// Trigger slow status load right after fast values
-		return m.LoadSlowStatus()
+		// Deliberately does NOT start a resource-usage collection. This message
+		// is the result of LoadStatus, which the app re-runs on its own 5s tick;
+		// chaining the collection off it ran a second, faster loop alongside the
+		// one SlowStatusMsg re-arms, and neither could see the other, so rounds
+		// piled up on the daemon. The counts here are cheap and stay on the app
+		// tick; the fan-out has exactly one driver.
+		return nil
 
 	case LatestVersionMsg:
 		m.latest = msg.LatestVersion
