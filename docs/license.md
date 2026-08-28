@@ -71,10 +71,10 @@ stored on the swarm:
 
 ### Managed licenses: activation is a second step
 
-A **managed** license is issued to you rather than to one swarm, and then
-*activated* for each swarm you run it on. Installing the key is the first
-step; the second is an **activation lease** — a short-lived signed artifact
-naming that license and that swarm.
+A **managed** license names its swarm in the key, exactly as a key bound at
+issuance does, and is then *activated* for that swarm. Installing the key is
+the first step; the second is an **activation lease** — a short-lived signed
+artifact naming that license and that swarm.
 
 On a swarm that can reach us, the second step takes care of itself. A managed
 license with no lease installed is due for renewal by definition, and the
@@ -105,8 +105,8 @@ low-touch deployments, and are worth asking for **before** your first outage
 rather than after: `:license` will tell you which state you are in, but only if
 somebody opens it.
 
-Managed licenses are being rolled out; keys issued today are unbound or bound
-at issuance, and nothing about them changes.
+Managed licenses are being rolled out; keys issued today are bound at
+issuance, and nothing about them changes.
 
 All of them require a Docker context pointing at a swarm manager, and all
 of them validate the key before storing it.
@@ -176,19 +176,21 @@ Inside the TUI, `:license` shows current state:
 
 | Shown | Meaning |
 |---|---|
-| Status: Valid | Key verified, not expired, within limits, bound swarm matches (or unbound). |
+| Status: Valid | Key verified, not expired, bound swarm matches (or unbound). |
 | Status: Grace Period (N days remaining) | Key expired, features still enabled (see below). |
 | Status: Expired | Key past grace; features disabled. |
 | Status: No license | No key present. |
 | Status: Invalid | The key did not verify, or names a tier this build does not know. |
-| Status: Node limit exceeded | Cluster has more nodes than `max_nodes`. |
-| Status: User limit exceeded | RBAC store has more users than `max_users`. |
 | Status: Wrong swarm (license bound to a different cluster) | The connected swarm differs from the one the license is bound to. See [Per-swarm binding](#per-swarm-binding). |
 
 The view also shows:
 
 - `Source: swarm config (swarmcli-license)` — where the active key was loaded from.
 - `Binding: Bound to <id> | Unbound (portable across swarms) | Expected/Observed mismatch` — the current binding state.
+- `Nodes: 12 of 10 — nothing is switched off`, with a portal link beside it —
+  shown only when the swarm has more nodes than `max_nodes`. It is a report and
+  not a status: the `Status:` line above is unaffected and every feature stays
+  on. See [Limits](#limits).
 
 Key bindings inside the view:
 
@@ -231,8 +233,9 @@ swarmcli license sync   [--json]   # renew this swarm's activation now
 
 Both read the license from the swarm's Docker Config exactly as the TUI does, so
 they need a Docker context pointing at a swarm manager. `status` prints one
-`key=value` per line — status, tier, license id, binding, the lease's dates, and
-what the last renewal answered — or the same fields as an object with `--json`.
+`key=value` per line — status, tier, license id, binding, the node count and its
+allowance, the lease's dates, and what the last renewal answered — or the same
+fields as an object with `--json`.
 
 The exit codes answer two different questions, which is what makes them useful in
 a cron job:
@@ -297,17 +300,21 @@ of the license.
 A license key may be bound to a single Docker Swarm. There are three
 binding modes, and `:license` names which one you hold.
 
-- **Unbound**: the key verifies on any swarm. This is the legacy / portable
-  behaviour; `trial` keys are typically unbound.
+- **Unbound**: the key verifies on any swarm. Legacy only — issuance refuses
+  to sign an unbound key, trials included, so no key issued today is one of
+  these.
 - **Bound at issuance** (*static*): the swarm is named in the key when it is
   signed. Matching is business as usual; on any other swarm the key is
   cryptographically valid but Business Edition features disable and
   `:license` shows `Wrong swarm`. Switching back restores it immediately,
   with no waiting period.
-- **Managed**: the key is issued to you, and each swarm is *activated*
-  separately with a lease — see
-  [Managed licenses](#managed-licenses-activation-is-a-second-step). Moving
-  the license to a different swarm does not need a new key.
+- **Managed**: the swarm is named in the key as above, but the binding is also
+  kept current — features work only while the swarm holds a live lease, which
+  it renews by itself. See
+  [Managed licenses](#managed-licenses-activation-is-a-second-step). Moving it
+  to another swarm is a dashboard action that issues a new key, and is allowed
+  at most once per lease window — see [Moving a managed
+  license](#moving-a-managed-license-to-another-swarm).
 
 ### Moving a managed license to another swarm
 
@@ -468,13 +475,14 @@ thing that proves entitlement.
 ## Limits
 
 `max_nodes` and `max_users` are **soft** limits. Exceeding them does not
-block any operation; they appear as a warning state in the `:license`
-view, and the expiry is recorded on the key at issuance time.
+block any operation and does not change the status the `:license` view
+reports, and the expiry is recorded on the key at issuance time.
 
-- `max_nodes` is checked against the swarm's current node count, refreshed
-  on each TUI update tick.
-- `max_users` is checked against the rbac-proxy's user store after each
-  RBAC change.
+- `max_nodes` is compared against the swarm's node count, refreshed on each
+  TUI update tick. Over the limit, `:license` reports the pair and leaves
+  every feature on — see [`:license` view](#license-view).
+- `max_users` is compared against nothing. The number is recorded on the key,
+  but no part of the product counts users against it.
 
 Either limit set to `0` is treated as unlimited.
 

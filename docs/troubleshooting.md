@@ -21,10 +21,12 @@ and if that does not help, contact whoever issued it.
 The key is past its grace window. Paste a fresh key at the prompt, or set
 `SWARMCLI_LICENSE` and restart. See [License — Lifecycle](license.md#lifecycle-states).
 
-**`:license` shows "Node limit exceeded" / "User limit exceeded".**
-Soft limit warning; nothing is blocked. Either upgrade the license, scale
-the cluster down, or treat it as informational. See
-[License — Limits](license.md#limits).
+**`:license` shows `Nodes: 12 of 10 — nothing is switched off`.**
+The swarm has more nodes than the license allows. Nothing is blocked and no
+feature is switched off — it is a commercial limit, not a technical one.
+Either upgrade from the portal link beside it, scale the cluster down, or
+treat it as informational. There is no equivalent line for users: nothing
+counts against `max_users`. See [License — Limits](license.md#limits).
 
 ## Bootstrap
 
