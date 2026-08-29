@@ -25,11 +25,16 @@ step on top — never verification, and there is an offline path for both.
 What a key records about you:
 
 - **Who it is for** — your customer identifier.
-- **Which tier** — `be` (Business Edition) or `trial`. Both grant the same
-  feature set today, so the expiry is what separates them — a `trial` must
-  carry one, and from v2.0.0 a key that does not is refused.
-- **When it expires**, if ever. A `be` key may be issued without an expiry; a
-  `trial` may not.
+- **Which tier** — `be` (Business Edition), `free` or `trial`. All three grant
+  the same feature set today, so the tier does not decide which features you
+  get; it decides what surrounds the key. A `trial` and a `free` key must carry
+  an expiry — from v2.0.0 a key on either tier that does not is refused — and a
+  `free` key carries a node allowance somebody actually judges. See [The free
+  tier](#the-free-tier).
+- **When it expires**, if ever. A `be` key may be issued without an expiry;
+  `trial` and `free` may not. A free licence's expiry is not a countdown to the
+  end of the tier, because it is rolled forward — see [The free
+  tier](#the-free-tier).
 - **Node and user limits**, if any. See [Limits](#limits).
 - **Which swarm it is bound to**, if any, and **how** — see
   [Per-swarm binding](#per-swarm-binding).
@@ -41,9 +46,58 @@ from the tier, so adding a capability to a tier benefits every outstanding key
 for that tier without re-issuing — and no key can claim a feature its tier does
 not grant.
 
+## The free tier
+
+There is a permanent free tier, and it is a licence like any other: a signed key
+you install into a swarm, verified offline, granting the same features a paid
+`be` key grants — the Business Edition features these pages describe, and the
+licensed swarmcli-cd features beside them, since one licence covers both
+products. It is not a reduced feature set under a different name, and nothing
+about installing, renewing or moving it differs from what the rest of this page
+describes.
+
+What bounds it is not the features. It is the two things around the key:
+
+- **Three nodes.** The allowance is recorded on the key as `max_nodes`, the same
+  field a paid licence carries, and swarmcli does not refuse anything on the
+  strength of it — the count is judged elsewhere, and [Limits](#limits) is where
+  that is spelled out, because "soft limit" on its own leads a reader to the
+  wrong conclusion here.
+- **A term, rather than a perpetual grant.** A free key is signed for 365 days,
+  and the term is rolled forward for you: it reaches the swarm on the same daily
+  token refresh that carries a renewal or a tier change (see
+  [Privacy](#privacy)), and it arrives before the date it replaces rather than
+  on it. Rolling it forward is the only lever there is — a free licence ends by
+  no longer being rolled, never by anything switching off from our side — and
+  that is also why the expiry is mandatory rather than optional. A free key with
+  no expiry would be a permanent grant on every swarm it reached, and nothing
+  could ever end it.
+
+A swarm that cannot reach us keeps the term it was signed with and stops when it
+runs out, and there is no offline substitute: a free licence has no lease, so
+there is no lease file to hand-carry in its place. Air-gapped and
+policy-restricted deployments are what the paid tiers' offline paths are for.
+
+One free licence per account, and it is [bound to one
+swarm](#per-swarm-binding) at issuance like any other key — `bind: static`, so
+there is no lease and no activation step. Installing the key is the whole of it.
+Registering the cluster is the same flow as for a paid licence, see [Getting a
+bound license](#getting-a-bound-license); moving it to another swarm is the same
+dashboard action, and asking for a second free key is refused naming the cluster
+the first one is on.
+
+The tier is new: a free key is accepted from v2.0.0. An older swarmcli does not
+know the word `free` — it verifies the signature, finds a tier it has no
+entitlements for, and reports `Invalid` on the `:license` view. The key is fine;
+upgrade rather than ask for a different one. See [Key
+versioning](#key-versioning).
+
 ## Acquiring a key
 
-Get a key (including a free trial) at [swarmcli.io/be](https://swarmcli.io/be).
+Get a key at [swarmcli.io/be](https://swarmcli.io/be) — a
+[free-tier](#the-free-tier) key, a time-boxed trial, or a paid subscription. All
+three are the same kind of artifact, are installed the same way, and everything
+below applies to each of them.
 
 ## Activation
 
@@ -191,6 +245,12 @@ The view also shows:
   shown only when the swarm has more nodes than `max_nodes`. It is a report and
   not a status: the `Status:` line above is unaffected and every feature stays
   on. See [Limits](#limits).
+- `Allowance: 5 of 3 nodes, as the licence service sees it`, and beside it
+  `Term: stops rolling 2026-09-12 unless the count comes down` — what the
+  licence service last said about the allowance, shown only while it says this
+  licence is over it, and abbreviated into the status bar as well because the
+  swarm nobody opens `:license` on is the one that lapses. Also a report and not
+  a status. See [Limits](#limits).
 
 Key bindings inside the view:
 
@@ -307,7 +367,8 @@ binding modes, and `:license` names which one you hold.
   signed. Matching is business as usual; on any other swarm the key is
   cryptographically valid but Business Edition features disable and
   `:license` shows `Wrong swarm`. Switching back restores it immediately,
-  with no waiting period.
+  with no waiting period. Every [free-tier](#the-free-tier) key is one of
+  these, which is why a free licence has no activation step.
 - **Managed**: the swarm is named in the key as above, but the binding is also
   kept current — features work only while the swarm holds a live lease, which
   it renews by itself. See
@@ -450,6 +511,11 @@ doesn't take a production cluster offline. A managed license's renewal
 window works the same way and for the same reason: features stay on while
 the renewal is overdue, and the countdown says how long that lasts.
 
+Being over a node allowance is deliberately not one of these states. It is a
+report rather than a status, it takes nothing away on the day it appears, and
+the state it eventually leads to is the ordinary `Expired` above — see
+[Limits](#limits).
+
 Two states are worth telling apart, because the fix is different and only
 one of them involves us. **Not activated** means the swarm has no lease —
 install the one you were sent. **Activation expired** means it had one and
@@ -474,9 +540,11 @@ thing that proves entitlement.
 
 ## Limits
 
-`max_nodes` and `max_users` are **soft** limits. Exceeding them does not
-block any operation and does not change the status the `:license` view
-reports, and the expiry is recorded on the key at issuance time.
+`max_nodes` and `max_users` are **soft** limits *in the binary*: swarmcli
+reports what it observes and never denies on a count. Exceeding either blocks no
+operation, changes no status the `:license` view reports and switches no feature
+off — on every tier, the free one included — and the expiry is recorded on the
+key at issuance time.
 
 - `max_nodes` is compared against the swarm's node count, refreshed on each
   TUI update tick. Over the limit, `:license` reports the pair and leaves
@@ -485,6 +553,44 @@ reports, and the expiry is recorded on the key at issuance time.
   but no part of the product counts users against it.
 
 Either limit set to `0` is treated as unlimited.
+
+### The node allowance is judged elsewhere
+
+Soft in the binary is not the same as unbounded, and on the [free
+tier](#the-free-tier) the difference is the whole of the tier's boundary. Every
+licensing request reports the node count this swarm observed (see
+[Privacy](#privacy)), and on a free licence that count is compared against the
+allowance *there* rather than here. Nothing switches off when it is exceeded.
+What is at stake is the roll of the term:
+
+1. Over the allowance, the next answer says so, and `:license` grows an
+   `Allowance:` line and a `Term:` line naming **the date after which the term
+   stops being rolled forward**; the status bar carries a short form of the
+   same. Every feature stays on, the `Status:` line is unchanged, and renewals
+   and refreshes carry on exactly as before.
+2. Come back under the allowance before that date and the clock stops. The
+   report goes quiet and the term rolls again.
+3. Stay over it, and on that date nothing happens — which is the part worth
+   knowing in advance. The licence keeps working until the expiry already signed
+   into the key, then through the [grace period](#lifecycle-states), and only
+   then do Business Edition features stop. How long that is depends on where in
+   the term the swarm was when the rolling stopped: it may be days or most of a
+   year, and the `Expires:` line on `:license` is the date to plan around.
+
+So an exceeded allowance is a dated warning rather than an outage, and the
+outage it can become arrives long after the warning that named it. Bringing the
+count back under the allowance or moving to a paid licence resolves it, at any
+point before the term runs out.
+
+Two node figures can be on screen at once, and they are allowed to disagree. The
+`Nodes:` line is this process's own count against the allowance signed into the
+key; the `Allowance:` line is what the licence service last recorded and last
+decided. Each names its source, so a stale report beside a fresh count is two
+views of one swarm rather than a contradiction.
+
+Neither of the service's two lines reaches `swarmcli license status`, which
+reports the observed count and the signed `max_nodes` and nothing the service
+said about them.
 
 ## Key versioning
 
@@ -495,6 +601,12 @@ the floor, and a release that does so says as much in its upgrade notes.
 
 In practice this has happened once: per-swarm binding was added without
 invalidating anything, and keys issued before it remain valid and portable.
+
+A tier is not a version, and the two fail differently. A key whose *version* is
+newer than the build reports `Newer than this build`; a key naming a tier the
+build has no entitlements for — a `free` key on a swarmcli that predates the
+free tier — reports `Invalid`. Both are fixed by upgrading swarmcli, and neither
+is a reason to ask for a different key.
 
 ## Privacy
 
@@ -512,9 +624,10 @@ The first is a **token refresh**, made by every license that carries a
 tier, node count and binding mode are *signed*, so changing any of them means
 re-signing your key, and a key we re-signed is no use sitting on our side. Once
 a day swarmcli asks whether we hold different bytes for the license it already
-has, and installs them if we do. It is how a renewal or a tier change reaches
-your swarm without you copying a key out of the dashboard by hand. Nothing is
-written unless the bytes actually differ.
+has, and installs them if we do. It is how a renewal, a tier change or a rolled
+[free-tier term](#the-free-tier) reaches your swarm without you copying a key
+out of the dashboard by hand. Nothing is written unless the bytes actually
+differ.
 
 The second is a **lease renewal**, and only a managed license makes it: the
 activation lease expires, so getting the next one means asking for it.
@@ -527,12 +640,17 @@ Both requests send:
   than staying on the machine;
 - the **license id** (`lic_…`) — which license is asking;
 - the **cluster id** of the swarm it is asking for;
+- the **number of nodes** in the swarm, once swarmcli has observed one. A single
+  integer, and the count the [node allowance](#limits) is judged against; it is
+  left out altogether until the first observation lands, because a zero would
+  claim a swarm with no nodes rather than a swarm not yet looked at;
 - the **swarmcli version** making the request; and
 - the time and network origin of the request, as with any HTTPS call.
 
-Nothing else. Not your services, nodes, images, users, configuration, or
-anything else read from your Docker daemon — swarmcli does not gather it and
-the request has nowhere to put it.
+Nothing else. Not your services, images, users, configuration, node names,
+addresses or roles, or anything else read from your Docker daemon — swarmcli
+does not gather it and the request has nowhere to put it. The node count is a
+count: how many, never which ones or what runs on them.
 
 Four things about these requests are worth being precise on, because they are
 the questions people actually ask:

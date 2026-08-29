@@ -18,9 +18,9 @@ Open it from the command bar:
 
 What you can do depends on two things:
 
-- **License.** The `volumes-all-nodes` entitlement (granted on the `be` and
-  `trial` tiers — see [License](license.md)) unlocks cross-node listing and all
-  management actions.
+- **License.** The `volumes-all-nodes` entitlement (granted on the `be`, `free`
+  and `trial` tiers — see [License](license.md)) unlocks cross-node listing and
+  all management actions.
 - **Context.** Cross-node operations talk to the per-node agents through the
   RBAC proxy, so they need a managed Docker context (a swarm that has been put
   through [`:bootstrap`](bootstrap.md)). On a non-managed context the view falls
@@ -154,7 +154,7 @@ node that is unreachable is reported as such rather than silently omitted.
 
 ## Permissions and gating
 
-`volumes-all-nodes` is granted on the `be` and `trial` tiers (see
+`volumes-all-nodes` is granted on the `be`, `free` and `trial` tiers (see
 [License — Model](license.md#model)). When it is off — no license, an expired or
 wrong-swarm license, or a non-managed context — the view shows the read-only
 connected-node listing and the management keys open the "Business Edition

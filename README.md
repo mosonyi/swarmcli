@@ -155,6 +155,10 @@ commercial superset that adds:
 - Interactive shell into a running service task.
 - Reveal-secret for debugging.
 
+The licence that turns them on need not be a paid one: the [free
+tier](docs/license.md#the-free-tier) grants the same features on a swarm of up
+to three nodes.
+
 The binary on disk is named `swarmcli` (BE is a strict superset of CE — same
 binary name, expanded feature set), so existing scripts and aliases continue to
 work.

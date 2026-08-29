@@ -346,5 +346,5 @@ active license grants it:
 - Port-forward
 - Container statistics
 
-Tier-to-feature mapping is centralised: today, both `be` and `trial`
-tiers grant all four features. See [License — Model](license.md#model).
+Tier-to-feature mapping is centralised: today the `be`, `free` and `trial`
+tiers all grant the four features. See [License — Model](license.md#model).
