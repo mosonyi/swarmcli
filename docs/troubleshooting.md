@@ -277,3 +277,21 @@ If none of the above matches, capture:
 
 …and open a [issue](https://github.com/Eldara-Tech/swarmcli/issues)
 or contact the support channel that came with your license.
+
+## Charts
+
+**`docker stack rm` removed the services, but swarmcli still lists the release.**
+Expected. The chart engine stores each revision as a Docker config named
+`swarmcli.release.<release>.v<n>`, labelled `com.swarmcli.type=release` — not
+`com.docker.stack.namespace` — so a stack removal never touches them. A
+torn-down application can therefore still report as synced.
+
+Remove the release through swarmcli rather than through `docker stack rm`, or
+delete the configs by label:
+
+```bash
+docker config ls --filter label=com.swarmcli.type=release
+```
+
+Tearing the whole swarm down and re-initialising also clears them, which is what
+a test environment should do between runs.

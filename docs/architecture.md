@@ -96,6 +96,47 @@ utils/log/
 - **Snapshot Cache**: `docker.GetSnapshot()` / `docker.RefreshSnapshot()` — 3s TTL, background event-driven invalidation.
 - **Navigation**: `view.NavigateToMsg{ViewName, Payload, Replace}` dispatched in `update.go`.
 
+## Two seams worth knowing before you widen them
+
+**`charts.Backend` (`charts/release.go`) has exactly two implementers**: CE's own
+`dockerBackend`, and `swarmcli-cd`'s `backend.Backend`. `swarmcli-be` does *not*
+implement it — its `DeployStack` is `docker.DeployStack`, an unrelated two-arg
+shell-out used by `bootstrap`. So widening that interface is a contained
+cross-repo change (swarmcli#532 did it).
+
+The `docker.*` snapshot helpers are the opposite case. `RefreshSnapshot` and
+`GetOrRefreshSnapshot` keep their bare, context-free forms because `swarmcli-be`
+and the TUI depend on them; the context-taking variants are separate `…Ctx`
+functions rather than a signature change.
+
+**The help view has three layouts, and they are not interchangeable.**
+`views/help/register.go`'s factory routes by payload type:
+
+- `[]CommandInfo` → `New` — the command table behind `:help`.
+- `[]HelpCategory` → `NewDetailed` — a **multi-column** layout, one column per
+  category with a fixed key width, built for keybindings.
+- per-command help → `CommandHelp` — a vertical, long-form layout.
+
+Reaching for the columnar `NewDetailed` to render long prose produces a
+fixed-width column that truncates. Route by what the content *is*, not by which
+constructor is nearest.
+
+## The chart engine's release records outlive the stack
+
+Every revision is written as a Docker config named
+`swarmcli.release.<release>.v<n>`, labelled `com.swarmcli.type=release`. That
+label is **not** `com.docker.stack.namespace`, so `docker stack rm <name>`
+removes the services and leaves the records — which is why a torn-down
+application can still report as synced. See
+[troubleshooting.md](troubleshooting.md#charts) for the operator-facing symptom.
+
+Those records store the rendered manifest, and that is deliberate. swarmcli#465
+asked for a secret-redaction pass over them and was closed not-planned: an
+inlined `environment:` value is already readable from the service spec by anyone
+who can read the config, so the record duplicates an exposure rather than
+widening it — and redacting it would break rollback and `charts apply`, which
+need the manifest they actually deployed.
+
 ## What the Business Edition attaches to
 
 This repository is the open half of an open-core pair. `swarmcli-be` is a separate
