@@ -62,6 +62,10 @@ views/
   helpbar/                 Dynamic keybinding bar
   systeminfo/              Header with cluster info
   viewstack/               Navigation stack (push/pop)
+  charts/                  The `:charts` browser — the chart-engine's TUI surface
+  volumes/                 Volume list and file browser. This is the view the `volumes-all-nodes` Pro gate below applies to
+  taskutil/                Shared task helpers used by the task-bearing views
+  unlockdialog/            Secret/config unlock prompt
 commands/
   api/                     Command context & arg parsing
   command/                 Top-level built-in commands (help.go, contexts.go, quit.go, alias.go, bootstrap.go, devupdate.go); docker-entity commands live under command/docker/<entity>/ls.go (service, node, network, volume, secret, config). devupdate.go registers `:dev-update` only when SWARMCLI_ENV=dev (force-shows the update-available notice for previewing)
@@ -76,6 +80,17 @@ docker/
   secret.go, config.go     Secret/config CRUD
 registry/
   registry.go              Global command map: Register(), Get(), All(), Suggest()
+features/
+  features.go              Feature-flag registry. The base build enables nothing; extension builds call Enable() from init(). This is the seam swarmcli-be's profeatures/ drives from the licence, so a change here is a cross-repo change
+args/
+  args.go                  Argument parsing shared by the CLI dispatch path
+settings/
+  settings.go              Persists small single-purpose CLI preferences to the user config dir
+ui/
+  columns.go, dialog/, components/, framebox
+                           Shared widgets nearly every view under views/ builds on — the filterable list, dialog styling, the frame box
+core/primitives/hash/      Small shared primitives
+assets/                    Logos and the demo GIF (no Go code)
 utils/log/
   logger.go                zap wrapper: Init(), L(), Sync(), SetLevel(), lumberjack rotation
   slogcore.go              InitSlog(slog.Handler): forwards this package's output into a host program's log/slog handler instead of a file. For consumers importing swarmcli as a library (swarmcli-cd), where Init's lumberjack file is wrong and not initialising at all silently discards everything L()'s callers write
@@ -180,7 +195,7 @@ Every PR to `main` must pass the `check_labels.yml` workflow which requires one 
 
 | Group | Labels | Meaning |
 |---|---|---|
-| A — Change type | `A0-ui`, `A1-feature`, `A2-bugfix`, `A3-technical` | What kind of change |
+| A — Change type | `A0-ui`, `A1-feature`, `A2-bugfix`, `A3-technical`, `D0-dependency` | What kind of change (`D0-dependency` is the Dependabot one, and counts as an A label) |
 | B — Urgency | `B0-low-priority`, `B2-high-priority` | How urgent |
 | C — Breaking | `C0-breaks-nothing`, `C1-breaking-change` | Backward compatibility |
 
@@ -192,11 +207,15 @@ When a PR fixes a GitHub issue, copy the issue's labels to the PR and add any mi
 
 ## CI Workflows (.github/workflows/)
 
+All seven:
+
 - `ci.yml`: go fmt, golangci-lint, go build, Docker image build
 - `integration-tests.yml`: Full E2E
 - `release.yml`: GoReleaser on tags (multi-platform, Homebrew tap)
-- `check_labels.yml`: PR label validation
+- `check_labels.yml`: PR label validation — it reads labels from the `pull_request` **event payload**, not the API, so a run queued from `opened` sees none; only a new event fixes that, never a job re-run
 - `licence.yml`: License header check
+- `govulncheck.yml`: scheduled vulnerability scan
+- `dependabot-tidy.yml`: keeps `go.sum` tidy on Dependabot PRs (which carry `D0-dependency`)
 
 ## Go Version & Build
 
