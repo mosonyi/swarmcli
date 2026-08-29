@@ -82,6 +82,10 @@ A licence is installed into the swarm and read at startup. It turns features on
 in the merged build only — there is nothing in the OSS build for it to unlock,
 and installing one there changes nothing and reports nothing.
 
+A licence need not be a paid one: the [free tier](license.md#the-free-tier) is a
+licence like any other and turns the same features on, on a swarm of up to three
+nodes.
+
 The Business Edition documentation covers acquiring, installing and managing a
 key, and what each feature does.
 

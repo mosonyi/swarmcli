@@ -22,11 +22,15 @@ features a licence unlocks. On top of the Community Edition it adds:
 - **Volume management across all swarm nodes** — list, create, delete, prune,
   and browse files inside volumes.
 
+The licence that unlocks them need not be a paid one: the [free
+tier](license.md#the-free-tier) grants the same features on a swarm of up to
+three nodes.
+
 ## Contents
 
 - [Editions](editions.md) — the two artefacts one tag publishes, and which one you have.
 - [Installation](installation.md) — install channels, first run, edition check.
-- [License](license.md) — acquiring a key, activation paths, grace period, tiers.
+- [License](license.md) — the tiers including the free one, acquiring a key, activation paths, grace period.
 - [Bootstrap](bootstrap.md) — `:bootstrap` end-to-end: what gets deployed and how.
 - [Migration](migration.md) — moving an existing stack to application-layer mTLS (`:bootstrap --migrate`).
 - [RBAC](rbac.md) — managing users, roles, onboarding, and revocation.
