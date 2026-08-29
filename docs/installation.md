@@ -159,6 +159,19 @@ docker pull eldaratech/swarmcli-be:latest   # Docker
 For binary installs, replace the file on disk with the new archive's
 contents.
 
+**swarmcli does not update itself.** There is no `update` verb, no background
+download, and nothing that replaces the running binary — upgrading is always the
+package manager or the file on disk. If you have been told a swarm is running
+"the version the auto-updater installed", there is nothing behind that.
+
+What swarmcli does have is a **startup notice**: one request to
+`https://swarmcli.io/api/v1/version` at launch, a version badge in the
+system-info header, and a dismiss-only modal pointing back at this page. It tells
+you a newer release exists; it never fetches one.
+
+(The one thing that *does* renew itself is a managed licence's lease, which is
+unrelated to the binary — see [license.md](license.md).)
+
 The compatibility matrix between BE, the bundled CE codebase, and the
 agent/rbac-proxy versions is published in each release's notes — see
 [Releases](https://github.com/Eldara-Tech/swarmcli/releases).
