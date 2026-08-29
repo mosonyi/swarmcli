@@ -39,6 +39,13 @@ features a licence unlocks. On top of the Community Edition it adds:
 For install commands see [Installation](installation.md), or the
 [repository README](../README.md) for a quickstart.
 
+### For contributors
+
+- [Architecture](architecture.md) — the package map, how views and commands
+  self-register, and which seams the Business Edition attaches to.
+- [CONTRIBUTING.md](../CONTRIBUTING.md) — building, testing, and opening a pull
+  request.
+
 ## Reporting issues
 
 Bugs and feature requests for either edition belong in this repository's
