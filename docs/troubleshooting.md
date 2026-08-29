@@ -184,6 +184,44 @@ That's the idle-timeout. Override with
 `SWARMCLI_FORWARD_IDLE_TIMEOUT=2h` (or any Go duration up to 24 h)
 before launching SwarmCLI.
 
+**Port-forward never works on a Docker Desktop swarm, including WSL2.**
+This one is a property of the environment, not a misconfiguration, and no
+amount of re-bootstrapping fixes it.
+
+Port-forward works by entering the target container's network namespace
+through the host's procfs, which the agent receives as
+`/proc:/hostproc:ro`. Docker Desktop runs its daemon inside a VM and
+stages every bind mount through it, so that mount arrives with a
+rewritten source:
+
+```
+"Source": "/run/desktop/mnt/host/wsl/docker-desktop-bind-mounts/Ubuntu/71ad1df…"
+```
+
+`/hostproc` is then not the procfs whose process IDs the daemon reports.
+The agent inspects a running container, gets a live PID, and opening
+`/hostproc/<pid>/ns/net` fails with `ENOENT`. It cannot be worked around:
+the daemon reports PIDs from the VM's namespace, and Swarm services have
+no `pid: host`.
+
+Two different problems produce that same `ENOENT`, with opposite
+remedies — no procfs mounted at all (a stale stack template, fixed by
+`:bootstrap --upgrade`), versus a procfs that is mounted but lacks the
+PID (this case, or a `hidepid` mount). Agent v1.6.0-rc1 and later tell
+them apart; older agents always blamed the mount and sent people to
+re-bootstrap a perfectly correct swarm.
+
+SwarmCLI will not offer an upgrade for it. A bind mount whose source the
+daemon has rewritten is recognised as an environment override rather
+than drift, so `:bootstrap --upgrade` leaves it alone and the infra
+nudge ignores it — otherwise every upgrade would restart the agent and
+converge on nothing.
+
+**Everything else is unaffected.** Shell, logs, volumes, health and pull
+progress do not need the host procfs. Only port-forward does. To use
+port-forward, run against a swarm whose nodes run `dockerd` natively on
+Linux.
+
 ## RBAC users
 
 **Onboarding URL returns "token expired" or "not found".**
