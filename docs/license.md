@@ -123,6 +123,11 @@ stored on the swarm:
 3. Press the listed key on the `:license` view to install from
    `$SWARMCLI_LICENSE` or from `~/.config/swarmcli/license.key`.
 
+All three are things a person does at a TUI. A machine has its own path to
+the same Docker Config — `swarmcli license install <file>` for a key you
+already hold, `swarmcli license activate` for one you do not. See [Without
+the TUI](#without-the-tui-swarmcli-license).
+
 ### Managed licenses: activation is a second step
 
 A **managed** license names its swarm in the key, exactly as a key bound at
@@ -150,6 +155,13 @@ sent instead:
 
 ```
 :license lease install ~/swarm.lease
+```
+
+or, on a site where the deployment is scripted precisely because nobody is
+sitting at a terminal, the same thing from a shell:
+
+```bash
+swarmcli license lease install ~/swarm.lease
 ```
 
 A lease carries its own dates. The default is **30 days to renewal and a
@@ -284,34 +296,65 @@ There is no subcommand that moves a license to another swarm — see
 
 ### Without the TUI: `swarmcli license`
 
-The same two things a person does on the `:license` page, for a machine:
+The whole lifecycle is reachable without a person at a TUI:
 
 ```bash
-swarmcli license status [--json]   # what this swarm holds
-swarmcli license sync   [--json]   # renew this swarm's activation now
+swarmcli license status  [--json]                    # what this swarm holds
+swarmcli license sync    [--json] [--interval <d>]   # renew this swarm's activation now
+swarmcli license install <file>                      # store a key you already hold
+swarmcli license activate                            # get a key for this swarm, in one command
+swarmcli license lease install <file>                # activate from a lease file
+swarmcli license id                                  # print the license id support asks for
 ```
 
-Both read the license from the swarm's Docker Config exactly as the TUI does, so
-they need a Docker context pointing at a swarm manager. `status` prints one
-`key=value` per line — status, tier, license id, binding, the node count and its
-allowance, the lease's dates, and what the last renewal answered — or the same
-fields as an object with `--json`.
+They all read the license from the swarm's Docker Config exactly as the TUI does,
+so they need a Docker context pointing at a swarm manager, and the ones that write
+verify first, so an artifact that does not verify never reaches the swarm from
+here either. `status` prints one `key=value` per line — status, tier, license id,
+binding, the node count and its allowance, the lease's dates, and what the last
+renewal answered — or the same fields as an object with `--json`.
 
-The exit codes answer two different questions, which is what makes them useful in
-a cron job:
+The exit codes do not all answer the same question, and that is what makes them
+useful in a cron job. A verb that finishes an activation answers *does this
+swarm's license grant its features*; a verb that performs one step of one answers
+*did the step happen*.
 
 | | `0` | `1` | `2` |
 |---|---|---|---|
 | `status` | the license grants its features — including while degraded in a grace window | it does not | usage error |
+| `activate` | the same, having just activated the swarm | it does not | usage error |
+| `lease install` | the same, having just installed the lease | the lease did not install, or the license still does not grant | usage error |
 | `sync` | renewed, or there was nothing to renew | the renewal failed | usage error |
+| `install` | the key is stored | it is not | usage error |
 
 So a `503` from our service exits `1` from `sync` and `0` from `status` on the
-same swarm, and both are correct: the renewal failed, and the license is fine.
+same swarm, and both are correct: the renewal failed, and the license is fine. By
+the same rule `install` exits `0` on a managed key that grants nothing yet, which
+is also correct — a managed key is not an activated license until a lease arrives.
 
 This exists for deployments where nobody opens the TUI for weeks — a controller
 or a CI runner holding a managed license. A daily `swarmcli license sync` keeps
 the activation current without a human, and a `swarmcli license status` that
-starts exiting non-zero is the alert that something needs one.
+starts exiting non-zero is the alert that something needs one. With `--interval`
+(minimum `1h`) `sync` stays running and repeats on that period instead of
+exiting, which is the shape the `licence-renewer` service uses; in that mode a
+failed pass logs and waits, because a service that exited on a transient outage
+would be restarted into a crash loop.
+
+`activate` is the one-command path for a swarm that can reach us. It opens an
+activation, prints a short code and a link, waits while you confirm in a browser,
+and installs what comes back through the same path `install` uses. It refuses on
+a swarm that already holds a license that grants — replacing a working one is
+what `install` is for — and it makes no outbound call at all when
+`SWARMCLI_DISABLE_LICENSE_RENEWAL` is set.
+
+`lease install` is `activate`'s offline twin: the same activation, from a lease
+file somebody carried in, for the sites where `activate` cannot reach us and
+nobody is sitting at a TUI. It checks that the lease verifies and that it names
+this license and this swarm before anything is written. There is no `lease show`
+here and no `--json` on it — `status` already reports the installed lease, in
+both its forms, and a second rendering of those fields is a second place for them
+to drift.
 
 `sync` never moves a license: it renews the swarm it is run against, and takes no
 argument that could name another one.
@@ -347,10 +390,11 @@ the installed lease keeps working to the end of its own window.
 Two manual paths, for when it does not happen by itself:
 
 - **`:license renew`**, or **`swarmcli license sync`** for a machine — ask now.
-- **`:license lease install <new-lease-file>`** — install a lease you were sent
-  as a file, which is the air-gapped path and the recovery path. Installing a
-  lease never removes the working one first, so a swarm is never briefly
-  unactivated, and installing the same lease twice does nothing.
+- **`:license lease install <new-lease-file>`**, or `swarmcli license lease
+  install <new-lease-file>` for a machine — install a lease you were sent as a
+  file, which is the air-gapped path and the recovery path. Installing a lease
+  never removes the working one first, so a swarm is never briefly unactivated,
+  and installing the same lease twice does nothing.
 
 Your key is untouched either way — a renewal of the activation is not a reissue
 of the license.
@@ -663,9 +707,10 @@ the questions people actually ask:
   renewals. It is the only service in that stack with a route off the cluster,
   and `:bootstrap --no-renewer` omits it.
 - **It is not required for the license to work.** A lease can be delivered as
-  a file instead — `:license lease install <file>` — which is the supported
-  path for air-gapped and policy-restricted clusters. Ask for a long lease and
-  the file is something you install rarely.
+  a file instead — `:license lease install <file>`, or `swarmcli license lease
+  install <file>` — which is the supported path for air-gapped and
+  policy-restricted clusters. Ask for a long lease and the file is something
+  you install rarely.
 - **They are attempted automatically** — the token refresh once a day, the lease
   renewal from a third of the way through the lease's window — and both when you
   open `:license` or run `swarmcli license sync`. An attempt that is refused is
