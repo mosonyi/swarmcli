@@ -10,6 +10,11 @@ We love your input! We want to make contributing to SwarmCLI as easy and transpa
 
 ## Development Setup
 
+Before changing anything non-trivial, read
+[docs/architecture.md](docs/architecture.md) — it maps the packages, explains how
+views and commands self-register through `init()`, and names the seams the
+Business Edition attaches to (renaming one of those is a cross-repo change).
+
 SwarmCLI is built in **Go**. To get started:
 
 1. **Clone the repository**:
