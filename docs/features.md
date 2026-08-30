@@ -5,8 +5,10 @@ Copyright © 2026 Eldara Tech
 
 # Pro features
 
-Four license-gated capabilities ride on top of the standard SwarmCLI TUI.
-All of them require:
+Four of the license-gated capabilities are covered in detail here — shell,
+reveal-secret, port-forward and container statistics. They are four of the
+thirteen entitlements a license grants; [Where the gates
+live](#where-the-gates-live) is the full list. All four require:
 
 - A valid (or in-grace) Business Edition license — see [License](license.md).
 - A managed Docker context (i.e. a Swarm that has been put through
@@ -338,13 +340,32 @@ metrics stack (cAdvisor, Prometheus) alongside.
 
 ## Where the gates live
 
-All four features are license-gated — each is enabled only when the
-active license grants it:
+A license grants **thirteen** entitlements, and each gated action is enabled
+only when the active license carries the one it names. Eight are this TUI's:
 
-- Shell
-- Reveal-secret
-- Port-forward
-- Container statistics
+- `shell` — shell into a service task
+- `reveal-secret` — reveal a secret's value
+- `port-forward` — forward a container port (two views: the forward itself and
+  the list of active ones)
+- `volumes-all-nodes` — the cross-node [volume](volumes.md) views: browse,
+  create, delete, prune
+- `user-management` — the [RBAC](rbac.md) user and role views
+- `service-health`
+- `pull-progress`
+- `container-stats` — the graph above
 
-Tier-to-feature mapping is centralised: today the `be`, `free` and `trial`
-tiers all grant the four features. See [License — Model](license.md#model).
+Five of those eight back **nine** registered gated actions, which is why the
+count of entitlements and the count of things that can be greyed out differ:
+`port-forward` gates two (the forward and the list of active ones) and
+`volumes-all-nodes` gates four (browse, create, delete, prune). The other three
+gate elsewhere — `user-management` on the `:users` command, `service-health` and
+`pull-progress` inside the service fan-out that fills those columns.
+
+The remaining five entitlements are consumed by
+[swarmcli-cd](https://swarmcli.io), not by this TUI, and one license covers both
+products: `cd-multi-swarm`, `cd-sso`, `cd-projects`, `cd-audit` and
+`cd-notifications`.
+
+Tier-to-feature mapping is centralised, and today the `be`, `free` and `trial`
+tiers grant the identical thirteen — the tier decides what surrounds the key,
+not which features you get. See [License — Model](license.md#model).

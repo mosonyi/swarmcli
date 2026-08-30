@@ -80,11 +80,21 @@ policy-restricted deployments are what the paid tiers' offline paths are for.
 
 One free licence per account, and it is [bound to one
 swarm](#per-swarm-binding) at issuance like any other key — `bind: static`, so
-there is no lease and no activation step. Installing the key is the whole of it.
-Registering the cluster is the same flow as for a paid licence, see [Getting a
-bound license](#getting-a-bound-license); moving it to another swarm is the same
-dashboard action, and asking for a second free key is refused naming the cluster
-the first one is on.
+there is **no lease**, and nothing to renew or hand-carry after the key is in.
+That is the step a paid licence has and this one does not; getting the key is
+still a step, and it is one command:
+
+```bash
+swarmcli license activate
+```
+
+It prints a short code and a link, waits while you pick the free tier in the
+browser, and installs what comes back. Register Cluster in the dashboard is the
+same thing done by hand — see [Getting a bound
+license](#getting-a-bound-license) — and either way installing the key is the
+end of it. Moving it to another swarm is the same dashboard action as for a paid
+licence, and asking for a second free key is refused naming the cluster the
+first one is on.
 
 The tier is new: a free key is accepted from v2.0.0. An older swarmcli does not
 know the word `free` — it verifies the signature, finds a tier it has no
@@ -98,6 +108,75 @@ Get a key at [swarmcli.io/be](https://swarmcli.io/be) — a
 [free-tier](#the-free-tier) key, a time-boxed trial, or a paid subscription. All
 three are the same kind of artifact, are installed the same way, and everything
 below applies to each of them.
+
+## Start to finish
+
+The rest of this page is organised by mechanism. This section is the same
+material in the order you actually meet it, on a swarm that has never held a
+license. Every command needs a Docker context pointing at a **swarm manager**.
+
+**1. Get a key.** One command, from a machine that can reach us:
+
+```bash
+swarmcli license activate
+```
+
+It reads this swarm's cluster id, prints a short code and a link, opens a
+browser if there is one, and waits while you choose — the [free
+tier](#the-free-tier), a trial, or a paid plan. What comes back is installed
+into the swarm before the command returns. It refuses on a swarm that already
+holds a working license, and makes no call at all when
+`SWARMCLI_DISABLE_LICENSE_RENEWAL` is set.
+
+The dashboard is the same thing done by hand: **Register Cluster** at
+[swarmcli.io/licenses](https://swarmcli.io/licenses), which wants the cluster id
+`:license cluster-id` prints.
+
+**2. Install a key you were sent.** Skip this if step 1 did it for you.
+
+```bash
+swarmcli license install ~/license.key       # or :license install ~/license.key
+```
+
+or press `s` on the `:license` view and paste. Either way the key is verified
+before it is stored, and it is stored on the swarm rather than on your laptop —
+see [Per-swarm storage](#per-swarm-storage).
+
+**3. Activate, if the license is managed.** A paid license is signed
+`bind: managed`: the key names your swarm, and the swarm is then activated for
+it with a short-lived [lease](#managed-licenses-activation-is-a-second-step).
+Until the lease lands, `:license` says **Not activated for this swarm** and
+Business Edition features stay off. On a swarm that can reach us this takes care
+of itself within a few minutes; air-gapped, it is a file:
+
+```bash
+swarmcli license lease install ~/swarm.lease
+```
+
+A [free-tier](#the-free-tier) license is signed `bind: static` and has no lease,
+so this step does not exist for it. Step 2 was the whole of it.
+
+**4. Confirm.**
+
+```bash
+swarmcli license status
+```
+
+Exit `0` means the license grants its features; `1` means it does not. In the
+TUI, `:license` says the same thing at more length, and the edition label in the
+header reads *Business Edition*.
+
+**5. Renewal is not a thing you do.** A rolled [free-tier](#the-free-tier) term,
+a plan change and a lease renewal all arrive over the same requests, attempted
+on a timer and again whenever you open `:license`. On a swarm nobody opens a TUI
+against, [`:bootstrap`](bootstrap.md) deploys a `licence-renewer` service that
+makes them for you. See [Renewing a license](#renewing-a-license).
+
+**6. What running out looks like.** The key's `expires_at` passes, five days of
+[grace](#lifecycle-states) follow with every feature still on, and then features
+stop. Nothing prompts you at startup: the status bar carries the state and the
+license dialog opens when a gated feature is next asked for. Installing a fresh
+key at any point in that sequence is a single paste, with no uninstall step.
 
 ## Activation
 
@@ -171,8 +250,9 @@ low-touch deployments, and are worth asking for **before** your first outage
 rather than after: `:license` will tell you which state you are in, but only if
 somebody opens it.
 
-Managed licenses are being rolled out; keys issued today are bound at
-issuance, and nothing about them changes.
+A paid license issued today is signed `managed`; a [free-tier](#the-free-tier)
+key is signed `static` and has no lease. Keys issued before managed binding
+existed are bound at issuance, and nothing about them changes.
 
 All of them require a Docker context pointing at a swarm manager, and all
 of them validate the key before storing it.
@@ -181,47 +261,125 @@ of them validate the key before storing it.
 
 The prompt appears when you ask for a Business Edition feature and no
 usable key is available — i.e. there's no key, the key is invalid, or the
-key is past its grace period. You see one of:
+key is past its grace period. It is never shown at startup; see
+[Lifecycle states](#lifecycle-states).
+
+Every state is the same dialog, and only the message inside it changes.
+With no license at all:
 
 ```
+ License
+
 No Business Edition license found.
 
-Get a free trial license at: https://swarmcli.io/be
+Swarm cluster ID:
+  <cluster-id>
 
-Paste your license key below, or press Enter to continue
-with Community Edition.
+Get a license at:
+  https://swarmcli.io/licenses?cluster_id=<cluster-id>
 
-You can also set the SWARMCLI_LICENSE environment variable.
+Paste your license key:
+>
 
-License key:
+<Enter> submit  <Esc> cancel  <ctrl+o> open
 ```
+
+`<ctrl+o>` opens the link the message names, `<ctrl+y>` copies it, and
+`<ctrl+g>` copies the bare cluster id — for filling the form in on another
+machine without mouse-selecting an id out of a bordered box. The rest of
+this section quotes only the message, since the frame around it does not
+change.
+
+**Invalid** — the key did not verify:
 
 ```
 Your license key is invalid.
-
-Paste a valid license key below, or press Enter to continue
-with Community Edition.
-
-License key:
 ```
 
+**Expired** — past the grace window:
+
 ```
-Your license expired on YYYY-MM-DD. The 5-day grace period has ended.
+Your license expired on 2026-03-01.
+The 5-day grace period has ended.
 Business Edition features are now disabled.
 
-Paste a new license key below, or press Enter to continue
-with Community Edition.
-
-License key:
+Renew, or ask about the free tier for up to 3 nodes:
+  https://swarmcli.io/licenses?cluster_id=<cluster-id>
 ```
+
+**Grace period** — expired, features still on:
+
+```
+Your license expired on 2026-03-01.
+Grace period: 3 of 5 days remaining.
+
+Renew at:
+  https://swarmcli.io/licenses?cluster_id=<cluster-id>
+```
+
+**Wrong swarm** — the key names a different cluster:
 
 ```
 This license is bound to swarm <expected-id>.
 You are connected to swarm <observed-id>.
 Business Edition features are disabled.
-Switch context (:contexts) or contact support to rebind.
 
-License key:
+Switch context (:contexts), or request a license for this swarm at:
+  https://swarmcli.io/licenses?cluster_id=<observed-id>
+```
+
+**Newer than this build** — nothing is wrong with the key:
+
+```
+This license is newer than this build of swarmcli.
+The key is fine; this binary cannot read it.
+
+Upgrade swarmcli.
+```
+
+**Valid but not saved** — the signature verified and the swarm did not
+take it, so pasting the same key again is the right move once the reason
+is fixed:
+
+```
+Your license key is valid but is not installed in this swarm:
+  <reason>
+
+Business Edition features stay disabled until it is stored in the
+swarm. Connect to a swarm manager (:contexts), then try again.
+```
+
+Three more belong to a [managed
+license](#managed-licenses-activation-is-a-second-step), and are about the
+activation lease rather than the key. **Not activated** — the key is
+installed and the swarm has no lease:
+
+```
+This license is installed, but this swarm is not activated yet.
+
+Install the lease file you were sent:
+  :license lease install <file>
+```
+
+**Renewal overdue** — the lease's renewal date has passed, and features
+stay on to the date named:
+
+```
+This swarm's activation is overdue for renewal.
+Business Edition features stay on until 2026-04-15.
+
+Renew it, or install a fresh lease:
+  :license lease install <file>
+```
+
+**Activation expired** — the grace window ran out:
+
+```
+This swarm's activation has expired.
+Business Edition features are disabled.
+
+Renew it, then install the fresh lease:
+  :license lease install <file>
 ```
 
 Pressing **Enter** with no input dismisses the prompt and leaves you in
@@ -248,11 +406,29 @@ Inside the TUI, `:license` shows current state:
 | Status: No license | No key present. |
 | Status: Invalid | The key did not verify, or names a tier this build does not know. |
 | Status: Wrong swarm (license bound to a different cluster) | The connected swarm differs from the one the license is bound to. See [Per-swarm binding](#per-swarm-binding). |
+| Status: Valid, but not saved: `<reason>` | The signature verified and the swarm did not take the key. Named rather than reported as an unknown, because the reason is the remedy. |
+| Status: Newer than this build (upgrade swarmcli) | The key's version is above what this build accepts. The key is fine — see [Key versioning](#key-versioning). |
+| Status: Not activated for this swarm | A [managed](#managed-licenses-activation-is-a-second-step) key with no lease. |
+| Status: Activated — renewal overdue | The lease's renewal date has passed; features are still on. |
+| Status: Activation expired | The lease's grace window ran out; features are off. |
 
 The view also shows:
 
 - `Source: swarm config (swarmcli-license)` — where the active key was loaded from.
-- `Binding: Bound to <id> | Unbound (portable across swarms) | Expected/Observed mismatch` — the current binding state.
+- `Bound to: <id>` — the binding line. It reads `Unbound (portable across
+  swarms)` for a legacy unbound key, `Bound to: <id> (waiting for swarm
+  observation)` before the first swarm read lands, and `Expected: <id>` over
+  `Observed: <id> (mismatch)` on the wrong swarm.
+- A [managed](#managed-licenses-activation-is-a-second-step) license writes the
+  same line as `Managed — …`, and names the exact state because the remedies
+  differ: `activated for <id>, renews <date>`; `renewal overdue, features off
+  in N day(s) (<date>)`; `activation expired <date>`; `not activated for this
+  swarm (<id>)`; `the installed lease is not for this swarm's licence`, when
+  the wrong lease file was pasted; `expected: <id> / Observed: <id>
+  (mismatch)`. Two more are about this host rather than the license: `this
+  host's clock is behind the newest time this swarm has seen`, which no fresh
+  lease lifts, and `this activation does not begin until <timestamp>` for a
+  future-dated lease.
 - `Nodes: 12 of 10 — nothing is switched off`, with a portal link beside it —
   shown only when the swarm has more nodes than `max_nodes`. It is a report and
   not a status: the `Status:` line above is unaffected and every feature stays
@@ -263,6 +439,10 @@ The view also shows:
   licence is over it, and abbreviated into the status bar as well because the
   swarm nobody opens `:license` on is the one that lapses. Also a report and not
   a status. See [Limits](#limits).
+- `Auto-renewal: no licence-renewer service on this swarm` — shown when the
+  swarm was bootstrapped before the `licence-renewer` service existed, so
+  nothing renews the licence while swarmcli is closed. See [Bootstrap — the
+  `Auto-renewal:` warning](bootstrap.md#the-auto-renewal-warning-on-license).
 
 Key bindings inside the view:
 
@@ -310,9 +490,19 @@ swarmcli license id                                  # print the license id supp
 They all read the license from the swarm's Docker Config exactly as the TUI does,
 so they need a Docker context pointing at a swarm manager, and the ones that write
 verify first, so an artifact that does not verify never reaches the swarm from
-here either. `status` prints one `key=value` per line — status, tier, license id,
-binding, the node count and its allowance, the lease's dates, and what the last
-renewal answered — or the same fields as an object with `--json`.
+here either. `status` prints one `key=value` per line, or the same fields as an
+object with `--json`: `status`, `grants`, `tier`, `customer`, `license_id`,
+`bind`, `cluster_id`, `bound_cluster_id`, `expires_at`, `nodes`, `max_nodes`,
+`features`, and — when a lease is installed — `lease_id`, `lease_expires`,
+`lease_hard_stop` and `lease_error`. Every field is omitted rather than zeroed
+when there is nothing to say, so absence is not a state.
+
+`sync` prints the same report plus the fields that only exist once the license
+service has answered: `renewal_at`, `renewal_result`, `renewal_code`,
+`retry_after`, `portal`, and the four [allowance](#limits) fields
+`entitlement_status`, `entitlement_nodes`, `entitlement_max_nodes` and
+`entitlement_term_ends_at`. They are absent from `status` because `status`
+makes no call at all.
 
 The exit codes do not all answer the same question, and that is what makes them
 useful in a cron job. A verb that finishes an activation answers *does this
@@ -412,7 +602,7 @@ binding modes, and `:license` names which one you hold.
   cryptographically valid but Business Edition features disable and
   `:license` shows `Wrong swarm`. Switching back restores it immediately,
   with no waiting period. Every [free-tier](#the-free-tier) key is one of
-  these, which is why a free licence has no activation step.
+  these, which is why a free licence needs no lease.
 - **Managed**: the swarm is named in the key as above, but the binding is also
   kept current — features work only while the swarm holds a live lease, which
   it renews by itself. See
@@ -471,9 +661,17 @@ is refused with *"This license is already bound to a different Swarm. Please
 unbind it first."* A license bound at issuance may be moved this way as often
 as you need. Install the replacement with `:license install <file>`.
 
-**Unbind Cluster** is offered for licenses that carry a subscription. A
-license issued to you outside the dashboard has no unbind button, and moving
-one is still a support request — send the new cluster id.
+**Unbind Cluster** is offered for any bound license, subscription-backed or
+not — it is `swarm_id` that decides whether the button is there, and the
+issuing side checks only that the license is yours. A free-tier license moves
+this way too, and it is the verb to use rather than Delete, which throws the
+one-per-account row away with the binding.
+
+The one restriction is the managed move cap, and it applies to **managed**
+licenses only: a lease that has been issued cannot be recalled, so unbinding is
+refused until the previous swarm's lease window has run out, and the refusal
+names the date the next move becomes possible. A license bound at issuance —
+every free-tier key among them — has no lease and so no cap.
 
 Force-restoring a swarm from a backup of `/var/lib/docker/swarm/` (a
 documented DR procedure with `docker swarm init --force-new-cluster`)
@@ -538,16 +736,22 @@ stateDiagram-v2
 
 | State | BE features | What the user sees |
 |---|---|---|
-| Valid | enabled | normal startup, no prompt |
-| Grace Period | **enabled** | one-line warning printed to stderr at startup, banner in `:license` view |
-| Expired (past grace) | disabled | startup prompt every run until a new key is provided |
-| No license | disabled | startup prompt every run |
-| Invalid | disabled | startup prompt every run |
-| Wrong swarm | disabled | startup prompt naming the expected vs. observed cluster id |
+| Valid | enabled | normal startup, nothing to see |
+| Grace Period | **enabled** | banner in `:license` view, and the days remaining in the status bar |
+| Expired (past grace) | disabled | `No valid license · Community Edition · install via :license` in the status bar, and the prompt when a gated feature is asked for |
+| No license | disabled | the same status-bar suffix, and the same prompt on a gated request |
+| Invalid | disabled | the same status-bar suffix, and the same prompt on a gated request |
+| Wrong swarm | disabled | the prompt names the expected and the observed cluster id |
 | Not activated for this swarm | disabled | `:license` names the swarm and the command that activates it |
 | Activated — renewal overdue | **enabled** | countdown to the day features stop, on `:license` and in the status bar |
 | Activation expired | disabled | `:license` says renew, not activate |
 | Newer than this build | disabled | upgrade swarmcli; the key is fine |
+
+Nothing in that column is a startup prompt: an unlicensed or expired start
+is passive. The edition label drops to *Community Edition*, the status bar
+grows a suffix saying so, and the licence dialog opens just-in-time — when a
+gated feature is actually requested, and not before. So a swarm that nobody
+asks a Business Edition question of never shows a modal at all.
 
 The grace period is **5 days** from `expires_at`. During grace, BE
 features remain enabled — this is deliberate, so a quiet renewal cycle
@@ -632,9 +836,15 @@ key; the `Allowance:` line is what the licence service last recorded and last
 decided. Each names its source, so a stale report beside a fresh count is two
 views of one swarm rather than a contradiction.
 
-Neither of the service's two lines reaches `swarmcli license status`, which
-reports the observed count and the signed `max_nodes` and nothing the service
-said about them.
+`swarmcli license status` does not carry either of the service's two lines: it
+makes no call, so it reports the observed count and the signed `max_nodes` and
+nothing the service said about them. `swarmcli license sync` does make the call,
+and prints what came back as four fields — `entitlement_status`,
+`entitlement_nodes`, `entitlement_max_nodes` and `entitlement_term_ends_at`, the
+last being the date after which the term stops being rolled forward. They are
+the `:license` page's `Allowance:` and `Term:` lines in machine-readable form,
+in both the `key=value` and the `--json` output, and they are absent when the
+answer carried no report.
 
 ## Key versioning
 
@@ -688,7 +898,10 @@ Both requests send:
   integer, and the count the [node allowance](#limits) is judged against; it is
   left out altogether until the first observation lands, because a zero would
   claim a swarm with no nodes rather than a swarm not yet looked at;
-- the **swarmcli version** making the request; and
+- the **product and version** making the request — `swarmcli-be` from this
+  binary or `swarmcli-cd` from the controller, beside the version, because one
+  license covers both products and the service has to know which one is
+  asking; and
 - the time and network origin of the request, as with any HTTPS call.
 
 Nothing else. Not your services, images, users, configuration, node names,

@@ -79,8 +79,10 @@ is behaving as. Do not use it to answer this question.
 ## What a licence changes, and when
 
 A licence is installed into the swarm and read at startup. It turns features on
-in the merged build only — there is nothing in the OSS build for it to unlock,
-and installing one there changes nothing and reports nothing.
+in the merged build only, and the OSS build has nothing to install one *with*:
+the `license` command and the `:license` view are both part of the licensed
+code, so `swarmcli license …` exits `2` with `unknown command "license"` and
+`:license` is not a command the TUI knows.
 
 A licence need not be a paid one: the [free tier](license.md#the-free-tier) is a
 licence like any other and turns the same features on, on a swarm of up to three
@@ -129,8 +131,11 @@ the artefact, not on the source:
 module graph Go stamped into each published binary and fails if the main module
 is not this repository or if anything private is linked. It runs from
 `.goreleaser.yml`'s per-build hook on every binary the release publishes, and
-from `ci.yml` on every change — so it is not a gate that only ever fires on a
-tag.
+from `ci.yml` on every change that could affect it — the build job is gated
+on a paths filter of `**.go`, `go.mod`, `go.sum`, the Dockerfiles, `ci.yml`
+itself and `scripts/check-oss-artefact.sh`, so a change that weakens the guard
+has to run the guard. A docs-only pull request does not. Either way it is not a
+gate that only ever fires on a tag.
 
 It also fails when it cannot read a module stamp at all, rather than passing.
 A binary whose graph is unreadable looks exactly like a binary with no private

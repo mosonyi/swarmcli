@@ -31,10 +31,14 @@ flowchart TB
   subgraph mgr["Swarm manager node"]
     proxy["rbac-proxy<br/>:2376 mTLS"]
     am["agent-manager"]
+    ren["licence-renewer<br/>swarmcli license sync"]
     sock1[("/var/run/docker.sock")]
     proxy --> sock1
     am --> sock1
+    ren --> sock1
   end
+
+  ren -- "HTTPS" --> svc["swarmcli.io<br/>licence service"]
 
   subgraph node["Each Swarm node"]
     ag["agent (global)"]
@@ -49,7 +53,7 @@ flowchart TB
 
 The bootstrap command creates the following artifacts:
 
-**Stack** `swarmcli-infra`, three services:
+**Stack** `swarmcli-infra`, four services:
 
 - `rbac-proxy` — mTLS-fronted Docker API proxy. Listens on the chosen port
   (default `2376`). One replica, pinned to a manager node. Uses a SQLite
@@ -59,9 +63,25 @@ The bootstrap command creates the following artifacts:
 - `agent-manager` — one replica on a manager. Companion to `agent`: the
   rbac-proxy connects here on port `8080` to locate and reach per-node
   agents over the overlay.
+- `licence-renewer` — one replica on a manager, running this same swarmcli
+  image as `license sync --interval 6h`. It keeps the swarm's licence current
+  while nobody has a TUI open: it collects a token we re-signed — a renewal, a
+  plan change, a rolled [free-tier](license.md#the-free-tier) term — and, on a
+  [managed](license.md#managed-licenses-activation-is-a-second-step) licence,
+  renews the activation lease. Omitted by `--no-renewer`, and omitted by a
+  development build, which publishes no image to deploy.
 
-**Network** `swarmcli-agent-net` — encrypted, internal overlay shared by all
-three services. Protected against accidental deletion from the TUI.
+Six hours is a wake-up rather than a request rate: the client's own gates decide
+whether anything is actually asked, and most passes ask nothing. A failed pass
+logs and waits rather than exiting, because a service that exited on a transient
+outage would be restarted into a crash loop.
+
+**Networks.** `swarmcli-agent-net` — internal overlay shared by the proxy, the
+agent and the agent-manager, and protected against accidental deletion from the
+TUI. When the renewer is deployed it gets a second overlay of its own,
+`swarmcli-renewal-net`, which is deliberately **not** internal: it is the only
+network in the stack with a route off the cluster, and the renewer is the only
+service on it, so the egress is confined to the one container that needs it.
 
 **Docker secrets** (prefixed with the stack name, default `swarmcli-infra_`):
 
@@ -143,6 +163,30 @@ To skip the interactive prompt, pass `--port`:
 | `--port N` | Use port `N` (1–65535). Skips the interactive prompt. |
 | `--host H` | Pre-fill or override the proxy host. Pre-fills the field in the interactive prompt; combined with `--port`, runs unattended. See [Host autodetection](#host-autodetection). |
 | `--force` | Redeploy even if the stack is already running. **Not recommended on a live cluster** — see [Re-bootstrap](#re-bootstrap-and-teardown). |
+| `--no-renewer` | Omit the `licence-renewer` service — the only one that talks outside the cluster. For air-gapped swarms, and for anyone running `swarmcli license sync` from their own scheduler. |
+
+### The `Auto-renewal:` warning on `:license`
+
+A swarm bootstrapped before the renewer existed cannot gain one from
+`:bootstrap --upgrade`, which is images-only. Nothing renews the licence while
+swarmcli is closed, and until this line existed that happened in silence — so
+`:license` reports it:
+
+```
+Auto-renewal: no licence-renewer service on this swarm
+  Nothing renews the licence while swarmcli is closed, so this licence's term
+  stops being rolled forward.
+```
+
+The consequence named depends on the licence: a managed one loses its
+activation renewal, a static one — every [free-tier](license.md#the-free-tier)
+key among them — loses the annual roll of its term, which is the only thing
+keeping it alive. The fix is `:bootstrap --force` from the original
+(non-managed) context, which redeploys the stack and keeps the CA, users,
+contexts and RBAC data; or run `swarmcli license sync` on your own schedule and
+leave the stack alone. The line does not appear when there is nothing to say —
+a perpetual key, `SWARMCLI_DISABLE_LICENSE_RENEWAL`, or a build with no renewer
+image.
 
 ## Host autodetection
 

@@ -11,46 +11,54 @@ superset of CE: the OSS feature set is included unchanged. Aliases, scripts,
 and CI invocations from a CE installation continue to work without
 modification when you switch to BE.
 
-The package/formula/image names *are* `swarmcli-be`, so the package manager
-can offer both editions side by side. They install the same binary name, so
-**you can have either CE or BE at any time, but not both**. See
-[CE vs BE](#ce-vs-be) below.
+The package/formula/image names are `swarmcli` for this build and
+`swarmcli-oss` for the wholly Apache-2.0 one, so the package manager can offer
+both artefacts side by side. They install the same binary name, so **you can
+have either at any time, but not both**. See [CE and BE are one
+download](#ce-and-be-are-one-download) below. The older `swarmcli-be` formula,
+manifest and image were renamed on 2026-08-07; they still receive the same build
+for a deprecation window, and Homebrew now warns on install and upgrade.
 
 ## Channels
 
 ### Homebrew (macOS / Linux)
 
 ```bash
-brew install Eldara-Tech/tap/swarmcli-be
+brew install Eldara-Tech/tap/swarmcli
 ```
 
 The formula is hosted at
 [Eldara-Tech/homebrew-tap](https://github.com/Eldara-Tech/homebrew-tap).
-It conflicts with the CE `swarmcli` formula; brew will refuse to install
-both at once and will offer to remove the other one.
+It conflicts with the `swarmcli-oss` cask and with the deprecated
+`swarmcli-be` one; brew will refuse to install two at once and will offer to
+remove the other.
 
 ### Scoop (Windows)
 
 ```powershell
 scoop bucket add eldara https://github.com/Eldara-Tech/scoop-bucket
-scoop install swarmcli-be
+scoop install swarmcli
 ```
 
 ### Docker
 
 ```bash
-docker pull eldaratech/swarmcli-be:latest
+docker pull eldaratech/swarmcli:latest
 docker run --rm -it \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v "$HOME/.docker/contexts:/root/.docker/contexts" \
   -v "$HOME/.config/swarmcli:/root/.config/swarmcli" \
-  eldaratech/swarmcli-be:latest
+  eldaratech/swarmcli:latest
 ```
 
 The container runs as root (matching the upstream `docker:N-cli` base, so
 the mounted Docker socket works without `--group-add`). Mounting
-`~/.docker/contexts` and `~/.config/swarmcli` keeps your Docker contexts
-and license file persistent across container runs.
+`~/.docker/contexts` and `~/.config/swarmcli` keeps your Docker contexts and
+your bootstrap certificates persistent across container runs. The license is
+**not** among them — it lives in the swarm's own Raft state, as the Docker
+config `swarmcli-license`, so it is already persistent and follows the context
+rather than the container (see
+[License — Per-swarm storage](license.md#per-swarm-storage)).
 
 Available tags: `latest`, `vX.Y.Z`. Multi-arch images cover `linux/amd64`
 and `linux/arm64`.
@@ -61,14 +69,21 @@ Download platform archives from the
 [Releases page](https://github.com/Eldara-Tech/swarmcli/releases).
 Each release ships:
 
-- `swarmcli-be_<version>_<os>_<arch>.tar.gz` (Linux/macOS/FreeBSD) or `.zip` (Windows)
-- `checksums.txt` — SHA-256 of every archive
+- `swarmcli_<Os>_<arch>.tar.gz` (Linux/macOS/FreeBSD) or `.zip` (Windows) —
+  this build. There is no version component in the name, the OS is capitalised,
+  and `amd64` is written `x86_64`: `swarmcli_Linux_x86_64.tar.gz`.
+- `swarmcli_<Os>_<arch>_oss.tar.gz` — the wholly Apache-2.0 artefact, see
+  [Editions](editions.md).
+- `checksums-merged.txt` — SHA-256 of this build's archives, and
+  `checksums-oss.txt` for the OSS ones. There is deliberately no unqualified
+  `checksums.txt`: a release carries two sets of artefacts, and one file would
+  not say which set it verified.
 
 Verify and install:
 
 ```bash
-sha256sum -c checksums.txt --ignore-missing
-tar -xzf swarmcli-be_<version>_linux_amd64.tar.gz
+sha256sum -c checksums-merged.txt --ignore-missing
+tar -xzf swarmcli_Linux_x86_64.tar.gz
 install -m 0755 swarmcli /usr/local/bin/swarmcli
 ```
 
@@ -86,10 +101,19 @@ Build matrix per release:
 swarmcli
 ```
 
-If no license is present, you'll see a startup prompt asking for a license
-key (or to continue in Community Edition mode). The detail of every state
-the prompt can show is in [License — Activation](license.md#activation).
-Once you have a valid license, every subsequent run starts silently.
+With no license, swarmcli starts normally as the Community Edition — there is
+no startup prompt. The status bar says so, and the license dialog appears
+just-in-time, the first time you ask for a feature a license gates. The fastest
+way to a licensed swarm is one command:
+
+```bash
+swarmcli license activate
+```
+
+which covers the [free tier](license.md#the-free-tier) as well as a paid plan.
+[License — Start to finish](license.md#start-to-finish) is the whole sequence,
+and the detail of every state the dialog can show is in [License — The license
+prompt](license.md#the-license-prompt).
 
 If your terminal does not look right (colors, key handling), check that
 your `TERM` is set to a 256-color value — SwarmCLI expects `xterm-256color`
@@ -97,7 +121,8 @@ or equivalent.
 
 ## Verifying version and edition
 
-There is no `--version` flag today. Two ways to check:
+`swarmcli version` is the direct answer, and `--version` and `-v` are accepted
+as aliases for it. Two more ways to check:
 
 - **Inside the TUI**: the version is shown in the header bar; `:license`
   additionally shows license status (see [License](license.md)).
@@ -151,10 +176,14 @@ build for a deprecation window, so nothing breaks if you track one — but
 ## Upgrade
 
 ```bash
-brew upgrade swarmcli-be          # Homebrew
-scoop update swarmcli-be          # Scoop
-docker pull eldaratech/swarmcli-be:latest   # Docker
+brew upgrade swarmcli             # Homebrew
+scoop update swarmcli             # Scoop
+docker pull eldaratech/swarmcli:latest      # Docker
 ```
+
+If you still track the deprecated `swarmcli-be` names, those commands keep
+working and install the same build — but switch, because the deprecation is
+where they end.
 
 For binary installs, replace the file on disk with the new archive's
 contents.
