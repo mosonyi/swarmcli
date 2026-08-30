@@ -11,15 +11,21 @@ general TUI behaviour, see the
 
 ## License
 
-**"Your license key is invalid."** at startup.
+**"Your license key is invalid."** in the license dialog — which opens when a
+license-gated feature is requested, not at startup.
 The key did not verify. Usually it was truncated when copied or picked up an
 extra newline; it can also mean the key was issued for a different product
 build, or is too old for this release to accept. Re-paste it from its source,
 and if that does not help, contact whoever issued it.
 
-**"Your license expired on YYYY-MM-DD. The 5-day grace period has ended."**
-The key is past its grace window. Paste a fresh key at the prompt, or set
-`SWARMCLI_LICENSE` and restart. See [License — Lifecycle](license.md#lifecycle-states).
+**"Your license expired on YYYY-MM-DD. / The 5-day grace period has ended."**
+The key is past its grace window. Paste a fresh key into the dialog, or run
+`swarmcli license install <file>`. Setting `SWARMCLI_LICENSE` and restarting
+does **not** do it: neither the environment variable nor
+`~/.config/swarmcli/license.key` is loaded on its own — they are install-*from*
+sources, offered on the `:license` view as `<e>` and `<m>`, which store the key
+in the swarm. See [License — Activation](license.md#activation) and [License —
+Lifecycle](license.md#lifecycle-states).
 
 **`:license` shows `Nodes: 12 of 10 — nothing is switched off`.**
 The swarm has more nodes than the license allows. Nothing is blocked and no
