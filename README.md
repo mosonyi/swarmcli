@@ -152,8 +152,12 @@ commercial superset that adds:
   per-node agent stack onto your existing Swarm.
 - Per-user RBAC, identity by client certificate, role-gated mutation and
   exec.
-- Interactive shell into a running service task.
-- Reveal-secret for debugging.
+- Thirteen licensed entitlements. Eight in this TUI — shell into a running
+  service task, reveal-secret, port-forward, volumes across all nodes, RBAC
+  user management, service health, pull progress and container statistics —
+  and five more consumed by swarmcli-cd, because one licence covers both
+  products. See
+  [docs/features.md](docs/features.md#where-the-gates-live).
 
 The licence that turns them on need not be a paid one: the [free
 tier](docs/license.md#the-free-tier) grants the same features on a swarm of up

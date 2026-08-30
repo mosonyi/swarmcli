@@ -21,8 +21,8 @@ apply to every build.
 | `SWARMCLI_CHARTS_NO_AUTO_UPDATE` | both | Stops a `charts` command refreshing a repository index before resolving a chart from it. `--no-repo-update` does the same for one invocation. | unset (refreshes) | `charts` commands |
 | `EDITOR` | both | Editor invoked by the in-TUI edit actions (stack, config, secret). | `nano` | edit action |
 | `XDG_STATE_HOME` | both | Base directory for logs and chart state — see [On-disk paths](#on-disk-paths). | `~/.local/state` | startup, `charts` commands |
-| `SWARMCLI_LICENSE` | BE | License key. Takes priority over the license file. | unset | startup |
-| `SWARMCLI_DISABLE_LICENSE_RENEWAL` | BE | Stops swarmcli asking the license service to renew a [managed license](license.md#managed-licenses-activation-is-a-second-step)'s activation. Leases are then installed from a file. No effect on any other license type, which never make the request at all. | unset | startup |
+| `SWARMCLI_LICENSE` | BE | A license key to install *from*. It is never loaded on its own — the active key is the one stored on the swarm — so setting this and restarting licenses nothing. When it is set, the `:license` view offers `<e>` to install it into the connected swarm. | unset | `:license` view |
+| `SWARMCLI_DISABLE_LICENSE_RENEWAL` | BE | Stops **both** licensing requests, on every license type: swarmcli builds no license client at all, so neither the daily token refresh nor a [managed license](license.md#managed-licenses-activation-is-a-second-step)'s lease renewal has anything to make it. Leases are then installed from a file, and `swarmcli license activate` refuses rather than hanging. The token refresh is the one a static or unbound license makes — it is what carries a renewal, a tier change or a rolled [free-tier](license.md#the-free-tier) term — so this switches something off for those too. | unset | startup |
 | `SWARMCLI_LICENSE_API_URL` | BE | Base URL of the license service renewals are asked of. Pointing it elsewhere cannot grant anything — every artifact is verified against a key compiled into swarmcli. | `https://swarmcli.io/api/v1` | startup |
 | `SWARMCLI_PROXY_URL` | BE | WebSocket URL of the rbac-proxy. Auto-derived from the active Docker context if unset. | unset | shell connect |
 | `SWARMCLI_REVEAL_IMAGE` | BE | Image used for the temporary service that reveals a secret. | `alpine:latest` | reveal action |
@@ -35,8 +35,9 @@ The four on/off variables (`SWARMCLI_DISABLE_VERSION_CHECK`,
 values Go's `strconv.ParseBool` does — `1`, `t`, `true`, `TRUE` and their false
 counterparts. Anything else is treated as unset.
 
-See [License — Activation](license.md#activation) for the precedence
-between `SWARMCLI_LICENSE` and the license file, and
+See [License — Activation](license.md#activation) for how `SWARMCLI_LICENSE`
+and the license file are installed into a swarm. There is no precedence between
+them, because neither is loaded on its own, and
 [Features](features.md) for how `SWARMCLI_REVEAL_IMAGE`,
 `SWARMCLI_SHELL_CMD`, and `SWARMCLI_FORWARD_IDLE_TIMEOUT` are used.
 
@@ -73,7 +74,7 @@ prompt and still runs `docker context use`, so your shell follows along.
 | `~/.local/state/swarmcli/charts/cache/index-<repo>.yaml` | both | `0644` | Cached repository index per configured repository. |
 | `~/.local/state/swarmcli/charts/cache/charts/<sha256>.tgz` | both | `0644` | Chart archives already downloaded, kept under the sha256 their repository index publishes. Re-verified on every read, and swept 30 days after the last one. |
 | `~/.config/swarmcli/update-notice.json` | both | `0644` | The release version at which the startup update notice was dismissed. |
-| `~/.config/swarmcli/license.key` | BE | `0600` | Active license key. Created by the startup prompt or by `:license <s>`. |
+| `~/.config/swarmcli/license.key` | BE | `0600` | A license key to install *from*, if you put one there. Nothing in swarmcli writes this file and nothing loads it automatically; when it exists, the `:license` view offers `<m>` to install it into the connected swarm. The active key lives in the swarm, as the Docker config `swarmcli-license`. |
 | `~/.config/swarmcli/certs/<stack>/ca.pem` | BE | `0600` | CA cert from `:bootstrap`. |
 | `~/.config/swarmcli/certs/<stack>/cert.pem` | BE | `0600` | Admin client cert (CN = seed username). |
 | `~/.config/swarmcli/certs/<stack>/key.pem` | BE | `0600` | Admin client private key. |

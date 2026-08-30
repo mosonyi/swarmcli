@@ -17,10 +17,13 @@ features a licence unlocks. On top of the Community Edition it adds:
   per-node agent stack onto your existing Swarm.
 - **Per-user RBAC** — identity by client certificate, role-based gating of
   destructive and exec endpoints.
-- **Interactive shell into running services** (`x` on a service).
-- **Reveal-secret** for debugging (`x` on a secret).
-- **Volume management across all swarm nodes** — list, create, delete, prune,
-  and browse files inside volumes.
+- **Thirteen licensed entitlements.** Eight are this TUI's — interactive shell
+  into a running service (`x` on a service), reveal-secret (`x` on a secret),
+  port-forward, volume management across all swarm nodes, RBAC user and role
+  management, service health, pull progress and container statistics. The
+  other five are consumed by swarmcli-cd, since one licence covers both
+  products. [Features — Where the gates
+  live](features.md#where-the-gates-live) is the list.
 
 The licence that unlocks them need not be a paid one: the [free
 tier](license.md#the-free-tier) grants the same features on a swarm of up to
