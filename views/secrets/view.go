@@ -204,7 +204,7 @@ func (m *Model) renderCreateDialog() string {
 			encodeText = dialog.ItemStyle.Render(encodeText)
 		}
 		lines = append(lines, encodeText)
-		lines = append(lines, dialog.ItemStyle.Render("  (Secrets need to be base64 encoded. Disable this if already encoded.)"))
+		lines = append(lines, dialog.ItemStyle.Render("  (Base64-encode the value. Leave off unless the consumer decodes it.)"))
 		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Change help text based on error state
@@ -270,7 +270,7 @@ func (m *Model) renderCreateDialog() string {
 			encodeText = dialog.ItemStyle.Render(encodeText)
 		}
 		lines = append(lines, encodeText)
-		lines = append(lines, dialog.ItemStyle.Render("  (Secrets need to be base64 encoded. Disable this if already encoded.)"))
+		lines = append(lines, dialog.ItemStyle.Render("  (Base64-encode the value. Leave off unless the consumer decodes it.)"))
 		lines = append(lines, dialog.ItemStyle.Render(""))
 
 		// Change help text based on error state

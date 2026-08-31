@@ -426,6 +426,14 @@ func TestCreateDialog_DetailsInline_Esc_Closes(t *testing.T) {
 	require.False(t, m.createDialogActive)
 }
 
+// #628: the default must stay off. With encoding on, the stored secret is
+// base64 *of* the credential and nothing decodes it again — a consumer reading
+// /run/secrets/<name> gets bytes that are printable and plausible enough to
+// survive every check but a prefix comparison.
+func TestCreateDialog_EncodeDefaultsOff(t *testing.T) {
+	require.False(t, testModel().createEncodeSecret)
+}
+
 func TestCreateDialog_DetailsFile_Space_TogglesEncode(t *testing.T) {
 	m := testModel()
 	m.createDialogActive = true
