@@ -109,7 +109,7 @@ func New(width, height int) *Model {
 		visible:            true,
 		sortField:          SortByName,
 		sortAscending:      true,
-		createEncodeSecret: true,
+		createEncodeSecret: false,
 	}
 
 	cols := m.buildColumns()
