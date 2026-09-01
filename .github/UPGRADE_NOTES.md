@@ -1,34 +1,3 @@
-### Every package, formula and image dropped the `-be`
-
-The Business Edition artefacts were renamed on 2026-08-07. The build is
-unchanged and the executable on disk was always `swarmcli`; what changed is what
-you ask the package manager for:
-
-```bash
-brew install Eldara-Tech/tap/swarmcli   # was swarmcli-be
-scoop install swarmcli                  # was swarmcli-be
-docker pull eldaratech/swarmcli         # was eldaratech/swarmcli-be
-```
-
-Release archives changed with them: `swarmcli_Linux_x86_64.tar.gz` for this
-build and `swarmcli_Linux_x86_64_oss.tar.gz` for the wholly Apache-2.0 one, with
-`checksums-merged.txt` and `checksums-oss.txt` beside them. There is no
-unqualified `checksums.txt`, because a release carries two sets of artefacts and
-one file would not say which set it verified.
-
-The old names keep receiving the same build for a deprecation window. Homebrew
-warns on install *and* upgrade — `deprecate!`, not a caveat, because someone who
-only ever runs `brew upgrade` never reads caveats — and Scoop prints a rename
-notice. Neither tool can express this as a rename, which is why it is here.
-
-**One consequence is worth naming.** Anyone who was already on the `swarmcli`
-cask or Scoop manifest — the Community Edition names — moves onto the merged
-build with this release. Nothing they run changes: the licensed code is inert
-until a licence verifies, and the binary behaves exactly as the Community
-Edition did. If you need an artefact that provably contains no proprietary code,
-that is `swarmcli-oss`, and it ships from every release — see
-[docs/editions.md](../docs/editions.md).
-
 ### There is a permanent free tier
 
 A licence need not be a paid one. The free tier is a signed key like any other,
@@ -172,3 +141,7 @@ v2.0.0 — the major is shared across the SwarmCLI components and this release
 takes it for the licence changes above. The Apache-2.0 build (`swarmcli_*_oss`,
 `eldaratech/swarmcli:<version>-oss`) contains no licensed code and is untouched
 by any of them; upgrading that one from v1.14.0 needs nothing at all.
+
+The `-be` suffix left every package, cask and image in v1.14.0, not here — see
+[docs/installation.md](../docs/installation.md) and
+[docs/editions.md](../docs/editions.md) if you still track the old names.
