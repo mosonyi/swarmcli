@@ -90,19 +90,36 @@ services:
       net.ipv4.ip_forward: 1
       net.ipv4.conf.all.route_localnet: 1
     command:
-      [
-        "sh","-c",
-        "apk add --no-cache ca-certificates >/dev/null 2>&1 || true; \
-         update-ca-certificates || true; \
-         ( until docker info >/dev/null 2>&1; do sleep 1; done; \
-           until [ -s /shared/worker_token ]; do sleep 1; done; \
-           docker swarm leave >/dev/null 2>&1 || true; \
-           docker swarm join --token \"$(cat /shared/worker_token)\" manager:2377 \
-         ) & \
-         exec dockerd \
-           --host=tcp://0.0.0.0:2375 \
-           --host=unix:///var/run/docker.sock"
-      ]
+      - sh
+      - -c
+      # A block scalar rather than the one-line flow form the other services
+      # use: the join is a sequence with two waits and a retry, and it has to
+      # stay readable. Every step announces itself, because a silent step that
+      # never finishes is indistinguishable from one that never started —
+      # `testenv.sh` dumps this log when the join gate times out.
+      - |
+        apk add --no-cache ca-certificates >/dev/null 2>&1 || true
+        update-ca-certificates || true
+        (
+          # Explicit: this half of the container talks to the daemon the next
+          # line starts, never to a host inherited from the image or the env.
+          export DOCKER_HOST=unix:///var/run/docker.sock
+          echo 'swarm-join: waiting for the local daemon'
+          until docker info >/dev/null 2>&1; do sleep 1; done
+          echo 'swarm-join: waiting for the join token'
+          until [ -s /shared/worker_token ]; do sleep 1; done
+          echo 'swarm-join: joining'
+          # Leave first, in case this replica reused a volume carrying state
+          # from an earlier swarm; retry until the daemon actually reports
+          # membership, so a manager that is not accepting joins yet is a
+          # delay rather than a permanent single-node degrade.
+          docker swarm leave >/dev/null 2>&1 || true
+          until docker info 2>/dev/null | grep -q 'Swarm: active'; do
+            docker swarm join --token "$(cat /shared/worker_token)" manager:2377 || sleep 2
+          done
+          echo 'swarm-join: joined'
+        ) &
+        exec dockerd --host=tcp://0.0.0.0:2375 --host=unix:///var/run/docker.sock
     volumes:
       - /var/lib/docker
       - shared:/shared
