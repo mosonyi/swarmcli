@@ -161,9 +161,10 @@ All seven:
 
 ## Go Version & Build
 
-Go 1.26. No Makefile — use `go build` directly. GoReleaser handles releases with `-trimpath -s -w` ldflags and version injection.
+Go 1.27. No Makefile — use `go build` directly. GoReleaser handles releases with `-trimpath -s -w` ldflags and version injection.
 
-When updating the Go version, keep these three in sync:
+When updating the Go version, keep these in sync:
 - `go.mod` — `go` and `toolchain` directives
-- `.devcontainer/Dockerfile` — `mcr.microsoft.com/devcontainers/go` image tag (tracks major.minor; patch versions are handled by `GOTOOLCHAIN=auto`)
+- `Dockerfile` — `FROM golang:<major.minor>`, the `swarmcli-dev` image. Dependabot bumps this one on its own schedule, and a bump that arrives unpaired leaves the dev container compiling on a Go nothing else in CI uses
+- `.devcontainer/Dockerfile` — `mcr.microsoft.com/devcontainers/go` image tag, consumed by swarmcli-be's devcontainer (tracks major.minor; patch versions are handled by `GOTOOLCHAIN=auto`). MCR lags the `golang` image by a release, so this tag legitimately trails — check `https://mcr.microsoft.com/v2/devcontainers/go/tags/list` before bumping it
 - `govulncheck` CI step — bump suppressed vuln IDs if the new toolchain resolves them, or add new ones if it introduces new unfixed stdlib vulns
