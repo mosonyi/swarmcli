@@ -133,7 +133,17 @@ jobs:
 
   build:
     needs: [changes, test]
-    if: needs.changes.outputs.docker == 'true'
+    # `test` is gated on the `code` filter, this job on `docker`, and the two
+    # are not the same set: a diff touching only the Dockerfiles leaves `test`
+    # skipped, and a skipped `needs` skips the dependent job whatever its own
+    # `if:` says. So the one job that ever runs `docker build`, and the only
+    # place the release-image guard below fires, could not run for exactly the
+    # diff it was written for — #631 bumped both Dockerfiles and `changes` read
+    # `code = false, docker = true`, leaving neither file built. `!cancelled()`
+    # keeps the needs edge for ordering while tolerating a skipped `test`; a
+    # failed one still skips this job, so a Docker build never runs on a tree
+    # whose tests are red.
+    if: ${{ !cancelled() && needs.changes.outputs.docker == 'true' && needs.test.result != 'failure' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
