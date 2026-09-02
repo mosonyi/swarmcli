@@ -101,6 +101,10 @@ wait_for_workers() {
   done
   err "Only ${ready:-0}/${expected} worker node(s) Ready after $((retries * wait_sec))s. Swarm state:"
   docker -H "$MANAGER_HOST" node ls >&2 || true
+  # Each replica joins the swarm itself, so the reason it did not is in its
+  # own log and nowhere else — `node ls` above can only report the absence.
+  err "Worker logs:"
+  $DOCKER_COMPOSE logs --tail=40 worker >&2 || true
   exit 1
 }
 
