@@ -146,7 +146,12 @@ cmd_up() {
   cleanup_port  # <<< ensure old manager gone
 
   info "🚀 Starting Swarm environment: ${NODES} node(s) (1 manager + $((NODES - 1)) worker(s))..."
-  $DOCKER_COMPOSE up -d --scale "worker=$((NODES - 1))"
+  # --remove-orphans: this project's service names are not stable across
+  # checkouts — the fixed worker1/worker2 pair became one scaled `worker`.
+  # Containers of a service this file no longer declares are left running
+  # otherwise, and they keep holding the `shared` volume, which is what makes
+  # a later `down -v` report it as still in use.
+  $DOCKER_COMPOSE up -d --remove-orphans --scale "worker=$((NODES - 1))"
   $DOCKER_COMPOSE ps
 
   info "🔧 Ensuring Docker context..."
@@ -231,8 +236,11 @@ cmd_down() {
   # Remove the stack (ignore errors if it doesn't exist)
   run_or_warn docker --context "$CONTEXT_NAME" stack rm demo
 
-  # Bring down compose services and volumes
-  run_or_warn $DOCKER_COMPOSE down -v
+  # Bring down compose services and volumes. --remove-orphans for the same
+  # reason cmd_up passes it: a container left over from an earlier service
+  # layout still references `shared`, and the volume removal fails with
+  # "Resource is still in use" while the teardown reports success.
+  run_or_warn $DOCKER_COMPOSE down -v --remove-orphans
 
   ok "Swarm environment torn down."
 }
