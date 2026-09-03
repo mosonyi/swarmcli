@@ -28,7 +28,6 @@ services:
       - "22375:2375"                     # expose manager Docker API to host
     volumes:
       - manager-data:/var/lib/docker
-      - shared:/shared
       - ../.devcontainer/certs:/usr/local/share/ca-certificates:ro
     networks:
       swarmnet:
@@ -41,7 +40,10 @@ services:
       start_period: 2s
 
 
-  # Initializes Swarm on manager and writes worker join token to the shared volume
+  # Initializes Swarm on the manager. It publishes nothing: each worker asks
+  # the manager for its own join token (see `worker`), so there is no token
+  # file, and no volume shared between services to carry one run's token into
+  # the next.
   swarm-init:
     image: docker:29
     depends_on:
@@ -49,8 +51,6 @@ services:
         condition: service_healthy
     environment:
       DOCKER_HOST: tcp://manager:2375
-    volumes:
-      - shared:/shared
     networks:
       - swarmnet
     command:
@@ -60,7 +60,6 @@ services:
          if ! docker info 2>/dev/null | grep -q 'Swarm: active'; then \
            docker swarm init --advertise-addr eth0; \
          fi; \
-         docker swarm join-token -q worker > /shared/worker_token; \
          tail -f /dev/null"
       ]
 
@@ -93,8 +92,8 @@ services:
       - sh
       - -c
       # A block scalar rather than the one-line flow form the other services
-      # use: the join is a sequence with two waits and a retry, and it has to
-      # stay readable. Every step announces itself, because a silent step that
+      # use: the join is a wait followed by a retry, and it has to stay
+      # readable. Every step announces itself, because a silent step that
       # never finishes is indistinguishable from one that never started —
       # `testenv.sh` dumps this log when the join gate times out.
       - |
@@ -106,23 +105,30 @@ services:
           export DOCKER_HOST=unix:///var/run/docker.sock
           echo 'swarm-join: waiting for the local daemon'
           until docker info >/dev/null 2>&1; do sleep 1; done
-          echo 'swarm-join: waiting for the join token'
-          until [ -s /shared/worker_token ]; do sleep 1; done
           echo 'swarm-join: joining'
           # Leave first, in case this replica reused a volume carrying state
           # from an earlier swarm; retry until the daemon actually reports
           # membership, so a manager that is not accepting joins yet is a
           # delay rather than a permanent single-node degrade.
+          #
+          # The token is fetched from the manager on every attempt rather than
+          # read from a file the two services share. A shared volume outlives
+          # the swarm that filled it — a teardown that cannot remove it hands
+          # the next run a token for a swarm that no longer exists — and it is
+          # a token for *this* manager or the attempt fails and retries. Before
+          # `swarm init` lands the fetch is empty and the join fails, which is
+          # the same delay as any other not-yet-ready manager.
           docker swarm leave >/dev/null 2>&1 || true
           until docker info 2>/dev/null | grep -q 'Swarm: active'; do
-            docker swarm join --token "$(cat /shared/worker_token)" manager:2377 || sleep 2
+            docker swarm join --token \
+              "$(docker -H tcp://manager:2375 swarm join-token -q worker 2>/dev/null)" \
+              manager:2377 || sleep 2
           done
           echo 'swarm-join: joined'
         ) &
         exec dockerd --host=tcp://0.0.0.0:2375 --host=unix:///var/run/docker.sock
     volumes:
       - /var/lib/docker
-      - shared:/shared
       - ../.devcontainer/certs:/usr/local/share/ca-certificates:ro
     networks:
       - swarmnet
@@ -138,4 +144,3 @@ networks:
 
 volumes:
   manager-data:
-  shared:
