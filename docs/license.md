@@ -35,7 +35,7 @@ What a key records about you:
   `trial` and `free` may not. A free licence's expiry is not a countdown to the
   end of the tier, because it is rolled forward — see [The free
   tier](#the-free-tier).
-- **Node and user limits**, if any. See [Limits](#limits).
+- **Node, user and per-node vCPU limits**, if any. See [Limits](#limits).
 - **Which swarm it is bound to**, if any, and **how** — see
   [Per-swarm binding](#per-swarm-binding).
 - **A license id** — a short `lic_…` string naming this individual license.
@@ -433,6 +433,12 @@ The view also shows:
   shown only when the swarm has more nodes than `max_nodes`. It is a report and
   not a status: the `Status:` line above is unaffected and every feature stays
   on. See [Limits](#limits).
+- `vCPU: 48 of 16 per node — nothing is switched off`, with the same portal
+  link — shown only when the swarm's largest node is bigger than
+  `max_vcpus_per_node`. `per node` is in the line because the two figures
+  otherwise read as the same kind of number and they are not: one counts the
+  swarm, the other measures its biggest machine. Also a report and not a status.
+  See [Limits](#limits).
 - `Allowance: 5 of 3 nodes, as the licence service sees it`, and beside it
   `Term: stops rolling 2026-09-12 unless the count comes down` — what the
   licence service last said about the allowance, shown only while it says this
@@ -493,14 +499,16 @@ verify first, so an artifact that does not verify never reaches the swarm from
 here either. `status` prints one `key=value` per line, or the same fields as an
 object with `--json`: `status`, `grants`, `tier`, `customer`, `license_id`,
 `bind`, `cluster_id`, `bound_cluster_id`, `expires_at`, `nodes`, `max_nodes`,
-`features`, and — when a lease is installed — `lease_id`, `lease_expires`,
+`vcpus_max`, `max_vcpus_per_node`, `features`, and — when a lease is installed —
+`lease_id`, `lease_expires`,
 `lease_hard_stop` and `lease_error`. Every field is omitted rather than zeroed
 when there is nothing to say, so absence is not a state.
 
 `sync` prints the same report plus the fields that only exist once the license
 service has answered: `renewal_at`, `renewal_result`, `renewal_code`,
-`retry_after`, `portal`, and the four [allowance](#limits) fields
-`entitlement_status`, `entitlement_nodes`, `entitlement_max_nodes` and
+`retry_after`, `portal`, and the six [allowance](#limits) fields
+`entitlement_status`, `entitlement_nodes`, `entitlement_max_nodes`,
+`entitlement_vcpus_max`, `entitlement_max_vcpus_per_node` and
 `entitlement_term_ends_at`. They are absent from `status` because `status`
 makes no call at all.
 
@@ -788,19 +796,31 @@ thing that proves entitlement.
 
 ## Limits
 
-`max_nodes` and `max_users` are **soft** limits *in the binary*: swarmcli
-reports what it observes and never denies on a count. Exceeding either blocks no
-operation, changes no status the `:license` view reports and switches no feature
-off — on every tier, the free one included — and the expiry is recorded on the
-key at issuance time.
+`max_nodes`, `max_users` and `max_vcpus_per_node` are **soft** limits *in the
+binary*: swarmcli reports what it observes and never denies on a count.
+Exceeding any of them blocks no operation, changes no status the `:license` view
+reports and switches no feature off — on every tier, the free one included — and
+the expiry is recorded on the key at issuance time.
 
 - `max_nodes` is compared against the swarm's node count, refreshed on each
   TUI update tick. Over the limit, `:license` reports the pair and leaves
   every feature on — see [`:license` view](#license-view).
+- `max_vcpus_per_node` is compared against **the largest single node** in the
+  swarm, because the limit is stated per node: the swarm is inside it exactly
+  when its biggest machine is. Over it, `:license` grows a `vCPU:` line reading
+  `48 of 16 per node`, and — as with the node count — every feature stays on.
+  Only nodes that are `Ready` are measured. A node that is down reports whatever
+  size it last told the manager, so counting it would make the figure a memory
+  of a machine rather than an observation of the swarm; draining your largest
+  node therefore lowers the number, which is correct and occasionally
+  surprising. A node advertising a fractional core rounds down.
 - `max_users` is compared against nothing. The number is recorded on the key,
   but no part of the product counts users against it.
 
-Either limit set to `0` is treated as unlimited.
+Any of them set to `0` is treated as unlimited, and a key issued before a limit
+existed carries no value for it and is unlimited in the same way. Keys predating
+the per-node vCPU allowance are the current example: they name none, so nothing
+is compared and the `vCPU:` line cannot appear.
 
 ### The node allowance is judged elsewhere
 
@@ -839,9 +859,10 @@ views of one swarm rather than a contradiction.
 `swarmcli license status` does not carry either of the service's two lines: it
 makes no call, so it reports the observed count and the signed `max_nodes` and
 nothing the service said about them. `swarmcli license sync` does make the call,
-and prints what came back as four fields — `entitlement_status`,
-`entitlement_nodes`, `entitlement_max_nodes` and `entitlement_term_ends_at`, the
-last being the date after which the term stops being rolled forward. They are
+and prints what came back as six fields — `entitlement_status`,
+`entitlement_nodes`, `entitlement_max_nodes`, `entitlement_vcpus_max`,
+`entitlement_max_vcpus_per_node` and `entitlement_term_ends_at`, the last being
+the date after which the term stops being rolled forward. They are
 the `:license` page's `Allowance:` and `Term:` lines in machine-readable form,
 in both the `key=value` and the `--json` output, and they are absent when the
 answer carried no report.
@@ -898,6 +919,13 @@ Both requests send:
   integer, and the count the [node allowance](#limits) is judged against; it is
   left out altogether until the first observation lands, because a zero would
   claim a swarm with no nodes rather than a swarm not yet looked at;
+- **two figures about node size**, on the same terms: the **vCPU count of the
+  largest node** in the swarm, and **how many nodes exceed** the [per-node vCPU
+  allowance](#limits) your key names. Both are single integers about the swarm
+  as a whole. The first is omitted until something has been observed; the second
+  is omitted when your key names no allowance, and is `0` — not omitted — when
+  it names one and nothing is over it, because "we counted and found none" is a
+  different fact from "there was nothing to count against";
 - the **product and version** making the request — `swarmcli-be` from this
   binary or `swarmcli-cd` from the controller, beside the version, because one
   license covers both products and the service has to know which one is
@@ -906,8 +934,13 @@ Both requests send:
 
 Nothing else. Not your services, images, users, configuration, node names,
 addresses or roles, or anything else read from your Docker daemon — swarmcli
-does not gather it and the request has nowhere to put it. The node count is a
-count: how many, never which ones or what runs on them.
+does not gather it and the request has nowhere to put it.
+
+Every figure above is about the swarm rather than about any machine in it. The
+node count is a count — how many, never which ones or what runs on them — and
+the two size figures are the same kind of statement: the largest node's vCPU
+count identifies no node, and the number over the allowance is a tally. There is
+no per-node breakdown in the request, and no field one could be written into.
 
 Four things about these requests are worth being precise on, because they are
 the questions people actually ask:
