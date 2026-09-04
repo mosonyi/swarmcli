@@ -24,7 +24,13 @@ step on top — never verification, and there is an offline path for both.
 
 What a key records about you:
 
-- **Who it is for** — your customer identifier.
+- **Who it is for** — an identifier for the *account* the key was issued to, not
+  for you personally. It is deliberately not your e-mail address: a key is
+  exportable by design and lives on your swarm, where anyone who can read a file
+  on a node can read every field listed here. Quote the [license
+  id](#license-id) rather than this when you contact support — it names one key
+  rather than one account. A key signed before this was settled may still carry
+  an address; the daily token refresh replaces it (see [Privacy](#privacy)).
 - **Which tier** — `be` (Business Edition), `free` or `trial`. All three grant
   the same feature set today, so the tier does not decide which features you
   get; it decides what surrounds the key. A `trial` and a `free` key must carry
