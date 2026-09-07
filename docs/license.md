@@ -69,7 +69,7 @@ What bounds it is not the features. It is the two things around the key:
   strength of it — the count is judged elsewhere, and [Limits](#limits) is where
   that is spelled out, because "soft limit" on its own leads a reader to the
   wrong conclusion here.
-- **A term, rather than a perpetual grant.** A free key is signed for 365 days,
+- **A term, rather than a perpetual grant.** A free key is signed for 90 days,
   and the term is rolled forward for you: it reaches the swarm on the same daily
   token refresh that carries a renewal or a tier change (see
   [Privacy](#privacy)), and it arrives before the date it replaces rather than
