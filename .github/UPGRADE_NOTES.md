@@ -6,7 +6,7 @@ verified offline, granting the same thirteen entitlements a paid `be` key grants
 under a different name.
 
 What bounds it is around the key rather than in it: **three nodes**, recorded as
-`max_nodes`, and a **365-day term** that is rolled forward for you inside its
+`max_nodes`, and a **90-day term** that is rolled forward for you inside its
 last 30 days. Nothing switches off on the node count; declining to roll the term
 is the only lever, and that is also why the expiry is mandatory (below).
 
@@ -22,8 +22,9 @@ upgrade rather than ask for a different one.
 
 A `trial` or `free` licence with no expiry date no longer verifies. It is
 reported as **invalid** rather than expired — nothing has lapsed, so the remedy
-is a reissued key and not a renewal. Get a new one at
-[swarmcli.io/be](https://swarmcli.io/be) and install it as before.
+is a reissued key and not a renewal. Get a free one with `swarmcli license
+activate` or at [swarmcli.io/licenses](https://swarmcli.io/licenses), a paid one
+at [swarmcli.io/be](https://swarmcli.io/be), and install it as before.
 
 The two tiers fail the same way for different reasons. A trial's expiry is the
 whole of the difference between it and a paid licence. A free licence's expiry
@@ -34,13 +35,17 @@ it reached.
 `be` (paid Business Edition) licences are unaffected and may still be perpetual.
 
 **This most likely reaches nobody.** Keys handed out by the issuing side have
-always carried an expiry, so one without is not believed to exist. Confirm in a
-second if you would rather be sure — a licence that reports valid on v1.14.0
-reports valid on v2.0.0:
+always carried an expiry, so one without is not believed to exist. If you would
+rather be sure, check on the version you are running **now** rather than after
+upgrading, and read the expiry line rather than the verdict — the version that
+still accepts such a key is the only one that can show you it has none:
 
 ```bash
 swarmcli license status
 ```
+
+A `trial` or `free` key showing no expiry is the affected case, and it wants
+reissuing rather than renewing. A `be` key without one keeps working.
 
 Upgrade the pieces you run to the same version. Mixed versions can leave one of
 them honouring a key another refuses, which is awkward to diagnose rather than
@@ -57,6 +62,13 @@ Paid licences issued from now on are signed `bind: managed`. Free-tier keys are
 signed `bind: static` and have no lease. Keys issued before managed binding
 existed are unaffected and keep working exactly as they did.
 
+A **pre-v2 swarmcli reads a managed key as though it were bound at issuance**.
+`bind` is a field it does not have, so it is dropped on the way in, `cluster_id`
+is all that remains to judge by, and the licence grants without a lease ever
+being asked for. Nothing is refused and nothing reports a problem, which is what
+makes it worth saying out loud: the skew is silent, and it is the reason to move
+a fleet together rather than a piece at a time.
+
 On a swarm that can reach the licence service, the second step takes care of
 itself — the renewal check runs on a timer and again whenever you open
 `:license`, so activation follows the key install on its own. Until a lease is
@@ -70,8 +82,9 @@ Air-gapped and policy-restricted swarms take a lease as a file instead:
 swarmcli license lease install ~/swarm.lease   # or :license lease install
 ```
 
-**The client half of this ships in v2.0.0; lease issuance turns on separately
-and is not live in production yet.** Nothing you run needs to change for it, and
+**Both halves arrive together.** The client ships in v2.0.0 and lease issuance
+goes live on the licence service alongside it, so a swarm that can reach the
+service activates on its own and nothing you run needs to change for it.
 `swarmcli license status` is the check that says which state a swarm is in.
 
 Two consequences worth knowing before you meet them:
